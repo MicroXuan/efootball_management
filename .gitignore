@@ -1,0 +1,9 @@
+.worktrees/
+.superpowers/
+node_modules/
+.env
+dist/
+coverage/
+.DS_Store
+apps/miniprogram/miniprogram_npm/
+
