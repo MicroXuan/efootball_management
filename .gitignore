@@ -6,4 +6,5 @@ dist/
 coverage/
 .DS_Store
 apps/miniprogram/miniprogram_npm/
+.mysql/
 
