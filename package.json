@@ -15,4 +15,3 @@
     "dev:db:stop": "docker compose down"
   }
 }
-
