@@ -4,17 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "pnpm --filter @efm/contracts build",
+    "start": "node dist/main.js",
     "prisma:generate": "prisma generate",
-    "prestart:dev": "pnpm prisma:generate",
+    "prestart:dev": "pnpm --filter @efm/contracts build && pnpm prisma:generate",
     "start:dev": "tsx watch src/main.ts",
     "prebuild": "pnpm prisma:generate",
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
-    "pretypecheck": "pnpm prisma:generate",
+    "pretypecheck": "pnpm --filter @efm/contracts build && pnpm prisma:generate",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "pnpm prisma:generate",
+    "pretest": "pnpm --filter @efm/contracts build && pnpm prisma:generate",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts",
-    "pretest:e2e": "pnpm prisma:generate",
+    "pretest:e2e": "pnpm --filter @efm/contracts build && pnpm prisma:generate",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts"
   },
   "dependencies": {
