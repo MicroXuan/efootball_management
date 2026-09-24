@@ -1,0 +1,12 @@
+.git
+.gitignore
+.worktrees
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+**/coverage
+**/.DS_Store
+apps/miniprogram/project.private.config.json
+.superpowers

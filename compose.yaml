@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: efootball_management
+      MYSQL_USER: efm
+      MYSQL_PASSWORD: efm_local
+      MYSQL_ROOT_PASSWORD: root_local
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot_local"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - efm_mysql:/var/lib/mysql
+
+volumes:
+  efm_mysql:

@@ -1,0 +1,7 @@
+{
+  "navigationStyle": "custom",
+  "backgroundColor": "#07110d",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

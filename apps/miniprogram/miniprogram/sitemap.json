@@ -1,0 +1,4 @@
+{
+  "desc": "赛事参赛者工具",
+  "rules": [{ "action": "disallow", "page": "*" }]
+}

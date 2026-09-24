@@ -1,0 +1,23 @@
+{
+  "name": "@efm/miniprogram",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native WeChat mini-program for eFootball management",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "@efm/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "miniprogram-api-typings": "^2.8.3-1",
+    "typescript": "5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
