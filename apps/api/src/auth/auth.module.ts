@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
+import { AuthController } from './auth.controller.js';
+import { AuthService } from './auth.service.js';
 import { FakeWechatGateway } from './fake-wechat.gateway.js';
 import { TokenService, TOKEN_CONFIG } from './token.service.js';
 import { WechatHttpGateway } from './wechat-http.gateway.js';
@@ -8,6 +10,7 @@ import { WECHAT_GATEWAY } from './wechat.gateway.js';
 
 @Module({
   imports: [JwtModule.register({})],
+  controllers: [AuthController],
   providers: [
     {
       provide: TOKEN_CONFIG,
@@ -30,8 +33,8 @@ import { WECHAT_GATEWAY } from './wechat.gateway.js';
         );
       }
     },
-    TokenService,
-    JwtService
+    AuthService,
+    TokenService
   ],
   exports: [TokenService, WECHAT_GATEWAY]
 })
