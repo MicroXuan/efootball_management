@@ -43,4 +43,3 @@ describe('shared API contracts', () => {
     assert.equal(parsed.isDefault, false);
   });
 });
-

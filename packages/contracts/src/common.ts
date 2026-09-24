@@ -15,4 +15,3 @@ export const ApiErrorSchema = z.object({
 });
 
 export type ApiErrorResponse = z.infer<typeof ApiErrorSchema>;
-

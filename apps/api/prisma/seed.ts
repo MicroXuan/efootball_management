@@ -28,4 +28,3 @@ for (const [code, name] of roles) {
 }
 
 await prisma.$disconnect();
-

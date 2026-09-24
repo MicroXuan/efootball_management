@@ -6,4 +6,3 @@ export function configureApplication(app: INestApplication): void {
   app.enableShutdownHooks();
   app.useGlobalFilters(new HttpErrorFilter());
 }
-

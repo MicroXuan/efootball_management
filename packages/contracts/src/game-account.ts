@@ -28,4 +28,3 @@ export type GamePlatform = z.infer<typeof GamePlatformSchema>;
 export type GameAccountInput = z.input<typeof GameAccountInputSchema>;
 export type ParsedGameAccountInput = z.output<typeof GameAccountInputSchema>;
 export type GameAccountResponse = z.infer<typeof GameAccountSchema>;
-

@@ -18,4 +18,3 @@ export const CurrentUserSchema = z.object({
 
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 export type CurrentUserResponse = z.infer<typeof CurrentUserSchema>;
-

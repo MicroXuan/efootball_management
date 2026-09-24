@@ -20,4 +20,3 @@ export const AuthTokenResponseSchema = z.object({
 export type WechatLoginRequest = z.infer<typeof WechatLoginRequestSchema>;
 export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
 export type AuthTokenResponse = z.infer<typeof AuthTokenResponseSchema>;
-
