@@ -1,0 +1,6 @@
+<view class="loading" role="status">
+  <view class="loader">
+    <view class="loader-ball">⚽</view>
+  </view>
+  <text class="label">{{label}}</text>
+</view>

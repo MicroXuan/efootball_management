@@ -1,0 +1,151 @@
+page {
+  background: #07110d;
+  color: #eef7f1;
+}
+
+.page-shell {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: calc(env(safe-area-inset-top) + 34rpx) 32rpx 80rpx;
+  background: linear-gradient(165deg, #07110d 0%, #0d2118 55%, #111912 100%);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+}
+
+.back-button {
+  width: 72rpx;
+  height: 72rpx;
+  margin: 0 24rpx 0 0;
+  padding: 0;
+  border: 2rpx solid rgba(85, 239, 139, 0.28);
+  border-radius: 50%;
+  background: transparent;
+  color: #55ef8b;
+  font-size: 52rpx;
+  line-height: 62rpx;
+}
+
+.back-button::after,
+.primary-button::after,
+.delete-button::after {
+  border: 0;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+}
+
+.eyebrow {
+  color: #d4b05f;
+  font-size: 18rpx;
+  letter-spacing: 5rpx;
+}
+
+.page-title {
+  margin-top: 6rpx;
+  font-family: STKaiti, KaiTi, serif;
+  font-size: 48rpx;
+  font-weight: 700;
+}
+
+.editor-card {
+  margin-top: 46rpx;
+  padding: 34rpx;
+  border-top: 4rpx solid #55ef8b;
+  background: rgba(18, 38, 27, 0.92);
+}
+
+.field {
+  display: block;
+  margin-top: 28rpx;
+}
+
+.field:first-child {
+  margin-top: 0;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 12rpx;
+  color: #8ea497;
+  font-size: 22rpx;
+}
+
+.field input,
+.picker-value {
+  height: 92rpx;
+  box-sizing: border-box;
+  padding: 0 22rpx;
+  border-bottom: 2rpx solid rgba(142, 164, 151, 0.28);
+  background: rgba(7, 17, 13, 0.58);
+  color: #eef7f1;
+  font-size: 28rpx;
+  line-height: 92rpx;
+}
+
+.picker-value {
+  display: flex;
+  justify-content: space-between;
+}
+
+.switch-row {
+  margin-top: 34rpx;
+  padding: 24rpx 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 2rpx solid rgba(142, 164, 151, 0.18);
+  border-bottom: 2rpx solid rgba(142, 164, 151, 0.18);
+}
+
+.switch-title,
+.switch-copy {
+  display: block;
+}
+
+.switch-title {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.switch-copy {
+  margin-top: 8rpx;
+  color: #8ea497;
+  font-size: 20rpx;
+}
+
+.error-copy {
+  display: block;
+  margin-top: 24rpx;
+  color: #ff9c8e;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.primary-button,
+.delete-button {
+  border-radius: 0;
+  font-weight: 700;
+}
+
+.primary-button {
+  margin-top: 34rpx;
+  background: #55ef8b;
+  color: #07110d;
+}
+
+.primary-button[disabled] {
+  background: #315c40;
+  color: #8ea497;
+}
+
+.delete-button {
+  margin-top: 24rpx;
+  border: 2rpx solid rgba(255, 156, 142, 0.4);
+  background: transparent;
+  color: #ff9c8e;
+}

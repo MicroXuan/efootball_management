@@ -1,6 +1,8 @@
 {
   "pages": [
-    "pages/login/index"
+    "pages/login/index",
+    "pages/profile/index",
+    "pages/game-account-edit/index"
   ],
   "window": {
     "navigationBarTextStyle": "black",

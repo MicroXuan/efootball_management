@@ -1,0 +1,34 @@
+.loading {
+  min-height: 420rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #8ea497;
+}
+
+.loader {
+  width: 88rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(85, 239, 139, 0.28);
+  border-radius: 50%;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.loader-ball {
+  font-size: 42rpx;
+}
+
+.label {
+  margin-top: 24rpx;
+  font-size: 24rpx;
+  letter-spacing: 2rpx;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.48; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
+}

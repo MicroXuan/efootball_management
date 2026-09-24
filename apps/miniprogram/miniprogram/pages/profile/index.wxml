@@ -1,0 +1,88 @@
+<view class="page-shell">
+  <view class="topbar">
+    <view>
+      <text class="eyebrow">CLUB OPERATIONS</text>
+      <text class="page-title">我的球队</text>
+    </view>
+    <view class="season-mark">S01</view>
+  </view>
+
+  <loading-state wx:if="{{state === 'loading'}}" label="正在加载球队资料" />
+
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-icon">!</text>
+    <text class="state-title">暂时无法加载</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="secondary-button" bindtap="loadPage">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="profile-card">
+      <view class="profile-head">
+        <image wx:if="{{user.avatarUrl}}" class="avatar" src="{{user.avatarUrl}}" mode="aspectFill" />
+        <view wx:else class="avatar avatar-fallback">⚽</view>
+        <view class="identity">
+          <text class="name">{{user.displayName}}</text>
+          <text class="region">{{user.region || '未设置地区'}}</text>
+        </view>
+        <view class="complete {{user.profileComplete ? 'is-complete' : ''}}">
+          {{user.profileComplete ? '资料完整' : '待完善'}}
+        </view>
+      </view>
+
+      <view class="form-grid">
+        <label class="field">
+          <text class="field-label">显示名称 *</text>
+          <input value="{{displayName}}" maxlength="32" placeholder="输入昵称" bindinput="onDisplayNameInput" />
+        </label>
+        <label class="field">
+          <text class="field-label">所在地区</text>
+          <input value="{{region}}" maxlength="64" placeholder="例如：上海" bindinput="onRegionInput" />
+        </label>
+        <label class="field">
+          <text class="field-label">头像链接</text>
+          <input value="{{avatarUrl}}" placeholder="https://..." bindinput="onAvatarUrlInput" />
+        </label>
+      </view>
+      <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
+      <button class="primary-button" loading="{{saving}}" disabled="{{!profileCanSave || saving}}" bindtap="saveProfile">
+        保存资料
+      </button>
+    </view>
+
+    <view class="section-head">
+      <view>
+        <text class="section-kicker">GAME IDENTITIES</text>
+        <text class="section-title">游戏账号</text>
+      </view>
+      <button class="add-button" bindtap="addAccount">＋ 添加</button>
+    </view>
+
+    <view wx:if="{{!hasAccounts}}" class="empty-card">
+      <text class="empty-mark">01</text>
+      <text class="state-title">还没有游戏账号</text>
+      <text class="state-copy">添加你的平台、区服与玩家名，之后即可用于赛事报名。</text>
+      <button class="secondary-button" bindtap="addAccount">添加第一个账号</button>
+    </view>
+
+    <view wx:else class="account-list">
+      <view
+        wx:for="{{accounts}}"
+        wx:key="id"
+        class="account-card"
+        data-id="{{item.id}}"
+        bindtap="editAccount"
+      >
+        <view class="account-platform">{{item.platformName}}</view>
+        <view class="account-main">
+          <view class="account-name-line">
+            <text class="account-name">{{item.gamerTag}}</text>
+            <text wx:if="{{item.isDefault}}" class="default-badge">默认</text>
+          </view>
+          <text class="account-meta">{{item.serverRegion}} · {{item.verificationStatus === 'VERIFIED' ? '已认证' : '未认证'}}</text>
+        </view>
+        <text class="chevron">›</text>
+      </view>
+    </view>
+  </block>
+</view>

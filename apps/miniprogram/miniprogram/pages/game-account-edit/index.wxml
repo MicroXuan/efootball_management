@@ -1,0 +1,56 @@
+<view class="page-shell">
+  <view class="topbar">
+    <button class="back-button" bindtap="goBack">‹</button>
+    <view class="heading">
+      <text class="eyebrow">GAME IDENTITY</text>
+      <text class="page-title">{{editing ? '编辑账号' : '添加账号'}}</text>
+    </view>
+  </view>
+
+  <loading-state wx:if="{{loading}}" label="正在读取账号" />
+
+  <view wx:else class="editor-card">
+    <label class="field">
+      <text class="field-label">游戏平台 *</text>
+      <picker range="{{platformLabels}}" value="{{platformIndex}}" bindchange="onPlatformChange">
+        <view class="picker-value">{{platformLabels[platformIndex]}} <text>⌄</text></view>
+      </picker>
+    </label>
+
+    <label class="field">
+      <text class="field-label">服务器 / 区服 *</text>
+      <input value="{{serverRegion}}" maxlength="32" placeholder="例如：国服、亚洲服" bindinput="onServerRegionInput" />
+    </label>
+
+    <label class="field">
+      <text class="field-label">玩家名 *</text>
+      <input value="{{gamerTag}}" maxlength="64" placeholder="游戏中显示的名称" bindinput="onGamerTagInput" />
+    </label>
+
+    <label class="field">
+      <text class="field-label">游戏 UID（选填）</text>
+      <input value="{{gameUid}}" maxlength="64" placeholder="用于后续身份核验" bindinput="onGameUidInput" />
+    </label>
+
+    <view class="switch-row">
+      <view>
+        <text class="switch-title">设为默认账号</text>
+        <text class="switch-copy">报名时优先使用此账号</text>
+      </view>
+      <switch checked="{{isDefault}}" color="#55ef8b" bindchange="onDefaultChange" />
+    </view>
+
+    <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
+    <button class="primary-button" loading="{{saving}}" disabled="{{!saveEnabled || saving}}" bindtap="saveAccount">
+      {{editing ? '保存修改' : '添加账号'}}
+    </button>
+
+    <button
+      wx:if="{{editing}}"
+      class="delete-button"
+      loading="{{deleting}}"
+      disabled="{{deleting}}"
+      bindtap="deleteAccount"
+    >删除这个账号</button>
+  </view>
+</view>
