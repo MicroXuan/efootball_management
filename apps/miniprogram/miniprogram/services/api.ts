@@ -10,7 +10,7 @@ type ApiErrorEnvelope = {
   }
 }
 
-type ApiRequestOptions = {
+export type ApiRequestOptions = {
   path: string
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   data?: string | WechatMiniprogram.IAnyObject | ArrayBuffer
