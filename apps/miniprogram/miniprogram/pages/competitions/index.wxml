@@ -1,0 +1,48 @@
+<view class="competition-page">
+  <view class="page-head">
+    <view>
+      <text class="kicker">MATCH CONTROL</text>
+      <text class="title">赛事中枢</text>
+    </view>
+    <text class="head-mark">EFM / 02</text>
+  </view>
+
+  <view class="briefing">
+    <text class="briefing-label">本周任务</text>
+    <text class="briefing-copy">报名、赛程与积分，都在一条比赛时间线上。</text>
+  </view>
+
+  <loading-state wx:if="{{loading && items.length === 0}}" label="正在读取赛事" />
+  <view wx:elif="{{errorMessage && items.length === 0}}" class="state-panel">
+    <text class="state-code">CONNECTION LOST</text>
+    <text class="state-title">赛事数据暂时不可用</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="outline-button" bindtap="retry">重新加载</button>
+  </view>
+  <view wx:elif="{{!loading && items.length === 0}}" class="state-panel">
+    <text class="state-code">NO FIXTURES</text>
+    <text class="state-title">暂时没有公开赛事</text>
+    <text class="state-copy">新赛事发布后会出现在这里。</text>
+  </view>
+
+  <view wx:else class="timeline">
+    <view wx:for="{{items}}" wx:key="id" class="timeline-row">
+      <view class="timeline-rail"><view class="timeline-dot {{item.status === 'IN_PROGRESS' ? 'is-live' : ''}}"></view></view>
+      <view class="event-card" data-id="{{item.id}}" bindtap="openDetail">
+        <view class="card-top">
+          <text class="status">{{item.lifecycleName}}</text>
+          <text wx:if="{{item.registrationLabel}}" class="registration">{{item.registrationLabel}}</text>
+        </view>
+        <text class="event-name">{{item.name}}</text>
+        <view class="meta-row"><text>{{item.platform}}</text><text>·</text><text>{{item.serverRegion}}</text></view>
+        <view class="card-footer">
+          <view><text class="footer-label">报名截止</text><text class="footer-value">{{item.deadlineLabel}}</text></view>
+          <view class="capacity"><text class="footer-label">席位</text><text class="footer-value">{{item.capacityLabel}}</text></view>
+        </view>
+      </view>
+    </view>
+    <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
+    <loading-state wx:if="{{loadingMore}}" label="继续读取赛事" />
+    <text wx:elif="{{!hasMore}}" class="list-end">— 赛事时间线已更新 —</text>
+  </view>
+</view>

@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "赛事",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

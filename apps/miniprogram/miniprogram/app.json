@@ -1,6 +1,8 @@
 {
   "pages": [
     "pages/players/index",
+    "pages/competitions/index",
+    "pages/competition-detail/index",
     "pages/login/index",
     "pages/profile/index",
     "pages/game-account-edit/index",
@@ -22,6 +24,12 @@
         "text": "球员",
         "iconPath": "assets/icons/player.png",
         "selectedIconPath": "assets/icons/player-active.png"
+      },
+      {
+        "pagePath": "pages/competitions/index",
+        "text": "赛事",
+        "iconPath": "assets/icons/competition.png",
+        "selectedIconPath": "assets/icons/competition-active.png"
       },
       {
         "pagePath": "pages/profile/index",
