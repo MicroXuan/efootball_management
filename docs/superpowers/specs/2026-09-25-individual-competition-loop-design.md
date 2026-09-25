@@ -1,8 +1,10 @@
 # Individual Competition Loop Design
 
-**Date:** 2026-09-25  
-**Status:** Written specification awaiting final review  
+**Date:** 2026-09-25
+**Status:** Approved design, pending implementation plan
 **Product scope:** V0.1 internal prototype
+
+**中文版本：** [2026-09-25-individual-competition-loop-design.zh-CN.md](./2026-09-25-individual-competition-loop-design.zh-CN.md)
 
 ## 1. Goal
 
