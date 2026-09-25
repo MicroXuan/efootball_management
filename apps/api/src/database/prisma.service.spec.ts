@@ -35,4 +35,10 @@ describe('PrismaService', () => {
     expect(prisma.importBatch).toBeDefined();
     expect(prisma.catalogRelease).toBeDefined();
   });
+
+  it('exposes external synchronization delegates', () => {
+    expect(prisma.externalSyncRun).toBeDefined();
+    expect(prisma.externalSyncItem).toBeDefined();
+    expect(prisma.externalSyncRunBatch).toBeDefined();
+  });
 });

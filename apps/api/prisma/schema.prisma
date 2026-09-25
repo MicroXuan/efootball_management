@@ -90,6 +90,27 @@ enum ImportDiffType {
   INVALID
 }
 
+enum ExternalSyncMode {
+  SAMPLE
+  FULL
+  INCREMENTAL
+}
+
+enum ExternalSyncStatus {
+  PENDING
+  RUNNING
+  READY
+  PAUSED
+  FAILED
+}
+
+enum ExternalSyncItemStatus {
+  PENDING
+  FETCHED
+  SKIPPED
+  FAILED
+}
+
 model User {
   id               String            @id @default(uuid()) @db.Char(36)
   wechatOpenId     String            @unique @map("wechat_open_id") @db.VarChar(128)
@@ -206,6 +227,7 @@ model DataSource {
   cards     PlayerCard[]
   packs     CardPack[]
   players   FootballPlayerSource[]
+  syncRuns  ExternalSyncRun[]
 
   @@map("data_sources")
 }
@@ -338,29 +360,94 @@ model PlayerCardSkill {
 }
 
 model ImportBatch {
-  id             String            @id @default(uuid()) @db.Char(36)
-  sourceId       String            @map("source_id") @db.Char(36)
-  fileName       String            @map("file_name") @db.VarChar(255)
+  id             String                 @id @default(uuid()) @db.Char(36)
+  sourceId       String                 @map("source_id") @db.Char(36)
+  fileName       String                 @map("file_name") @db.VarChar(255)
   format         ImportFormat
-  checksum       String            @db.Char(64)
-  status         ImportBatchStatus @default(UPLOADED)
-  totalCount     Int               @default(0) @map("total_count")
-  createCount    Int               @default(0) @map("create_count")
-  updateCount    Int               @default(0) @map("update_count")
-  unchangedCount Int               @default(0) @map("unchanged_count")
-  invalidCount   Int               @default(0) @map("invalid_count")
-  failureReason  String?           @map("failure_reason") @db.VarChar(512)
-  createdBy      String            @map("created_by") @db.Char(36)
-  publishedAt    DateTime?         @map("published_at")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
-  source         DataSource        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  checksum       String                 @db.Char(64)
+  status         ImportBatchStatus      @default(UPLOADED)
+  totalCount     Int                    @default(0) @map("total_count")
+  createCount    Int                    @default(0) @map("create_count")
+  updateCount    Int                    @default(0) @map("update_count")
+  unchangedCount Int                    @default(0) @map("unchanged_count")
+  invalidCount   Int                    @default(0) @map("invalid_count")
+  failureReason  String?                @map("failure_reason") @db.VarChar(512)
+  createdBy      String                 @map("created_by") @db.Char(36)
+  publishedAt    DateTime?              @map("published_at")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  source         DataSource             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   records        ImportRecord[]
   release        CatalogRelease?
+  syncRunLinks   ExternalSyncRunBatch[]
 
   @@unique([sourceId, checksum], map: "import_batches_source_checksum_unique")
   @@index([status, createdAt], map: "import_batches_status_created_idx")
   @@map("import_batches")
+}
+
+model ExternalSyncRun {
+  id             String                 @id @default(uuid()) @db.Char(36)
+  sourceId       String                 @map("source_id") @db.Char(36)
+  actorId        String                 @map("actor_id") @db.Char(36)
+  mode           ExternalSyncMode
+  status         ExternalSyncStatus     @default(PENDING)
+  activeLeaseKey String?                @unique @map("active_lease_key") @db.VarChar(64)
+  requestedLimit Int?                   @map("requested_limit") @db.UnsignedInt
+  sourceTotal    Int?                   @map("source_total") @db.UnsignedInt
+  scannedCount   Int                    @default(0) @map("scanned_count") @db.UnsignedInt
+  fetchedCount   Int                    @default(0) @map("fetched_count") @db.UnsignedInt
+  skippedCount   Int                    @default(0) @map("skipped_count") @db.UnsignedInt
+  failedCount    Int                    @default(0) @map("failed_count") @db.UnsignedInt
+  currentOffset  Int                    @default(0) @map("current_offset") @db.UnsignedInt
+  errorCode      String?                @map("error_code") @db.VarChar(64)
+  errorMessage   String?                @map("error_message") @db.VarChar(512)
+  startedAt      DateTime?              @map("started_at")
+  finishedAt     DateTime?              @map("finished_at")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  source         DataSource             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  items          ExternalSyncItem[]
+  batchLinks     ExternalSyncRunBatch[]
+
+  @@index([sourceId, status, createdAt], map: "external_sync_runs_source_status_idx")
+  @@index([actorId], map: "external_sync_runs_actor_idx")
+  @@map("external_sync_runs")
+}
+
+model ExternalSyncItem {
+  id              String                 @id @default(uuid()) @db.Char(36)
+  runId           String                 @map("run_id") @db.Char(36)
+  externalId      String                 @map("external_id") @db.VarChar(128)
+  summaryChecksum String                 @map("summary_checksum") @db.Char(64)
+  detailChecksum  String?                @map("detail_checksum") @db.Char(64)
+  status          ExternalSyncItemStatus @default(PENDING)
+  rawDetail       Json?                  @map("raw_detail")
+  normalizedJson  Json?                  @map("normalized_json")
+  attempts        Int                    @default(0) @db.UnsignedSmallInt
+  lastError       String?                @map("last_error") @db.VarChar(512)
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+  run             ExternalSyncRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, externalId], map: "external_sync_items_run_external_unique")
+  @@index([runId, status], map: "external_sync_items_run_status_idx")
+  @@index([externalId, updatedAt], map: "external_sync_items_external_updated_idx")
+  @@map("external_sync_items")
+}
+
+model ExternalSyncRunBatch {
+  runId      String          @map("run_id") @db.Char(36)
+  batchId    String          @map("batch_id") @db.Char(36)
+  chunkIndex Int             @map("chunk_index") @db.UnsignedInt
+  createdAt  DateTime        @default(now()) @map("created_at")
+  run        ExternalSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  batch      ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@id([runId, batchId])
+  @@unique([runId, chunkIndex], map: "external_sync_run_batches_chunk_unique")
+  @@index([batchId], map: "external_sync_run_batches_batch_idx")
+  @@map("external_sync_run_batches")
 }
 
 model ImportRecord {

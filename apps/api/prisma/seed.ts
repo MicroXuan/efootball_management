@@ -64,6 +64,12 @@ await prisma.$transaction(async (transaction) => {
     update: { name: 'Manual import', isEnabled: true },
     create: { code: 'manual', name: 'Manual import', type: 'MANUAL' }
   });
+
+  await transaction.dataSource.upsert({
+    where: { code: 'pesdata' },
+    update: { name: 'PESDATA authorized sync', type: 'API', isEnabled: true },
+    create: { code: 'pesdata', name: 'PESDATA authorized sync', type: 'API' }
+  });
 });
 
 await prisma.$disconnect();
