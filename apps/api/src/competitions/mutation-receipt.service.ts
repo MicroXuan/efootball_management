@@ -44,7 +44,7 @@ export class MutationReceiptService {
           data: { resultJson: result }
         });
         return result;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const winner = await this.prisma.mutationReceipt.findUnique({

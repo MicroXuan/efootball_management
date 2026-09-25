@@ -195,6 +195,7 @@ export class CompetitionsService {
     key: string
   ): Promise<CompetitionDetail> {
     return this.receipts.execute(actorId, `competition.transition:${competitionId}:${target}`, key, async (transaction) => {
+      await this.lockCompetition(transaction, competitionId);
       const existing = await this.findCompetition(transaction, competitionId);
       assertExpectedVersion(existing.version, input.expectedVersion, 'Competition');
       assertCompetitionTransition(existing.status, target);
@@ -273,6 +274,10 @@ export class CompetitionsService {
     const competition = await transaction.competition.findUnique({ where: { id } });
     if (!competition) throw this.notFound();
     return competition;
+  }
+
+  private lockCompetition(transaction: CompetitionTransaction, competitionId: string): Promise<unknown> {
+    return transaction.$queryRaw`SELECT id FROM competitions WHERE id = ${competitionId} FOR UPDATE`;
   }
 
   private async getDetailRecord(
