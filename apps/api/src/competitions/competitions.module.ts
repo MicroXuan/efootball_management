@@ -10,18 +10,36 @@ import { COMPETITION_CLOCK, RegistrationsService, SystemCompetitionClock } from 
 import { SchedulesController } from './schedules.controller.js';
 import { SCHEDULE_GENERATOR, SchedulesService } from './schedules.service.js';
 import { generateRoundRobin } from './domain/round-robin.js';
+import { ResultsController } from './results.controller.js';
+import { ResultsService } from './results.service.js';
+import { StandingsService } from './standings.service.js';
 
 @Module({
   imports: [AuthorizationModule, JwtModule.register({})],
-  controllers: [PublicCompetitionsController, AdminCompetitionsController, RegistrationsController, SchedulesController],
+  controllers: [
+    PublicCompetitionsController,
+    AdminCompetitionsController,
+    RegistrationsController,
+    SchedulesController,
+    ResultsController
+  ],
   providers: [
     CompetitionsService,
     MutationReceiptService,
     RegistrationsService,
     SchedulesService,
+    StandingsService,
+    ResultsService,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],
-  exports: [CompetitionsService, MutationReceiptService, RegistrationsService, SchedulesService]
+  exports: [
+    CompetitionsService,
+    MutationReceiptService,
+    RegistrationsService,
+    SchedulesService,
+    StandingsService,
+    ResultsService
+  ]
 })
 export class CompetitionsModule {}

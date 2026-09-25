@@ -63,6 +63,14 @@ describe('competition lifecycle API', () => {
 
   afterAll(async () => {
     await prisma.mutationReceipt.deleteMany({ where: { actorId: { in: [adminUserId, managerUserId, playerUserId] } } });
+    await prisma.standingsRow.deleteMany({ where: { snapshot: { competitionId: { in: competitionIds } } } });
+    await prisma.standingsSnapshot.deleteMany({ where: { competitionId: { in: competitionIds } } });
+    await prisma.competitionMatch.updateMany({
+      where: { stage: { competitionId: { in: competitionIds } } }, data: { officialResultVersionId: null }
+    });
+    await prisma.matchResultVersion.deleteMany({
+      where: { match: { stage: { competitionId: { in: competitionIds } } } }
+    });
     await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: competitionIds } } } });
     await prisma.competitionStage.deleteMany({ where: { competitionId: { in: competitionIds } } });
     await prisma.competitionParticipant.deleteMany({ where: { competitionId: { in: competitionIds } } });
@@ -229,7 +237,7 @@ describe('competition lifecycle API', () => {
     await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/matches`)
       .expect(200).expect([]);
 
-    await request(app.getHttpServer())
+    const published = await request(app.getHttpServer())
       .post(`/v1/admin/competitions/${created.id}/schedule/publish`)
       .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
       .send({
@@ -237,10 +245,25 @@ describe('competition lifecycle API', () => {
         expectedStageVersion: generated.body.version
       }).expect(200)
       .expect(({ body: published }) => expect(published.status).toBe('PUBLISHED'));
-    await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/matches`)
+    const publicMatches = await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/matches`)
       .expect(200).expect(({ body: matches }) => {
         expect(matches).toHaveLength(6);
         expect(matches.map((match: { matchNumber: number }) => match.matchNumber)).toEqual([1, 2, 3, 4, 5, 6]);
       });
+    await request(app.getHttpServer()).post(`/v1/admin/competitions/${created.id}/start`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .send({ expectedVersion: closed.body.version + 1 }).expect(200);
+    await request(app.getHttpServer())
+      .post(`/v1/admin/competitions/${created.id}/matches/${publicMatches.body[0].id}/results`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .send({ homeScore: 2, awayScore: 1, expectedVersion: 2 }).expect(200)
+      .expect(({ body: result }) => expect(result.status).toBe('OFFICIAL'));
+    await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/standings`)
+      .expect(200).expect(({ body: standings }) => {
+        expect(standings.version).toBe(1);
+        expect(standings.rows).toHaveLength(4);
+        expect(standings.rows[0]).toMatchObject({ played: 1, wins: 1, totalPoints: 3 });
+      });
+    expect(published.body.matchCount).toBe(6);
   });
 });
