@@ -44,7 +44,7 @@ describe('PlayerCatalogService', () => {
   const card = (index: number, overrides: Record<string, unknown> = {}) => ({
     externalId: `catalog-${index}`,
     playerExternalId: `catalog-player-${index}`,
-    playerNameEn: index === 1 ? 'Ａｌｅｘｉｓ' : `Catalog Player ${index}`,
+    playerNameEn: `${sourceCode} Player ${index}`,
     cardName: `Card ${index}`,
     position: index % 2 === 0 ? 'CMF' : 'RWF',
     overallRating: 70 + index,
@@ -100,7 +100,12 @@ describe('PlayerCatalogService', () => {
 
   it('filters, normalizes Unicode keywords, and excludes inactive and unpublished cards', async () => {
     await importAndPublish([
-      card(1, { overallRating: 97, position: 'AMF', cardType: 'FEATURED' }),
+      card(1, {
+        playerNameEn: `Ａｌｅｘｉｓ ${sourceCode}`,
+        overallRating: 97,
+        position: 'AMF',
+        cardType: 'FEATURED'
+      }),
       card(2, { status: 'INACTIVE' })
     ]);
     const unpublishedPlayer = await prisma.footballPlayer.create({ data: { nameEn: 'Unpublished' } });
@@ -117,7 +122,7 @@ describe('PlayerCatalogService', () => {
     });
 
     const result = await catalog.search({
-      keyword: 'Alexis',
+      keyword: `Alexis ${sourceCode}`,
       position: 'AMF',
       minOverall: 95,
       cardType: 'FEATURED',
@@ -125,13 +130,13 @@ describe('PlayerCatalogService', () => {
     });
 
     expect(result.items).toHaveLength(1);
-    expect(result.items[0]?.playerNameEn).toBe('Ａｌｅｘｉｓ');
+    expect(result.items[0]?.playerNameEn).toBe(`Ａｌｅｘｉｓ ${sourceCode}`);
     expect(result.items.every((item) => item.id !== 'unpublished')).toBe(true);
   });
 
   it('keeps all original IDs stable across pages after a later release', async () => {
     await importAndPublish(Array.from({ length: 25 }, (_, index) => card(index + 1)));
-    const firstPage = await catalog.search({ limit: 10 });
+    const firstPage = await catalog.search({ keyword: sourceCode, limit: 10 });
     expect(firstPage.items).toHaveLength(10);
     expect(firstPage.nextCursor).not.toBeNull();
 
@@ -143,7 +148,7 @@ describe('PlayerCatalogService', () => {
     const seen = [...firstPage.items.map(({ id }) => id)];
     let cursor = firstPage.nextCursor;
     while (cursor) {
-      const page = await catalog.search({ cursor, limit: 10 });
+      const page = await catalog.search({ keyword: sourceCode, cursor, limit: 10 });
       expect(page.releaseSequence).toBe(firstPage.releaseSequence);
       seen.push(...page.items.map(({ id }) => id));
       cursor = page.nextCursor;
@@ -151,14 +156,14 @@ describe('PlayerCatalogService', () => {
 
     expect(seen).toHaveLength(25);
     expect(new Set(seen).size).toBe(25);
-    const latest = await catalog.search({ limit: 100 });
+    const latest = await catalog.search({ keyword: sourceCode, limit: 100 });
     expect(latest.items).toHaveLength(26);
     expect(latest.items[0]?.overallRating).toBe(110);
   });
 
   it('returns player, card, and pack details and raises 404 for hidden IDs', async () => {
     await importAndPublish([card(1), card(2)]);
-    const search = await catalog.search({ limit: 20 });
+    const search = await catalog.search({ keyword: sourceCode, limit: 20 });
     const first = search.items[0]!;
     const player = await catalog.getPlayer(first.playerId);
     const detail = await catalog.getCard(first.id);

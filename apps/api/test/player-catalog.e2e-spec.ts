@@ -23,7 +23,7 @@ describe('player catalog lifecycle', () => {
   const record = (externalId: string, overrides: Record<string, unknown> = {}) => ({
     externalId,
     playerExternalId: `player-${externalId}`,
-    playerNameEn: 'Ａｌｅｘｉｓ',
+    playerNameEn: `E2E Player ${suffix}`,
     cardName: 'Featured',
     position: 'CMF',
     overallRating: 96,
@@ -139,10 +139,10 @@ describe('player catalog lifecycle', () => {
       .expect(({ body }) => expect(body.id).toBe(created.body.id));
 
     const search = await request(app.getHttpServer())
-      .get('/v1/players?keyword=Alexis')
+      .get(`/v1/players?keyword=${encodeURIComponent(`E2E Player ${suffix}`)}`)
       .expect(200);
     expect(search.body.items).toHaveLength(1);
-    expect(search.body.items[0].playerNameEn).toBe('Ａｌｅｘｉｓ');
+    expect(search.body.items[0].playerNameEn).toBe(`E2E Player ${suffix}`);
     publishedCardId = search.body.items[0].id;
     publishedPlayerId = search.body.items[0].playerId;
     publishedPackId = search.body.items[0].pack.id;
