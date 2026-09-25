@@ -5,6 +5,7 @@ import { configuration } from './config/configuration.js';
 import { validateEnvironment } from './config/env.schema.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
+import { PlayerImportModule } from './player-import/player-import.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -18,6 +19,7 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     DatabaseModule,
     HealthModule,
+    PlayerImportModule,
     UsersModule
   ]
 })
