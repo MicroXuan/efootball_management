@@ -33,6 +33,63 @@ enum ScopeType {
   TEAM
 }
 
+enum ImportSourceType {
+  MANUAL
+  API
+}
+
+enum PlayerPosition {
+  GK
+  CB
+  LB
+  RB
+  DMF
+  CMF
+  LMF
+  RMF
+  AMF
+  LWF
+  RWF
+  SS
+  CF
+}
+
+enum PlayerCardType {
+  STANDARD
+  FEATURED
+  TRENDING
+  HIGHLIGHT
+  EPIC
+  BIG_TIME
+  OTHER
+}
+
+enum PlayerCardStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ImportFormat {
+  CSV
+  JSON
+}
+
+enum ImportBatchStatus {
+  UPLOADED
+  VALIDATED
+  READY
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum ImportDiffType {
+  CREATE
+  UPDATE
+  UNCHANGED
+  INVALID
+}
+
 model User {
   id               String            @id @default(uuid()) @db.Char(36)
   wechatOpenId     String            @unique @map("wechat_open_id") @db.VarChar(128)
@@ -121,18 +178,268 @@ model RolePermission {
 }
 
 model UserRoleBinding {
-  id          String     @id @default(uuid()) @db.Char(36)
-  userId      String     @map("user_id") @db.Char(36)
-  roleId      String     @map("role_id") @db.Char(36)
-  scopeType   ScopeType  @map("scope_type")
-  scopeId     String?    @map("scope_id") @db.Char(36)
-  startsAt    DateTime   @default(now()) @map("starts_at")
-  expiresAt   DateTime?  @map("expires_at")
-  grantedById String?    @map("granted_by_id") @db.Char(36)
-  createdAt   DateTime   @default(now()) @map("created_at")
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role        Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid()) @db.Char(36)
+  userId      String    @map("user_id") @db.Char(36)
+  roleId      String    @map("role_id") @db.Char(36)
+  scopeType   ScopeType @map("scope_type")
+  scopeId     String?   @map("scope_id") @db.Char(36)
+  startsAt    DateTime  @default(now()) @map("starts_at")
+  expiresAt   DateTime? @map("expires_at")
+  grantedById String?   @map("granted_by_id") @db.Char(36)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@index([userId, scopeType, scopeId], map: "role_bindings_scope_idx")
   @@map("user_role_bindings")
+}
+
+model DataSource {
+  id        String                 @id @default(uuid()) @db.Char(36)
+  code      String                 @unique @db.VarChar(64)
+  name      String                 @db.VarChar(128)
+  type      ImportSourceType       @default(MANUAL)
+  isEnabled Boolean                @default(true) @map("is_enabled")
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+  batches   ImportBatch[]
+  cards     PlayerCard[]
+  packs     CardPack[]
+  players   FootballPlayerSource[]
+
+  @@map("data_sources")
+}
+
+model FootballPlayer {
+  id                           String                 @id @default(uuid()) @db.Char(36)
+  nameZh                       String?                @map("name_zh") @db.VarChar(128)
+  nameEn                       String?                @map("name_en") @db.VarChar(128)
+  normalizedNameZh             String?                @map("normalized_name_zh") @db.VarChar(128)
+  normalizedNameEn             String?                @map("normalized_name_en") @db.VarChar(128)
+  shortName                    String?                @map("short_name") @db.VarChar(64)
+  nationality                  String?                @db.VarChar(64)
+  club                         String?                @db.VarChar(128)
+  publishedAt                  DateTime?              @map("published_at")
+  lastPublishedReleaseSequence Int?                   @map("last_published_release_sequence")
+  createdAt                    DateTime               @default(now()) @map("created_at")
+  updatedAt                    DateTime               @updatedAt @map("updated_at")
+  sources                      FootballPlayerSource[]
+  cards                        PlayerCard[]
+  importRecords                ImportRecord[]
+
+  @@index([normalizedNameZh], map: "football_players_name_zh_idx")
+  @@index([normalizedNameEn], map: "football_players_name_en_idx")
+  @@index([publishedAt], map: "football_players_published_at_idx")
+  @@map("football_players")
+}
+
+model FootballPlayerSource {
+  id              String         @id @default(uuid()) @db.Char(36)
+  playerId        String         @map("player_id") @db.Char(36)
+  sourceId        String         @map("source_id") @db.Char(36)
+  externalId      String         @map("external_id") @db.VarChar(128)
+  sourceUpdatedAt DateTime?      @map("source_updated_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  player          FootballPlayer @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  source          DataSource     @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceId, externalId], map: "football_player_sources_identity_unique")
+  @@index([playerId], map: "football_player_sources_player_idx")
+  @@map("football_player_sources")
+}
+
+model CardPack {
+  id                           String           @id @default(uuid()) @db.Char(36)
+  sourceId                     String           @map("source_id") @db.Char(36)
+  externalId                   String           @map("external_id") @db.VarChar(128)
+  nameZh                       String?          @map("name_zh") @db.VarChar(128)
+  nameEn                       String?          @map("name_en") @db.VarChar(128)
+  season                       String?          @db.VarChar(32)
+  releaseDate                  DateTime?        @map("release_date") @db.Date
+  coverUrl                     String?          @map("cover_url") @db.VarChar(2048)
+  status                       PlayerCardStatus @default(ACTIVE)
+  publishedAt                  DateTime?        @map("published_at")
+  lastPublishedReleaseSequence Int?             @map("last_published_release_sequence")
+  createdAt                    DateTime         @default(now()) @map("created_at")
+  updatedAt                    DateTime         @updatedAt @map("updated_at")
+  source                       DataSource       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  cards                        PlayerCard[]
+
+  @@unique([sourceId, externalId], map: "card_packs_identity_unique")
+  @@index([publishedAt, status], map: "card_packs_published_status_idx")
+  @@map("card_packs")
+}
+
+model PlayerCard {
+  id                           String               @id @default(uuid()) @db.Char(36)
+  sourceId                     String               @map("source_id") @db.Char(36)
+  externalId                   String               @map("external_id") @db.VarChar(128)
+  playerId                     String               @map("player_id") @db.Char(36)
+  cardPackId                   String?              @map("card_pack_id") @db.Char(36)
+  cardName                     String               @map("card_name") @db.VarChar(128)
+  position                     PlayerPosition
+  overallRating                Int                  @map("overall_rating") @db.UnsignedTinyInt
+  cardType                     PlayerCardType       @map("card_type")
+  playStyle                    String?              @map("play_style") @db.VarChar(128)
+  status                       PlayerCardStatus     @default(ACTIVE)
+  imageUrl                     String?              @map("image_url") @db.VarChar(2048)
+  sourceUpdatedAt              DateTime?            @map("source_updated_at")
+  publishedAt                  DateTime?            @map("published_at")
+  lastPublishedReleaseSequence Int?                 @map("last_published_release_sequence")
+  createdAt                    DateTime             @default(now()) @map("created_at")
+  updatedAt                    DateTime             @updatedAt @map("updated_at")
+  source                       DataSource           @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  player                       FootballPlayer       @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  cardPack                     CardPack?            @relation(fields: [cardPackId], references: [id], onDelete: SetNull)
+  attributes                   PlayerCardAttribute?
+  skills                       PlayerCardSkill[]
+  versions                     PlayerCardVersion[]
+  importRecords                ImportRecord[]
+
+  @@unique([sourceId, externalId], map: "player_cards_identity_unique")
+  @@index([position, cardType, overallRating], map: "player_cards_filter_idx")
+  @@index([cardPackId], map: "player_cards_pack_idx")
+  @@index([publishedAt, status], map: "player_cards_published_status_idx")
+  @@map("player_cards")
+}
+
+model PlayerCardAttribute {
+  id             String     @id @default(uuid()) @db.Char(36)
+  playerCardId   String     @unique @map("player_card_id") @db.Char(36)
+  attributesJson Json       @map("attributes_json")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  playerCard     PlayerCard @relation(fields: [playerCardId], references: [id], onDelete: Cascade)
+
+  @@map("player_card_attributes")
+}
+
+model Skill {
+  id        String            @id @default(uuid()) @db.Char(36)
+  code      String            @unique @db.VarChar(128)
+  nameZh    String?           @map("name_zh") @db.VarChar(128)
+  nameEn    String?           @map("name_en") @db.VarChar(128)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  cards     PlayerCardSkill[]
+
+  @@map("skills")
+}
+
+model PlayerCardSkill {
+  playerCardId String     @map("player_card_id") @db.Char(36)
+  skillId      String     @map("skill_id") @db.Char(36)
+  playerCard   PlayerCard @relation(fields: [playerCardId], references: [id], onDelete: Cascade)
+  skill        Skill      @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@id([playerCardId, skillId])
+  @@map("player_card_skills")
+}
+
+model ImportBatch {
+  id             String            @id @default(uuid()) @db.Char(36)
+  sourceId       String            @map("source_id") @db.Char(36)
+  fileName       String            @map("file_name") @db.VarChar(255)
+  format         ImportFormat
+  checksum       String            @db.Char(64)
+  status         ImportBatchStatus @default(UPLOADED)
+  totalCount     Int               @default(0) @map("total_count")
+  createCount    Int               @default(0) @map("create_count")
+  updateCount    Int               @default(0) @map("update_count")
+  unchangedCount Int               @default(0) @map("unchanged_count")
+  invalidCount   Int               @default(0) @map("invalid_count")
+  failureReason  String?           @map("failure_reason") @db.VarChar(512)
+  createdBy      String            @map("created_by") @db.Char(36)
+  publishedAt    DateTime?         @map("published_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  source         DataSource        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  records        ImportRecord[]
+  release        CatalogRelease?
+
+  @@unique([sourceId, checksum], map: "import_batches_source_checksum_unique")
+  @@index([status, createdAt], map: "import_batches_status_created_idx")
+  @@map("import_batches")
+}
+
+model ImportRecord {
+  id               String          @id @default(uuid()) @db.Char(36)
+  batchId          String          @map("batch_id") @db.Char(36)
+  rowNumber        Int             @map("row_number")
+  externalId       String?         @map("external_id") @db.VarChar(128)
+  contentChecksum  String?         @map("content_checksum") @db.Char(64)
+  rawJson          Json            @map("raw_json")
+  normalizedJson   Json?           @map("normalized_json")
+  diffType         ImportDiffType  @map("diff_type")
+  fieldDiff        Json            @map("field_diff")
+  validationErrors Json            @map("validation_errors")
+  targetPlayerId   String?         @map("target_player_id") @db.Char(36)
+  targetCardId     String?         @map("target_card_id") @db.Char(36)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  batch            ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  targetPlayer     FootballPlayer? @relation(fields: [targetPlayerId], references: [id], onDelete: SetNull)
+  targetCard       PlayerCard?     @relation(fields: [targetCardId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, rowNumber], map: "import_records_batch_row_unique")
+  @@index([batchId, diffType], map: "import_records_batch_diff_idx")
+  @@index([targetPlayerId], map: "import_records_target_player_idx")
+  @@index([targetCardId], map: "import_records_target_card_idx")
+  @@map("import_records")
+}
+
+model CatalogRelease {
+  id             String              @id @default(uuid()) @db.Char(36)
+  sequence       Int                 @unique @default(autoincrement())
+  batchId        String              @unique @map("batch_id") @db.Char(36)
+  publishedBy    String              @map("published_by") @db.Char(36)
+  createdCount   Int                 @map("created_count")
+  updatedCount   Int                 @map("updated_count")
+  unchangedCount Int                 @map("unchanged_count")
+  publishedAt    DateTime            @default(now()) @map("published_at")
+  batch          ImportBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  cardVersions   PlayerCardVersion[]
+
+  @@map("catalog_releases")
+}
+
+model PlayerCardVersion {
+  id               String           @id @default(uuid()) @db.Char(36)
+  playerCardId     String           @map("player_card_id") @db.Char(36)
+  releaseSequence  Int              @map("release_sequence")
+  playerId         String           @map("player_id") @db.Char(36)
+  playerNameZh     String?          @map("player_name_zh") @db.VarChar(128)
+  playerNameEn     String?          @map("player_name_en") @db.VarChar(128)
+  normalizedNameZh String?          @map("normalized_name_zh") @db.VarChar(128)
+  normalizedNameEn String?          @map("normalized_name_en") @db.VarChar(128)
+  playerShortName  String?          @map("player_short_name") @db.VarChar(64)
+  nationality      String?          @db.VarChar(64)
+  club             String?          @db.VarChar(128)
+  cardPackId       String?          @map("card_pack_id") @db.Char(36)
+  packNameZh       String?          @map("pack_name_zh") @db.VarChar(128)
+  packNameEn       String?          @map("pack_name_en") @db.VarChar(128)
+  packSeason       String?          @map("pack_season") @db.VarChar(32)
+  packReleaseDate  DateTime?        @map("pack_release_date") @db.Date
+  packCoverUrl     String?          @map("pack_cover_url") @db.VarChar(2048)
+  cardName         String           @map("card_name") @db.VarChar(128)
+  position         PlayerPosition
+  overallRating    Int              @map("overall_rating") @db.UnsignedTinyInt
+  cardType         PlayerCardType   @map("card_type")
+  playStyle        String?          @map("play_style") @db.VarChar(128)
+  status           PlayerCardStatus
+  imageUrl         String?          @map("image_url") @db.VarChar(2048)
+  sourceUpdatedAt  DateTime?        @map("source_updated_at")
+  skillsJson       Json             @map("skills_json")
+  attributesJson   Json             @map("attributes_json")
+  publishedAt      DateTime         @map("published_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  playerCard       PlayerCard       @relation(fields: [playerCardId], references: [id], onDelete: Cascade)
+  release          CatalogRelease   @relation(fields: [releaseSequence], references: [sequence], onDelete: Restrict)
+
+  @@unique([playerCardId, releaseSequence], map: "player_card_versions_card_release_unique")
+  @@index([releaseSequence, status], map: "player_card_versions_release_status_idx")
+  @@index([position, cardType, overallRating], map: "player_card_versions_filter_idx")
+  @@index([normalizedNameZh], map: "player_card_versions_name_zh_idx")
+  @@index([normalizedNameEn], map: "player_card_versions_name_en_idx")
+  @@map("player_card_versions")
 }

@@ -19,12 +19,51 @@ const roles = [
   ['PLATFORM_ADMIN', '平台管理员']
 ] as const;
 
-for (const [code, name] of roles) {
-  await prisma.role.upsert({
-    where: { code },
-    update: { name },
-    create: { code, name }
+const catalogPermissions = [
+  ['catalog.import.create', 'Create player import batches'],
+  ['catalog.import.read', 'Read player import batches'],
+  ['catalog.import.publish', 'Publish player import batches']
+] as const;
+
+await prisma.$transaction(async (transaction) => {
+  for (const [code, name] of roles) {
+    await transaction.role.upsert({
+      where: { code },
+      update: { name },
+      create: { code, name }
+    });
+  }
+
+  const platformAdmin = await transaction.role.findUniqueOrThrow({
+    where: { code: 'PLATFORM_ADMIN' }
   });
-}
+
+  for (const [code, name] of catalogPermissions) {
+    const permission = await transaction.permission.upsert({
+      where: { code },
+      update: { name },
+      create: { code, name }
+    });
+    await transaction.rolePermission.upsert({
+      where: {
+        roleId_permissionId: {
+          roleId: platformAdmin.id,
+          permissionId: permission.id
+        }
+      },
+      update: {},
+      create: {
+        roleId: platformAdmin.id,
+        permissionId: permission.id
+      }
+    });
+  }
+
+  await transaction.dataSource.upsert({
+    where: { code: 'manual' },
+    update: { name: 'Manual import', isEnabled: true },
+    create: { code: 'manual', name: 'Manual import', type: 'MANUAL' }
+  });
+});
 
 await prisma.$disconnect();

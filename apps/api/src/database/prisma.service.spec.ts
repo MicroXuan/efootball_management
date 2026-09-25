@@ -28,4 +28,11 @@ describe('PrismaService', () => {
     await prisma.user.delete({ where: { id: created.id } });
     await expect(prisma.user.findUnique({ where: { id: created.id } })).resolves.toBeNull();
   });
+
+  it('exposes player catalog and import delegates', () => {
+    expect(prisma.dataSource).toBeDefined();
+    expect(prisma.playerCard).toBeDefined();
+    expect(prisma.importBatch).toBeDefined();
+    expect(prisma.catalogRelease).toBeDefined();
+  });
 });
