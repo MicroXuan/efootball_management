@@ -111,37 +111,101 @@ enum ExternalSyncItemStatus {
   FAILED
 }
 
+enum CompetitionStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum CompetitionParticipantType {
+  INDIVIDUAL
+  TEAM
+}
+
+enum CompetitionFormat {
+  ROUND_ROBIN
+  DOUBLE_ROUND_ROBIN
+  SINGLE_ELIMINATION
+  GROUP_KNOCKOUT
+}
+
+enum CompetitionRegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum CompetitionStageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CompetitionMatchStatus {
+  SCHEDULED
+  AWAITING_RESULT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  ADMIN_DECIDED
+}
+
+enum MatchResultSubmissionSide {
+  HOME
+  AWAY
+  MANAGER
+}
+
+enum MatchResultVersionStatus {
+  PROPOSED
+  REJECTED
+  OFFICIAL
+  SUPERSEDED
+}
+
 model User {
-  id               String            @id @default(uuid()) @db.Char(36)
-  wechatOpenId     String            @unique @map("wechat_open_id") @db.VarChar(128)
-  wechatUnionId    String?           @unique @map("wechat_union_id") @db.VarChar(128)
-  displayName      String            @map("display_name") @db.VarChar(32)
-  avatarUrl        String?           @map("avatar_url") @db.VarChar(2048)
-  region           String?           @db.VarChar(64)
-  status           UserStatus        @default(ACTIVE)
-  agreementVersion String?           @map("agreement_version") @db.VarChar(32)
-  privacyConsentAt DateTime?         @map("privacy_consent_at")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
-  gameAccounts     GameAccount[]
-  refreshSessions  RefreshSession[]
-  roleBindings     UserRoleBinding[]
+  id                               String                                 @id @default(uuid()) @db.Char(36)
+  wechatOpenId                     String                                 @unique @map("wechat_open_id") @db.VarChar(128)
+  wechatUnionId                    String?                                @unique @map("wechat_union_id") @db.VarChar(128)
+  displayName                      String                                 @map("display_name") @db.VarChar(32)
+  avatarUrl                        String?                                @map("avatar_url") @db.VarChar(2048)
+  region                           String?                                @db.VarChar(64)
+  status                           UserStatus                             @default(ACTIVE)
+  agreementVersion                 String?                                @map("agreement_version") @db.VarChar(32)
+  privacyConsentAt                 DateTime?                              @map("privacy_consent_at")
+  createdAt                        DateTime                               @default(now()) @map("created_at")
+  updatedAt                        DateTime                               @updatedAt @map("updated_at")
+  gameAccounts                     GameAccount[]
+  refreshSessions                  RefreshSession[]
+  roleBindings                     UserRoleBinding[]
+  createdCompetitions              Competition[]                          @relation("CompetitionCreator")
+  createdCompetitionRules          CompetitionRuleVersion[]               @relation("CompetitionRuleCreator")
+  competitionRegistrations         CompetitionRegistration[]              @relation("CompetitionApplicant")
+  reviewedCompetitionRegistrations CompetitionRegistration[]              @relation("CompetitionRegistrationReviewer")
+  competitionRegistrationHistory   CompetitionRegistrationStatusHistory[] @relation("CompetitionRegistrationActor")
+  competitionParticipants          CompetitionParticipant[]               @relation("CompetitionIndividualParticipant")
+  submittedMatchResults            MatchResultVersion[]                   @relation("MatchResultSubmitter")
+  mutationReceipts                 MutationReceipt[]                      @relation("MutationReceiptActor")
 
   @@map("users")
 }
 
 model GameAccount {
-  id                 String             @id @default(uuid()) @db.Char(36)
-  userId             String             @map("user_id") @db.Char(36)
-  platform           GamePlatform
-  serverRegion       String             @map("server_region") @db.VarChar(32)
-  gamerTag           String             @map("gamer_tag") @db.VarChar(64)
-  gameUid            String?            @map("game_uid") @db.VarChar(64)
-  isDefault          Boolean            @default(false) @map("is_default")
-  verificationStatus VerificationStatus @default(UNVERIFIED) @map("verification_status")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
-  user               User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id                       String                    @id @default(uuid()) @db.Char(36)
+  userId                   String                    @map("user_id") @db.Char(36)
+  platform                 GamePlatform
+  serverRegion             String                    @map("server_region") @db.VarChar(32)
+  gamerTag                 String                    @map("gamer_tag") @db.VarChar(64)
+  gameUid                  String?                   @map("game_uid") @db.VarChar(64)
+  isDefault                Boolean                   @default(false) @map("is_default")
+  verificationStatus       VerificationStatus        @default(UNVERIFIED) @map("verification_status")
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  updatedAt                DateTime                  @updatedAt @map("updated_at")
+  user                     User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  competitionRegistrations CompetitionRegistration[]
 
   @@unique([platform, serverRegion, gameUid], map: "game_accounts_identity_unique")
   @@index([userId], map: "game_accounts_user_id_idx")
@@ -529,4 +593,248 @@ model PlayerCardVersion {
   @@index([normalizedNameZh], map: "player_card_versions_name_zh_idx")
   @@index([normalizedNameEn], map: "player_card_versions_name_en_idx")
   @@map("player_card_versions")
+}
+
+model Competition {
+  id                   String                     @id @default(uuid()) @db.Char(36)
+  name                 String                     @db.VarChar(80)
+  description          String                     @db.Text
+  platform             GamePlatform
+  serverRegion         String                     @map("server_region") @db.VarChar(32)
+  participantType      CompetitionParticipantType @default(INDIVIDUAL) @map("participant_type")
+  format               CompetitionFormat          @default(ROUND_ROBIN)
+  status               CompetitionStatus          @default(DRAFT)
+  registrationOpensAt  DateTime                   @map("registration_opens_at")
+  registrationClosesAt DateTime                   @map("registration_closes_at")
+  startsAt             DateTime                   @map("starts_at")
+  endsAt               DateTime                   @map("ends_at")
+  participantLimit     Int                        @map("participant_limit") @db.UnsignedInt
+  createdById          String                     @map("created_by_id") @db.Char(36)
+  activeRuleVersion    Int                        @default(1) @map("active_rule_version") @db.UnsignedInt
+  boundRuleVersion     Int?                       @map("bound_rule_version") @db.UnsignedInt
+  cancellationReason   String?                    @map("cancellation_reason") @db.VarChar(512)
+  version              Int                        @default(1) @db.UnsignedInt
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
+  creator              User                       @relation("CompetitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  ruleVersions         CompetitionRuleVersion[]
+  registrations        CompetitionRegistration[]
+  participants         CompetitionParticipant[]
+  stages               CompetitionStage[]
+  standingsSnapshots   StandingsSnapshot[]
+
+  @@index([status, registrationOpensAt, id], map: "competitions_public_list_idx")
+  @@index([createdById], map: "competitions_creator_idx")
+  @@map("competitions")
+}
+
+model CompetitionRuleVersion {
+  id            String      @id @default(uuid()) @db.Char(36)
+  competitionId String      @map("competition_id") @db.Char(36)
+  version       Int         @db.UnsignedInt
+  winPoints     Int         @default(3) @map("win_points")
+  drawPoints    Int         @default(1) @map("draw_points")
+  lossPoints    Int         @default(0) @map("loss_points")
+  tieBreakers   Json        @map("tie_breakers")
+  createdById   String      @map("created_by_id") @db.Char(36)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  creator       User        @relation("CompetitionRuleCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([competitionId, version], map: "competition_rule_versions_version_unique")
+  @@index([createdById], map: "competition_rule_versions_creator_idx")
+  @@map("competition_rule_versions")
+}
+
+model CompetitionRegistration {
+  id                  String                                 @id @default(uuid()) @db.Char(36)
+  competitionId       String                                 @map("competition_id") @db.Char(36)
+  applicantId         String                                 @map("applicant_id") @db.Char(36)
+  gameAccountId       String                                 @map("game_account_id") @db.Char(36)
+  acceptedRuleVersion Int                                    @map("accepted_rule_version") @db.UnsignedInt
+  status              CompetitionRegistrationStatus          @default(PENDING)
+  reviewedById        String?                                @map("reviewed_by_id") @db.Char(36)
+  reviewReason        String?                                @map("review_reason") @db.VarChar(512)
+  reviewedAt          DateTime?                              @map("reviewed_at")
+  withdrawnAt         DateTime?                              @map("withdrawn_at")
+  version             Int                                    @default(1) @db.UnsignedInt
+  createdAt           DateTime                               @default(now()) @map("created_at")
+  updatedAt           DateTime                               @updatedAt @map("updated_at")
+  competition         Competition                            @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  applicant           User                                   @relation("CompetitionApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  gameAccount         GameAccount                            @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
+  reviewer            User?                                  @relation("CompetitionRegistrationReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  history             CompetitionRegistrationStatusHistory[]
+  participant         CompetitionParticipant?
+
+  @@unique([competitionId, applicantId], map: "competition_registrations_applicant_unique")
+  @@index([competitionId, status, createdAt], map: "competition_registrations_review_idx")
+  @@index([gameAccountId], map: "competition_registrations_account_idx")
+  @@index([reviewedById], map: "competition_registrations_reviewer_idx")
+  @@map("competition_registrations")
+}
+
+model CompetitionRegistrationStatusHistory {
+  id             String                         @id @default(uuid()) @db.Char(36)
+  registrationId String                         @map("registration_id") @db.Char(36)
+  fromStatus     CompetitionRegistrationStatus? @map("from_status")
+  toStatus       CompetitionRegistrationStatus  @map("to_status")
+  actorId        String                         @map("actor_id") @db.Char(36)
+  reason         String?                        @db.VarChar(512)
+  createdAt      DateTime                       @default(now()) @map("created_at")
+  registration   CompetitionRegistration        @relation(fields: [registrationId], references: [id], onDelete: Restrict)
+  actor          User                           @relation("CompetitionRegistrationActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([registrationId, createdAt], map: "competition_registration_history_idx")
+  @@index([actorId], map: "competition_registration_history_actor_idx")
+  @@map("competition_registration_status_history")
+}
+
+model CompetitionParticipant {
+  id                  String                     @id @default(uuid()) @db.Char(36)
+  competitionId       String                     @map("competition_id") @db.Char(36)
+  participantType     CompetitionParticipantType @default(INDIVIDUAL) @map("participant_type")
+  registrationId      String                     @unique @map("registration_id") @db.Char(36)
+  individualUserId    String?                    @map("individual_user_id") @db.Char(36)
+  teamId              String?                    @map("team_id") @db.Char(36)
+  admissionSequence   Int                        @map("admission_sequence") @db.UnsignedInt
+  displayNameSnapshot String                     @map("display_name_snapshot") @db.VarChar(64)
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  competition         Competition                @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  registration        CompetitionRegistration    @relation(fields: [registrationId], references: [id], onDelete: Restrict)
+  individualUser      User?                      @relation("CompetitionIndividualParticipant", fields: [individualUserId], references: [id], onDelete: Restrict)
+  homeMatches         CompetitionMatch[]         @relation("CompetitionMatchHome")
+  awayMatches         CompetitionMatch[]         @relation("CompetitionMatchAway")
+  standingsRows       StandingsRow[]
+
+  @@unique([competitionId, admissionSequence], map: "competition_participants_sequence_unique")
+  @@unique([competitionId, individualUserId], map: "competition_participants_user_unique")
+  @@index([individualUserId], map: "competition_participants_user_idx")
+  @@map("competition_participants")
+}
+
+model CompetitionStage {
+  id            String                 @id @default(uuid()) @db.Char(36)
+  competitionId String                 @map("competition_id") @db.Char(36)
+  sequence      Int                    @db.UnsignedInt
+  format        CompetitionFormat      @default(ROUND_ROBIN)
+  status        CompetitionStageStatus @default(DRAFT)
+  version       Int                    @default(1) @db.UnsignedInt
+  publishedAt   DateTime?              @map("published_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  competition   Competition            @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  matches       CompetitionMatch[]
+
+  @@unique([competitionId, sequence], map: "competition_stages_sequence_unique")
+  @@index([competitionId, status], map: "competition_stages_status_idx")
+  @@map("competition_stages")
+}
+
+model CompetitionMatch {
+  id                      String                 @id @default(uuid()) @db.Char(36)
+  stageId                 String                 @map("stage_id") @db.Char(36)
+  roundNumber             Int                    @map("round_number") @db.UnsignedInt
+  pairingKey              String                 @map("pairing_key") @db.VarChar(73)
+  matchNumber             Int                    @map("match_number") @db.UnsignedInt
+  homeParticipantId       String                 @map("home_participant_id") @db.Char(36)
+  awayParticipantId       String                 @map("away_participant_id") @db.Char(36)
+  plannedAt               DateTime?              @map("planned_at")
+  status                  CompetitionMatchStatus @default(SCHEDULED)
+  officialResultVersionId String?                @unique @map("official_result_version_id") @db.Char(36)
+  version                 Int                    @default(1) @db.UnsignedInt
+  createdAt               DateTime               @default(now()) @map("created_at")
+  updatedAt               DateTime               @updatedAt @map("updated_at")
+  stage                   CompetitionStage       @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  homeParticipant         CompetitionParticipant @relation("CompetitionMatchHome", fields: [homeParticipantId], references: [id], onDelete: Restrict)
+  awayParticipant         CompetitionParticipant @relation("CompetitionMatchAway", fields: [awayParticipantId], references: [id], onDelete: Restrict)
+  resultVersions          MatchResultVersion[]   @relation("MatchResultHistory")
+  officialResultVersion   MatchResultVersion?    @relation("OfficialMatchResult", fields: [officialResultVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([stageId, pairingKey], map: "competition_matches_pair_unique")
+  @@unique([stageId, matchNumber], map: "competition_matches_number_unique")
+  @@index([stageId, roundNumber, matchNumber], map: "competition_matches_round_idx")
+  @@index([homeParticipantId], map: "competition_matches_home_idx")
+  @@index([awayParticipantId], map: "competition_matches_away_idx")
+  @@map("competition_matches")
+}
+
+model MatchResultVersion {
+  id                 String                    @id @default(uuid()) @db.Char(36)
+  matchId            String                    @map("match_id") @db.Char(36)
+  version            Int                       @db.UnsignedInt
+  homeScore          Int                       @map("home_score") @db.UnsignedTinyInt
+  awayScore          Int                       @map("away_score") @db.UnsignedTinyInt
+  submittedById      String                    @map("submitted_by_id") @db.Char(36)
+  submissionSide     MatchResultSubmissionSide @map("submission_side")
+  status             MatchResultVersionStatus  @default(PROPOSED)
+  reason             String?                   @db.VarChar(512)
+  evidenceMetadata   Json?                     @map("evidence_metadata")
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @updatedAt @map("updated_at")
+  match              CompetitionMatch          @relation("MatchResultHistory", fields: [matchId], references: [id], onDelete: Restrict)
+  submitter          User                      @relation("MatchResultSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  officialForMatch   CompetitionMatch?         @relation("OfficialMatchResult")
+  triggeredSnapshots StandingsSnapshot[]
+
+  @@unique([matchId, version], map: "match_result_versions_version_unique")
+  @@index([matchId, status], map: "match_result_versions_status_idx")
+  @@index([submittedById], map: "match_result_versions_submitter_idx")
+  @@map("match_result_versions")
+}
+
+model StandingsSnapshot {
+  id                        String              @id @default(uuid()) @db.Char(36)
+  competitionId             String              @map("competition_id") @db.Char(36)
+  version                   Int                 @db.UnsignedInt
+  triggeringResultVersionId String?             @map("triggering_result_version_id") @db.Char(36)
+  ruleVersion               Int                 @map("rule_version") @db.UnsignedInt
+  generatedAt               DateTime            @default(now()) @map("generated_at")
+  competition               Competition         @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  triggeringResultVersion   MatchResultVersion? @relation(fields: [triggeringResultVersionId], references: [id], onDelete: Restrict)
+  rows                      StandingsRow[]
+
+  @@unique([competitionId, version], map: "standings_snapshots_version_unique")
+  @@index([triggeringResultVersionId], map: "standings_snapshots_trigger_idx")
+  @@map("standings_snapshots")
+}
+
+model StandingsRow {
+  id               String                 @id @default(uuid()) @db.Char(36)
+  snapshotId       String                 @map("snapshot_id") @db.Char(36)
+  participantId    String                 @map("participant_id") @db.Char(36)
+  played           Int                    @default(0) @db.UnsignedInt
+  wins             Int                    @default(0) @db.UnsignedInt
+  draws            Int                    @default(0) @db.UnsignedInt
+  losses           Int                    @default(0) @db.UnsignedInt
+  goalsFor         Int                    @default(0) @map("goals_for") @db.UnsignedInt
+  goalsAgainst     Int                    @default(0) @map("goals_against") @db.UnsignedInt
+  goalDifference   Int                    @default(0) @map("goal_difference")
+  basePoints       Int                    @default(0) @map("base_points")
+  adjustmentPoints Int                    @default(0) @map("adjustment_points")
+  totalPoints      Int                    @default(0) @map("total_points")
+  rank             Int                    @db.UnsignedInt
+  tiePending       Boolean                @default(false) @map("tie_pending")
+  tieBreakValues   Json                   @map("tie_break_values")
+  snapshot         StandingsSnapshot      @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  participant      CompetitionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotId, participantId], map: "standings_rows_participant_unique")
+  @@index([snapshotId, rank], map: "standings_rows_rank_idx")
+  @@index([participantId], map: "standings_rows_participant_idx")
+  @@map("standings_rows")
+}
+
+model MutationReceipt {
+  id         String   @id @default(uuid()) @db.Char(36)
+  actorId    String   @map("actor_id") @db.Char(36)
+  operation  String   @db.VarChar(96)
+  key        String   @db.VarChar(128)
+  resultJson Json?    @map("result_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  actor      User     @relation("MutationReceiptActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([actorId, operation, key], map: "mutation_receipts_request_unique")
+  @@map("mutation_receipts")
 }

@@ -25,6 +25,14 @@ const catalogPermissions = [
   ['catalog.import.publish', 'Publish player import batches']
 ] as const;
 
+const competitionPermissions = [
+  ['competition.create', 'Create competitions'],
+  ['competition.manage', 'Manage a competition'],
+  ['competition.registration.review', 'Review competition registrations'],
+  ['competition.schedule.manage', 'Manage competition schedules'],
+  ['competition.result.manage', 'Manage official competition results']
+] as const;
+
 await prisma.$transaction(async (transaction) => {
   for (const [code, name] of roles) {
     await transaction.role.upsert({
@@ -36,6 +44,9 @@ await prisma.$transaction(async (transaction) => {
 
   const platformAdmin = await transaction.role.findUniqueOrThrow({
     where: { code: 'PLATFORM_ADMIN' }
+  });
+  const eventManager = await transaction.role.findUniqueOrThrow({
+    where: { code: 'EVENT_MANAGER' }
   });
 
   for (const [code, name] of catalogPermissions) {
@@ -57,6 +68,31 @@ await prisma.$transaction(async (transaction) => {
         permissionId: permission.id
       }
     });
+  }
+
+  for (const [index, [code, name]] of competitionPermissions.entries()) {
+    const permission = await transaction.permission.upsert({
+      where: { code },
+      update: { name },
+      create: { code, name }
+    });
+    const rolesToGrant = index === 0 ? [platformAdmin] : [platformAdmin, eventManager];
+
+    for (const role of rolesToGrant) {
+      await transaction.rolePermission.upsert({
+        where: {
+          roleId_permissionId: {
+            roleId: role.id,
+            permissionId: permission.id
+          }
+        },
+        update: {},
+        create: {
+          roleId: role.id,
+          permissionId: permission.id
+        }
+      });
+    }
   }
 
   await transaction.dataSource.upsert({

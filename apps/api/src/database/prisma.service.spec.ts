@@ -41,4 +41,18 @@ describe('PrismaService', () => {
     expect(prisma.externalSyncItem).toBeDefined();
     expect(prisma.externalSyncRunBatch).toBeDefined();
   });
+
+  it('exposes competition aggregate and idempotency delegates', () => {
+    expect(prisma.competition).toBeDefined();
+    expect(prisma.competitionRuleVersion).toBeDefined();
+    expect(prisma.competitionRegistration).toBeDefined();
+    expect(prisma.competitionRegistrationStatusHistory).toBeDefined();
+    expect(prisma.competitionParticipant).toBeDefined();
+    expect(prisma.competitionStage).toBeDefined();
+    expect(prisma.competitionMatch).toBeDefined();
+    expect(prisma.matchResultVersion).toBeDefined();
+    expect(prisma.standingsSnapshot).toBeDefined();
+    expect(prisma.standingsRow).toBeDefined();
+    expect(prisma.mutationReceipt).toBeDefined();
+  });
 });
