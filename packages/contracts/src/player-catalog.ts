@@ -28,6 +28,7 @@ export const PlayerCardTypeSchema = z.enum([
 ]);
 
 export const PlayerCardStatusSchema = z.enum(['ACTIVE', 'INACTIVE']);
+export const PlayerAttributesSchema = z.record(z.string(), z.json());
 
 export const PlayerSearchQuerySchema = z.object({
   keyword: z.string().trim().min(1).max(80).optional(),
@@ -94,7 +95,7 @@ export const PlayerCardDetailSchema = PlayerCardSummarySchema.extend({
   club: z.string().nullable(),
   status: PlayerCardStatusSchema,
   skills: z.array(SkillSummarySchema),
-  attributes: z.record(z.string(), z.number().finite()),
+  attributes: PlayerAttributesSchema,
   otherCards: z.array(PlayerCardSummarySchema)
 });
 

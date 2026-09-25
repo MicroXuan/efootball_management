@@ -47,4 +47,18 @@ describe('player card detail view model', () => {
       siblings: [{ id: sibling.id, title: '基础卡', overallRating: 90 }],
     })
   })
+
+  it('renders only finite numeric metadata as attribute bars', () => {
+    const attributes = {
+      speed: 77,
+      foot: 'RIGHT',
+      positionHot: ['CB', 'DMF'],
+      boost: { Tackling: 2 },
+      invalid: Number.POSITIVE_INFINITY,
+    } as unknown as PlayerCardDetail['attributes']
+
+    expect(toCardDetailViewModel(detail({ attributes })).attributes).toEqual([
+      expect.objectContaining({ key: 'speed', value: 77 }),
+    ])
+  })
 })

@@ -3,7 +3,8 @@ import { ResourceIdSchema } from './common.js';
 import {
   PlayerCardStatusSchema,
   PlayerCardTypeSchema,
-  PlayerPositionSchema
+  PlayerPositionSchema,
+  PlayerAttributesSchema
 } from './player-catalog.js';
 
 export const ImportFormatSchema = z.enum(['CSV', 'JSON']);
@@ -38,7 +39,7 @@ export const NormalizedPlayerCardRecordSchema = z.object({
   releaseDate: z.iso.date().optional(),
   sourceUpdatedAt: z.iso.datetime().optional(),
   skills: z.array(z.string().trim().min(1).max(128)).default([]),
-  attributes: z.record(z.string(), z.number().finite()).default({})
+  attributes: PlayerAttributesSchema.default({})
 }).refine((value) => Boolean(value.playerNameZh || value.playerNameEn), {
   message: 'At least one player name is required',
   path: ['playerNameZh']

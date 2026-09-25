@@ -78,4 +78,30 @@ describe('shared API contracts', () => {
       imageUrl: 'http://example.com/card.png'
     }));
   });
+
+  it('accepts complete JSON metadata in player card attributes', () => {
+    const parsed = NormalizedPlayerCardRecordSchema.parse({
+      externalId: '8801',
+      playerNameEn: 'Authorized Player',
+      cardName: 'Epic Test',
+      position: 'CB',
+      overallRating: 87,
+      cardType: 'EPIC',
+      attributes: {
+        speed: 77,
+        foot: 'RIGHT',
+        positionHot: ['CB', 'DMF'],
+        boost: { Tackling: 2 },
+        featured: true
+      }
+    });
+
+    assert.deepEqual(parsed.attributes, {
+      speed: 77,
+      foot: 'RIGHT',
+      positionHot: ['CB', 'DMF'],
+      boost: { Tackling: 2 },
+      featured: true
+    });
+  });
 });

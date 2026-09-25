@@ -39,6 +39,9 @@ export type PlayerCardDetailViewModel = PlayerCardViewModel & {
 export function toCardDetailViewModel(detail: PlayerCardDetail): PlayerCardDetailViewModel {
   const known = new Map(attributeOrder.map((key, index) => [key, index]))
   const attributes = Object.entries(detail.attributes)
+    .filter((entry): entry is [string, number] => (
+      typeof entry[1] === 'number' && Number.isFinite(entry[1])
+    ))
     .sort(([left], [right]) => {
       const leftOrder = known.get(left)
       const rightOrder = known.get(right)
