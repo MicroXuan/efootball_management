@@ -42,9 +42,10 @@ function requiredActor(argv: string[]): string {
 }
 
 export function parsePesdataSyncArgs(argv: string[]): PesdataSyncArgs {
-  const [mode, target] = argv;
-  const actorId = requiredActor(argv);
-  const dryRun = argv.includes('--dry-run');
+  const normalizedArguments = argv[0] === '--' ? argv.slice(1) : argv;
+  const [mode, target] = normalizedArguments;
+  const actorId = requiredActor(normalizedArguments);
+  const dryRun = normalizedArguments.includes('--dry-run');
 
   if (mode === 'resume') {
     if (dryRun) throw new PesdataCliError('PESDATA_DRY_RUN_UNSUPPORTED');
@@ -56,7 +57,7 @@ export function parsePesdataSyncArgs(argv: string[]): PesdataSyncArgs {
     throw new PesdataCliError('PESDATA_MODE_INVALID');
   }
 
-  const limitValue = option(argv, '--limit');
+  const limitValue = option(normalizedArguments, '--limit');
   if (limitValue !== undefined && mode !== 'sample') {
     throw new PesdataCliError('PESDATA_LIMIT_UNSUPPORTED');
   }

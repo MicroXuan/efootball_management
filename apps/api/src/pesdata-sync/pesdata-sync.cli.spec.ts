@@ -20,6 +20,9 @@ describe('PESDATA sync CLI arguments', () => {
     expect(parsePesdataSyncArgs(['sample', '--actor', actorId, '--limit', '2', '--dry-run'])).toEqual({
       command: 'start', mode: 'sample', actorId, limit: 2, dryRun: true
     });
+    expect(parsePesdataSyncArgs(['--', 'sample', '--actor', actorId, '--limit', '2', '--dry-run'])).toEqual({
+      command: 'start', mode: 'sample', actorId, limit: 2, dryRun: true
+    });
   });
 
   it.each([
