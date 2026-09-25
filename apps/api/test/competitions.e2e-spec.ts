@@ -17,6 +17,7 @@ describe('competition lifecycle API', () => {
   ];
   const competitionIds: string[] = [];
   const gameAccountIds: string[] = [];
+  const fixtureUserIds: string[] = [];
   let app: INestApplication;
   let adminToken: string;
   let managerToken: string;
@@ -62,6 +63,8 @@ describe('competition lifecycle API', () => {
 
   afterAll(async () => {
     await prisma.mutationReceipt.deleteMany({ where: { actorId: { in: [adminUserId, managerUserId, playerUserId] } } });
+    await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: competitionIds } } } });
+    await prisma.competitionStage.deleteMany({ where: { competitionId: { in: competitionIds } } });
     await prisma.competitionParticipant.deleteMany({ where: { competitionId: { in: competitionIds } } });
     await prisma.competitionRegistrationStatusHistory.deleteMany({
       where: { registration: { competitionId: { in: competitionIds } } }
@@ -73,6 +76,7 @@ describe('competition lifecycle API', () => {
     await prisma.competitionRuleVersion.deleteMany({ where: { competitionId: { in: competitionIds } } });
     await prisma.competition.deleteMany({ where: { id: { in: competitionIds } } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: gameAccountIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: fixtureUserIds } } });
     await prisma.refreshSession.deleteMany({ where: { userId: { in: [adminUserId, managerUserId, playerUserId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [adminUserId, managerUserId, playerUserId] } } });
     await app.close();
@@ -88,6 +92,38 @@ describe('competition lifecycle API', () => {
       .expect(201);
     competitionIds.push(response.body.id as string);
     return response.body as { id: string; version: number };
+  }
+
+  async function seedParticipants(competitionId: string, count: number) {
+    for (let index = 0; index < count; index += 1) {
+      const userId = randomUUID();
+      fixtureUserIds.push(userId);
+      await prisma.user.create({
+        data: { id: userId, wechatOpenId: `schedule-e2e-${userId}`, displayName: `赛程 E2E ${index + 1}` }
+      });
+      const account = await prisma.gameAccount.create({
+        data: { userId, platform: 'MOBILE', serverRegion: 'GLOBAL', gamerTag: `ScheduleE2E-${index + 1}-${suffix}` }
+      });
+      gameAccountIds.push(account.id);
+      const registration = await prisma.competitionRegistration.create({
+        data: {
+          competitionId,
+          applicantId: userId,
+          gameAccountId: account.id,
+          acceptedRuleVersion: 1,
+          status: 'APPROVED'
+        }
+      });
+      await prisma.competitionParticipant.create({
+        data: {
+          competitionId,
+          registrationId: registration.id,
+          individualUserId: userId,
+          admissionSequence: index + 1,
+          displayNameSnapshot: `赛程 E2E ${index + 1}`
+        }
+      });
+    }
   }
 
   it('requires idempotency and validates competition timelines', async () => {
@@ -167,5 +203,44 @@ describe('competition lifecycle API', () => {
       .set('Authorization', `Bearer ${playerToken}`).set('Idempotency-Key', randomUUID())
       .send({ expectedVersion: approved.body.version }).expect(200)
       .expect(({ body: withdrawn }) => expect(withdrawn.status).toBe('WITHDRAWN'));
+  });
+
+  it('generates, previews, publishes, and exposes a round-robin schedule', async () => {
+    const created = await createCompetition();
+    const opened = await request(app.getHttpServer())
+      .post(`/v1/admin/competitions/${created.id}/open-registration`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .send({ expectedVersion: created.version }).expect(200);
+    const closed = await request(app.getHttpServer())
+      .post(`/v1/admin/competitions/${created.id}/close-registration`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .send({ expectedVersion: opened.body.version }).expect(200);
+    await seedParticipants(created.id, 4);
+
+    const generated = await request(app.getHttpServer())
+      .post(`/v1/admin/competitions/${created.id}/schedule/generate`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .expect(200);
+    expect(generated.body).toMatchObject({ status: 'DRAFT', roundCount: 3, matchCount: 6 });
+    await request(app.getHttpServer())
+      .get(`/v1/admin/competitions/${created.id}/schedule/preview`)
+      .set('Authorization', `Bearer ${adminToken}`).expect(200)
+      .expect(({ body: preview }) => expect(preview.matches).toHaveLength(6));
+    await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/matches`)
+      .expect(200).expect([]);
+
+    await request(app.getHttpServer())
+      .post(`/v1/admin/competitions/${created.id}/schedule/publish`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .send({
+        expectedCompetitionVersion: closed.body.version,
+        expectedStageVersion: generated.body.version
+      }).expect(200)
+      .expect(({ body: published }) => expect(published.status).toBe('PUBLISHED'));
+    await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/matches`)
+      .expect(200).expect(({ body: matches }) => {
+        expect(matches).toHaveLength(6);
+        expect(matches.map((match: { matchNumber: number }) => match.matchNumber)).toEqual([1, 2, 3, 4, 5, 6]);
+      });
   });
 });
