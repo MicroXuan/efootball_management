@@ -250,6 +250,40 @@ describe('PesdataSyncService', () => {
     expect(result).toMatchObject({ status: 'READY', scannedCount: 2, fetchedCount: 2 });
   });
 
+  it('releases the lease when retrying a failed item hits a protocol error', async () => {
+    const source = await prisma.dataSource.findUniqueOrThrow({ where: { code: 'pesdata' } });
+    const run = await prisma.externalSyncRun.create({
+      data: {
+        sourceId: source.id,
+        actorId,
+        mode: 'FULL',
+        status: 'FAILED',
+        currentOffset: 1,
+        items: {
+          create: {
+            externalId: '1',
+            summaryChecksum: 'a'.repeat(64),
+            status: 'FAILED',
+            attempts: 1
+          }
+        }
+      }
+    });
+    const client = {
+      listPlayers: async () => ({ list: [], count: 1 }),
+      getPlayerDetail: async () => {
+        throw new PesdataClientError('PESDATA_PROTOCOL_ERROR', 'changed protocol', 'detail', 403, 1);
+      }
+    };
+
+    await expect(
+      new PesdataSyncService(prisma, importService, client as never).resume(actorId, run.id)
+    ).rejects.toMatchObject({ code: 'PESDATA_PROTOCOL_ERROR' });
+
+    await expect(prisma.externalSyncRun.findUniqueOrThrow({ where: { id: run.id } }))
+      .resolves.toMatchObject({ status: 'FAILED', activeLeaseKey: null });
+  });
+
   it('keeps successful items when another detail cannot be mapped', async () => {
     const client = {
       listPlayers: async () => ({ list: [summary(1), summary(2)], count: 2 }),

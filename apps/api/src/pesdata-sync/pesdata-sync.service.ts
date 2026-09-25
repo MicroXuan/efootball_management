@@ -166,40 +166,40 @@ export class PesdataSyncService {
       throw error;
     }
 
-    const rows: RawImportRow[] = [];
-    const seenExternalIds = new Set<string>();
-    let fetchedCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
-    for (const item of run.items) {
-      seenExternalIds.add(item.externalId);
-      if ((item.status === 'FETCHED' || item.status === 'SKIPPED') && item.normalizedJson) {
-        rows.push(item.normalizedJson as RawImportRow);
-        if (item.status === 'FETCHED') fetchedCount += 1;
-        else skippedCount += 1;
-      } else if (item.status === 'FAILED' || item.status === 'PENDING') {
-        try {
-          const detail = await this.client.getPlayerDetail(item.externalId);
-          const row = mapPesdataPlayer(detail);
-          rows.push(row);
-          fetchedCount += 1;
-          await this.persistItem(
-            runId,
-            item.externalId,
-            item.summaryChecksum,
-            pesdataValueChecksum(detail),
-            detail,
-            row,
-            'FETCHED'
-          );
-        } catch (error) {
-          if (error instanceof PesdataClientError && error.code === 'PESDATA_PROTOCOL_ERROR') throw error;
-          failedCount += 1;
+    try {
+      const rows: RawImportRow[] = [];
+      const seenExternalIds = new Set<string>();
+      let fetchedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+      for (const item of run.items) {
+        seenExternalIds.add(item.externalId);
+        if ((item.status === 'FETCHED' || item.status === 'SKIPPED') && item.normalizedJson) {
+          rows.push(item.normalizedJson as RawImportRow);
+          if (item.status === 'FETCHED') fetchedCount += 1;
+          else skippedCount += 1;
+        } else if (item.status === 'FAILED' || item.status === 'PENDING') {
+          try {
+            const detail = await this.client.getPlayerDetail(item.externalId);
+            const row = mapPesdataPlayer(detail);
+            rows.push(row);
+            fetchedCount += 1;
+            await this.persistItem(
+              runId,
+              item.externalId,
+              item.summaryChecksum,
+              pesdataValueChecksum(detail),
+              detail,
+              row,
+              'FETCHED'
+            );
+          } catch (error) {
+            if (error instanceof PesdataClientError && error.code === 'PESDATA_PROTOCOL_ERROR') throw error;
+            failedCount += 1;
+          }
         }
       }
-    }
 
-    try {
       return await this.execute(actorId, {
         runId,
         mode: run.mode.toLowerCase() as PesdataSyncMode,
