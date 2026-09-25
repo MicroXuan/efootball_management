@@ -1,9 +1,10 @@
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import type { ExternalSyncMode } from '../generated/prisma/enums.js';
-import type { PrismaService } from '../database/prisma.service.js';
+import { PrismaService } from '../database/prisma.service.js';
 import type { RawImportRow } from '../player-import/import-adapter.js';
-import type { PlayerImportService } from '../player-import/player-import.service.js';
-import { PesdataClientError, type PesdataClient } from './pesdata-client.js';
+import { PlayerImportService } from '../player-import/player-import.service.js';
+import { PesdataClient, PesdataClientError } from './pesdata-client.js';
 import { mapPesdataPlayer, pesdataValueChecksum, PesdataMappingError } from './pesdata-mapper.js';
 import type { PesdataPlayerDetail, PesdataPlayerSummary } from './pesdata.schemas.js';
 import {
@@ -24,6 +25,7 @@ type SyncCounters = {
 };
 
 type ServiceOptions = { pageSize?: number };
+export const PESDATA_SYNC_OPTIONS = Symbol('PESDATA_SYNC_OPTIONS');
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -52,14 +54,15 @@ export function comparePesdataExternalIds(left: string, right: string): number {
   return left.localeCompare(right);
 }
 
+@Injectable()
 export class PesdataSyncService {
   private readonly pageSize: number;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly importService: PlayerImportService,
-    private readonly client: PesdataClient,
-    options: ServiceOptions = {}
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PlayerImportService) private readonly importService: PlayerImportService,
+    @Inject(PesdataClient) private readonly client: PesdataClient,
+    @Optional() @Inject(PESDATA_SYNC_OPTIONS) options: ServiceOptions = {}
   ) {
     this.pageSize = options.pageSize ?? 100;
   }

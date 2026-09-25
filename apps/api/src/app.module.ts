@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
+import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module.js';
     HealthModule,
     PlayerCatalogModule,
     PlayerImportModule,
+    PesdataSyncModule,
     UsersModule
   ]
 })

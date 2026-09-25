@@ -136,9 +136,10 @@ describe('PesdataClient', () => {
     }
   });
 
-  it('requires locally configured signing material only when the client is constructed', () => {
-    expect(() => createClient(mockFetch(), { signatureSeed: undefined })).toThrow(
-      expect.objectContaining({ code: 'PESDATA_CONFIG_MISSING' })
-    );
+  it('requires locally configured signing material only when synchronization is invoked', async () => {
+    const client = createClient(mockFetch(), { signatureSeed: undefined });
+    await expect(client.listPlayers({ start: 0, limit: 1, order: 'DESC' })).rejects.toMatchObject({
+      code: 'PESDATA_CONFIG_MISSING'
+    });
   });
 });

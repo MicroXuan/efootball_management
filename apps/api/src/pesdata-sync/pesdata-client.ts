@@ -64,7 +64,7 @@ export class PesdataClient {
   private readonly now: () => number;
   private readonly nonce: () => string;
   private readonly random: () => number;
-  private readonly signatureSeed: string;
+  private readonly signatureSeed: string | undefined;
   private readonly deviceId: string;
   private requestTail: Promise<void> = Promise.resolve();
   private lastRequestStartedAt?: number;
@@ -73,13 +73,6 @@ export class PesdataClient {
     private readonly config: PesdataClientConfig,
     dependencies: PesdataClientDependencies = {}
   ) {
-    if (!config.signatureSeed) {
-      throw new PesdataClientError(
-        'PESDATA_CONFIG_MISSING',
-        'PESDATA signing material is not configured'
-      );
-    }
-
     this.signatureSeed = config.signatureSeed;
     this.deviceId = config.deviceId ?? randomBytes(16).toString('hex');
     this.fetchImplementation = dependencies.fetchImplementation ?? fetch;
@@ -123,6 +116,13 @@ export class PesdataClient {
     params: Record<string, PesdataRequestParam>,
     schema: ZodType<T>
   ): Promise<T> {
+    if (!this.signatureSeed) {
+      throw new PesdataClientError(
+        'PESDATA_CONFIG_MISSING',
+        'PESDATA signing material is not configured',
+        endpoint
+      );
+    }
     const maximumAttempts = this.config.maxRetries + 1;
 
     for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {

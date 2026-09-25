@@ -19,6 +19,7 @@
     "start:api": "pnpm --filter @efm/api start:dev",
     "player-import:validate": "pnpm --filter @efm/api player-import -- validate",
     "player-import:publish": "pnpm --filter @efm/api player-import -- publish",
+    "sync:pesdata": "pnpm --filter @efm/api sync:pesdata --",
     "dev:db": "docker compose up -d mysql",
     "dev:db:stop": "docker compose down"
   }
