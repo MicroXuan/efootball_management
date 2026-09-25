@@ -202,4 +202,11 @@ describe('PlayerImportService', () => {
     await expect(createJsonBatch([validCard])).rejects.toBeInstanceOf(ForbiddenException);
     expect(authorizationCalls).toContainEqual([actorId, 'catalog.import.create']);
   });
+
+  it('exposes an authorization preflight for long-running import producers', async () => {
+    canResult = false;
+
+    await expect(service.assertCanCreateBatch(actorId)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(authorizationCalls).toContainEqual([actorId, 'catalog.import.create']);
+  });
 });

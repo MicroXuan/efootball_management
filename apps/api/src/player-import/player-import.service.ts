@@ -89,7 +89,7 @@ function toExistingRecord(card: {
     releaseDate: dateOnly(card.cardPack?.releaseDate),
     sourceUpdatedAt: card.sourceUpdatedAt?.toISOString(),
     skills: card.skills.map(({ skill }) => skill.code),
-    attributes: (card.attributes?.attributesJson ?? {}) as Record<string, number>
+    attributes: (card.attributes?.attributesJson ?? {}) as NormalizedPlayerCardRecord['attributes']
   };
 }
 
@@ -104,11 +104,15 @@ export class PlayerImportService {
     return (await this.createBatchWithOutcome(actorId, input)).batch;
   }
 
+  async assertCanCreateBatch(actorId: string): Promise<void> {
+    await this.requirePermission(actorId, 'catalog.import.create');
+  }
+
   async createBatchWithOutcome(
     actorId: string,
     input: CreateImportBatchRequest
   ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
-    await this.requirePermission(actorId, 'catalog.import.create');
+    await this.assertCanCreateBatch(actorId);
 
     const source = await this.prisma.dataSource.findUnique({ where: { code: input.sourceCode } });
     if (!source?.isEnabled) {
