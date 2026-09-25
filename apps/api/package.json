@@ -17,7 +17,8 @@
     "pretest": "pnpm --filter @efm/contracts build && pnpm prisma:generate",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts",
     "pretest:e2e": "pnpm --filter @efm/contracts build && pnpm prisma:generate",
-    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts"
+    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts",
+    "player-import": "tsx src/player-import/player-import.cli.ts"
   },
   "dependencies": {
     "@efm/contracts": "workspace:*",
