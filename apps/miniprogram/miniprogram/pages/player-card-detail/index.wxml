@@ -1,0 +1,76 @@
+<view class="detail-page">
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员卡档案" />
+
+  <view wx:elif="{{state === 'unavailable'}}" class="detail-state">
+    <text class="state-code">CARD UNAVAILABLE</text>
+    <text class="state-title">当前无法查看</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="back-button" bindtap="goBack">返回球员库</button>
+  </view>
+
+  <view wx:elif="{{state === 'error'}}" class="detail-state">
+    <text class="state-code">CONNECTION LOST</text>
+    <text class="state-title">详情加载失败</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="back-button" bindtap="retry">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="hero">
+      <view class="hero-card"><player-card card="{{card}}" /></view>
+      <view class="hero-copy">
+        <text class="hero-kicker">PLAYER DOSSIER</text>
+        <text class="hero-name">{{card.displayName}}</text>
+        <text class="hero-card-name">{{card.cardName}}</text>
+        <view class="hero-rule"></view>
+        <text class="hero-meta">{{card.nationality || '国籍未记录'}}</text>
+        <text class="hero-meta">{{card.club || '俱乐部未记录'}}</text>
+        <text wx:if="{{card.packName}}" class="pack-badge">{{card.packName}}</text>
+      </view>
+    </view>
+
+    <view class="detail-section">
+      <view class="section-head">
+        <text class="section-index">01</text>
+        <text class="section-title">能力数据</text>
+      </view>
+      <view wx:if="{{card.attributes.length}}" class="attribute-grid">
+        <view wx:for="{{card.attributes}}" wx:key="key" class="attribute-row">
+          <text class="attribute-label">{{item.label}}</text>
+          <text class="attribute-value">{{item.value}}</text>
+          <view class="attribute-track"><view class="attribute-fill" style="width: {{item.value}}%;"></view></view>
+        </view>
+      </view>
+      <text wx:else class="empty-copy">暂无能力数据</text>
+    </view>
+
+    <view class="detail-section">
+      <view class="section-head">
+        <text class="section-index">02</text>
+        <text class="section-title">球员技能</text>
+      </view>
+      <view wx:if="{{card.skills.length}}" class="skill-list">
+        <text wx:for="{{card.skills}}" wx:key="code" class="skill-chip">{{item.nameZh || item.nameEn || item.code}}</text>
+      </view>
+      <text wx:else class="empty-copy">暂无已记录技能</text>
+    </view>
+
+    <view wx:if="{{card.siblings.length}}" class="detail-section">
+      <view class="section-head">
+        <text class="section-index">03</text>
+        <text class="section-title">同球员其他卡片</text>
+      </view>
+      <view
+        wx:for="{{card.siblings}}"
+        wx:key="id"
+        class="sibling-row"
+        data-id="{{item.id}}"
+        bindtap="onSiblingTap"
+      >
+        <text class="sibling-rating">{{item.overallRating}}</text>
+        <text class="sibling-title">{{item.title}}</text>
+        <text class="sibling-arrow">›</text>
+      </view>
+    </view>
+  </block>
+</view>

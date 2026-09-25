@@ -1,0 +1,29 @@
+<view class="player-card" hover-class="player-card--pressed" bindtap="onTap" role="button">
+  <view class="card-art">
+    <view class="pitch-line pitch-line--one"></view>
+    <view class="pitch-line pitch-line--two"></view>
+    <view class="rating-block">
+      <text class="rating">{{card.overallRating}}</text>
+      <text class="position">{{card.position}}</text>
+    </view>
+    <image
+      wx:if="{{!card.usesFallbackArtwork && !imageFailed}}"
+      class="player-image"
+      src="{{card.imageUrl}}"
+      mode="aspectFill"
+      binderror="onImageError"
+    />
+    <view wx:else class="fallback-art">
+      <text class="fallback-initials">{{card.fallbackInitials}}</text>
+      <text class="fallback-mark">EFM</text>
+    </view>
+    <view class="name-plate">
+      <text class="player-name">{{card.displayName}}</text>
+    </view>
+  </view>
+  <view class="card-copy">
+    <text class="card-name">{{card.cardName}}</text>
+    <text class="card-meta">{{card.cardTypeLabel}} · {{card.positionLabel}}</text>
+    <text wx:if="{{card.playStyle}}" class="play-style">{{card.playStyle}}</text>
+  </view>
+</view>

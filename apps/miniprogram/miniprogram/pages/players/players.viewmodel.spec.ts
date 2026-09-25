@@ -4,6 +4,7 @@ import {
   buildPlayerQuery,
   groupCardsByPack,
   mergeUniqueCards,
+  nextPlayerPageState,
   toCardViewModel,
 } from './players.viewmodel'
 
@@ -71,5 +72,25 @@ describe('player list view model', () => {
       positionLabel: '中前卫',
       cardTypeLabel: '精选',
     })
+  })
+
+  it('replaces on refresh, appends uniquely, stops at an empty cursor, and preserves content on error', () => {
+    const initial = nextPlayerPageState(undefined, {
+      items: [card()],
+      nextCursor: 'next-1',
+      releaseSequence: 1,
+    }, 'refresh')
+    const appended = nextPlayerPageState(initial, {
+      items: [card(), card({ id: '33333333-3333-4333-8333-333333333333' })],
+      nextCursor: null,
+      releaseSequence: 1,
+    }, 'append')
+    const failed = nextPlayerPageState(appended, new Error('网络连接失败'), 'error')
+
+    expect(initial.cards).toHaveLength(1)
+    expect(appended.cards).toHaveLength(2)
+    expect(appended.hasMore).toBe(false)
+    expect(failed.cards).toEqual(appended.cards)
+    expect(failed.errorMessage).toBe('网络连接失败')
   })
 })

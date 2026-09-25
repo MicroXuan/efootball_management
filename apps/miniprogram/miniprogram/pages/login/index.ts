@@ -12,7 +12,7 @@ Page({
     this.setData({ loading: true, errorMessage: '' })
     try {
       await auth.login()
-      wx.reLaunch({ url: '/pages/profile/index' })
+      wx.switchTab({ url: '/pages/profile/index' })
     } catch (error) {
       const message = error instanceof ApiError
         ? error.message

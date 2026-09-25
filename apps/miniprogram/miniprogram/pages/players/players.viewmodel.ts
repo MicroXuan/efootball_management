@@ -3,6 +3,7 @@ import type {
   PlayerCardType,
   PlayerPosition,
   PlayerSearchQuery,
+  PlayerSearchResponse,
 } from '@efm/contracts'
 
 export type PlayerQueryInput = Partial<Omit<PlayerSearchQuery, 'limit'>> & { limit?: number }
@@ -20,6 +21,15 @@ export type PlayerCardGroup = {
   id: string
   title: string
   cards: PlayerCardViewModel[]
+}
+
+export type PlayerPageState = {
+  cards: PlayerCardSummary[]
+  groups: PlayerCardGroup[]
+  nextCursor: string | null
+  hasMore: boolean
+  releaseSequence: number | null
+  errorMessage: string
 }
 
 const positionLabels: Record<PlayerPosition, string> = {
@@ -111,4 +121,33 @@ export function groupCardsByPack(cards: PlayerCardSummary[]): PlayerCardGroup[] 
     groups.set(id, group)
   }
   return [...groups.values()]
+}
+
+export function nextPlayerPageState(
+  current: PlayerPageState | undefined,
+  result: PlayerSearchResponse | Error,
+  mode: 'refresh' | 'append' | 'error',
+): PlayerPageState {
+  const previous = current ?? {
+    cards: [],
+    groups: [],
+    nextCursor: null,
+    hasMore: true,
+    releaseSequence: null,
+    errorMessage: '',
+  }
+  if (mode === 'error' || result instanceof Error) {
+    return { ...previous, errorMessage: result instanceof Error ? result.message : '加载失败' }
+  }
+  const cards = mode === 'append'
+    ? mergeUniqueCards(previous.cards, result.items)
+    : result.items
+  return {
+    cards,
+    groups: groupCardsByPack(cards),
+    nextCursor: result.nextCursor,
+    hasMore: Boolean(result.nextCursor),
+    releaseSequence: result.releaseSequence,
+    errorMessage: '',
+  }
 }

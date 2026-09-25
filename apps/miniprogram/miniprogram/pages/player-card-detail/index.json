@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "球员卡详情",
+  "backgroundColor": "#0b100e",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index",
+    "player-card": "/components/player-card/index"
+  }
+}
