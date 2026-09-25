@@ -207,6 +207,15 @@ describe('competition lifecycle API', () => {
       .set('Authorization', `Bearer ${managerToken}`).set('Idempotency-Key', randomUUID())
       .send({ expectedVersion: registration.body.version }).expect(200);
     expect(approved.body.status).toBe('APPROVED');
+    await request(app.getHttpServer()).get('/v1/me/competitions?limit=10')
+      .set('Authorization', `Bearer ${playerToken}`).expect(200)
+      .expect(({ body: dashboard }) => {
+        const item = dashboard.items.find((entry: { competition: { id: string } }) => entry.competition.id === created.id);
+        expect(item.registration.status).toBe('APPROVED');
+      });
+    await request(app.getHttpServer()).get('/v1/me/matches?limit=10')
+      .set('Authorization', `Bearer ${playerToken}`).expect(200)
+      .expect(({ body: matches }) => expect(matches.items).toEqual([]));
     await request(app.getHttpServer()).delete(`/v1/competitions/${created.id}/registrations/me`)
       .set('Authorization', `Bearer ${playerToken}`).set('Idempotency-Key', randomUUID())
       .send({ expectedVersion: approved.body.version }).expect(200)
