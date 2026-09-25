@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   type CreateImportBatchRequest,
+  ImportBatchSchema,
+  type ImportBatchResponse,
   type ImportDiffType,
   type NormalizedPlayerCardRecord
 } from '@efm/contracts';
@@ -98,7 +100,14 @@ export class PlayerImportService {
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService
   ) {}
 
-  async createBatch(actorId: string, input: CreateImportBatchRequest) {
+  async createBatch(actorId: string, input: CreateImportBatchRequest): Promise<ImportBatchResponse> {
+    return (await this.createBatchWithOutcome(actorId, input)).batch;
+  }
+
+  async createBatchWithOutcome(
+    actorId: string,
+    input: CreateImportBatchRequest
+  ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
     await this.requirePermission(actorId, 'catalog.import.create');
 
     const source = await this.prisma.dataSource.findUnique({ where: { code: input.sourceCode } });
@@ -111,7 +120,7 @@ export class PlayerImportService {
       where: { sourceId_checksum: { sourceId: source.id, checksum: contentChecksum } },
       include: { source: true, release: true }
     });
-    if (duplicate) return this.batchResponse(duplicate);
+    if (duplicate) return { batch: this.batchResponse(duplicate), created: false };
 
     const batch = await this.prisma.importBatch.create({
       data: {
@@ -201,7 +210,7 @@ export class PlayerImportService {
       });
     });
 
-    return this.getBatchUnchecked(batch.id);
+    return { batch: await this.getBatchUnchecked(batch.id), created: true };
   }
 
   async getBatch(actorId: string, batchId: string) {
@@ -209,7 +218,11 @@ export class PlayerImportService {
     return this.getBatchUnchecked(batchId);
   }
 
-  async listRecords(actorId: string, batchId: string, filter: { diffType?: ImportDiffType }) {
+  async listRecords(
+    actorId: string,
+    batchId: string,
+    filter: { diffType?: ImportDiffType | undefined }
+  ) {
     await this.requirePermission(actorId, 'catalog.import.read');
     await this.ensureBatch(batchId);
     const records = await this.prisma.importRecord.findMany({
@@ -377,8 +390,8 @@ export class PlayerImportService {
     createdAt: Date;
     publishedAt: Date | null;
     release: { id: string; sequence: number } | null;
-  }) {
-    return {
+  }): ImportBatchResponse {
+    return ImportBatchSchema.parse({
       id: batch.id,
       sourceCode: batch.source.code,
       fileName: batch.fileName,
@@ -396,6 +409,6 @@ export class PlayerImportService {
       createdBy: batch.createdBy,
       createdAt: batch.createdAt.toISOString(),
       publishedAt: batch.publishedAt?.toISOString() ?? null
-    };
+    });
   }
 }

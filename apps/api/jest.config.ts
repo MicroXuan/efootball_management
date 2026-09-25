@@ -2,6 +2,7 @@ import type { Config } from 'jest';
 
 const config: Config = {
   extensionsToTreatAsEsm: ['.ts'],
+  maxWorkers: 1,
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },

@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ImportBatchSchema,
   NormalizedPlayerCardRecordSchema,
@@ -9,10 +9,17 @@ import { AuthorizationService } from '../authorization/authorization.service.js'
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { PlayerCardStatus } from '../generated/prisma/enums.js';
-import { ImportDomainError } from './player-import.service.js';
 import { normalizeSearchText } from './record-normalizer.js';
 
 type Transaction = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
+
+class ImportBatchNotReadyError extends ConflictException {
+  readonly code = 'IMPORT_BATCH_NOT_READY';
+
+  constructor(message: string) {
+    super({ code: 'IMPORT_BATCH_NOT_READY', message });
+  }
+}
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -48,7 +55,7 @@ export class PlayerImportPublisher {
           where: { batchId, diffType: 'INVALID' }
         });
         if (batch.status !== 'READY' || invalidCount > 0) {
-          throw new ImportDomainError('IMPORT_BATCH_NOT_READY', 'Only ready batches can be published');
+          throw new ImportBatchNotReadyError('Only ready batches can be published');
         }
 
         const release = await tx.catalogRelease.create({
@@ -64,7 +71,7 @@ export class PlayerImportPublisher {
         for (const record of batch.records) {
           if (record.diffType === 'UNCHANGED') continue;
           if (record.diffType !== 'CREATE' && record.diffType !== 'UPDATE') {
-            throw new ImportDomainError('IMPORT_BATCH_NOT_READY', 'Batch contains an invalid record');
+            throw new ImportBatchNotReadyError('Batch contains an invalid record');
           }
           const normalized = NormalizedPlayerCardRecordSchema.parse(record.normalizedJson);
           const changedFields = new Set(Object.keys(record.fieldDiff as Record<string, unknown>));
