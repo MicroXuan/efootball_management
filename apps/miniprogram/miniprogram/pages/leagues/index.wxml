@@ -1,0 +1,31 @@
+<view class="page-shell">
+  <view class="masthead">
+    <view><text class="eyebrow">LEAGUE DIRECTORY</text><text class="page-title">联赛中心</text></view>
+    <text class="edition">LIVE / 01</text>
+  </view>
+  <text class="intro">选择一个长期联赛，查看当前赛季并完成报名或续赛确认。</text>
+
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛" />
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-code">OFFLINE / RETRY</text><text class="state-title">暂时无法读取联赛</text>
+    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadLeagues">重新加载</button>
+  </view>
+  <view wx:elif="{{!hasLeagues}}" class="state-card">
+    <text class="state-code">NO PUBLIC LEAGUE</text><text class="state-title">还没有公开联赛</text>
+    <text class="state-copy">联赛管理员发布赛季后，会在这里显示报名与赛季状态。</text>
+  </view>
+  <view wx:else class="league-list">
+    <view wx:for="{{leagues}}" wx:key="id" class="league-card" data-id="{{item.id}}" bindtap="openLeague">
+      <view class="brand-line">
+        <image wx:if="{{item.logoUrl}}" class="league-logo" src="{{item.logoUrl}}" mode="aspectFit" />
+        <view wx:else class="league-logo logo-fallback">{{item.logoText}}</view>
+        <view class="brand-copy"><text class="league-name">{{item.name}}</text><text class="league-meta">{{item.eligibility}}</text></view>
+        <text class="arrow">↗</text>
+      </view>
+      <view class="season-strip">
+        <view><text class="season-label">CURRENT SEASON</text><text class="season-name">{{item.seasonName}}</text></view>
+        <view class="season-state"><text>{{item.seasonState}}</text><text class="entry-copy">{{item.entryCopy}}</text></view>
+      </view>
+    </view>
+  </view>
+</view>

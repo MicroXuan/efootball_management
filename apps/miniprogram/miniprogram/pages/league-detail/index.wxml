@@ -1,0 +1,55 @@
+<view class="page-shell">
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取赛季资料" />
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-code">SEASON / ERROR</text><text class="state-title">暂时无法读取联赛</text>
+    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
+  </view>
+  <block wx:else>
+    <view class="league-hero">
+      <image wx:if="{{league.logoUrl}}" class="league-logo" src="{{league.logoUrl}}" mode="aspectFit" />
+      <view wx:else class="league-logo logo-fallback">{{leagueLogoText}}</view>
+      <text class="hero-kicker">{{league.shortName}} LEAGUE OFFICE</text>
+      <text class="hero-title">{{league.name}}</text>
+      <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
+    </view>
+
+    <view wx:if="{{seasons.length}}" class="season-picker-card">
+      <text class="field-label">查看赛季</text>
+      <picker range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="onSeasonChange">
+        <view class="picker-control"><text>{{selectedSeason.displayName}}</text><text>⌄</text></view>
+      </picker>
+    </view>
+
+    <view wx:if="{{selectedSeason}}" class="season-board">
+      <view class="board-head"><text class="board-kicker">SEASON SNAPSHOT</text><text class="season-number">S{{selectedSeason.seasonNumber}}</text></view>
+      <text class="board-title">{{selectedSeason.displayName}}</text>
+      <text class="structure-copy">{{structureCopy}}</text>
+      <view class="metric-grid">
+        <view><text class="metric-value">{{selectedSeason.approvedEntryCount}}</text><text class="metric-label">已确认球队</text></view>
+        <view><text class="metric-value">{{selectedSeason.championCapacity}}</text><text class="metric-label">冠军组上限</text></view>
+        <view><text class="metric-value">{{selectedSeason.promotionCount}}</text><text class="metric-label">升级建议数</text></view>
+      </view>
+      <view class="timeline"><text>报名截止</text><text>{{registrationCloseDate}}</text></view>
+    </view>
+
+    <view wx:if="{{selectedSeason}}" class="entry-card">
+      <text class="section-kicker">MY ENTRY</text><text class="section-title">我的赛季资格</text>
+      <view wx:if="{{profile}}" class="team-line">
+        <image wx:if="{{profile.logoUrl}}" class="team-logo" src="{{profile.logoUrl}}" mode="aspectFit" />
+        <view wx:else class="team-logo team-fallback">{{profile.shortName}}</view>
+        <view><text class="team-name">{{profile.name}}</text><text class="entry-status">{{action.label}}</text></view>
+      </view>
+      <text wx:else class="state-copy">先建立球队档案，之后即可报名当前赛季。</text>
+      <view wx:if="{{(action.kind === 'APPLY' || action.kind === 'RENEW') && accounts.length}}" class="account-select">
+        <text class="field-label">本赛季使用账号</text>
+        <picker range="{{accounts}}" range-key="label" value="{{selectedAccountIndex}}" bindchange="onAccountChange">
+          <view class="picker-control"><text>{{selectedAccountLabel}}</text><text>⌄</text></view>
+        </picker>
+      </view>
+      <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
+      <button class="action-button {{action.tone}}" loading="{{mutating}}" disabled="{{action.kind === 'NONE' || mutating}}" bindtap="performAction">{{action.label}}</button>
+    </view>
+
+    <view wx:else class="state-card compact"><text class="state-title">暂无公开赛季</text><text class="state-copy">等待联赛管理员发布新赛季。</text></view>
+  </block>
+</view>
