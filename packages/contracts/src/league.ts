@@ -4,7 +4,7 @@ import { ExpectedVersionSchema } from './competition.js';
 import { GamePlatformSchema } from './game-account.js';
 
 const TimestampSchema = z.iso.datetime();
-const NullableLogoUrlSchema = z.url().max(2_048).nullable().default(null);
+const NullableLogoUrlSchema = z.url().max(2_048).nullable();
 const CapacitySchema = z.number().int().min(2).max(64);
 const PromotionCountSchema = z.number().int().min(0).max(32);
 
@@ -35,7 +35,9 @@ const TeamProfileFieldsSchema = z.object({
   defaultGameAccountId: ResourceIdSchema
 });
 
-export const CreateTeamProfileRequestSchema = TeamProfileFieldsSchema;
+export const CreateTeamProfileRequestSchema = TeamProfileFieldsSchema.extend({
+  logoUrl: NullableLogoUrlSchema.default(null)
+});
 export const UpdateTeamProfileRequestSchema = TeamProfileFieldsSchema.partial().extend({
   expectedVersion: ExpectedVersionSchema
 });
@@ -55,16 +57,22 @@ export const TeamProfileSchema = z.object({
 const LeagueFieldsSchema = z.object({
   name: z.string().trim().min(1).max(64),
   shortName: z.string().trim().min(1).max(24),
-  description: z.string().trim().max(500).default(''),
+  description: z.string().trim().max(500),
   logoUrl: NullableLogoUrlSchema,
   defaultPlatform: GamePlatformSchema,
   defaultServerRegion: z.string().trim().min(1).max(32),
+  defaultSuperCapacity: CapacitySchema,
+  defaultChampionCapacity: CapacitySchema,
+  defaultPromotionCount: PromotionCountSchema
+});
+
+export const CreateLeagueRequestSchema = LeagueFieldsSchema.extend({
+  description: z.string().trim().max(500).default(''),
+  logoUrl: NullableLogoUrlSchema.default(null),
   defaultSuperCapacity: CapacitySchema.default(23),
   defaultChampionCapacity: CapacitySchema.default(18),
   defaultPromotionCount: PromotionCountSchema.default(4)
 });
-
-export const CreateLeagueRequestSchema = LeagueFieldsSchema;
 export const UpdateLeagueRequestSchema = LeagueFieldsSchema.partial().extend({
   status: LeagueStatusSchema.optional(),
   expectedVersion: ExpectedVersionSchema

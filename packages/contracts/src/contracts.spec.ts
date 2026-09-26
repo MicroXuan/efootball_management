@@ -151,6 +151,15 @@ describe('shared API contracts', () => {
     assert.throws(() => UpdateLeagueRequestSchema.parse({ expectedVersion: 0 }));
   });
 
+  it('does not inject create defaults into a league update', () => {
+    assert.deepEqual(UpdateLeagueRequestSchema.parse({ expectedVersion: 3 }), {
+      expectedVersion: 3
+    });
+    assert.deepEqual(UpdateTeamProfileRequestSchema.parse({ expectedVersion: 2 }), {
+      expectedVersion: 2
+    });
+  });
+
   it('applies catalog query defaults and bounds', () => {
     const query = PlayerSearchQuerySchema.parse({ keyword: '  亚马尔  ', minOverall: '90' });
 
