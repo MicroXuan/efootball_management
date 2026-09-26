@@ -16,6 +16,8 @@
 
 ## 阶段 1：联赛基础
 
+**当前状态（2026-09-26）：** 代码、迁移、Native 页面与自动化验证已完成；微信开发者工具的玩家/管理员双身份手工验收待按[本地验收指南](../../league-foundation-local-verification.zh-CN.md)执行。手工验收完成前，本阶段不标记为正式验收通过。
+
 **交付物：** `League`、`TeamProfile`、`LeagueSeason`、`SeasonEntry`、报名与续赛闭环。
 
 ### 能力范围
