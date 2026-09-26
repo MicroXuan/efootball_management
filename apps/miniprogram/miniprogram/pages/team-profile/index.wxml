@@ -1,0 +1,58 @@
+<view class="page-shell">
+  <view class="topbar">
+    <view>
+      <text class="eyebrow">CLUB REGISTRATION</text>
+      <text class="page-title">{{title}}</text>
+    </view>
+    <text class="record-mark">TEAM / 01</text>
+  </view>
+
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取球队档案" />
+
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-code">LOAD / ERROR</text>
+    <text class="state-title">暂时无法读取球队档案</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="secondary-button" bindtap="loadPage">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="identity-card">
+      <image wx:if="{{form.logoUrl}}" class="crest" src="{{form.logoUrl}}" mode="aspectFit" />
+      <view wx:else class="crest crest-placeholder">{{form.shortName || 'FC'}}</view>
+      <view class="identity-copy">
+        <text class="identity-label">球队注册证</text>
+        <text class="identity-name">{{form.name || '等待填写球队名称'}}</text>
+        <text class="identity-status">{{mode === 'create' ? '未建立' : '已登记'}} · {{form.shortName || '暂无简称'}}</text>
+      </view>
+    </view>
+
+    <view class="form-card">
+      <label class="field">
+        <text class="field-label">球队名称 *</text>
+        <input value="{{form.name}}" maxlength="64" placeholder="例如：上海申花" bindinput="onNameInput" />
+      </label>
+      <label class="field">
+        <text class="field-label">球队简称 *</text>
+        <input value="{{form.shortName}}" maxlength="24" placeholder="用于积分榜和赛程" bindinput="onShortNameInput" />
+      </label>
+      <label class="field">
+        <text class="field-label">队徽链接（可选）</text>
+        <input value="{{form.logoUrl}}" placeholder="https://..." bindinput="onLogoInput" />
+      </label>
+      <view class="field">
+        <text class="field-label">默认参赛账号 *</text>
+        <picker wx:if="{{accounts.length}}" range="{{accounts}}" range-key="label" value="{{selectedAccountIndex}}" bindchange="onAccountChange">
+          <view class="picker-control"><text>{{selectedAccountLabel}}</text><text class="picker-arrow">⌄</text></view>
+        </picker>
+        <button wx:else class="account-empty" bindtap="addAccount">＋ 先添加游戏账号</button>
+      </view>
+
+      <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
+      <button class="primary-button" loading="{{saving}}" disabled="{{!canSave || saving}}" bindtap="save">
+        {{actionLabel}}
+      </button>
+      <text class="form-note">报名时会把球队名称、队徽和游戏身份保存为赛季快照；之后修改档案不会改变历史记录。</text>
+    </view>
+  </block>
+</view>

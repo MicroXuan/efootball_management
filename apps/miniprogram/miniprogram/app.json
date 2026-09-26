@@ -9,6 +9,7 @@
     "pages/competition-editor/index",
     "pages/login/index",
     "pages/profile/index",
+    "pages/team-profile/index",
     "pages/game-account-edit/index",
     "pages/player-card-detail/index"
   ],
