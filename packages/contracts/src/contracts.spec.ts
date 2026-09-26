@@ -12,10 +12,12 @@ import {
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
   NormalizedPlayerCardRecordSchema,
+  OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
   ResourceIdSchema,
   StandingsSnapshotResponseSchema,
   SubmitMatchResultRequestSchema,
+  SeasonEntryListQuerySchema,
   UpdateLeagueRequestSchema,
   UpdateLeagueSeasonRequestSchema,
   UpdateTeamProfileRequestSchema,
@@ -91,6 +93,22 @@ describe('shared API contracts', () => {
     assert.equal(team.name, '上海申花');
     assert.equal(team.logoUrl, null);
     assert.equal(season.displayName, 'S20 赛季');
+  });
+
+  it('validates season entry review filters and requires an override reason', () => {
+    assert.deepEqual(SeasonEntryListQuerySchema.parse({ status: 'PENDING' }), {
+      status: 'PENDING'
+    });
+    assert.throws(() => OverrideSeasonEntryRequestSchema.parse({
+      targetStatus: 'APPROVED',
+      expectedVersion: 1,
+      reason: '   '
+    }));
+    assert.equal(OverrideSeasonEntryRequestSchema.parse({
+      targetStatus: 'APPROVED',
+      expectedVersion: 1,
+      reason: '  管理员核验通过  '
+    }).reason, '管理员核验通过');
   });
 
   it('rejects an invalid league season timeline', () => {

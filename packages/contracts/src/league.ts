@@ -259,6 +259,15 @@ export const ReviewSeasonEntryRequestSchema = z.object({
     });
   }
 });
+export const OverrideSeasonEntryRequestSchema = z.object({
+  targetStatus: SeasonEntryStatusSchema,
+  expectedVersion: ExpectedVersionSchema,
+  reason: z.string().trim().min(1).max(512)
+});
+export const SeasonEntryListQuerySchema = z.object({
+  status: SeasonEntryStatusSchema.optional(),
+  source: SeasonEntrySourceSchema.optional()
+});
 export const WithdrawSeasonEntryRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema
 });
@@ -293,5 +302,7 @@ export type CancelLeagueSeasonRequest = z.infer<typeof CancelLeagueSeasonRequest
 export type CreateSeasonApplicationRequest = z.infer<typeof CreateSeasonApplicationRequestSchema>;
 export type ConfirmSeasonRenewalRequest = z.infer<typeof ConfirmSeasonRenewalRequestSchema>;
 export type ReviewSeasonEntryRequest = z.infer<typeof ReviewSeasonEntryRequestSchema>;
+export type OverrideSeasonEntryRequest = z.infer<typeof OverrideSeasonEntryRequestSchema>;
+export type SeasonEntryListQuery = z.infer<typeof SeasonEntryListQuerySchema>;
 export type WithdrawSeasonEntryRequest = z.infer<typeof WithdrawSeasonEntryRequestSchema>;
 export type SeasonEntryResponse = z.infer<typeof SeasonEntrySchema>;
