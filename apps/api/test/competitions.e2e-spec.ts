@@ -161,6 +161,11 @@ describe('competition lifecycle API', () => {
     await prisma.userRoleBinding.create({
       data: { userId: managerUserId, roleId: managerRole.id, scopeType: 'COMPETITION', scopeId: first.id }
     });
+    await request(app.getHttpServer()).get(`/v1/admin/competitions/${first.id}`)
+      .set('Authorization', `Bearer ${managerToken}`).expect(200)
+      .expect(({ body: detail }) => expect(detail.capabilities.canManage).toBe(true));
+    await request(app.getHttpServer()).get(`/v1/admin/competitions/${second.id}`)
+      .set('Authorization', `Bearer ${managerToken}`).expect(403);
     await request(app.getHttpServer()).patch(`/v1/admin/competitions/${first.id}`)
       .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
       .send({ name: '首次更新', expectedVersion: 1 }).expect(200);

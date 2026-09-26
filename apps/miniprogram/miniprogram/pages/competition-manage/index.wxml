@@ -1,0 +1,28 @@
+<view class="manage-page">
+  <loading-state wx:if="{{loading && !detail}}" label="正在打开赛事工作台" />
+  <block wx:elif="{{detail}}">
+    <view class="hero"><view><text class="kicker">EVENT COMMAND</text><text class="title">{{detail.name}}</text><text class="meta">{{lifecycleName}} · V{{detail.version}}</text></view><button class="edit" bindtap="edit">编辑</button></view>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="panel"><view class="panel-head"><view><text class="kicker">LIFECYCLE</text><text class="panel-title">赛事状态</text></view><text class="metric">{{detail.participantCount}}/{{detail.participantLimit}}</text></view>
+      <button wx:if="{{lifecycleAction}}" class="primary" disabled="{{acting}}" bindtap="transition">{{lifecycleAction.label}}</button>
+      <text wx:else class="empty">当前阶段无需手动推进。</text>
+    </view>
+    <view class="panel"><view class="panel-head"><view><text class="kicker">REGISTRATION DESK</text><text class="panel-title">待审核报名</text></view><text class="metric">{{pendingRegistrations.length}}</text></view>
+      <input class="reason" value="{{rejectReason}}" placeholder="拒绝时填写原因" bindinput="onRejectReasonInput" />
+      <text wx:if="{{pendingRegistrations.length === 0}}" class="empty">当前没有待审核申请。</text>
+      <view wx:for="{{pendingRegistrations}}" wx:key="id" class="registration"><view><text class="entry-name">申请 #{{index + 1}}</text><text class="entry-meta">账号 {{item.gameAccountId}}</text></view><view class="actions"><button data-id="{{item.id}}" data-version="{{item.version}}" bindtap="approve">通过</button><button class="reject" data-id="{{item.id}}" data-version="{{item.version}}" bindtap="reject">拒绝</button></view></view>
+    </view>
+    <view class="panel"><view class="panel-head"><view><text class="kicker">FIXTURE ROOM</text><text class="panel-title">赛程编排</text></view><text class="metric">{{schedule ? schedule.matchCount : 0}}</text></view>
+      <button wx:if="{{!schedule}}" class="primary" disabled="{{acting}}" bindtap="generateSchedule">生成循环赛程</button>
+      <block wx:else><view wx:for="{{roundGroups}}" wx:key="roundNumber" wx:for-item="round" class="round"><text class="round-title">ROUND {{round.roundNumber}}</text><view wx:for="{{round.matches}}" wx:key="id" wx:for-item="fixture" class="fixture"><text>{{fixture.homeParticipant.displayName}}</text><text class="versus">VS</text><text>{{fixture.awayParticipant.displayName}}</text></view></view>
+        <button wx:if="{{schedule.status !== 'PUBLISHED'}}" class="gold" disabled="{{acting}}" bindtap="publishSchedule">确认并发布赛程</button><text wx:else class="published">赛程已发布</text></block>
+    </view>
+    <view class="panel"><view class="panel-head"><view><text class="kicker">RESULT CONTROL</text><text class="panel-title">官方比分</text></view><text class="metric">{{matches.length}}</text></view>
+      <text wx:if="{{matches.length === 0}}" class="empty">发布赛程后可录入或修正比分。</text>
+      <block wx:else><scroll-view scroll-x class="match-strip"><view class="match-options"><button wx:for="{{matches}}" wx:key="id" class="match-option {{selectedMatchId === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="selectMatch">R{{item.roundNumber}} · #{{item.matchNumber}}<text>{{item.homeParticipant.displayName}} / {{item.awayParticipant.displayName}}</text></button></view></scroll-view>
+        <view class="score-form"><input type="number" value="{{homeScore}}" placeholder="主队" bindinput="onHomeInput" /><text>:</text><input type="number" value="{{awayScore}}" placeholder="客队" bindinput="onAwayInput" /></view>
+        <textarea class="reason correction" value="{{correctionReason}}" placeholder="如修正已有官方比分，请填写原因" bindinput="onCorrectionReasonInput" />
+        <button class="gold" disabled="{{acting}}" bindtap="correctResult">提交官方比分</button></block>
+    </view>
+  </block>
+</view>

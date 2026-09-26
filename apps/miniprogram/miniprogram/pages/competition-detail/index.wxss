@@ -27,10 +27,11 @@ page { background: #0b100e; color: #f5f7f6; }
 .account.is-disabled { opacity: .45; }
 .account-name, .account-meta { display: block; }
 .account-name { color: #f5f7f6; font-size: 24rpx; }.account-meta { margin-top: 5rpx; font-size: 18rpx; }
-.primary-button, .danger-button, .outline-button { min-height: 88rpx; border-radius: 8rpx; font-size: 24rpx; font-weight: 700; }
+.primary-button, .danger-button, .outline-button, .manager-button { min-height: 88rpx; border-radius: 8rpx; font-size: 24rpx; font-weight: 700; }
 .primary-button { background: #66f05a; color: #07110d; }.primary-button[disabled] { background: #24352c; color: #718078; }
 .danger-button { border: 2rpx solid #f0b84b; background: transparent; color: #f0b84b; }
-.primary-button::after, .danger-button::after, .outline-button::after { border: 0; }
+.manager-button { border: 2rpx solid #f0b84b; background: #392f1b; color: #ffe3a8; }
+.primary-button::after, .danger-button::after, .outline-button::after, .manager-button::after { border: 0; }
 .match-card { position: relative; }.versus { margin-top: 18rpx; gap: 16rpx; font-size: 24rpx; font-weight: 700; }.vs { color: #f0b84b; font-size: 18rpx; }
 .official-score { display: block; margin-top: 18rpx; color: #66f05a; font-family: "DIN Alternate", sans-serif; font-size: 36rpx; text-align: center; }
 .standing-row { display: grid; grid-template-columns: 45rpx 1fr 60rpx 70rpx 70rpx; gap: 8rpx; padding: 17rpx 0; border-top: 1rpx solid #243e31; color: #c6d1cb; font-size: 21rpx; }
@@ -39,3 +40,4 @@ page { background: #0b100e; color: #f5f7f6; }
 .inline-error, .state-copy { color: #f0b84b; font-size: 22rpx; line-height: 1.6; }
 .state-panel { min-height: 600rpx; display: flex; flex-direction: column; justify-content: center; }.state-code { color: #f0b84b; font-size: 17rpx; letter-spacing: 4rpx; }.state-title { margin-top: 18rpx; font-size: 34rpx; font-weight: 800; }
 .outline-button { width: 240rpx; margin: 28rpx 0 0; border: 2rpx solid #66f05a; background: transparent; color: #66f05a; }
+.outline-button.wide { width: 100%; margin: 0; }

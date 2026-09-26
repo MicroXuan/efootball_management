@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Headers,
+  Get,
   HttpCode,
   Inject,
   Param,
@@ -36,6 +37,12 @@ type CancelRequest = VersionedMutationRequest & { reason: string };
 @UseGuards(JwtAuthGuard, ScopeGuard)
 export class AdminCompetitionsController {
   constructor(@Inject(CompetitionsService) private readonly competitions: CompetitionsService) {}
+
+  @Get(':id')
+  @RequirePermission('competition.manage', { type: 'COMPETITION', param: 'id' })
+  get(@Param('id', new ZodValidationPipe(ResourceIdSchema)) id: string) {
+    return this.competitions.getManaged(id);
+  }
 
   @Post()
   @RequirePermission('competition.create')

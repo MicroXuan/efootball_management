@@ -270,6 +270,11 @@ export class CompetitionsService {
     return this.detail(record, false);
   }
 
+  async getManaged(competitionId: string): Promise<CompetitionDetail> {
+    const record = await this.getDetailRecord(this.prisma, competitionId);
+    return this.detail(record, true);
+  }
+
   private async findCompetition(transaction: CompetitionTransaction, id: string): Promise<Competition> {
     const competition = await transaction.competition.findUnique({ where: { id } });
     if (!competition) throw this.notFound();

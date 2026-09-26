@@ -37,6 +37,8 @@
           <text>{{item.eligible ? (selectedAccountId === item.id ? '已选' : '选择') : item.disabledReason}}</text>
         </view>
       </view>
+      <button wx:if="{{detail.capabilities.canManage}}" class="manager-button" bindtap="manage">打开赛事工作台</button>
+      <button wx:if="{{registration && registration.status === 'APPROVED'}}" class="outline-button wide" bindtap="openMyMatches">查看我的比赛</button>
       <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
       <button wx:if="{{!loggedIn}}" class="primary-button" bindtap="register">登录后报名</button>
       <button wx:elif="{{registration && (registration.status === 'PENDING' || registration.status === 'APPROVED')}}" class="danger-button" loading="{{acting}}" bindtap="withdraw">撤回报名</button>

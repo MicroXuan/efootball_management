@@ -39,6 +39,8 @@ Page({
   switchTab(event: { currentTarget: { dataset: { tab?: DetailTab } } }) {
     if (event.currentTarget.dataset.tab) this.setData({ activeTab: event.currentTarget.dataset.tab })
   },
+  manage() { wx.navigateTo({ url: `/pages/competition-manage/index?id=${encodeURIComponent(this.data.id)}` }) },
+  openMyMatches() { wx.navigateTo({ url: '/pages/my-matches/index' }) },
   selectAccount(event: { currentTarget: { dataset: { id?: string; eligible?: boolean } } }) {
     if (event.currentTarget.dataset.eligible && event.currentTarget.dataset.id) {
       this.setData({ selectedAccountId: event.currentTarget.dataset.id })
@@ -49,9 +51,12 @@ Page({
     if (!this.data.id) return
     this.setData({ loading: true, errorMessage: '' })
     try {
-      const [detail, matches, standings] = await Promise.all([
+      const [publicDetail, matches, standings] = await Promise.all([
         competitionsApi.detail(this.data.id), competitionsApi.matches(this.data.id), competitionsApi.standings(this.data.id),
       ])
+      const detail = session.getAccessToken()
+        ? await competitionsApi.managerDetail(this.data.id).catch(() => publicDetail)
+        : publicDetail
       let accounts: GameAccountResponse[] = []
       let registration: CompetitionRegistrationResponse | null = null
       if (session.getAccessToken()) {
