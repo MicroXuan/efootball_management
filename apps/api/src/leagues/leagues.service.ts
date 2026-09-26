@@ -14,11 +14,17 @@ import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
 
-type SeasonWithCount = LeagueSeason & { _count: { entries: number } };
+type SeasonWithCount = LeagueSeason & {
+  _count: { entries: number };
+  entries: Array<{ id: string }>;
+};
 const LEAGUE_INCLUDE = {
   seasons: {
     where: { status: { notIn: ['DRAFT', 'CANCELLED'] } },
-    include: { _count: { select: { entries: true } } },
+    include: {
+      _count: { select: { entries: true } },
+      entries: { where: { status: 'APPROVED' }, select: { id: true } }
+    },
     orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
   }
 } satisfies Prisma.LeagueInclude;
@@ -210,7 +216,7 @@ export class LeaguesService {
       promotionCount: season.promotionCount,
       status: season.status,
       entryCount: season._count.entries,
-      approvedEntryCount: 0,
+      approvedEntryCount: season.entries.length,
       version: season.version,
       createdAt: season.createdAt.toISOString(),
       updatedAt: season.updatedAt.toISOString()
