@@ -20,12 +20,15 @@ async function expectRejectCode(action: Promise<unknown>, code: string): Promise
 
 describe('WeChat gateways', () => {
   it('maps deterministic fake codes without accepting arbitrary input', async () => {
-    const gateway = new FakeWechatGateway();
+    const gateway = new FakeWechatGateway('test-openid-competition-demo-1');
 
     await expect(gateway.exchangeCode('test-code-alice')).resolves.toEqual({
       openId: 'test-openid-alice'
     });
-    await expectRejectCode(gateway.exchangeCode('production-code'), 'WECHAT_CODE_INVALID');
+    await expect(gateway.exchangeCode('simulator-one-time-code')).resolves.toEqual({
+      openId: 'test-openid-competition-demo-1'
+    });
+    await expectRejectCode(new FakeWechatGateway().exchangeCode('production-code'), 'WECHAT_CODE_INVALID');
   });
 
   it('exchanges a code with the official endpoint without exposing credentials', async () => {

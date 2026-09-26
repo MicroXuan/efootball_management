@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { CompetitionMatchResponse } from '@efm/contracts';
-import type { CompetitionMatch, CompetitionParticipant, CompetitionStage, Prisma } from '../generated/prisma/client.js';
+import type { CompetitionParticipant, CompetitionStage, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
-import { generateRoundRobin } from './domain/round-robin.js';
+import type { generateRoundRobin } from './domain/round-robin.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 
 export type PublishScheduleInput = {

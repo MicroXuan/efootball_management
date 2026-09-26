@@ -5,7 +5,7 @@ import type {
   ReviewRegistrationRequest,
   VersionedMutationRequest
 } from '@efm/contracts';
-import type { CompetitionRegistration, Prisma } from '../generated/prisma/client.js';
+import type { CompetitionRegistration } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';

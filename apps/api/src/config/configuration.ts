@@ -8,6 +8,10 @@ export function configuration() {
       environment: environment.NODE_ENV,
       port: environment.PORT
     },
+    wechat: {
+      gatewayMode: environment.WECHAT_GATEWAY_MODE,
+      devOpenId: environment.DEV_WECHAT_OPEN_ID
+    },
     pesdata: {
       baseUrl: environment.PESDATA_BASE_URL,
       siteVersion: environment.PESDATA_SITE_VERSION,

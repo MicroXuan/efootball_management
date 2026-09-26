@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { CompetitionTieBreaker, StandingsSnapshotResponse } from '@efm/contracts';
-import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import type { CompetitionTransaction } from './competition.types.js';
 import { calculateStandings } from './domain/standings.js';

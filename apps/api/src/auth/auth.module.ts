@@ -25,7 +25,7 @@ import { WECHAT_GATEWAY } from './wechat.gateway.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         if (config.getOrThrow<string>('WECHAT_GATEWAY_MODE') === 'fake') {
-          return new FakeWechatGateway();
+          return new FakeWechatGateway(config.get<string>('DEV_WECHAT_OPEN_ID'));
         }
         return new WechatHttpGateway(
           config.getOrThrow<string>('WECHAT_APP_ID'),

@@ -56,7 +56,7 @@ describe('MutationReceiptService', () => {
 
     expect(second).toEqual(first);
     expect(executions).toBe(1);
-    await expect(prisma.mutationReceipt.count()).resolves.toBe(1);
+    await expect(prisma.mutationReceipt.count({ where: { actorId: { in: actorIds } } })).resolves.toBe(1);
   });
 
   it('executes independently for a different actor or operation', async () => {
@@ -68,7 +68,7 @@ describe('MutationReceiptService', () => {
     await service.execute(actorIds[0]!, 'competition.update', 'shared-key', work);
 
     expect(executions).toBe(3);
-    await expect(prisma.mutationReceipt.count()).resolves.toBe(3);
+    await expect(prisma.mutationReceipt.count({ where: { actorId: { in: actorIds } } })).resolves.toBe(3);
   });
 
   it('rolls back the receipt when the mutation callback fails', async () => {
@@ -104,6 +104,6 @@ describe('MutationReceiptService', () => {
     });
 
     expect(executions).toBe(0);
-    await expect(prisma.mutationReceipt.count()).resolves.toBe(0);
+    await expect(prisma.mutationReceipt.count({ where: { actorId: { in: actorIds } } })).resolves.toBe(0);
   });
 });

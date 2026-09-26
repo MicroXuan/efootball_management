@@ -217,5 +217,8 @@ export function calculateStandings(
       : index + 1;
   }
 
-  return rows.map(({ admissionSequence: _, ...row }) => row);
+  return rows.map(({ admissionSequence, ...row }) => {
+    void admissionSequence;
+    return row;
+  });
 }

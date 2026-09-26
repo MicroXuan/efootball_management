@@ -9,6 +9,7 @@ export const EnvironmentSchema = z.object({
   WECHAT_APP_ID: z.string().min(1),
   WECHAT_APP_SECRET: z.string().min(1),
   WECHAT_GATEWAY_MODE: z.enum(['fake', 'http']).default('fake'),
+  DEV_WECHAT_OPEN_ID: z.string().trim().min(1).optional(),
   PESDATA_BASE_URL: z.url().default('https://pesdata.net'),
   PESDATA_SITE_VERSION: z.string().min(1).default('1.9.0'),
   PESDATA_SIGNATURE_SEED: z.string().min(1).optional(),
