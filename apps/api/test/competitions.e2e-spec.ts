@@ -206,7 +206,10 @@ describe('competition lifecycle API', () => {
       .expect(({ body: mine }) => expect(mine.id).toBe(registration.body.id));
     await request(app.getHttpServer()).get(`/v1/admin/competitions/${created.id}/registrations`)
       .set('Authorization', `Bearer ${managerToken}`).expect(200)
-      .expect(({ body: queue }) => expect(queue).toHaveLength(1));
+      .expect(({ body: queue }) => {
+        expect(queue).toHaveLength(1);
+        expect(queue[0]).toMatchObject({ applicantDisplayName: '实况玩家', gameAccountGamerTag: `E2E-${suffix}` });
+      });
     const approved = await request(app.getHttpServer())
       .post(`/v1/admin/competitions/${created.id}/registrations/${registration.body.id}/approve`)
       .set('Authorization', `Bearer ${managerToken}`).set('Idempotency-Key', randomUUID())

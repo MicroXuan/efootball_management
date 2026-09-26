@@ -2,7 +2,7 @@ import type { CompetitionDetail, CompetitionMatchResponse, CompetitionRegistrati
 import { ApiError } from '../../services/api'
 import { competitionsApi, type SchedulePreview } from '../../services/competitions'
 import { formatLocalDate, lifecycleLabel } from '../competitions/competitions.viewmodel'
-import { groupScheduleByRound, reviewReasonRequired } from '../competition-editor/editor.viewmodel'
+import { canCancelCompetition, groupScheduleByRound, reviewReasonRequired } from '../competition-editor/editor.viewmodel'
 import { validateScore } from '../match-result/result.viewmodel'
 
 type DatasetEvent = { currentTarget: { dataset: { id?: string; version?: number; action?: string } } }
@@ -19,7 +19,7 @@ function actionFor(status: CompetitionDetail['status']): { key: 'open-registrati
 Page({
   data: {
     id: '', loading: true, acting: false, errorMessage: '', detail: null as CompetitionDetail | null,
-    lifecycleName: '', lifecycleAction: null as ReturnType<typeof actionFor>,
+    lifecycleName: '', lifecycleAction: null as ReturnType<typeof actionFor>, cancelAllowed: false, cancelReason: '',
     registrations: [] as CompetitionRegistrationResponse[], pendingRegistrations: [] as CompetitionRegistrationResponse[],
     rejectReason: '', schedule: null as SchedulePreview | null,
     roundGroups: [] as Array<{ roundNumber: number; matches: CompetitionMatchResponse[] }>,
@@ -28,6 +28,7 @@ Page({
   onLoad(options: Record<string, string | undefined>) { this.setData({ id: options.id ?? '' }); void this.load() },
   onPullDownRefresh() { void this.load(false).finally(() => wx.stopPullDownRefresh()) },
   onRejectReasonInput(event: InputEvent) { this.setData({ rejectReason: event.detail.value }) },
+  onCancelReasonInput(event: InputEvent) { this.setData({ cancelReason: event.detail.value }) },
   onHomeInput(event: InputEvent) { this.setData({ homeScore: event.detail.value }) },
   onAwayInput(event: InputEvent) { this.setData({ awayScore: event.detail.value }) },
   onCorrectionReasonInput(event: InputEvent) { this.setData({ correctionReason: event.detail.value }) },
@@ -49,6 +50,7 @@ Page({
       catch (error) { if (!(error instanceof ApiError) || error.statusCode !== 404) throw error }
       this.setData({
         detail, lifecycleName: lifecycleLabel(detail.status), lifecycleAction: actionFor(detail.status),
+        cancelAllowed: canCancelCompetition(detail.status),
         registrations, pendingRegistrations: registrations.filter(({ status }) => status === 'PENDING'),
         schedule, roundGroups: groupScheduleByRound(schedule?.matches ?? []), matches,
         selectedMatchId: this.data.selectedMatchId || matches[0]?.id || '', errorMessage: '',
@@ -78,6 +80,19 @@ Page({
     if (!detail || !action) return
     wx.showModal({ title: action.label, content: `确认将赛事从“${this.data.lifecycleName}”推进到下一阶段？`, confirmText: '确认',
       success: ({ confirm }) => { if (confirm) void this.run(async () => { await competitionsApi.transition(this.data.id, action.key, detail.version) }, '赛事状态已更新') } })
+  },
+  cancel() {
+    const detail = this.data.detail, reason = this.data.cancelReason.trim()
+    if (!detail || !this.data.cancelAllowed) return
+    if (!reason) { this.setData({ errorMessage: '取消赛事前必须填写原因' }); return }
+    wx.showModal({
+      title: '取消赛事',
+      content: `确认取消“${detail.name}”？该操作会终止赛事，原因将保留在审计记录中。`,
+      confirmText: '确认取消', confirmColor: '#d96656',
+      success: ({ confirm }) => {
+        if (confirm) void this.run(async () => { await competitionsApi.cancel(this.data.id, detail.version, reason) }, '赛事已取消')
+      },
+    })
   },
   correctResult() {
     const match = this.data.matches.find(({ id }) => id === this.data.selectedMatchId)

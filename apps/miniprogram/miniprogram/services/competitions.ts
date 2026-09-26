@@ -94,6 +94,12 @@ export const competitionsApi = {
       method: 'POST', headers: { 'Idempotency-Key': actionKey() }, data: { expectedVersion },
     })
   },
+  cancel(id: string, expectedVersion: number, reason: string) {
+    return api.request<CompetitionDetail>({
+      path: `/admin/competitions/${encodeURIComponent(id)}/cancel`,
+      method: 'POST', headers: { 'Idempotency-Key': actionKey() }, data: { expectedVersion, reason },
+    })
+  },
   registrations(id: string) {
     return api.request<CompetitionRegistrationResponse[]>({ path: `/admin/competitions/${encodeURIComponent(id)}/registrations` })
   },

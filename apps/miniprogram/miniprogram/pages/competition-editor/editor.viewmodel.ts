@@ -11,6 +11,10 @@ export function canEditCoreFields(status: CompetitionStatus): boolean {
   return status === 'DRAFT'
 }
 
+export function canCancelCompetition(status: CompetitionStatus): boolean {
+  return status !== 'COMPLETED' && status !== 'CANCELLED'
+}
+
 export function reviewReasonRequired(decision: 'APPROVE' | 'REJECT', reason: string): boolean {
   return decision === 'REJECT' && !reason.trim()
 }

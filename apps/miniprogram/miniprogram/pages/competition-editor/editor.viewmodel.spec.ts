@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canEditCoreFields, groupScheduleByRound, reviewReasonRequired, validateTimeline } from './editor.viewmodel'
+import { canCancelCompetition, canEditCoreFields, groupScheduleByRound, reviewReasonRequired, validateTimeline } from './editor.viewmodel'
 
 describe('competition manager form', () => {
   it('validates registration and competition timeline order', () => {
@@ -22,5 +22,12 @@ describe('competition manager form', () => {
       { roundNumber: 1, matches: [{ id: 'b', roundNumber: 1 }] },
       { roundNumber: 2, matches: [{ id: 'a', roundNumber: 2 }, { id: 'c', roundNumber: 2 }] },
     ])
+  })
+
+  it('allows cancellation only before a terminal state', () => {
+    expect(canCancelCompetition('DRAFT')).toBe(true)
+    expect(canCancelCompetition('IN_PROGRESS')).toBe(true)
+    expect(canCancelCompetition('COMPLETED')).toBe(false)
+    expect(canCancelCompetition('CANCELLED')).toBe(false)
   })
 })

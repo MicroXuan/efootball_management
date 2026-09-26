@@ -55,7 +55,7 @@ export class MyCompetitionsService {
   async listMatches(userId: string, query: MyMatchListQuery): Promise<MyMatchListResponse> {
     const records = await this.prisma.competitionMatch.findMany({
       where: {
-        stage: { status: 'PUBLISHED' },
+        stage: { status: 'PUBLISHED', competition: { status: { not: 'CANCELLED' } } },
         OR: [
           { homeParticipant: { individualUserId: userId } },
           { awayParticipant: { individualUserId: userId } }
@@ -80,7 +80,9 @@ export class MyCompetitionsService {
         const ownProposal = record.resultVersions.find(({ submittedById }) => submittedById === userId) ?? null;
         const action: MyMatchAction = this.done(record)
           ? 'DONE'
-          : opponentProposal
+          : record.stage.competition.status !== 'IN_PROGRESS'
+            ? 'WAIT'
+            : opponentProposal
             ? 'CONFIRM'
             : ownProposal
               ? 'WAIT'

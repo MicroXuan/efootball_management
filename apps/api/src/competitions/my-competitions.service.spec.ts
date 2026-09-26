@@ -126,5 +126,12 @@ describe('MyCompetitionsService', () => {
     expect(page.items.map(({ action }) => action)).toEqual(['SUBMIT', 'WAIT', 'CONFIRM', 'DONE']);
     expect(page.items.find(({ action }) => action === 'WAIT')?.actionableResultVersion).toBeNull();
     expect(page.items.find(({ action }) => action === 'CONFIRM')?.actionableResultVersion?.submittedByMe).toBe(false);
+
+    await prisma.competition.update({ where: { id: competition.id }, data: { status: 'SCHEDULED' } });
+    const scheduled = await service.listMatches(userId, { limit: 10 });
+    expect(scheduled.items.map(({ action }) => action)).toEqual(['WAIT', 'WAIT', 'WAIT', 'DONE']);
+
+    await prisma.competition.update({ where: { id: competition.id }, data: { status: 'CANCELLED' } });
+    await expect(service.listMatches(userId, { limit: 10 })).resolves.toMatchObject({ items: [] });
   });
 });

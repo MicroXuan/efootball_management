@@ -194,9 +194,15 @@ export class RegistrationsService {
 
   async listForManager(competitionId: string): Promise<CompetitionRegistrationResponse[]> {
     const registrations = await this.prisma.competitionRegistration.findMany({
-      where: { competitionId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      where: { competitionId },
+      include: { applicant: true, gameAccount: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
     });
-    return registrations.map((registration) => this.response(registration));
+    return registrations.map((registration) => ({
+      ...this.response(registration),
+      applicantDisplayName: registration.applicant.displayName,
+      gameAccountGamerTag: registration.gameAccount.gamerTag
+    }));
   }
 
   private assertRegistrationOpen(status: string, opensAt: Date, closesAt: Date): void {
