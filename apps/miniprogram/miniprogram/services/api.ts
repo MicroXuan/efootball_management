@@ -10,11 +10,12 @@ type ApiErrorEnvelope = {
   }
 }
 
-type ApiRequestOptions = {
+export type ApiRequestOptions = {
   path: string
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   data?: string | WechatMiniprogram.IAnyObject | ArrayBuffer
   skipAuth?: boolean
+  headers?: Record<string, string>
 }
 
 type RawResponse<T> = {
@@ -45,6 +46,7 @@ function rawRequest<T>(options: ApiRequestOptions, accessToken?: string): Promis
       header: {
         'content-type': 'application/json',
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...options.headers,
       },
       success: ({ statusCode, data }) => resolve({ statusCode, data: data as T }),
       fail: () => reject(new ApiError('NETWORK_ERROR', '网络连接失败，请稍后重试', 0)),

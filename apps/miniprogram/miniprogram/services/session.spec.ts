@@ -108,4 +108,24 @@ describe('mini-program session and API client', () => {
     expect(session.getAccessToken()).toBeUndefined()
     expect(wx.reLaunch).toHaveBeenCalledWith({ url: '/pages/login/index' })
   })
+
+  it('does not refresh or redirect when a public request returns 401', async () => {
+    vi.mocked(wx.request).mockImplementation(((options: RequestOptions) => {
+      queueMicrotask(() => options.success?.({
+        statusCode: 401,
+        data: { error: { code: 'AUTH_REQUIRED', message: 'unexpected auth', requestId: 'public-1' } },
+        header: {},
+        cookies: [],
+        errMsg: 'request:ok',
+        profile: {} as WechatMiniprogram.RequestProfile,
+      }))
+      return {} as WechatMiniprogram.RequestTask
+    }) as typeof wx.request)
+
+    await expect(api.request({ path: '/players', skipAuth: true })).rejects.toMatchObject({
+      code: 'AUTH_REQUIRED',
+    })
+    expect(wx.request).toHaveBeenCalledTimes(1)
+    expect(wx.reLaunch).not.toHaveBeenCalled()
+  })
 })

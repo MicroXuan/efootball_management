@@ -1,0 +1,76 @@
+<view class="catalog-page">
+  <view class="catalog-head">
+    <view>
+      <text class="head-kicker">SCOUTING INDEX</text>
+      <text class="head-title">球员档案</text>
+    </view>
+    <view class="head-mark">EFM / 01</view>
+  </view>
+
+  <view class="search-box">
+    <text class="search-icon">⌕</text>
+    <input
+      value="{{keyword}}"
+      placeholder="搜索中文名、英文名或卡片"
+      placeholder-class="search-placeholder"
+      confirm-type="search"
+      bindinput="onKeywordInput"
+    />
+  </view>
+
+  <scroll-view class="filter-strip" scroll-x enable-flex show-scrollbar="{{false}}">
+    <button
+      wx:for="{{positionFilters}}"
+      wx:key="value"
+      class="filter-chip {{position === item.value ? 'is-active' : ''}}"
+      data-value="{{item.value}}"
+      bindtap="onPositionTap"
+    >{{item.label}}</button>
+  </scroll-view>
+  <scroll-view class="filter-strip filter-strip--types" scroll-x enable-flex show-scrollbar="{{false}}">
+    <button
+      wx:for="{{typeFilters}}"
+      wx:key="value"
+      class="filter-chip filter-chip--gold {{cardType === item.value ? 'is-active' : ''}}"
+      data-value="{{item.value}}"
+      bindtap="onTypeTap"
+    >{{item.label}}</button>
+  </scroll-view>
+
+  <loading-state wx:if="{{loading && cards.length === 0}}" label="正在检索球员档案" />
+
+  <view wx:elif="{{errorMessage && cards.length === 0}}" class="catalog-state">
+    <text class="state-code">OFFLINE / RETRY</text>
+    <text class="state-title">暂时无法读取球员库</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="retry-button" bindtap="retry">重新加载</button>
+  </view>
+
+  <view wx:elif="{{!loading && cards.length === 0}}" class="catalog-state">
+    <text class="state-code">NO MATCH</text>
+    <text class="state-title">没有找到符合条件的球员</text>
+    <text class="state-copy">调整名称或筛选条件后再试。</text>
+  </view>
+
+  <view wx:else class="group-list">
+    <view wx:for="{{groups}}" wx:key="id" class="card-group">
+      <view class="group-head">
+        <text class="group-title">{{item.title}}</text>
+        <text class="group-count">{{item.cards.length}} CARDS</text>
+      </view>
+      <view class="card-grid">
+        <player-card
+          wx:for="{{item.cards}}"
+          wx:for-item="card"
+          wx:key="id"
+          card="{{card}}"
+          bind:cardtap="onCardTap"
+        />
+      </view>
+    </view>
+    <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}} · 点击重试</text>
+    <button wx:if="{{errorMessage}}" class="retry-link" bindtap="retry">重新加载</button>
+    <loading-state wx:if="{{loadingMore}}" label="继续加载" />
+    <text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部球员卡 —</text>
+  </view>
+</view>

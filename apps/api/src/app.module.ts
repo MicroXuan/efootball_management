@@ -3,8 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module.js';
 import { configuration } from './config/configuration.js';
 import { validateEnvironment } from './config/env.schema.js';
+import { CompetitionsModule } from './competitions/competitions.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
+import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
+import { PlayerImportModule } from './player-import/player-import.module.js';
+import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -16,8 +20,12 @@ import { UsersModule } from './users/users.module.js';
       validate: validateEnvironment
     }),
     AuthModule,
+    CompetitionsModule,
     DatabaseModule,
     HealthModule,
+    PlayerCatalogModule,
+    PlayerImportModule,
+    PesdataSyncModule,
     UsersModule
   ]
 })

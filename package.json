@@ -17,6 +17,10 @@
     "db:migrate:dev": "pnpm --filter @efm/api exec prisma migrate dev",
     "db:status": "pnpm --filter @efm/api exec prisma migrate status",
     "start:api": "pnpm --filter @efm/api start:dev",
+    "player-import:validate": "pnpm --filter @efm/api player-import -- validate",
+    "player-import:publish": "pnpm --filter @efm/api player-import -- publish",
+    "sync:pesdata": "pnpm --filter @efm/api sync:pesdata --",
+    "competition:demo": "pnpm --filter @efm/api competition:demo --",
     "dev:db": "docker compose up -d mysql",
     "dev:db:stop": "docker compose down"
   }

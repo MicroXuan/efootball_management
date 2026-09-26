@@ -109,6 +109,14 @@ Page({
     wx.navigateTo({ url: '/pages/game-account-edit/index' })
   },
 
+  openMyMatches() {
+    wx.navigateTo({ url: '/pages/my-matches/index' })
+  },
+
+  createCompetition() {
+    wx.navigateTo({ url: '/pages/competition-editor/index' })
+  },
+
   editAccount(event: AccountTapEvent) {
     const id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: `/pages/game-account-edit/index?id=${encodeURIComponent(id)}` })

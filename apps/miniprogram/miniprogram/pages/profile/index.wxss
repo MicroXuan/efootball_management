@@ -266,3 +266,12 @@ page {
   color: #55ef8b;
   font-size: 46rpx;
 }
+
+.operation-head { margin-top: 42rpx; }
+.operation-grid { margin-top: 20rpx; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16rpx; }
+.operation-grid button { min-height: 190rpx; margin: 0; padding: 24rpx; border: 2rpx solid rgba(85,239,139,.24); border-radius: 0; background: rgba(18,38,27,.9); color: #eef7f1; text-align: left; }
+.operation-grid button::after { border: 0; }
+.operation-index,.operation-title,.operation-copy { display: block; }
+.operation-index { color: #d4b05f; font-family: "DIN Alternate", sans-serif; font-size: 20rpx; }
+.operation-title { margin-top: 19rpx; font-size: 28rpx; font-weight: 800; }
+.operation-copy { margin-top: 8rpx; color: #8ea497; font-size: 19rpx; line-height: 1.5; }

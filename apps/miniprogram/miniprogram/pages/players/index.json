@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "球员库",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#0b100e",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index",
+    "player-card": "/components/player-card/index"
+  }
+}

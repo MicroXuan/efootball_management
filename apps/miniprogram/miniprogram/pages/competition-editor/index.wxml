@@ -1,0 +1,20 @@
+<view class="editor-page">
+  <view class="header"><text class="kicker">COMPETITION CONTROL</text><text class="title">{{id ? '编辑赛事' : '创建赛事'}}</text><text class="serial">INDIVIDUAL / ROUND ROBIN</text></view>
+  <loading-state wx:if="{{loading}}" label="正在读取赛事配置" />
+  <view wx:else class="form-card">
+    <text wx:if="{{id && !coreEditable}}" class="notice">报名开启后，核心配置已锁定；如需调整请创建新赛事。</text>
+    <label class="field"><text>赛事名称 *</text><input disabled="{{!coreEditable}}" value="{{name}}" data-field="name" bindinput="onInput" maxlength="80" /></label>
+    <label class="field"><text>赛事说明</text><textarea disabled="{{!coreEditable}}" value="{{description}}" data-field="description" bindinput="onInput" maxlength="2000" /></label>
+    <label class="field"><text>平台</text><picker disabled="{{!coreEditable}}" range="{{['移动端', 'PlayStation']}}" value="{{platform === 'MOBILE' ? 0 : 1}}" bindchange="onPlatformChange"><view class="picker">{{platform === 'MOBILE' ? '移动端' : 'PlayStation'}} ›</view></picker></label>
+    <label class="field"><text>区服 *</text><input disabled="{{!coreEditable}}" value="{{serverRegion}}" data-field="serverRegion" bindinput="onInput" /></label>
+    <label class="field"><text>参赛上限</text><input disabled="{{!coreEditable}}" type="number" value="{{participantLimit}}" data-field="participantLimit" bindinput="onInput" /></label>
+    <view class="time-block"><text class="block-title">时间轴 · ISO 8601</text>
+      <label class="field"><text>报名开放</text><input disabled="{{!coreEditable}}" value="{{registrationOpensAt}}" data-field="registrationOpensAt" bindinput="onInput" /></label>
+      <label class="field"><text>报名截止</text><input disabled="{{!coreEditable}}" value="{{registrationClosesAt}}" data-field="registrationClosesAt" bindinput="onInput" /></label>
+      <label class="field"><text>开赛时间</text><input disabled="{{!coreEditable}}" value="{{startsAt}}" data-field="startsAt" bindinput="onInput" /></label>
+      <label class="field"><text>结束时间</text><input disabled="{{!coreEditable}}" value="{{endsAt}}" data-field="endsAt" bindinput="onInput" /></label>
+    </view>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <button class="save" disabled="{{saving || !coreEditable}}" loading="{{saving}}" bindtap="save">保存赛事配置</button>
+  </view>
+</view>

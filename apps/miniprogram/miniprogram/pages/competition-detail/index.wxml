@@ -1,0 +1,65 @@
+<view class="detail-page">
+  <loading-state wx:if="{{loading && !detail}}" label="正在打开赛事档案" />
+  <view wx:elif="{{errorMessage && !detail}}" class="state-panel">
+    <text class="state-code">DATA UNAVAILABLE</text><text class="state-title">无法打开赛事</text>
+    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="retry">重新加载</button>
+  </view>
+  <block wx:elif="{{detail}}">
+    <view class="hero">
+      <view class="hero-top"><text class="status">{{lifecycleName}}</text><text class="serial">MATCH FILE / {{detail.version}}</text></view>
+      <text class="name">{{detail.name}}</text>
+      <text class="description">{{detail.description || '一场讲规则、也讲公平的个人赛事。'}}</text>
+      <view class="scoreboard">
+        <view><text class="score-label">平台 / 区服</text><text class="score-value">{{detail.platform}} · {{detail.serverRegion}}</text></view>
+        <view><text class="score-label">已录取</text><text class="score-value">{{detail.participantCount}} / {{detail.participantLimit}}</text></view>
+      </view>
+    </view>
+
+    <view class="tabs">
+      <button class="tab {{activeTab === 'overview' ? 'is-active' : ''}}" data-tab="overview" bindtap="switchTab">概览</button>
+      <button class="tab {{activeTab === 'schedule' ? 'is-active' : ''}}" data-tab="schedule" bindtap="switchTab">赛程</button>
+      <button class="tab {{activeTab === 'standings' ? 'is-active' : ''}}" data-tab="standings" bindtap="switchTab">积分榜</button>
+    </view>
+
+    <view wx:if="{{activeTab === 'overview'}}" class="section-stack">
+      <view class="panel"><text class="panel-kicker">REGISTRATION</text><text class="panel-title">报名信息</text>
+        <view class="fact"><text>报名时间</text><text>{{registrationWindow}}</text></view>
+        <view class="fact"><text>开赛时间</text><text>{{startLabel}}</text></view>
+        <view class="fact"><text>赛制</text><text>个人单循环</text></view>
+      </view>
+      <view class="panel"><text class="panel-kicker">RULEBOOK V{{detail.activeRuleVersion}}</text><text class="panel-title">积分规则</text>
+        <view class="rule-grid"><text>胜 {{detail.rules.winPoints}}</text><text>平 {{detail.rules.drawPoints}}</text><text>负 {{detail.rules.lossPoints}}</text></view>
+      </view>
+      <view wx:if="{{loggedIn && !registration}}" class="panel account-panel">
+        <text class="panel-kicker">GAME ACCOUNT</text><text class="panel-title">选择参赛账号</text>
+        <view wx:for="{{accounts}}" wx:key="id" class="account {{selectedAccountId === item.id ? 'is-selected' : ''}} {{!item.eligible ? 'is-disabled' : ''}}" data-id="{{item.id}}" data-eligible="{{item.eligible}}" bindtap="selectAccount">
+          <view><text class="account-name">{{item.gamerTag}}</text><text class="account-meta">{{item.platform}} · {{item.serverRegion}}</text></view>
+          <text>{{item.eligible ? (selectedAccountId === item.id ? '已选' : '选择') : item.disabledReason}}</text>
+        </view>
+      </view>
+      <button wx:if="{{detail.capabilities.canManage}}" class="manager-button" bindtap="manage">打开赛事工作台</button>
+      <button wx:if="{{registration && registration.status === 'APPROVED'}}" class="outline-button wide" bindtap="openMyMatches">查看我的比赛</button>
+      <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
+      <button wx:if="{{!loggedIn}}" class="primary-button" bindtap="register">登录后报名</button>
+      <button wx:elif="{{registration && (registration.status === 'PENDING' || registration.status === 'APPROVED')}}" class="danger-button" loading="{{acting}}" bindtap="withdraw">撤回报名</button>
+      <button wx:else class="primary-button" disabled="{{!registrationEnabled || acting}}" loading="{{acting}}" bindtap="register">{{registrationEnabled ? '提交报名' : registrationReason}}</button>
+    </view>
+
+    <view wx:elif="{{activeTab === 'schedule'}}" class="section-stack">
+      <view wx:if="{{matches.length === 0}}" class="empty-panel">赛程发布后会显示在这里。</view>
+      <view wx:for="{{matches}}" wx:key="id" class="match-card">
+        <text class="round">ROUND {{item.roundNumber}} · #{{item.matchNumber}}</text>
+        <view class="versus"><text>{{item.homeParticipant.displayName}}</text><text class="vs">VS</text><text>{{item.awayParticipant.displayName}}</text></view>
+        <text wx:if="{{item.officialResult}}" class="official-score">{{item.officialResult.homeScore}} : {{item.officialResult.awayScore}}</text>
+      </view>
+    </view>
+
+    <view wx:else class="section-stack">
+      <view wx:if="{{standingsIsEmpty}}" class="empty-panel">第一场官方比分产生后，积分榜会自动生成。</view>
+      <view wx:else class="standing-table">
+        <view class="standing-row standing-head"><text>#</text><text>球员</text><text>赛</text><text>净胜</text><text>积分</text></view>
+        <view wx:for="{{standings.rows}}" wx:key="participantId" class="standing-row"><text>{{item.rank}}</text><text>{{item.displayName}}</text><text>{{item.played}}</text><text>{{item.goalDifference}}</text><text class="points">{{item.totalPoints}}</text></view>
+      </view>
+    </view>
+  </block>
+</view>

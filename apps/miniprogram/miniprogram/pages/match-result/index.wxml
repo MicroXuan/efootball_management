@@ -1,0 +1,18 @@
+<view class="result-page">
+  <loading-state wx:if="{{loading && !item}}" label="正在核对比赛" />
+  <view wx:elif="{{item}}">
+    <text class="kicker">RESULT CONSOLE</text><text class="title">比分确认</text>
+    <view class="scoreboard"><text>{{item.match.homeParticipant.displayName}}</text><text class="divider">—</text><text>{{item.match.awayParticipant.displayName}}</text></view>
+    <view wx:if="{{item.action === 'SUBMIT'}}" class="form">
+      <text class="label">录入最终比分</text><view class="score-inputs"><input type="number" maxlength="2" value="{{homeScore}}" bindinput="onHomeInput"/><text>:</text><input type="number" maxlength="2" value="{{awayScore}}" bindinput="onAwayInput"/></view>
+      <button loading="{{acting}}" bindtap="submit">提交给对手确认</button>
+    </view>
+    <view wx:elif="{{item.action === 'CONFIRM'}}" class="form">
+      <text class="label">对手提交的比分</text><text class="proposal">{{item.actionableResultVersion.homeScore}} : {{item.actionableResultVersion.awayScore}}</text>
+      <button loading="{{acting}}" bindtap="confirm">确认比分</button>
+      <textarea placeholder="如不同意，请填写原因" value="{{reason}}" bindinput="onReasonInput"/><button class="reject" loading="{{acting}}" bindtap="reject">拒绝并退回</button>
+    </view>
+    <view wx:else class="form"><text class="label">{{item.action === 'DONE' ? '官方结果' : '已提交，等待对手确认'}}</text><text wx:if="{{item.match.officialResult}}" class="proposal">{{item.match.officialResult.homeScore}} : {{item.match.officialResult.awayScore}}</text></view>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+  </view>
+</view>

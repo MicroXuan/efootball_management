@@ -1,13 +1,47 @@
 {
   "pages": [
+    "pages/players/index",
+    "pages/competitions/index",
+    "pages/competition-detail/index",
+    "pages/my-matches/index",
+    "pages/match-result/index",
+    "pages/competition-manage/index",
+    "pages/competition-editor/index",
     "pages/login/index",
     "pages/profile/index",
-    "pages/game-account-edit/index"
+    "pages/game-account-edit/index",
+    "pages/player-card-detail/index"
   ],
   "window": {
-    "navigationBarTextStyle": "black",
+    "navigationBarTextStyle": "white",
     "navigationBarTitleText": "非概念实况",
     "navigationBarBackgroundColor": "#07110d"
+  },
+  "tabBar": {
+    "color": "#718078",
+    "selectedColor": "#66f05a",
+    "backgroundColor": "#0b100e",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/players/index",
+        "text": "球员",
+        "iconPath": "assets/icons/player.png",
+        "selectedIconPath": "assets/icons/player-active.png"
+      },
+      {
+        "pagePath": "pages/competitions/index",
+        "text": "赛事",
+        "iconPath": "assets/icons/competition.png",
+        "selectedIconPath": "assets/icons/competition-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile-active.png"
+      }
+    ]
   },
   "sitemapLocation": "sitemap.json",
   "style": "v2",

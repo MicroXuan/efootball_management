@@ -50,6 +50,14 @@
       </button>
     </view>
 
+    <view class="section-head operation-head">
+      <view><text class="section-kicker">MATCHDAY DESK</text><text class="section-title">赛事工具</text></view>
+    </view>
+    <view class="operation-grid">
+      <button bindtap="openMyMatches"><text class="operation-index">01</text><text class="operation-title">我的比赛</text><text class="operation-copy">提交、确认或拒绝比分</text></button>
+      <button bindtap="createCompetition"><text class="operation-index">02</text><text class="operation-title">创建赛事</text><text class="operation-copy">管理员新建个人循环赛</text></button>
+    </view>
+
     <view class="section-head">
       <view>
         <text class="section-kicker">GAME IDENTITIES</text>
