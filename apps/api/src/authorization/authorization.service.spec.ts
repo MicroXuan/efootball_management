@@ -112,6 +112,21 @@ describe('AuthorizationService', () => {
       .resolves.toBe(false);
   });
 
+  it('allows a league binding for a season in that league', async () => {
+    const leagueId = randomUUID();
+    const seasonId = randomUUID();
+    await bind('LEAGUE', leagueId);
+
+    await expect(service.can(userId, permissionCode, {
+      exact: { type: 'SEASON', id: seasonId },
+      ancestors: [{ type: 'LEAGUE', id: leagueId }]
+    })).resolves.toBe(true);
+    await expect(service.can(userId, permissionCode, {
+      exact: { type: 'SEASON', id: seasonId },
+      ancestors: [{ type: 'LEAGUE', id: randomUUID() }]
+    })).resolves.toBe(false);
+  });
+
   it('denies an expired binding', async () => {
     const competitionId = randomUUID();
     await bind('COMPETITION', competitionId, new Date(Date.now() - 1_000));
