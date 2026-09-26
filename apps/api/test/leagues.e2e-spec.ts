@@ -21,7 +21,6 @@ describe('league foundation lifecycle API', () => {
   let outsiderToken: string;
   let adminId: string;
   let managerId: string;
-  let playerId: string;
   let outsiderId: string;
 
   beforeAll(async () => {
@@ -38,7 +37,9 @@ describe('league foundation lifecycle API', () => {
       userIds.push(user.id);
     }
     [adminToken, managerToken, playerToken, outsiderToken] = tokens as [string, string, string, string];
-    [adminId, managerId, playerId, outsiderId] = userIds as [string, string, string, string];
+    adminId = userIds[0]!;
+    managerId = userIds[1]!;
+    outsiderId = userIds[3]!;
     const platformAdmin = await prisma.role.findUniqueOrThrow({ where: { code: 'PLATFORM_ADMIN' } });
     await prisma.userRoleBinding.create({
       data: { userId: adminId, roleId: platformAdmin.id, scopeType: 'PLATFORM' }

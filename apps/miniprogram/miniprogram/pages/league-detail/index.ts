@@ -56,7 +56,7 @@ Page({
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     try {
       const [league, seasons, profile, accounts] = await Promise.all([
-        leaguesApi.detail(this.data.leagueId),
+        this.loadLeague(),
         leaguesApi.seasons(this.data.leagueId),
         leaguesApi.teamProfile(),
         api.request<GameAccountResponse[]>({ path: '/me/game-accounts' }),
@@ -83,6 +83,19 @@ Page({
     } catch (error) {
       this.setData({ state: 'error', errorMessage: this.errorCopy(error) })
     }
+  },
+
+  async loadLeague(): Promise<LeagueDetail> {
+    try {
+      return await leaguesApi.managerLeague(this.data.leagueId)
+    } catch {
+      return leaguesApi.detail(this.data.leagueId)
+    }
+  },
+
+  openManager() {
+    if (!this.data.league?.capabilities.canManage) return
+    wx.navigateTo({ url: `/pages/season-manage/index?leagueId=${encodeURIComponent(this.data.leagueId)}` })
   },
 
   async loadEntry() {

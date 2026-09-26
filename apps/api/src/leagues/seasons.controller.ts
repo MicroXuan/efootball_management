@@ -50,6 +50,12 @@ export class PublicSeasonsController {
 export class AdminSeasonsController {
   constructor(@Inject(SeasonsService) private readonly seasons: SeasonsService) {}
 
+  @Get('admin/leagues/:leagueId/seasons')
+  @RequirePermission('season.manage', { type: 'LEAGUE', param: 'leagueId' })
+  list(@Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string) {
+    return this.seasons.listManaged(leagueId);
+  }
+
   @Get('admin/seasons/:seasonId')
   @RequirePermission('season.manage', { type: 'SEASON', param: 'seasonId' })
   get(@Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string) {

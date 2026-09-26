@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   CreateLeagueSeasonRequestSchema,
-  type CancelLeagueSeasonRequest,
   type LeagueSeasonDetail,
   type LeagueSeasonStatus,
   type LeagueSeasonSummary,
@@ -180,6 +179,15 @@ export class SeasonsService {
       orderBy: [{ seasonNumber: 'desc' }, { id: 'asc' }]
     });
     return seasons.map((season) => this.summary(season));
+  }
+
+  async listManaged(leagueId: string): Promise<LeagueSeasonDetail[]> {
+    const seasons = await this.prisma.leagueSeason.findMany({
+      where: { leagueId },
+      include: SEASON_INCLUDE,
+      orderBy: [{ seasonNumber: 'desc' }, { id: 'asc' }]
+    });
+    return seasons.map((season) => this.detail(season, true));
   }
 
   async getPublic(seasonId: string): Promise<LeagueSeasonDetail> {

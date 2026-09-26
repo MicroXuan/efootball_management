@@ -163,6 +163,16 @@ describe('SeasonsService', () => {
     });
   });
 
+  it('lists draft seasons for managers while keeping them out of the public list', async () => {
+    const league = await createLeague('草稿可发现联赛');
+    const draft = await service.create(actorId, league.id, seasonInput(1), randomUUID());
+
+    await expect(service.listPublic(league.id)).resolves.toEqual([]);
+    await expect(service.listManaged(league.id)).resolves.toMatchObject([
+      { id: draft.id, status: 'DRAFT', capabilities: { canManage: true } }
+    ]);
+  });
+
   it('updates a draft with a valid merged timeline and locks fields after opening', async () => {
     const league = await createLeague('编辑联赛');
     const season = await service.create(actorId, league.id, seasonInput(1), randomUUID());

@@ -11,6 +11,7 @@
       <text class="hero-kicker">{{league.shortName}} LEAGUE OFFICE</text>
       <text class="hero-title">{{league.name}}</text>
       <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
+      <button wx:if="{{league.capabilities.canManage}}" class="manager-button" bindtap="openManager">进入报名工作台 →</button>
     </view>
 
     <view wx:if="{{seasons.length}}" class="season-picker-card">
