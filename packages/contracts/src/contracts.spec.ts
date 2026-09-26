@@ -5,6 +5,9 @@ import {
   CompetitionFormatSchema,
   CompetitionParticipantTypeSchema,
   CreateCompetitionRequestSchema,
+  CreateLeagueRequestSchema,
+  CreateLeagueSeasonRequestSchema,
+  CreateTeamProfileRequestSchema,
   GameAccountInputSchema,
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
@@ -13,6 +16,9 @@ import {
   ResourceIdSchema,
   StandingsSnapshotResponseSchema,
   SubmitMatchResultRequestSchema,
+  UpdateLeagueRequestSchema,
+  UpdateLeagueSeasonRequestSchema,
+  UpdateTeamProfileRequestSchema,
   WechatLoginRequestSchema
 } from './index.js';
 
@@ -51,6 +57,98 @@ describe('shared API contracts', () => {
     assert.equal(parsed.serverRegion, 'international');
     assert.equal(parsed.gamerTag, 'Player 1');
     assert.equal(parsed.isDefault, false);
+  });
+
+  it('accepts trimmed league, team profile, and valid season inputs', () => {
+    const gameAccountId = '11111111-1111-4111-8111-111111111111';
+    const league = CreateLeagueRequestSchema.parse({
+      name: '  CELL 传奇联赛  ',
+      shortName: '  CELL  ',
+      description: '  长期联赛  ',
+      logoUrl: null,
+      defaultPlatform: 'MOBILE',
+      defaultServerRegion: 'GLOBAL'
+    });
+    const team = CreateTeamProfileRequestSchema.parse({
+      name: '  上海申花  ',
+      shortName: '  申花  ',
+      logoUrl: null,
+      defaultGameAccountId: gameAccountId
+    });
+    const season = CreateLeagueSeasonRequestSchema.parse({
+      seasonNumber: 1,
+      displayName: '  S20 赛季  ',
+      registrationOpensAt: '2026-10-01T00:00:00.000Z',
+      registrationClosesAt: '2026-10-08T00:00:00.000Z',
+      startsAt: '2026-10-09T00:00:00.000Z',
+      endsAt: '2026-11-09T00:00:00.000Z'
+    });
+
+    assert.equal(league.name, 'CELL 传奇联赛');
+    assert.equal(league.defaultSuperCapacity, 23);
+    assert.equal(league.defaultChampionCapacity, 18);
+    assert.equal(league.defaultPromotionCount, 4);
+    assert.equal(team.name, '上海申花');
+    assert.equal(team.logoUrl, null);
+    assert.equal(season.displayName, 'S20 赛季');
+  });
+
+  it('rejects an invalid league season timeline', () => {
+    assert.throws(() => CreateLeagueSeasonRequestSchema.parse({
+      seasonNumber: 1,
+      displayName: 'S20 赛季',
+      registrationOpensAt: '2026-10-08T00:00:00.000Z',
+      registrationClosesAt: '2026-10-01T00:00:00.000Z',
+      startsAt: '2026-10-09T00:00:00.000Z',
+      endsAt: '2026-11-09T00:00:00.000Z'
+    }));
+    assert.throws(() => CreateLeagueSeasonRequestSchema.parse({
+      seasonNumber: 1,
+      displayName: 'S20 赛季',
+      registrationOpensAt: '2026-10-01T00:00:00.000Z',
+      registrationClosesAt: '2026-10-08T00:00:00.000Z',
+      startsAt: '2026-10-08T00:00:00.000Z',
+      endsAt: '2026-11-09T00:00:00.000Z'
+    }));
+  });
+
+  it('enforces league capacity and promotion bounds', () => {
+    const valid = {
+      name: 'CELL 传奇联赛',
+      shortName: 'CELL',
+      description: '',
+      logoUrl: null,
+      defaultPlatform: 'MOBILE' as const,
+      defaultServerRegion: 'GLOBAL'
+    };
+
+    assert.throws(() => CreateLeagueRequestSchema.parse({ ...valid, defaultSuperCapacity: 1 }));
+    assert.throws(() => CreateLeagueRequestSchema.parse({ ...valid, defaultChampionCapacity: 65 }));
+    assert.throws(() => CreateLeagueRequestSchema.parse({ ...valid, defaultPromotionCount: 33 }));
+  });
+
+  it('accepts nullable logos for league and team profile', () => {
+    const gameAccountId = '11111111-1111-4111-8111-111111111111';
+    assert.equal(CreateLeagueRequestSchema.parse({
+      name: 'CELL 传奇联赛',
+      shortName: 'CELL',
+      logoUrl: null,
+      defaultPlatform: 'MOBILE',
+      defaultServerRegion: 'GLOBAL'
+    }).logoUrl, null);
+    assert.equal(CreateTeamProfileRequestSchema.parse({
+      name: '上海申花',
+      shortName: '申花',
+      logoUrl: null,
+      defaultGameAccountId: gameAccountId
+    }).logoUrl, null);
+  });
+
+  it('requires positive optimistic versions for league foundation updates', () => {
+    assert.throws(() => UpdateLeagueRequestSchema.parse({ name: '新名称' }));
+    assert.throws(() => UpdateLeagueSeasonRequestSchema.parse({ displayName: 'S21' }));
+    assert.throws(() => UpdateTeamProfileRequestSchema.parse({ name: '新球队' }));
+    assert.throws(() => UpdateLeagueRequestSchema.parse({ expectedVersion: 0 }));
   });
 
   it('applies catalog query defaults and bounds', () => {
