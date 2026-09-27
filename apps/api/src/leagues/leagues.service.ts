@@ -9,6 +9,7 @@ import type {
   UpdateLeagueRequest
 } from '@efm/contracts';
 import type { League, LeagueSeason, Prisma } from '../generated/prisma/client.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from './league.errors.js';
@@ -34,7 +35,8 @@ type LeagueRecord = Prisma.LeagueGetPayload<{ include: typeof LEAGUE_INCLUDE }>;
 export class LeaguesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService
+    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService
   ) {}
 
   create(
@@ -143,8 +145,11 @@ export class LeaguesService {
     };
   }
 
-  async getPublic(leagueId: string): Promise<LeagueDetail> {
-    return this.detail(await this.getRecord(this.prisma, leagueId), false);
+  async getPublic(leagueId: string, viewerId?: string): Promise<LeagueDetail> {
+    const canManage = viewerId
+      ? await this.authorization.can(viewerId, 'league.manage', { type: 'LEAGUE', id: leagueId })
+      : false;
+    return this.detail(await this.getRecord(this.prisma, leagueId), canManage);
   }
 
   async getManaged(leagueId: string): Promise<LeagueDetail> {

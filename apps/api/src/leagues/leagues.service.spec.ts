@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { AuthorizationService } from '../authorization/authorization.service.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeaguesService } from './leagues.service.js';
@@ -8,7 +9,11 @@ config({ path: '../../.env', quiet: true });
 
 describe('LeaguesService', () => {
   const prisma = new PrismaService();
-  const service = new LeaguesService(prisma, new MutationReceiptService(prisma));
+  const service = new LeaguesService(
+    prisma,
+    new MutationReceiptService(prisma),
+    new AuthorizationService(prisma)
+  );
   const suffix = randomUUID();
   const leagueIds: string[] = [];
   let actorId: string;

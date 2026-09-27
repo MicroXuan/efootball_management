@@ -45,7 +45,7 @@ export const leaguesApi = {
     })
   },
   detail(leagueId: string) {
-    return api.request<LeagueDetail>({ path: `/leagues/${id(leagueId)}`, skipAuth: true })
+    return api.request<LeagueDetail>({ path: `/leagues/${id(leagueId)}` })
   },
   seasons(leagueId: string) {
     return api.request<LeagueSeasonSummary[]>({

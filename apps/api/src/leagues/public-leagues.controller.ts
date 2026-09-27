@@ -1,5 +1,8 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query, UseGuards } from '@nestjs/common';
 import { LeagueListQuerySchema, ResourceIdSchema, type LeagueListQuery } from '@efm/contracts';
+import { CurrentUser } from '../common/auth/current-user.decorator.js';
+import type { CurrentUser as AuthenticatedUser } from '../common/auth/current-user.decorator.js';
+import { OptionalJwtAuthGuard } from '../common/auth/optional-jwt-auth.guard.js';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { LeaguesService } from './leagues.service.js';
 
@@ -13,7 +16,11 @@ export class PublicLeaguesController {
   }
 
   @Get(':leagueId')
-  get(@Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string) {
-    return this.leagues.getPublic(leagueId);
+  @UseGuards(OptionalJwtAuthGuard)
+  get(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @CurrentUser() user?: AuthenticatedUser
+  ) {
+    return this.leagues.getPublic(leagueId, user?.id);
   }
 }

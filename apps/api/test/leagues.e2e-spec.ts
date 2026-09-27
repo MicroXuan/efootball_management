@@ -142,6 +142,24 @@ describe('league foundation lifecycle API', () => {
       where: { userId: adminId, roleId: leagueManagerRole.id, scopeId: createdLeague.body.id }
     })).resolves.toBe(1);
 
+    await request(app.getHttpServer()).get(`/v1/leagues/${createdLeague.body.id}`).expect(200)
+      .expect(({ body }) => expect(body.capabilities).toEqual({
+        canManage: false,
+        canCreateSeason: false
+      }));
+    await request(app.getHttpServer()).get(`/v1/leagues/${createdLeague.body.id}`)
+      .set('Authorization', authorization(managerToken)).expect(200)
+      .expect(({ body }) => expect(body.capabilities).toEqual({
+        canManage: true,
+        canCreateSeason: true
+      }));
+    await request(app.getHttpServer()).get(`/v1/leagues/${createdLeague.body.id}`)
+      .set('Authorization', authorization(outsiderToken)).expect(200)
+      .expect(({ body }) => expect(body.capabilities).toEqual({
+        canManage: false,
+        canCreateSeason: false
+      }));
+
     const account = await request(app.getHttpServer()).post('/v1/me/game-accounts')
       .set('Authorization', authorization(playerToken))
       .send({

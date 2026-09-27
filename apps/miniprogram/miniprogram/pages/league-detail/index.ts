@@ -1,6 +1,7 @@
 import type { GameAccountResponse, LeagueDetail, LeagueSeasonSummary, SeasonEntryResponse, TeamProfileResponse } from '@efm/contracts'
 import { ApiError, api } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
+import { session } from '../../services/session'
 import { platformLabel } from '../profile/profile.viewmodel'
 import {
   defaultSeasonAccountId,
@@ -29,6 +30,7 @@ Page({
     structureCopy: '',
     registrationCloseDate: '',
     leagueLogoText: '',
+    loggedIn: false,
     profile: null as TeamProfileResponse | null,
     accounts: [] as Array<GameAccountResponse & { label: string }>,
     rawAccounts: [] as GameAccountResponse[],
@@ -55,17 +57,18 @@ Page({
   async loadPage(showLoading = true) {
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     try {
+      const loggedIn = Boolean(session.getAccessToken())
       const [league, seasons, profile, accounts] = await Promise.all([
         this.loadLeague(),
         leaguesApi.seasons(this.data.leagueId),
-        leaguesApi.teamProfile(),
-        api.request<GameAccountResponse[]>({ path: '/me/game-accounts' }),
+        loggedIn ? leaguesApi.teamProfile() : Promise.resolve(null),
+        loggedIn ? api.request<GameAccountResponse[]>({ path: '/me/game-accounts' }) : Promise.resolve([]),
       ])
       const selectedSeason = selectSeason(seasons, this.data.selectedSeason?.id)
       const selectedAccountId = defaultSeasonAccountId(profile, accounts)
       const selectedAccountIndex = Math.max(0, accounts.findIndex((account) => account.id === selectedAccountId))
       this.setData({
-        state: 'loaded', errorMessage: '', league, seasons,
+        state: 'loaded', errorMessage: '', league, seasons, loggedIn,
         seasonLabels: seasons.map((season) => season.displayName),
         selectedSeasonIndex: Math.max(0, seasons.findIndex((season) => season.id === selectedSeason?.id)),
         selectedSeason,
@@ -86,11 +89,7 @@ Page({
   },
 
   async loadLeague(): Promise<LeagueDetail> {
-    try {
-      return await leaguesApi.managerLeague(this.data.leagueId)
-    } catch {
-      return leaguesApi.detail(this.data.leagueId)
-    }
+    return leaguesApi.detail(this.data.leagueId)
   },
 
   openManager() {
@@ -101,7 +100,11 @@ Page({
   async loadEntry() {
     const season = this.data.selectedSeason
     if (!season) {
-      this.setData({ entry: null, action: deriveSeasonAction(Boolean(this.data.profile), null, 'COMPLETED') })
+      this.setData({ entry: null, action: deriveSeasonAction(Boolean(this.data.profile), null, 'COMPLETED', this.data.loggedIn) })
+      return
+    }
+    if (!this.data.loggedIn) {
+      this.setData({ entry: null, action: deriveSeasonAction(false, null, season.status, false) })
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
@@ -118,7 +121,7 @@ Page({
       structureCopy: seasonStructureCopy(selectedSeason),
       registrationCloseDate: selectedSeason.registrationClosesAt.slice(0, 10),
       entry: null,
-      action: deriveSeasonAction(Boolean(this.data.profile), null, selectedSeason.status),
+      action: deriveSeasonAction(Boolean(this.data.profile), null, selectedSeason.status, this.data.loggedIn),
     })
     void this.loadEntry().catch((error: unknown) => this.setData({ errorMessage: this.errorCopy(error) }))
   },
@@ -134,6 +137,10 @@ Page({
     if (this.data.mutating) return
     const season = this.data.selectedSeason
     const action = this.data.action
+    if (action.kind === 'LOGIN') {
+      wx.navigateTo({ url: '/pages/login/index' })
+      return
+    }
     if (action.kind === 'TEAM_PROFILE') {
       wx.navigateTo({ url: '/pages/team-profile/index' })
       return

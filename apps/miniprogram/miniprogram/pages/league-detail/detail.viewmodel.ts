@@ -7,7 +7,7 @@ import type {
 } from '@efm/contracts'
 
 export type SeasonAction = {
-  kind: 'TEAM_PROFILE' | 'APPLY' | 'RENEW' | 'WITHDRAW' | 'NONE'
+  kind: 'LOGIN' | 'TEAM_PROFILE' | 'APPLY' | 'RENEW' | 'WITHDRAW' | 'NONE'
   label: string
   tone: 'primary' | 'secondary' | 'muted'
 }
@@ -29,7 +29,9 @@ export function deriveSeasonAction(
   hasTeamProfile: boolean,
   entry: SeasonEntryResponse | null,
   seasonStatus: LeagueSeasonStatus,
+  isAuthenticated = true,
 ): SeasonAction {
+  if (!isAuthenticated) return { kind: 'LOGIN', label: '登录后报名', tone: 'primary' }
   if (!hasTeamProfile) return { kind: 'TEAM_PROFILE', label: '先建立球队档案', tone: 'primary' }
   const registrationOpen = seasonStatus === 'REGISTRATION_OPEN'
   if (!entry) {

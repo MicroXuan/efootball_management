@@ -41,6 +41,7 @@ describe('league detail view model', () => {
   })
 
   it('derives team setup, application, renewal, and status actions', () => {
+    expect(deriveSeasonAction(false, null, 'REGISTRATION_OPEN', false)).toMatchObject({ kind: 'LOGIN', label: '登录后报名' })
     expect(deriveSeasonAction(false, null, 'REGISTRATION_OPEN')).toMatchObject({ kind: 'TEAM_PROFILE', label: '先建立球队档案' })
     expect(deriveSeasonAction(true, null, 'REGISTRATION_OPEN')).toMatchObject({ kind: 'APPLY', label: '报名参加' })
     expect(deriveSeasonAction(true, entry('INVITED'), 'REGISTRATION_OPEN')).toMatchObject({ kind: 'RENEW', label: '确认参加下一赛季' })

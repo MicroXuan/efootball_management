@@ -40,7 +40,7 @@
         <view wx:else class="team-logo team-fallback">{{profile.shortName}}</view>
         <view><text class="team-name">{{profile.name}}</text><text class="entry-status">{{action.label}}</text></view>
       </view>
-      <text wx:else class="state-copy">先建立球队档案，之后即可报名当前赛季。</text>
+      <text wx:else class="state-copy">{{loggedIn ? '先建立球队档案，之后即可报名当前赛季。' : '登录后可建立球队档案并报名当前赛季。'}}</text>
       <view wx:if="{{(action.kind === 'APPLY' || action.kind === 'RENEW') && accounts.length}}" class="account-select">
         <text class="field-label">本赛季使用账号</text>
         <picker range="{{accounts}}" range-key="label" value="{{selectedAccountIndex}}" bindchange="onAccountChange">
