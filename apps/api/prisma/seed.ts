@@ -42,7 +42,37 @@ const leaguePermissions = [
   ['season.registration.review', 'Review season entries']
 ] as const;
 
+const localAdminUsername = process.env.LOCAL_ADMIN_USERNAME?.trim();
+const localAdminPasswordHash = process.env.LOCAL_ADMIN_PASSWORD_HASH?.trim();
+
+if (Boolean(localAdminUsername) !== Boolean(localAdminPasswordHash)) {
+  throw new Error('LOCAL_ADMIN_USERNAME and LOCAL_ADMIN_PASSWORD_HASH must be provided together');
+}
+
 await prisma.$transaction(async (transaction) => {
+  await transaction.publicUserNumberSequence.upsert({
+    where: { key: 'public-users' },
+    update: {},
+    create: { key: 'public-users', nextValue: 100001 }
+  });
+
+  if (localAdminUsername && localAdminPasswordHash) {
+    await transaction.adminAccount.upsert({
+      where: { username: localAdminUsername },
+      update: {
+        passwordHash: localAdminPasswordHash,
+        status: 'ACTIVE',
+        platformRole: 'PLATFORM_ADMIN'
+      },
+      create: {
+        username: localAdminUsername,
+        displayName: 'Local Platform Administrator',
+        passwordHash: localAdminPasswordHash,
+        platformRole: 'PLATFORM_ADMIN'
+      }
+    });
+  }
+
   for (const [code, name] of roles) {
     await transaction.role.upsert({
       where: { code },

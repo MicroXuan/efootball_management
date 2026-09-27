@@ -45,6 +45,27 @@ enum TeamProfileStatus {
   ARCHIVED
 }
 
+enum AdminStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AdminRole {
+  PLATFORM_ADMIN
+  LEAGUE_MANAGER
+}
+
+enum LeagueTeamStatus {
+  ACTIVE
+  ARCHIVED
+  NEEDS_NUMBER
+}
+
+enum LeagueTeamRosterStatus {
+  COMPLIANT
+  OVER_CAP
+}
+
 enum LeagueSeasonStatus {
   DRAFT
   REGISTRATION_OPEN
@@ -205,6 +226,7 @@ model User {
   id                               String                                 @id @default(uuid()) @db.Char(36)
   wechatOpenId                     String                                 @unique @map("wechat_open_id") @db.VarChar(128)
   wechatUnionId                    String?                                @unique @map("wechat_union_id") @db.VarChar(128)
+  publicUserNo                     String?                                @unique @map("public_user_no") @db.Char(6)
   displayName                      String                                 @map("display_name") @db.VarChar(32)
   avatarUrl                        String?                                @map("avatar_url") @db.VarChar(2048)
   region                           String?                                @db.VarChar(64)
@@ -225,6 +247,7 @@ model User {
   submittedMatchResults            MatchResultVersion[]                   @relation("MatchResultSubmitter")
   mutationReceipts                 MutationReceipt[]                      @relation("MutationReceiptActor")
   ownedTeamProfile                 TeamProfile?                           @relation("TeamProfileOwner")
+  leagueTeams                      LeagueTeam[]                            @relation("LeagueTeamOwner")
   createdLeagues                   League[]                               @relation("LeagueCreator")
   createdLeagueSeasons             LeagueSeason[]                         @relation("LeagueSeasonCreator")
   seasonEntries                    SeasonEntry[]                          @relation("SeasonEntryOwner")
@@ -249,6 +272,7 @@ model GameAccount {
   user                     User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
   competitionRegistrations CompetitionRegistration[]
   defaultForTeamProfiles   TeamProfile[]
+  defaultForLeagueTeams    LeagueTeam[]
   seasonEntries            SeasonEntry[]
 
   @@unique([platform, serverRegion, gameUid], map: "game_accounts_identity_unique")
@@ -323,6 +347,74 @@ model UserRoleBinding {
   @@map("user_role_bindings")
 }
 
+model PublicUserNumberSequence {
+  key       String   @id @db.VarChar(32)
+  nextValue Int      @map("next_value") @db.UnsignedInt
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("public_user_number_sequences")
+}
+
+model AdminAccount {
+  id                 String            @id @default(uuid()) @db.Char(36)
+  username           String            @unique @db.VarChar(64)
+  displayName        String            @map("display_name") @db.VarChar(64)
+  passwordHash       String            @map("password_hash") @db.VarChar(255)
+  status             AdminStatus       @default(ACTIVE)
+  platformRole       AdminRole?        @map("platform_role")
+  failedLoginCount   Int               @default(0) @map("failed_login_count") @db.UnsignedInt
+  lockedUntil        DateTime?         @map("locked_until")
+  lastLoginAt        DateTime?         @map("last_login_at")
+  version            Int               @default(1) @db.UnsignedInt
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  sessions           AdminSession[]
+  leagueRoles        AdminLeagueRole[] @relation("AdminLeagueRoleAdmin")
+  grantedLeagueRoles AdminLeagueRole[] @relation("AdminLeagueRoleGrantor")
+  auditLogs          AuditLog[]        @relation("AuditActor")
+
+  @@index([status, username], map: "admin_accounts_status_username_idx")
+  @@map("admin_accounts")
+}
+
+model AdminSession {
+  id                  String       @id @default(uuid()) @db.Char(36)
+  adminId             String       @map("admin_id") @db.Char(36)
+  tokenHash           String       @unique @map("token_hash") @db.Char(64)
+  familyId            String       @map("family_id") @db.Char(36)
+  expiresAt           DateTime     @map("expires_at")
+  revokedAt           DateTime?    @map("revoked_at")
+  replacedBySessionId String?      @map("replaced_by_session_id") @db.Char(36)
+  ipAddress           String?      @map("ip_address") @db.VarChar(45)
+  userAgent           String?      @map("user_agent") @db.VarChar(512)
+  createdAt           DateTime     @default(now()) @map("created_at")
+  admin               AdminAccount @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId], map: "admin_sessions_admin_id_idx")
+  @@index([familyId], map: "admin_sessions_family_id_idx")
+  @@map("admin_sessions")
+}
+
+model AdminLeagueRole {
+  id          String       @id @default(uuid()) @db.Char(36)
+  adminId     String       @map("admin_id") @db.Char(36)
+  leagueId    String       @map("league_id") @db.Char(36)
+  role        AdminRole    @default(LEAGUE_MANAGER)
+  grantedById String       @map("granted_by_id") @db.Char(36)
+  revokedAt   DateTime?    @map("revoked_at")
+  version     Int          @default(1) @db.UnsignedInt
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  admin       AdminAccount @relation("AdminLeagueRoleAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  league      League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  grantedBy   AdminAccount @relation("AdminLeagueRoleGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@unique([adminId, leagueId, role], map: "admin_league_roles_unique")
+  @@index([leagueId, role, revokedAt], map: "admin_league_roles_scope_idx")
+  @@index([grantedById], map: "admin_league_roles_grantor_idx")
+  @@map("admin_league_roles")
+}
+
 model League {
   id                      String         @id @default(uuid()) @db.Char(36)
   name                    String         @db.VarChar(64)
@@ -341,6 +433,9 @@ model League {
   updatedAt               DateTime       @updatedAt @map("updated_at")
   creator                 User           @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
   seasons                 LeagueSeason[]
+  teams                   LeagueTeam[]
+  adminRoles              AdminLeagueRole[]
+  auditLogs               AuditLog[]
 
   @@index([status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -364,6 +459,32 @@ model TeamProfile {
 
   @@index([defaultGameAccountId], map: "team_profiles_default_account_idx")
   @@map("team_profiles")
+}
+
+model LeagueTeam {
+  id                   String                 @id @default(uuid()) @db.Char(36)
+  leagueId             String                 @map("league_id") @db.Char(36)
+  ownerUserId          String                 @map("owner_user_id") @db.Char(36)
+  teamNumber           Int?                   @map("team_number") @db.UnsignedSmallInt
+  name                 String                 @db.VarChar(64)
+  shortName            String                 @map("short_name") @db.VarChar(24)
+  logoUrl              String?                @map("logo_url") @db.VarChar(2048)
+  defaultGameAccountId String?                @map("default_game_account_id") @db.Char(36)
+  status               LeagueTeamStatus       @default(ACTIVE)
+  rosterStatus         LeagueTeamRosterStatus @default(COMPLIANT) @map("roster_status")
+  version              Int                    @default(1) @db.UnsignedInt
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  league               League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  owner                User                   @relation("LeagueTeamOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  defaultGameAccount   GameAccount?           @relation(fields: [defaultGameAccountId], references: [id], onDelete: SetNull)
+  seasonEntries        SeasonEntry[]
+
+  @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
+  @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
+  @@index([defaultGameAccountId], map: "league_teams_default_account_idx")
+  @@index([leagueId, status, createdAt], map: "league_teams_status_idx")
+  @@map("league_teams")
 }
 
 /// The service locks the parent League row before starting a season and rejects an existing IN_PROGRESS sibling.
@@ -421,6 +542,7 @@ model SeasonEntry {
   id                    String                     @id @default(uuid()) @db.Char(36)
   seasonId              String                     @map("season_id") @db.Char(36)
   teamProfileId         String                     @map("team_profile_id") @db.Char(36)
+  leagueTeamId          String?                    @map("league_team_id") @db.Char(36)
   ownerUserId           String                     @map("owner_user_id") @db.Char(36)
   gameAccountId         String                     @map("game_account_id") @db.Char(36)
   source                SeasonEntrySource
@@ -443,6 +565,7 @@ model SeasonEntry {
   updatedAt             DateTime                   @updatedAt @map("updated_at")
   season                LeagueSeason               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
   teamProfile           TeamProfile                @relation(fields: [teamProfileId], references: [id], onDelete: Restrict)
+  leagueTeam            LeagueTeam?                @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
   owner                 User                       @relation("SeasonEntryOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   gameAccount           GameAccount                @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
   previousSeasonEntry   SeasonEntry?               @relation("SeasonEntryPredecessor", fields: [previousSeasonEntryId], references: [id], onDelete: Restrict)
@@ -455,7 +578,27 @@ model SeasonEntry {
   @@index([ownerUserId, seasonId], map: "season_entries_owner_idx")
   @@index([gameAccountId], map: "season_entries_account_idx")
   @@index([reviewedById], map: "season_entries_reviewer_idx")
+  @@index([leagueTeamId], map: "season_entries_league_team_idx")
   @@map("season_entries")
+}
+
+model AuditLog {
+  id             String       @id @default(uuid()) @db.Char(36)
+  actorAdminId   String       @map("actor_admin_id") @db.Char(36)
+  leagueId       String?      @map("league_id") @db.Char(36)
+  action         String       @db.VarChar(128)
+  resourceType   String       @map("resource_type") @db.VarChar(64)
+  resourceId     String?      @map("resource_id") @db.Char(36)
+  reason         String?      @db.VarChar(512)
+  metadata       Json
+  createdAt      DateTime     @default(now()) @map("created_at")
+  actorAdmin     AdminAccount @relation("AuditActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
+  league         League?      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
+  @@index([actorAdminId, createdAt], map: "audit_logs_actor_idx")
+  @@index([leagueId, createdAt], map: "audit_logs_league_idx")
+  @@index([resourceType, resourceId], map: "audit_logs_resource_idx")
+  @@map("audit_logs")
 }
 
 model SeasonEntryStatusHistory {
