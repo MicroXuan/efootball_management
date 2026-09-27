@@ -546,8 +546,8 @@ model LeagueSeasonStatusHistory {
 model SeasonEntry {
   id                    String                     @id @default(uuid()) @db.Char(36)
   seasonId              String                     @map("season_id") @db.Char(36)
-  teamProfileId         String                     @map("team_profile_id") @db.Char(36)
-  leagueTeamId          String?                    @map("league_team_id") @db.Char(36)
+  teamProfileId         String?                    @map("team_profile_id") @db.Char(36)
+  leagueTeamId          String                     @map("league_team_id") @db.Char(36)
   ownerUserId           String                     @map("owner_user_id") @db.Char(36)
   gameAccountId         String                     @map("game_account_id") @db.Char(36)
   source                SeasonEntrySource
@@ -555,6 +555,7 @@ model SeasonEntry {
   previousSeasonEntryId String?                    @unique @map("previous_season_entry_id") @db.Char(36)
   teamNameSnapshot      String                     @map("team_name_snapshot") @db.VarChar(64)
   teamShortNameSnapshot String                     @map("team_short_name_snapshot") @db.VarChar(24)
+  teamNumberSnapshot    Int?                       @map("team_number_snapshot") @db.UnsignedSmallInt
   teamLogoUrlSnapshot   String?                    @map("team_logo_url_snapshot") @db.VarChar(2048)
   gamePlatformSnapshot  GamePlatform               @map("game_platform_snapshot")
   serverRegionSnapshot  String                     @map("server_region_snapshot") @db.VarChar(32)
@@ -569,8 +570,8 @@ model SeasonEntry {
   createdAt             DateTime                   @default(now()) @map("created_at")
   updatedAt             DateTime                   @updatedAt @map("updated_at")
   season                LeagueSeason               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  teamProfile           TeamProfile                @relation(fields: [teamProfileId], references: [id], onDelete: Restrict)
-  leagueTeam            LeagueTeam?                @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  teamProfile           TeamProfile?               @relation(fields: [teamProfileId], references: [id], onDelete: Restrict)
+  leagueTeam            LeagueTeam                 @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
   owner                 User                       @relation("SeasonEntryOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   gameAccount           GameAccount                @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
   previousSeasonEntry   SeasonEntry?               @relation("SeasonEntryPredecessor", fields: [previousSeasonEntryId], references: [id], onDelete: Restrict)
@@ -578,7 +579,7 @@ model SeasonEntry {
   reviewer              User?                      @relation("SeasonEntryReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
   statusHistory         SeasonEntryStatusHistory[]
 
-  @@unique([seasonId, teamProfileId], map: "season_entries_team_unique")
+  @@unique([seasonId, leagueTeamId], map: "season_entries_league_team_unique")
   @@index([seasonId, status, source, createdAt], map: "season_entries_review_idx")
   @@index([ownerUserId, seasonId], map: "season_entries_owner_idx")
   @@index([gameAccountId], map: "season_entries_account_idx")

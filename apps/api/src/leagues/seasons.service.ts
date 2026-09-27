@@ -210,30 +210,32 @@ export class SeasonsService {
       where: { seasonId: season.previousSeasonId, status: 'APPROVED' },
       include: {
         gameAccount: true,
-        teamProfile: { include: { defaultGameAccount: true } }
+        leagueTeam: { include: { defaultGameAccount: true } }
       }
     });
     const existing = await transaction.seasonEntry.findMany({
       where: { seasonId: season.id },
-      select: { teamProfileId: true }
+      select: { leagueTeamId: true }
     });
-    const existingTeams = new Set(existing.map((entry) => entry.teamProfileId));
+    const existingTeams = new Set(existing.map((entry) => entry.leagueTeamId));
 
     for (const previous of previousEntries) {
-      if (existingTeams.has(previous.teamProfileId)) continue;
-      const account = previous.teamProfile.defaultGameAccount ?? previous.gameAccount;
+      if (existingTeams.has(previous.leagueTeamId)) continue;
+      const account = previous.leagueTeam.defaultGameAccount ?? previous.gameAccount;
       const invitation = await transaction.seasonEntry.create({
         data: {
           seasonId: season.id,
           teamProfileId: previous.teamProfileId,
+          leagueTeamId: previous.leagueTeamId,
           ownerUserId: previous.ownerUserId,
           gameAccountId: account.id,
           source: 'RENEWAL',
           status: 'INVITED',
           previousSeasonEntryId: previous.id,
-          teamNameSnapshot: previous.teamProfile.name,
-          teamShortNameSnapshot: previous.teamProfile.shortName,
-          teamLogoUrlSnapshot: previous.teamProfile.logoUrl,
+          teamNameSnapshot: previous.leagueTeam.name,
+          teamShortNameSnapshot: previous.leagueTeam.shortName,
+          teamNumberSnapshot: previous.leagueTeam.teamNumber,
+          teamLogoUrlSnapshot: previous.leagueTeam.logoUrl,
           gamePlatformSnapshot: account.platform,
           serverRegionSnapshot: account.serverRegion,
           gamerTagSnapshot: account.gamerTag,
@@ -249,7 +251,7 @@ export class SeasonsService {
           reason: 'Renewal invitation generated when registration opened'
         }
       });
-      existingTeams.add(previous.teamProfileId);
+      existingTeams.add(previous.leagueTeamId);
     }
   }
 

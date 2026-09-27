@@ -19,7 +19,8 @@ const season = (overrides: Partial<LeagueSeasonSummary> = {}): LeagueSeasonSumma
 })
 
 const entry = (status: SeasonEntryResponse['status']): SeasonEntryResponse => ({
-  id: 'entry-1', seasonId: 'season-1', teamProfileId: 'profile-1', ownerUserId: 'user-1',
+  id: 'entry-1', seasonId: 'season-1', teamProfileId: 'profile-1', leagueTeamId: 'league-team-1',
+  ownerUserId: 'user-1', teamNumberSnapshot: 7,
   gameAccountId: 'account-1', source: status === 'INVITED' ? 'RENEWAL' : 'NEW_APPLICATION', status,
   previousSeasonEntryId: null, teamNameSnapshot: '申花', teamShortNameSnapshot: '申花',
   teamLogoUrlSnapshot: null, gamePlatformSnapshot: 'MOBILE', serverRegionSnapshot: 'GLOBAL',

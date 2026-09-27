@@ -175,7 +175,8 @@ export const LeagueSeasonCapabilitiesSchema = z.object({
 export const SeasonEntrySchema = z.object({
   id: ResourceIdSchema,
   seasonId: ResourceIdSchema,
-  teamProfileId: ResourceIdSchema,
+  teamProfileId: ResourceIdSchema.nullable(),
+  leagueTeamId: ResourceIdSchema,
   ownerUserId: ResourceIdSchema,
   gameAccountId: ResourceIdSchema,
   source: SeasonEntrySourceSchema,
@@ -183,6 +184,7 @@ export const SeasonEntrySchema = z.object({
   previousSeasonEntryId: ResourceIdSchema.nullable(),
   teamNameSnapshot: z.string(),
   teamShortNameSnapshot: z.string(),
+  teamNumberSnapshot: z.number().int().min(0).max(9_999).nullable(),
   teamLogoUrlSnapshot: z.string().nullable(),
   gamePlatformSnapshot: GamePlatformSchema,
   serverRegionSnapshot: z.string(),

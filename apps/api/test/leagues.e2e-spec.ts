@@ -67,6 +67,7 @@ describe('league foundation lifecycle API', () => {
     await prisma.userRoleBinding.deleteMany({
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
+    await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { ownerUserId: { in: userIds } } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -178,6 +179,16 @@ describe('league foundation lifecycle API', () => {
         logoUrl: null,
         defaultGameAccountId: account.body.id
       }).expect(201);
+    const leagueTeam = await prisma.leagueTeam.create({
+      data: {
+        leagueId: createdLeague.body.id as string,
+        ownerUserId: userIds[2]!,
+        teamNumber: 44,
+        name: '上海申花',
+        shortName: '申花',
+        defaultGameAccountId: account.body.id as string
+      }
+    });
 
     const season1 = await request(app.getHttpServer())
       .post(`/v1/admin/leagues/${createdLeague.body.id}/seasons`)
@@ -226,6 +237,7 @@ describe('league foundation lifecycle API', () => {
     await request(app.getHttpServer()).patch('/v1/me/team-profile')
       .set('Authorization', authorization(playerToken))
       .send({ name: '上海申花新名', expectedVersion: profile.body.version }).expect(200);
+    await prisma.leagueTeam.update({ where: { id: leagueTeam.id }, data: { name: '上海申花新名' } });
     await request(app.getHttpServer()).get(`/v1/seasons/${season1.body.id}/entries/me`)
       .set('Authorization', authorization(playerToken)).expect(200)
       .expect(({ body }) => expect(body).toMatchObject({
@@ -264,6 +276,7 @@ describe('league foundation lifecycle API', () => {
     await request(app.getHttpServer()).patch('/v1/me/team-profile')
       .set('Authorization', authorization(playerToken))
       .send({ name: '上海申花 S2', expectedVersion: updatedProfile.body.version }).expect(200);
+    await prisma.leagueTeam.update({ where: { id: leagueTeam.id }, data: { name: '上海申花 S2' } });
     await request(app.getHttpServer())
       .post(`/v1/seasons/${season2.body.id}/renewal/confirm`)
       .set('Authorization', authorization(playerToken)).set('Idempotency-Key', idempotency())

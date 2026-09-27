@@ -27,7 +27,8 @@ const season = (status: LeagueSeasonDetail['status']): LeagueSeasonDetail => ({
 })
 
 const entry = (id: string, source: SeasonEntryResponse['source'], status: SeasonEntryResponse['status']): SeasonEntryResponse => ({
-  id, seasonId: 'season-1', teamProfileId: `team-${id}`, ownerUserId: `user-${id}`, gameAccountId: `account-${id}`,
+  id, seasonId: 'season-1', teamProfileId: `team-${id}`, leagueTeamId: `league-team-${id}`,
+  ownerUserId: `user-${id}`, teamNumberSnapshot: Number(id), gameAccountId: `account-${id}`,
   source, status, previousSeasonEntryId: null, teamNameSnapshot: `球队${id}`, teamShortNameSnapshot: id,
   teamLogoUrlSnapshot: null, gamePlatformSnapshot: 'MOBILE', serverRegionSnapshot: 'GLOBAL', gamerTagSnapshot: `tag-${id}`,
   gameUidSnapshot: null, reviewedById: null, reviewedAt: null, decisionReason: null, confirmedAt: null,

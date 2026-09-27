@@ -9,7 +9,7 @@ import type {
   SeasonEntryStatus,
   WithdrawSeasonEntryRequest
 } from '@efm/contracts';
-import type { GameAccount, League, LeagueSeason, SeasonEntry } from '../generated/prisma/client.js';
+import type { GameAccount, League, LeagueSeason, LeagueTeam, SeasonEntry } from '../generated/prisma/client.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError, assertLeagueExpectedVersion } from './league.errors.js';
@@ -35,7 +35,7 @@ export class SeasonEntriesService {
       this.assertRegistrationOpen(season);
       const identity = await this.identity(transaction, userId, input.gameAccountId, season.league);
       const existing = await transaction.seasonEntry.findUnique({
-        where: { seasonId_teamProfileId: { seasonId, teamProfileId: identity.profile.id } }
+        where: { seasonId_leagueTeamId: { seasonId, leagueTeamId: identity.team.id } }
       });
       if (existing) {
         throw new LeagueError(
@@ -49,12 +49,13 @@ export class SeasonEntriesService {
       const entry = await transaction.seasonEntry.create({
         data: {
           seasonId,
-          teamProfileId: identity.profile.id,
+          teamProfileId: identity.legacyTeamProfileId,
+          leagueTeamId: identity.team.id,
           ownerUserId: userId,
           gameAccountId: identity.account.id,
           source: 'NEW_APPLICATION',
           status: 'PENDING',
-          ...this.snapshot(identity.profile, identity.account)
+          ...this.snapshot(identity.team, identity.account)
         }
       });
       await this.history(transaction, entry.id, null, 'PENDING', userId);
@@ -80,14 +81,14 @@ export class SeasonEntriesService {
         throw new LeagueError('SEASON_ENTRY_STATE_INVALID', 'Renewal invitation cannot be confirmed', 409);
       }
       const identity = await this.identity(transaction, userId, input.gameAccountId, season.league);
-      if (identity.profile.id !== entry.teamProfileId) throw this.notFound();
+      if (identity.team.id !== entry.leagueTeamId) throw this.notFound();
       const now = new Date();
       const updated = await transaction.seasonEntry.updateMany({
         where: { id: entry.id, version: input.expectedVersion },
         data: {
           gameAccountId: identity.account.id,
           status: 'APPROVED',
-          ...this.snapshot(identity.profile, identity.account),
+          ...this.snapshot(identity.team, identity.account),
           confirmedAt: now,
           reviewedById: null,
           reviewedAt: null,
@@ -228,9 +229,11 @@ export class SeasonEntriesService {
     gameAccountId: string,
     league: League
   ) {
-    const profile = await transaction.teamProfile.findUnique({ where: { ownerUserId: userId } });
-    if (!profile || profile.status !== 'ACTIVE') {
-      throw new LeagueError('TEAM_PROFILE_REQUIRED', 'An active team profile is required', 409);
+    const team = await transaction.leagueTeam.findUnique({
+      where: { leagueId_ownerUserId: { leagueId: league.id, ownerUserId: userId } }
+    });
+    if (!team || team.status !== 'ACTIVE' || team.teamNumber === null) {
+      throw new LeagueError('LEAGUE_TEAM_REQUIRED', 'An active numbered league team is required', 409);
     }
     const account = await transaction.gameAccount.findFirst({
       where: { id: gameAccountId, userId }
@@ -245,17 +248,22 @@ export class SeasonEntriesService {
         409
       );
     }
-    return { profile, account };
+    const legacyProfile = await transaction.teamProfile.findUnique({
+      where: { ownerUserId: userId },
+      select: { id: true }
+    });
+    return { team, account, legacyTeamProfileId: legacyProfile?.id ?? null };
   }
 
   private snapshot(
-    profile: { name: string; shortName: string; logoUrl: string | null },
+    team: Pick<LeagueTeam, 'teamNumber' | 'name' | 'shortName' | 'logoUrl'>,
     account: Pick<GameAccount, 'platform' | 'serverRegion' | 'gamerTag' | 'gameUid'>
   ) {
     return {
-      teamNameSnapshot: profile.name,
-      teamShortNameSnapshot: profile.shortName,
-      teamLogoUrlSnapshot: profile.logoUrl,
+      teamNameSnapshot: team.name,
+      teamShortNameSnapshot: team.shortName,
+      teamNumberSnapshot: team.teamNumber,
+      teamLogoUrlSnapshot: team.logoUrl,
       gamePlatformSnapshot: account.platform,
       serverRegionSnapshot: account.serverRegion,
       gamerTagSnapshot: account.gamerTag,
@@ -317,6 +325,7 @@ export class SeasonEntriesService {
       id: entry.id,
       seasonId: entry.seasonId,
       teamProfileId: entry.teamProfileId,
+      leagueTeamId: entry.leagueTeamId,
       ownerUserId: entry.ownerUserId,
       gameAccountId: entry.gameAccountId,
       source: entry.source,
@@ -324,6 +333,7 @@ export class SeasonEntriesService {
       previousSeasonEntryId: entry.previousSeasonEntryId,
       teamNameSnapshot: entry.teamNameSnapshot,
       teamShortNameSnapshot: entry.teamShortNameSnapshot,
+      teamNumberSnapshot: entry.teamNumberSnapshot,
       teamLogoUrlSnapshot: entry.teamLogoUrlSnapshot,
       gamePlatformSnapshot: entry.gamePlatformSnapshot,
       serverRegionSnapshot: entry.serverRegionSnapshot,

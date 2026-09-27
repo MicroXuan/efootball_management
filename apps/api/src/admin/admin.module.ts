@@ -37,6 +37,6 @@ import { AuditLogService } from './audit-log.service.js';
       useExisting: InMemoryAdminLookupRateLimiter
     }
   ],
-  exports: [AdminAuthorizationService, AuditLogService]
+  exports: [AdminAuthorizationService, AdminMutationReceiptService, AdminScopeGuard, AuditLogService]
 })
 export class AdminModule {}

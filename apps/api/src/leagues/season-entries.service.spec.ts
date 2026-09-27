@@ -47,6 +47,7 @@ describe('SeasonEntriesService', () => {
     await prisma.userRoleBinding.deleteMany({
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
+    await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { id: { in: profileIds } } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -114,9 +115,29 @@ describe('SeasonEntriesService', () => {
     return { league, season };
   }
 
+  async function assignTeam(
+    owner: Awaited<ReturnType<typeof createOwner>>,
+    leagueId: string,
+    name = `${owner.user.displayName}球队`,
+    teamNumber = 1
+  ) {
+    return prisma.leagueTeam.create({
+      data: {
+        leagueId,
+        ownerUserId: owner.user.id,
+        teamNumber,
+        name,
+        shortName: owner.user.displayName,
+        defaultGameAccountId: owner.account.id
+      }
+    });
+  }
+
   it('creates one idempotent application with immutable identity snapshots', async () => {
-    const { user, account, profile } = await createOwner('新申请');
-    const { season } = await createSeason('申请');
+    const owner = await createOwner('新申请');
+    const { user, account } = owner;
+    const { league, season } = await createSeason('申请');
+    const team = await assignTeam(owner, league.id);
     const key = randomUUID();
     const entry = await service.apply(user.id, season.id, { gameAccountId: account.id }, key);
     expect(entry).toMatchObject({
@@ -130,7 +151,7 @@ describe('SeasonEntriesService', () => {
     await expect(service.apply(user.id, season.id, { gameAccountId: account.id }, randomUUID()))
       .rejects.toMatchObject({ code: 'SEASON_ENTRY_ALREADY_EXISTS' });
 
-    await prisma.teamProfile.update({ where: { id: profile.id }, data: { name: '已改名球队' } });
+    await prisma.leagueTeam.update({ where: { id: team.id }, data: { name: '已改名球队' } });
     await prisma.gameAccount.update({ where: { id: account.id }, data: { gamerTag: '已改名玩家' } });
     await expect(service.getMine(user.id, season.id)).resolves.toMatchObject({
       teamNameSnapshot: '新申请球队',
@@ -139,31 +160,37 @@ describe('SeasonEntriesService', () => {
   });
 
   it('rejects an ineligible account platform', async () => {
-    const { user, account } = await createOwner('平台不符', 'PLAYSTATION');
-    const { season } = await createSeason('平台');
+    const owner = await createOwner('平台不符', 'PLAYSTATION');
+    const { user, account } = owner;
+    const { league, season } = await createSeason('平台');
+    await assignTeam(owner, league.id);
     await expect(service.apply(user.id, season.id, { gameAccountId: account.id }, randomUUID()))
       .rejects.toMatchObject({ code: 'GAME_ACCOUNT_INELIGIBLE' });
   });
 
   it('refreshes a renewal invitation snapshot before confirming it', async () => {
-    const { user, account, profile } = await createOwner('续赛');
-    const { season } = await createSeason('续赛');
+    const owner = await createOwner('续赛');
+    const { user, account, profile } = owner;
+    const { league, season } = await createSeason('续赛');
+    const team = await assignTeam(owner, league.id);
     const invitation = await prisma.seasonEntry.create({
       data: {
         seasonId: season.id,
         teamProfileId: profile.id,
+        leagueTeamId: team.id,
         ownerUserId: user.id,
         gameAccountId: account.id,
         source: 'RENEWAL',
         status: 'INVITED',
         teamNameSnapshot: '旧球队',
         teamShortNameSnapshot: '旧名',
+        teamNumberSnapshot: 1,
         gamePlatformSnapshot: 'MOBILE',
         serverRegionSnapshot: 'GLOBAL',
         gamerTagSnapshot: '旧玩家'
       }
     });
-    await prisma.teamProfile.update({ where: { id: profile.id }, data: { name: '续赛新球队' } });
+    await prisma.leagueTeam.update({ where: { id: team.id }, data: { name: '续赛新球队' } });
     const confirmed = await service.confirmRenewal(user.id, season.id, {
       gameAccountId: account.id,
       expectedVersion: invitation.version
@@ -178,7 +205,8 @@ describe('SeasonEntriesService', () => {
 
   it('withdraws during registration and rejects player mutations after close', async () => {
     const first = await createOwner('撤回');
-    const { season } = await createSeason('撤回');
+    const { league, season } = await createSeason('撤回');
+    await assignTeam(first, league.id);
     const entry = await service.apply(first.user.id, season.id, {
       gameAccountId: first.account.id
     }, randomUUID());
@@ -188,6 +216,7 @@ describe('SeasonEntriesService', () => {
     expect(withdrawn.status).toBe('WITHDRAWN');
 
     const second = await createOwner('截止');
+    await assignTeam(second, league.id, '截止球队', 2);
     await prisma.leagueSeason.update({
       where: { id: season.id },
       data: { status: 'ALLOCATION_REVIEW' }
@@ -198,8 +227,10 @@ describe('SeasonEntriesService', () => {
   });
 
   it('reviews pending entries, rejects stale versions, and filters the manager queue', async () => {
-    const { user, account } = await createOwner('审核');
-    const { season } = await createSeason('审核');
+    const owner = await createOwner('审核');
+    const { user, account } = owner;
+    const { league, season } = await createSeason('审核');
+    await assignTeam(owner, league.id);
     const entry = await service.apply(user.id, season.id, { gameAccountId: account.id }, randomUUID());
     const approved = await service.review(actorId, season.id, entry.id, {
       decision: 'APPROVE',
@@ -216,8 +247,10 @@ describe('SeasonEntriesService', () => {
   });
 
   it('requires a reason for a manager override and records the override after close', async () => {
-    const { user, account } = await createOwner('特殊处理');
-    const { season } = await createSeason('特殊处理');
+    const owner = await createOwner('特殊处理');
+    const { user, account } = owner;
+    const { league, season } = await createSeason('特殊处理');
+    await assignTeam(owner, league.id);
     const entry = await service.apply(user.id, season.id, { gameAccountId: account.id }, randomUUID());
     await prisma.leagueSeason.update({
       where: { id: season.id },

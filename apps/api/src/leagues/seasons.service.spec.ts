@@ -76,6 +76,7 @@ describe('SeasonsService', () => {
     await prisma.userRoleBinding.deleteMany({
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
+    await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { id: teamProfileId } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -219,24 +220,36 @@ describe('SeasonsService', () => {
 
   it('creates one fresh renewal invitation and replays opening idempotently', async () => {
     const league = await createLeague('续赛联赛');
+    const team = await prisma.leagueTeam.create({
+      data: {
+        leagueId: league.id,
+        ownerUserId: teamOwnerId,
+        teamNumber: 6,
+        name: '续赛球队',
+        shortName: '续赛',
+        defaultGameAccountId: teamAccountId
+      }
+    });
     const first = await service.create(actorId, league.id, seasonInput(1), randomUUID());
     const previous = await prisma.seasonEntry.create({
       data: {
         seasonId: first.id,
         teamProfileId,
+        leagueTeamId: team.id,
         ownerUserId: teamOwnerId,
         gameAccountId: teamAccountId,
         source: 'NEW_APPLICATION',
         status: 'APPROVED',
         teamNameSnapshot: '旧球队名',
         teamShortNameSnapshot: '旧名',
+        teamNumberSnapshot: 6,
         gamePlatformSnapshot: 'MOBILE',
         serverRegionSnapshot: 'GLOBAL',
         gamerTagSnapshot: '旧玩家名'
       }
     });
-    await prisma.teamProfile.update({
-      where: { id: teamProfileId },
+    await prisma.leagueTeam.update({
+      where: { id: team.id },
       data: { name: '续赛球队新名称' }
     });
     const second = await service.create(actorId, league.id, seasonInput(2), randomUUID());
