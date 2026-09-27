@@ -7,11 +7,18 @@ export type AuthorizationScope = {
   id: string;
 };
 
+export type AuthorizationTarget = {
+  exact: AuthorizationScope;
+  ancestors?: AuthorizationScope[];
+};
+
+type AuthorizationSubject = AuthorizationScope | AuthorizationTarget;
+
 @Injectable()
 export class AuthorizationService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async can(userId: string, permission: string, scope?: AuthorizationScope): Promise<boolean> {
+  async can(userId: string, permission: string, subject?: AuthorizationSubject): Promise<boolean> {
     const now = new Date();
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -29,11 +36,17 @@ export class AuthorizationService {
     });
     if (!user || user.status !== 'ACTIVE') return false;
 
-    return user.roleBindings.some((binding) =>
-      binding.scopeType === 'PLATFORM'
-      || (scope !== undefined
-        && binding.scopeType === scope.type
-        && binding.scopeId === scope.id)
-    );
+    const scopes = subject === undefined
+      ? []
+      : 'exact' in subject
+        ? [subject.exact, ...(subject.ancestors ?? [])]
+        : [subject];
+
+    return user.roleBindings.some((binding) => {
+      if (binding.scopeType === 'PLATFORM') return true;
+      return scopes.some((scope) =>
+        binding.scopeType === scope.type && binding.scopeId === scope.id
+      );
+    });
   }
 }

@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "赛季报名工作台",
+  "backgroundColor": "#07110d",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

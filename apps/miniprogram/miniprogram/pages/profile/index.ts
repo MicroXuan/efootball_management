@@ -117,6 +117,14 @@ Page({
     wx.navigateTo({ url: '/pages/competition-editor/index' })
   },
 
+  createLeague() {
+    wx.navigateTo({ url: '/pages/league-editor/index' })
+  },
+
+  openTeamProfile() {
+    wx.navigateTo({ url: '/pages/team-profile/index' })
+  },
+
   editAccount(event: AccountTapEvent) {
     const id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: `/pages/game-account-edit/index?id=${encodeURIComponent(id)}` })

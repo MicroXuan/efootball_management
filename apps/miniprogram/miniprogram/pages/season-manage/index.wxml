@@ -1,0 +1,53 @@
+<view class="manage-page">
+  <view class="header">
+    <view><text class="kicker">REGISTRATION CONTROL</text><text class="title">报名工作台</text></view>
+    <button wx:if="{{league.capabilities.canManage}}" class="text-button" bindtap="editLeague">联赛规则</button>
+  </view>
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取报名工作台" />
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">工作台暂时不可用</text><text class="error">{{errorMessage}}</text><button class="outline" bindtap="loadPage">重新加载</button></view>
+  <block wx:else>
+    <view class="league-line"><text>{{league.shortName}}</text><text>{{league.name}}</text><text class="authority">MANAGER</text></view>
+
+    <view wx:if="{{showSeasonForm}}" class="form-card">
+      <view class="card-head"><view><text class="kicker">NEW SEASON</text><text class="section-title">创建 S{{form.seasonNumber}} 草稿</text></view><button wx:if="{{seasons.length}}" class="close-button" bindtap="closeSeasonCreator">×</button></view>
+      <text class="hint">已继承联赛默认人数，你可以仅在本赛季覆盖。</text>
+      <label class="field"><text>赛季名称</text><input value="{{form.displayName}}" data-field="displayName" bindinput="onInput" /></label>
+      <view class="capacity-grid">
+        <label><text>超级组</text><input type="number" value="{{form.superCapacity}}" data-field="superCapacity" bindinput="onInput" /></label>
+        <label><text>冠军组</text><input type="number" value="{{form.championCapacity}}" data-field="championCapacity" bindinput="onInput" /></label>
+        <label><text>升级建议</text><input type="number" value="{{form.promotionCount}}" data-field="promotionCount" bindinput="onInput" /></label>
+      </view>
+      <view class="timeline-grid">
+        <label class="field"><text>报名开放 · ISO</text><input value="{{form.registrationOpensAt}}" data-field="registrationOpensAt" bindinput="onInput" placeholder="2026-10-01T00:00:00.000Z" /></label>
+        <label class="field"><text>报名截止 · ISO</text><input value="{{form.registrationClosesAt}}" data-field="registrationClosesAt" bindinput="onInput" /></label>
+        <label class="field"><text>开赛时间 · ISO</text><input value="{{form.startsAt}}" data-field="startsAt" bindinput="onInput" /></label>
+        <label class="field"><text>结束时间 · ISO</text><input value="{{form.endsAt}}" data-field="endsAt" bindinput="onInput" /></label>
+      </view>
+      <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+      <button class="primary" loading="{{mutating}}" disabled="{{mutating}}" bindtap="createSeason">保存赛季草稿</button>
+    </view>
+
+    <block wx:if="{{!showSeasonForm && selectedSeason}}">
+      <view class="season-card">
+        <view class="card-head"><view><text class="kicker">SEASON FILE</text><text class="section-title">{{selectedSeason.displayName}}</text></view><text class="status">{{selectedStatusLabel}}</text></view>
+        <picker range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="onSeasonChange"><view class="picker">切换赛季 <text>{{selectedSeason.displayName}}⌄</text></view></picker>
+        <view class="tally"><view><text>{{invitedRenewals}}</text><text>续赛待确认</text></view><view><text>{{confirmedRenewals}}</text><text>续赛已确认</text></view><view><text>{{newApplicants}}</text><text>新报名</text></view></view>
+        <button wx:if="{{transition && transition.kind !== 'NEXT_PHASE'}}" class="primary warning" loading="{{mutating}}" disabled="{{mutating}}" bindtap="performTransition">{{transition.label}}</button>
+        <view wx:if="{{transition && transition.kind === 'NEXT_PHASE'}}" class="terminal"><text class="terminal-code">REGISTRATION CLOSED</text><text class="terminal-title">下一阶段：分组确认</text><text>报名名单已冻结。本版本在此结束，后续接入超级组、冠军 A/B 组的系统建议与管理员确认。</text></view>
+      </view>
+
+      <view class="queue-card">
+        <view class="card-head"><view><text class="kicker">ENTRY QUEUE</text><text class="section-title">报名队列</text></view><text class="queue-count">{{entries.length}}</text></view>
+        <scroll-view class="filters" scroll-x><button wx:for="{{filters}}" wx:key="value" class="filter {{activeFilter === item.value ? 'active' : ''}}" data-filter="{{item.value}}" bindtap="onFilterTap">{{item.label}}</button></scroll-view>
+        <view wx:if="{{!visibleEntries.length}}" class="empty">当前筛选下没有报名记录</view>
+        <view wx:for="{{visibleEntries}}" wx:key="id" class="entry-row">
+          <view class="team-mark"><image wx:if="{{item.teamLogoUrlSnapshot}}" src="{{item.teamLogoUrlSnapshot}}" mode="aspectFit" /><text wx:else>{{item.teamShortNameSnapshot}}</text></view>
+          <view class="entry-main"><text class="team-name">{{item.teamNameSnapshot}}</text><text class="entry-meta">{{item.sourceLabel}} · {{item.gamerTagSnapshot}} · {{item.statusLabel}}</text><text wx:if="{{item.decisionReason}}" class="decision">{{item.decisionReason}}</text></view>
+          <view wx:if="{{item.status === 'PENDING' && selectedSeason.capabilities.canReviewEntries}}" class="entry-actions"><button data-id="{{item.id}}" bindtap="approveEntry">通过</button><button class="reject" data-id="{{item.id}}" bindtap="rejectEntry">拒绝</button></view>
+        </view>
+      </view>
+      <button wx:if="{{canCreateSeason}}" class="outline add-season" bindtap="openSeasonCreator">＋ 创建下一赛季草稿</button>
+      <text wx:if="{{errorMessage}}" class="error global-error">{{errorMessage}}</text>
+    </block>
+  </block>
+</view>

@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "联赛规则",
+  "backgroundColor": "#07110d",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

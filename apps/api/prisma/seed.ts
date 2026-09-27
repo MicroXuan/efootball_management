@@ -14,6 +14,8 @@ const prisma = new PrismaClient({ adapter });
 const roles = [
   ['PLAYER', '玩家'],
   ['TEAM_CAPTAIN', '战队队长'],
+  ['LEAGUE_MANAGER', '联赛管理员'],
+  ['SEASON_MANAGER', '赛季管理员'],
   ['EVENT_MANAGER', '赛事管理员'],
   ['REFEREE', '裁判'],
   ['PLATFORM_ADMIN', '平台管理员']
@@ -33,6 +35,13 @@ const competitionPermissions = [
   ['competition.result.manage', 'Manage official competition results']
 ] as const;
 
+const leaguePermissions = [
+  ['league.create', 'Create leagues'],
+  ['league.manage', 'Manage a league'],
+  ['season.manage', 'Manage a league season'],
+  ['season.registration.review', 'Review season entries']
+] as const;
+
 await prisma.$transaction(async (transaction) => {
   for (const [code, name] of roles) {
     await transaction.role.upsert({
@@ -47,6 +56,12 @@ await prisma.$transaction(async (transaction) => {
   });
   const eventManager = await transaction.role.findUniqueOrThrow({
     where: { code: 'EVENT_MANAGER' }
+  });
+  const leagueManager = await transaction.role.findUniqueOrThrow({
+    where: { code: 'LEAGUE_MANAGER' }
+  });
+  const seasonManager = await transaction.role.findUniqueOrThrow({
+    where: { code: 'SEASON_MANAGER' }
   });
 
   for (const [code, name] of catalogPermissions) {
@@ -77,6 +92,35 @@ await prisma.$transaction(async (transaction) => {
       create: { code, name }
     });
     const rolesToGrant = index === 0 ? [platformAdmin] : [platformAdmin, eventManager];
+
+    for (const role of rolesToGrant) {
+      await transaction.rolePermission.upsert({
+        where: {
+          roleId_permissionId: {
+            roleId: role.id,
+            permissionId: permission.id
+          }
+        },
+        update: {},
+        create: {
+          roleId: role.id,
+          permissionId: permission.id
+        }
+      });
+    }
+  }
+
+  for (const [index, [code, name]] of leaguePermissions.entries()) {
+    const permission = await transaction.permission.upsert({
+      where: { code },
+      update: { name },
+      create: { code, name }
+    });
+    const rolesToGrant = index === 0
+      ? [platformAdmin]
+      : index === 1
+        ? [platformAdmin, leagueManager]
+        : [platformAdmin, leagueManager, seasonManager];
 
     for (const role of rolesToGrant) {
       await transaction.rolePermission.upsert({

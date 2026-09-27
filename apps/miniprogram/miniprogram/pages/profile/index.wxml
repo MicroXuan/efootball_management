@@ -54,8 +54,10 @@
       <view><text class="section-kicker">MATCHDAY DESK</text><text class="section-title">赛事工具</text></view>
     </view>
     <view class="operation-grid">
-      <button bindtap="openMyMatches"><text class="operation-index">01</text><text class="operation-title">我的比赛</text><text class="operation-copy">提交、确认或拒绝比分</text></button>
-      <button bindtap="createCompetition"><text class="operation-index">02</text><text class="operation-title">创建赛事</text><text class="operation-copy">管理员新建个人循环赛</text></button>
+      <button bindtap="openTeamProfile"><text class="operation-index">01</text><text class="operation-title">我的球队</text><text class="operation-copy">维护队名、队徽与参赛账号</text></button>
+      <button bindtap="openMyMatches"><text class="operation-index">02</text><text class="operation-title">我的比赛</text><text class="operation-copy">提交、确认或拒绝比分</text></button>
+      <button bindtap="createCompetition"><text class="operation-index">03</text><text class="operation-title">创建赛事</text><text class="operation-copy">管理员新建个人循环赛</text></button>
+      <button bindtap="createLeague"><text class="operation-index">04</text><text class="operation-title">创建联赛</text><text class="operation-copy">建立多赛季联赛与报名规则</text></button>
     </view>
 
     <view class="section-head">

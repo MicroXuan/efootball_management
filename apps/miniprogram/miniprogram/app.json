@@ -2,6 +2,10 @@
   "pages": [
     "pages/players/index",
     "pages/competitions/index",
+    "pages/leagues/index",
+    "pages/league-detail/index",
+    "pages/league-editor/index",
+    "pages/season-manage/index",
     "pages/competition-detail/index",
     "pages/my-matches/index",
     "pages/match-result/index",
@@ -9,6 +13,7 @@
     "pages/competition-editor/index",
     "pages/login/index",
     "pages/profile/index",
+    "pages/team-profile/index",
     "pages/game-account-edit/index",
     "pages/player-card-detail/index"
   ],
@@ -30,8 +35,8 @@
         "selectedIconPath": "assets/icons/player-active.png"
       },
       {
-        "pagePath": "pages/competitions/index",
-        "text": "赛事",
+        "pagePath": "pages/leagues/index",
+        "text": "联赛",
         "iconPath": "assets/icons/competition.png",
         "selectedIconPath": "assets/icons/competition-active.png"
       },

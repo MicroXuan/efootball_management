@@ -52,7 +52,11 @@ describe('AuthorizationService', () => {
     await prisma.$disconnect();
   });
 
-  async function bind(scopeType: 'PLATFORM' | 'TEAM' | 'COMPETITION', scopeId?: string, expiresAt?: Date) {
+  async function bind(
+    scopeType: 'PLATFORM' | 'TEAM' | 'COMPETITION' | 'LEAGUE' | 'SEASON',
+    scopeId?: string,
+    expiresAt?: Date
+  ) {
     await prisma.userRoleBinding.create({
       data: {
         userId,
@@ -86,6 +90,41 @@ describe('AuthorizationService', () => {
     await expect(
       service.can(userId, permissionCode, { type: 'COMPETITION', id: randomUUID() })
     ).resolves.toBe(false);
+  });
+
+  it('allows an exact league scope and denies another league', async () => {
+    const leagueId = randomUUID();
+    await bind('LEAGUE', leagueId);
+
+    await expect(service.can(userId, permissionCode, { type: 'LEAGUE', id: leagueId }))
+      .resolves.toBe(true);
+    await expect(service.can(userId, permissionCode, { type: 'LEAGUE', id: randomUUID() }))
+      .resolves.toBe(false);
+  });
+
+  it('allows an exact season scope and denies another season', async () => {
+    const seasonId = randomUUID();
+    await bind('SEASON', seasonId);
+
+    await expect(service.can(userId, permissionCode, { type: 'SEASON', id: seasonId }))
+      .resolves.toBe(true);
+    await expect(service.can(userId, permissionCode, { type: 'SEASON', id: randomUUID() }))
+      .resolves.toBe(false);
+  });
+
+  it('allows a league binding for a season in that league', async () => {
+    const leagueId = randomUUID();
+    const seasonId = randomUUID();
+    await bind('LEAGUE', leagueId);
+
+    await expect(service.can(userId, permissionCode, {
+      exact: { type: 'SEASON', id: seasonId },
+      ancestors: [{ type: 'LEAGUE', id: leagueId }]
+    })).resolves.toBe(true);
+    await expect(service.can(userId, permissionCode, {
+      exact: { type: 'SEASON', id: seasonId },
+      ancestors: [{ type: 'LEAGUE', id: randomUUID() }]
+    })).resolves.toBe(false);
   });
 
   it('denies an expired binding', async () => {
