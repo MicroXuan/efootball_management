@@ -247,7 +247,7 @@ model User {
   submittedMatchResults            MatchResultVersion[]                   @relation("MatchResultSubmitter")
   mutationReceipts                 MutationReceipt[]                      @relation("MutationReceiptActor")
   ownedTeamProfile                 TeamProfile?                           @relation("TeamProfileOwner")
-  leagueTeams                      LeagueTeam[]                            @relation("LeagueTeamOwner")
+  leagueTeams                      LeagueTeam[]                           @relation("LeagueTeamOwner")
   createdLeagues                   League[]                               @relation("LeagueCreator")
   createdLeagueSeasons             LeagueSeason[]                         @relation("LeagueSeasonCreator")
   seasonEntries                    SeasonEntry[]                          @relation("SeasonEntryOwner")
@@ -356,22 +356,24 @@ model PublicUserNumberSequence {
 }
 
 model AdminAccount {
-  id                 String            @id @default(uuid()) @db.Char(36)
-  username           String            @unique @db.VarChar(64)
-  displayName        String            @map("display_name") @db.VarChar(64)
-  passwordHash       String            @map("password_hash") @db.VarChar(255)
-  status             AdminStatus       @default(ACTIVE)
-  platformRole       AdminRole?        @map("platform_role")
-  failedLoginCount   Int               @default(0) @map("failed_login_count") @db.UnsignedInt
-  lockedUntil        DateTime?         @map("locked_until")
-  lastLoginAt        DateTime?         @map("last_login_at")
-  version            Int               @default(1) @db.UnsignedInt
-  createdAt          DateTime          @default(now()) @map("created_at")
-  updatedAt          DateTime          @updatedAt @map("updated_at")
+  id                 String                 @id @default(uuid()) @db.Char(36)
+  username           String                 @unique @db.VarChar(64)
+  displayName        String                 @map("display_name") @db.VarChar(64)
+  passwordHash       String                 @map("password_hash") @db.VarChar(255)
+  status             AdminStatus            @default(ACTIVE)
+  platformRole       AdminRole?             @map("platform_role")
+  failedLoginCount   Int                    @default(0) @map("failed_login_count") @db.UnsignedInt
+  lockedUntil        DateTime?              @map("locked_until")
+  lastLoginAt        DateTime?              @map("last_login_at")
+  version            Int                    @default(1) @db.UnsignedInt
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
   sessions           AdminSession[]
-  leagueRoles        AdminLeagueRole[] @relation("AdminLeagueRoleAdmin")
-  grantedLeagueRoles AdminLeagueRole[] @relation("AdminLeagueRoleGrantor")
-  auditLogs          AuditLog[]        @relation("AuditActor")
+  leagueRoles        AdminLeagueRole[]      @relation("AdminLeagueRoleAdmin")
+  grantedLeagueRoles AdminLeagueRole[]      @relation("AdminLeagueRoleGrantor")
+  auditLogs          AuditLog[]             @relation("AuditActor")
+  createdLeagues     League[]               @relation("AdminLeagueCreator")
+  mutationReceipts   AdminMutationReceipt[]
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -416,22 +418,24 @@ model AdminLeagueRole {
 }
 
 model League {
-  id                      String         @id @default(uuid()) @db.Char(36)
-  name                    String         @db.VarChar(64)
-  shortName               String         @map("short_name") @db.VarChar(24)
-  description             String         @default("") @db.VarChar(500)
-  logoUrl                 String?        @map("logo_url") @db.VarChar(2048)
-  status                  LeagueStatus   @default(ACTIVE)
-  defaultPlatform         GamePlatform   @map("default_platform")
-  defaultServerRegion     String         @map("default_server_region") @db.VarChar(32)
-  defaultSuperCapacity    Int            @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
-  defaultChampionCapacity Int            @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
-  defaultPromotionCount   Int            @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
-  createdById             String         @map("created_by_id") @db.Char(36)
-  version                 Int            @default(1) @db.UnsignedInt
-  createdAt               DateTime       @default(now()) @map("created_at")
-  updatedAt               DateTime       @updatedAt @map("updated_at")
-  creator                 User           @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  id                      String            @id @default(uuid()) @db.Char(36)
+  name                    String            @db.VarChar(64)
+  shortName               String            @map("short_name") @db.VarChar(24)
+  description             String            @default("") @db.VarChar(500)
+  logoUrl                 String?           @map("logo_url") @db.VarChar(2048)
+  status                  LeagueStatus      @default(ACTIVE)
+  defaultPlatform         GamePlatform      @map("default_platform")
+  defaultServerRegion     String            @map("default_server_region") @db.VarChar(32)
+  defaultSuperCapacity    Int               @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
+  defaultChampionCapacity Int               @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
+  defaultPromotionCount   Int               @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
+  createdById             String?           @map("created_by_id") @db.Char(36)
+  createdByAdminId        String?           @map("created_by_admin_id") @db.Char(36)
+  version                 Int               @default(1) @db.UnsignedInt
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  creator                 User?             @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator            AdminAccount?     @relation("AdminLeagueCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   seasons                 LeagueSeason[]
   teams                   LeagueTeam[]
   adminRoles              AdminLeagueRole[]
@@ -439,6 +443,7 @@ model League {
 
   @@index([status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
+  @@index([createdByAdminId], map: "leagues_admin_creator_idx")
   @@map("leagues")
 }
 
@@ -583,17 +588,17 @@ model SeasonEntry {
 }
 
 model AuditLog {
-  id             String       @id @default(uuid()) @db.Char(36)
-  actorAdminId   String       @map("actor_admin_id") @db.Char(36)
-  leagueId       String?      @map("league_id") @db.Char(36)
-  action         String       @db.VarChar(128)
-  resourceType   String       @map("resource_type") @db.VarChar(64)
-  resourceId     String?      @map("resource_id") @db.Char(36)
-  reason         String?      @db.VarChar(512)
-  metadata       Json
-  createdAt      DateTime     @default(now()) @map("created_at")
-  actorAdmin     AdminAccount @relation("AuditActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
-  league         League?      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  id           String       @id @default(uuid()) @db.Char(36)
+  actorAdminId String       @map("actor_admin_id") @db.Char(36)
+  leagueId     String?      @map("league_id") @db.Char(36)
+  action       String       @db.VarChar(128)
+  resourceType String       @map("resource_type") @db.VarChar(64)
+  resourceId   String?      @map("resource_id") @db.Char(36)
+  reason       String?      @db.VarChar(512)
+  metadata     Json
+  createdAt    DateTime     @default(now()) @map("created_at")
+  actorAdmin   AdminAccount @relation("AuditActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
+  league       League?      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   @@index([actorAdminId, createdAt], map: "audit_logs_actor_idx")
   @@index([leagueId, createdAt], map: "audit_logs_league_idx")
@@ -1175,4 +1180,18 @@ model MutationReceipt {
 
   @@unique([actorId, operation, key], map: "mutation_receipts_request_unique")
   @@map("mutation_receipts")
+}
+
+model AdminMutationReceipt {
+  id         String       @id @default(uuid()) @db.Char(36)
+  adminId    String       @map("admin_id") @db.Char(36)
+  operation  String       @db.VarChar(191)
+  key        String       @db.VarChar(128)
+  resultJson Json?        @map("result_json")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  admin      AdminAccount @relation(fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@unique([adminId, operation, key], map: "admin_mutation_receipts_request_unique")
+  @@map("admin_mutation_receipts")
 }

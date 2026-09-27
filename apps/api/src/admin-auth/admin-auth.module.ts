@@ -25,6 +25,6 @@ import { PasswordService } from './password.service.js';
     AdminTokenService,
     PasswordService
   ],
-  exports: [AdminAuthGuard, AdminAuthService, AdminTokenService, PasswordService]
+  exports: [JwtModule, AdminAuthGuard, AdminAuthService, AdminTokenService, PasswordService]
 })
 export class AdminAuthModule {}
