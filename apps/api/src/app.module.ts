@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module.js';
+import { AdminAuthModule } from './admin-auth/admin-auth.module.js';
 import { configuration } from './config/configuration.js';
 import { validateEnvironment } from './config/env.schema.js';
 import { CompetitionsModule } from './competitions/competitions.module.js';
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module.js';
       load: [configuration],
       validate: validateEnvironment
     }),
+    AdminAuthModule,
     AuthModule,
     CompetitionsModule,
     DatabaseModule,

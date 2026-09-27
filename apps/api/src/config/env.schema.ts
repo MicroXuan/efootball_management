@@ -6,6 +6,7 @@ export const EnvironmentSchema = z.object({
   DATABASE_URL: z.string().startsWith('mysql://'),
   JWT_ACCESS_SECRET: z.string().min(32),
   REFRESH_TOKEN_PEPPER: z.string().min(32),
+  ADMIN_REFRESH_TOKEN_PEPPER: z.string().min(32).optional(),
   WECHAT_APP_ID: z.string().min(1),
   WECHAT_APP_SECRET: z.string().min(1),
   WECHAT_GATEWAY_MODE: z.enum(['fake', 'http']).default('fake'),
