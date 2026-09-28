@@ -10,6 +10,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { PlayerCardStatus } from '../generated/prisma/enums.js';
 import { normalizeSearchText } from './record-normalizer.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 
 type Transaction = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
 
@@ -33,7 +34,8 @@ function asDate(value: string | undefined): Date | null {
 export class PlayerImportPublisher {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(AuthorizationService) private readonly authorization: AuthorizationService
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
   ) {}
 
   async publish(actorId: string, batchId: string): Promise<ImportBatchResponse> {
@@ -229,6 +231,19 @@ export class PlayerImportPublisher {
         });
         await tx.playerCardSkill.create({ data: { playerCardId: card.id, skillId: skill.id } });
       }
+    }
+
+    if (
+      value.autoBuildAllocation !== undefined
+      && value.autoBuildMaxOverall !== undefined
+      && value.algorithmVersion !== undefined
+    ) {
+      await this.playerBuilds.saveWithClient(tx, card.id, {
+        autoBuildAllocation: value.autoBuildAllocation,
+        autoBuildMaxOverall: value.autoBuildMaxOverall,
+        dtRating: value.dtRating ?? null,
+        algorithmVersion: value.algorithmVersion
+      });
     }
 
     await this.createVersion(tx, card.id, releaseSequence, publishedAt);

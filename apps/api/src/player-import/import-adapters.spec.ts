@@ -89,5 +89,35 @@ describe('player import adapters', () => {
       expect(normalized.skills).toEqual(['Double Touch', 'Gamesmanship']);
       expect(normalized.status).toBe('ACTIVE');
     });
+
+    it('coerces source-provided automatic build output without inventing missing values', () => {
+      const normalized = normalizeImportRow({
+        externalId: 'bonucci-epic',
+        playerNameEn: 'Leonardo Bonucci',
+        cardName: 'Epic Power Tackle',
+        position: 'CB',
+        overallRating: 87,
+        cardType: 'EPIC',
+        autoBuildAllocation: '{"defending":12,"aerialStrength":8}',
+        autoBuildMaxOverall: '98',
+        dtRating: '97',
+        algorithmVersion: ' pesdata-auto-v1 '
+      });
+
+      expect(normalized).toMatchObject({
+        autoBuildAllocation: { defending: 12, aerialStrength: 8 },
+        autoBuildMaxOverall: 98,
+        dtRating: 97,
+        algorithmVersion: 'pesdata-auto-v1'
+      });
+      expect(normalizeImportRow({
+        externalId: 'bonucci-base',
+        playerNameEn: 'Leonardo Bonucci',
+        cardName: 'Base',
+        position: 'CB',
+        overallRating: 82,
+        cardType: 'STANDARD'
+      }).autoBuildMaxOverall).toBeUndefined();
+    });
   });
 });

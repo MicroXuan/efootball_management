@@ -25,7 +25,11 @@ describe('PESDATA player mapping', () => {
       packName: 'Epic Power Tackle',
       releaseDate: '2026-09-24',
       imageUrl: 'https://img.pesdata.net/images/playerCard/88045755859255_l.webp',
-      sourceUpdatedAt: '2026-09-24T00:00:00.000Z'
+      sourceUpdatedAt: '2026-09-24T00:00:00.000Z',
+      autoBuildAllocation: { defending: 12, aerialStrength: 8 },
+      autoBuildMaxOverall: 98,
+      dtRating: 97,
+      algorithmVersion: 'pesdata-auto-v1'
     });
     const attributes = row.attributes as Record<string, unknown>;
     expect(attributes.speed).toBe(77);
@@ -65,6 +69,21 @@ describe('PESDATA player mapping', () => {
     expect(() => mapPesdataPlayer({ ...detail, agentTitle: '' })).toThrow(
       expect.objectContaining({ code: 'PESDATA_MAPPING_ERROR' })
     );
+  });
+
+  it('leaves automatic build output unavailable when the source does not provide it', () => {
+    const row = mapPesdataPlayer({
+      ...detail,
+      autoBuildAllocation: undefined,
+      autoBuildMaxOverall: undefined,
+      dtRating: undefined,
+      algorithmVersion: undefined
+    });
+
+    expect(row.autoBuildAllocation).toBeUndefined();
+    expect(row.autoBuildMaxOverall).toBeUndefined();
+    expect(row.dtRating).toBeUndefined();
+    expect(row.algorithmVersion).toBeUndefined();
   });
 
   it('produces stable checksums independent of object key order', () => {

@@ -4,6 +4,7 @@ import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerImportPublisher } from '../player-import/player-import.publisher.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { decodeCatalogCursor, encodeCatalogCursor } from './catalog-cursor.js';
 import { PlayerCatalogService } from './player-catalog.service.js';
 
@@ -35,7 +36,11 @@ describe('PlayerCatalogService', () => {
   const prisma = new PrismaService();
   const authorization = { can: async () => true };
   const importer = new PlayerImportService(prisma, authorization as never);
-  const publisher = new PlayerImportPublisher(prisma, authorization as never);
+  const publisher = new PlayerImportPublisher(
+    prisma,
+    authorization as never,
+    new PlayerBuildsService(prisma)
+  );
   const catalog = new PlayerCatalogService(prisma);
   const actorId = randomUUID();
   let sourceId: string;

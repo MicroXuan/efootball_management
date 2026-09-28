@@ -641,20 +641,21 @@ model DataSource {
 }
 
 model FootballPlayer {
-  id                           String                 @id @default(uuid()) @db.Char(36)
-  nameZh                       String?                @map("name_zh") @db.VarChar(128)
-  nameEn                       String?                @map("name_en") @db.VarChar(128)
-  normalizedNameZh             String?                @map("normalized_name_zh") @db.VarChar(128)
-  normalizedNameEn             String?                @map("normalized_name_en") @db.VarChar(128)
-  shortName                    String?                @map("short_name") @db.VarChar(64)
-  nationality                  String?                @db.VarChar(64)
-  club                         String?                @db.VarChar(128)
-  publishedAt                  DateTime?              @map("published_at")
-  lastPublishedReleaseSequence Int?                   @map("last_published_release_sequence")
-  createdAt                    DateTime               @default(now()) @map("created_at")
-  updatedAt                    DateTime               @updatedAt @map("updated_at")
+  id                           String                  @id @default(uuid()) @db.Char(36)
+  nameZh                       String?                 @map("name_zh") @db.VarChar(128)
+  nameEn                       String?                 @map("name_en") @db.VarChar(128)
+  normalizedNameZh             String?                 @map("normalized_name_zh") @db.VarChar(128)
+  normalizedNameEn             String?                 @map("normalized_name_en") @db.VarChar(128)
+  shortName                    String?                 @map("short_name") @db.VarChar(64)
+  nationality                  String?                 @db.VarChar(64)
+  club                         String?                 @db.VarChar(128)
+  publishedAt                  DateTime?               @map("published_at")
+  lastPublishedReleaseSequence Int?                    @map("last_published_release_sequence")
+  createdAt                    DateTime                @default(now()) @map("created_at")
+  updatedAt                    DateTime                @updatedAt @map("updated_at")
   sources                      FootballPlayerSource[]
   cards                        PlayerCard[]
+  bestCard                     FootballPlayerBestCard?
   importRecords                ImportRecord[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
@@ -702,28 +703,30 @@ model CardPack {
 }
 
 model PlayerCard {
-  id                           String               @id @default(uuid()) @db.Char(36)
-  sourceId                     String               @map("source_id") @db.Char(36)
-  externalId                   String               @map("external_id") @db.VarChar(128)
-  playerId                     String               @map("player_id") @db.Char(36)
-  cardPackId                   String?              @map("card_pack_id") @db.Char(36)
-  cardName                     String               @map("card_name") @db.VarChar(128)
+  id                           String                   @id @default(uuid()) @db.Char(36)
+  sourceId                     String                   @map("source_id") @db.Char(36)
+  externalId                   String                   @map("external_id") @db.VarChar(128)
+  playerId                     String                   @map("player_id") @db.Char(36)
+  cardPackId                   String?                  @map("card_pack_id") @db.Char(36)
+  cardName                     String                   @map("card_name") @db.VarChar(128)
   position                     PlayerPosition
-  overallRating                Int                  @map("overall_rating") @db.UnsignedTinyInt
-  cardType                     PlayerCardType       @map("card_type")
-  playStyle                    String?              @map("play_style") @db.VarChar(128)
-  status                       PlayerCardStatus     @default(ACTIVE)
-  imageUrl                     String?              @map("image_url") @db.VarChar(2048)
-  sourceUpdatedAt              DateTime?            @map("source_updated_at")
-  publishedAt                  DateTime?            @map("published_at")
-  lastPublishedReleaseSequence Int?                 @map("last_published_release_sequence")
-  createdAt                    DateTime             @default(now()) @map("created_at")
-  updatedAt                    DateTime             @updatedAt @map("updated_at")
-  source                       DataSource           @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  player                       FootballPlayer       @relation(fields: [playerId], references: [id], onDelete: Restrict)
-  cardPack                     CardPack?            @relation(fields: [cardPackId], references: [id], onDelete: SetNull)
+  overallRating                Int                      @map("overall_rating") @db.UnsignedTinyInt
+  cardType                     PlayerCardType           @map("card_type")
+  playStyle                    String?                  @map("play_style") @db.VarChar(128)
+  status                       PlayerCardStatus         @default(ACTIVE)
+  imageUrl                     String?                  @map("image_url") @db.VarChar(2048)
+  sourceUpdatedAt              DateTime?                @map("source_updated_at")
+  publishedAt                  DateTime?                @map("published_at")
+  lastPublishedReleaseSequence Int?                     @map("last_published_release_sequence")
+  createdAt                    DateTime                 @default(now()) @map("created_at")
+  updatedAt                    DateTime                 @updatedAt @map("updated_at")
+  source                       DataSource               @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  player                       FootballPlayer           @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  cardPack                     CardPack?                @relation(fields: [cardPackId], references: [id], onDelete: SetNull)
   attributes                   PlayerCardAttribute?
   skills                       PlayerCardSkill[]
+  autoBuilds                   PlayerCardAutoBuild[]
+  bestCardSelections           FootballPlayerBestCard[]
   versions                     PlayerCardVersion[]
   importRecords                ImportRecord[]
 
@@ -732,6 +735,40 @@ model PlayerCard {
   @@index([cardPackId], map: "player_cards_pack_idx")
   @@index([publishedAt, status], map: "player_cards_published_status_idx")
   @@map("player_cards")
+}
+
+model PlayerCardAutoBuild {
+  id                String                  @id @default(uuid()) @db.Char(36)
+  playerCardId      String                  @map("player_card_id") @db.Char(36)
+  algorithmVersion  String                  @map("algorithm_version") @db.VarChar(64)
+  allocationJson    Json                    @map("allocation_json")
+  maxOverall        Int                     @map("max_overall") @db.UnsignedTinyInt
+  dtRating          Int?                    @map("dt_rating") @db.UnsignedTinyInt
+  calculatedAt      DateTime                @default(now()) @map("calculated_at")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  playerCard        PlayerCard              @relation(fields: [playerCardId], references: [id], onDelete: Cascade)
+  bestCardSelection FootballPlayerBestCard?
+
+  @@unique([playerCardId, algorithmVersion], map: "player_card_auto_builds_version_unique")
+  @@index([algorithmVersion, maxOverall], map: "player_card_auto_builds_ranking_idx")
+  @@map("player_card_auto_builds")
+}
+
+model FootballPlayerBestCard {
+  id               String              @id @default(uuid()) @db.Char(36)
+  footballPlayerId String              @unique @map("football_player_id") @db.Char(36)
+  playerCardId     String              @map("player_card_id") @db.Char(36)
+  autoBuildId      String              @unique @map("auto_build_id") @db.Char(36)
+  selectionReason  Json                @map("selection_reason")
+  selectedAt       DateTime            @default(now()) @map("selected_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  footballPlayer   FootballPlayer      @relation(fields: [footballPlayerId], references: [id], onDelete: Cascade)
+  playerCard       PlayerCard          @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
+  autoBuild        PlayerCardAutoBuild @relation(fields: [autoBuildId], references: [id], onDelete: Restrict)
+
+  @@index([playerCardId], map: "football_player_best_cards_card_idx")
+  @@map("football_player_best_cards")
 }
 
 model PlayerCardAttribute {

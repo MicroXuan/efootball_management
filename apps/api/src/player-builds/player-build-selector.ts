@@ -1,0 +1,70 @@
+export type BestCardCandidate = {
+  autoBuildId: string;
+  playerCardId: string;
+  externalId: string;
+  algorithmVersion: string;
+  maxOverall: number;
+  dtRating: number | null;
+  releaseDate: Date | null;
+};
+
+export type BestCardSelectionReason = {
+  algorithmVersion: string;
+  ordering: readonly [
+    'maxOverall:desc',
+    'dtRating:desc:nulls-last',
+    'releaseDate:desc:nulls-last',
+    'externalId:asc'
+  ];
+  candidateCount: number;
+  winner: {
+    externalId: string;
+    maxOverall: number;
+    dtRating: number | null;
+    releaseDate: string | null;
+  };
+};
+
+export type BestCardSelection = BestCardCandidate & {
+  selectionReason: BestCardSelectionReason;
+};
+
+const ordering = [
+  'maxOverall:desc',
+  'dtRating:desc:nulls-last',
+  'releaseDate:desc:nulls-last',
+  'externalId:asc'
+] as const;
+
+function descendingNullable(left: number | null, right: number | null): number {
+  if (left === right) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return right - left;
+}
+
+function compare(left: BestCardCandidate, right: BestCardCandidate): number {
+  return right.maxOverall - left.maxOverall
+    || descendingNullable(left.dtRating, right.dtRating)
+    || descendingNullable(left.releaseDate?.valueOf() ?? null, right.releaseDate?.valueOf() ?? null)
+    || left.externalId.localeCompare(right.externalId, 'en-US');
+}
+
+export function selectBestCard(builds: readonly BestCardCandidate[]): BestCardSelection | null {
+  if (builds.length === 0) return null;
+  const winner = [...builds].sort(compare)[0]!;
+  return {
+    ...winner,
+    selectionReason: {
+      algorithmVersion: winner.algorithmVersion,
+      ordering,
+      candidateCount: builds.length,
+      winner: {
+        externalId: winner.externalId,
+        maxOverall: winner.maxOverall,
+        dtRating: winner.dtRating,
+        releaseDate: winner.releaseDate?.toISOString().slice(0, 10) ?? null
+      }
+    }
+  };
+}

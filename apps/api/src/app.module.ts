@@ -12,6 +12,7 @@ import { LeaguesModule } from './leagues/leagues.module.js';
 import { LeagueTeamsModule } from './league-teams/league-teams.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
+import { PlayerBuildsModule } from './player-builds/player-builds.module.js';
 import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -32,6 +33,7 @@ import { UsersModule } from './users/users.module.js';
     LeaguesModule,
     LeagueTeamsModule,
     PlayerCatalogModule,
+    PlayerBuildsModule,
     PlayerImportModule,
     PesdataSyncModule,
     UsersModule

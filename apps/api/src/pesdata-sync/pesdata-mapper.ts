@@ -176,6 +176,7 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
   const cleanAttributes = Object.fromEntries(
     Object.entries(attributes).filter(([, value]) => value !== undefined)
   );
+  const algorithmVersion = text(detail.algorithmVersion);
 
   const row: RawImportRow = {
     externalId,
@@ -196,7 +197,15 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     ...(releaseDate ? { season: releaseDate.slice(0, 4), releaseDate } : {}),
     ...(updatedAt ? { sourceUpdatedAt: updatedAt } : {}),
     skills: skillNames(detail),
-    attributes: cleanAttributes
+    attributes: cleanAttributes,
+    ...(detail.autoBuildAllocation != null
+      ? { autoBuildAllocation: detail.autoBuildAllocation }
+      : {}),
+    ...(detail.autoBuildMaxOverall != null
+      ? { autoBuildMaxOverall: detail.autoBuildMaxOverall }
+      : {}),
+    ...(detail.dtRating != null ? { dtRating: detail.dtRating } : {}),
+    ...(algorithmVersion ? { algorithmVersion } : {})
   };
 
   try {

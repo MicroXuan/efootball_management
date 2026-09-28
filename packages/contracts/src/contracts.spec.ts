@@ -253,6 +253,31 @@ describe('shared API contracts', () => {
     });
   });
 
+  it('accepts a complete automatic build and rejects partial build metadata', () => {
+    const base = {
+      externalId: '88045755859255',
+      playerNameEn: 'Leonardo Bonucci',
+      cardName: 'Epic Power Tackle',
+      position: 'CB',
+      overallRating: 87,
+      cardType: 'EPIC'
+    } as const;
+    const parsed = NormalizedPlayerCardRecordSchema.parse({
+      ...base,
+      autoBuildAllocation: { defending: 12, aerialStrength: 8 },
+      autoBuildMaxOverall: 98,
+      dtRating: 97,
+      algorithmVersion: 'pesdata-auto-v1'
+    });
+
+    assert.equal(parsed.autoBuildMaxOverall, 98);
+    assert.equal(parsed.dtRating, 97);
+    assert.throws(() => NormalizedPlayerCardRecordSchema.parse({
+      ...base,
+      autoBuildMaxOverall: 98
+    }));
+  });
+
   it('accepts the first-release individual round-robin competition shape', () => {
     const parsed = CreateCompetitionRequestSchema.parse({
       name: '秋季个人联赛',
