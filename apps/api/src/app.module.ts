@@ -10,6 +10,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { LeaguesModule } from './leagues/leagues.module.js';
 import { LeagueTeamsModule } from './league-teams/league-teams.module.js';
+import { LeagueRostersModule } from './league-rosters/league-rosters.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
 import { PlayerBuildsModule } from './player-builds/player-builds.module.js';
@@ -32,6 +33,7 @@ import { UsersModule } from './users/users.module.js';
     HealthModule,
     LeaguesModule,
     LeagueTeamsModule,
+    LeagueRostersModule,
     PlayerCatalogModule,
     PlayerBuildsModule,
     PlayerImportModule,

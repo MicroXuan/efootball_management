@@ -65,6 +65,10 @@ export const CreateSalaryRuleVersionRequestSchema = z.object({
   effectiveAt: TimestampSchema,
   expectedCurrentVersion: z.number().int().nonnegative()
 });
+export const PreviewSalaryRuleRequestSchema = CreateSalaryRuleVersionRequestSchema.pick({
+  salaryCapMinor: true,
+  tiers: true
+});
 
 export const TransferOperationSchema = z.enum(['BUY', 'SELL', 'TRANSFER', 'CARD_UPGRADE']);
 
@@ -201,6 +205,10 @@ export const UpgradePlayerCardRequestSchema = RosterMutationBaseSchema.extend({
 });
 
 export type SalaryRuleVersion = z.infer<typeof SalaryRuleVersionSchema>;
+export type CreateSalaryRuleVersionRequest = z.infer<typeof CreateSalaryRuleVersionRequestSchema>;
+export type PreviewSalaryRuleRequest = z.infer<typeof PreviewSalaryRuleRequestSchema>;
+export type CreateTransferWindowRequest = z.infer<typeof CreateTransferWindowRequestSchema>;
+export type UpdateTransferWindowRequest = z.infer<typeof UpdateTransferWindowRequestSchema>;
 export type TransferOperation = z.infer<typeof TransferOperationSchema>;
 export type TransferWindow = z.infer<typeof TransferWindowSchema>;
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
