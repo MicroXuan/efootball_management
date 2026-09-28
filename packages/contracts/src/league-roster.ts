@@ -3,10 +3,11 @@ import { ResourceIdSchema } from './common.js';
 import { ExpectedVersionSchema, IdempotencyKeySchema } from './competition.js';
 
 const TimestampSchema = z.iso.datetime();
-const NonNegativeMoneyMinorSchema = z.number().int().nonnegative();
-const NullablePositiveMoneyMinorSchema = z.number().int().positive().nullable();
+const MAX_UNSIGNED_INT = 4_294_967_295;
+const NonNegativeMoneyMinorSchema = z.number().int().nonnegative().max(MAX_UNSIGNED_INT);
+const NullablePositiveMoneyMinorSchema = z.number().int().positive().max(MAX_UNSIGNED_INT).nullable();
 
-export const MoneyMinorSchema = z.number().int().positive();
+export const MoneyMinorSchema = z.number().int().positive().max(MAX_UNSIGNED_INT);
 export const DtRatingSchema = z.number().int().min(0).max(120);
 export const SalaryRuleStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'RETIRED']);
 

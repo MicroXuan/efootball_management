@@ -84,7 +84,16 @@ export class SalaryRulesService {
   }
 
   async quote(leagueId: string, dtRating: number, at = new Date()) {
-    const rule = await this.prisma.leagueSalaryRuleVersion.findFirst({
+    return this.quoteWithClient(this.prisma, leagueId, dtRating, at);
+  }
+
+  async quoteWithClient(
+    client: PrismaService | Prisma.TransactionClient,
+    leagueId: string,
+    dtRating: number,
+    at = new Date()
+  ) {
+    const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
       include: { tiers: { orderBy: { minDtRating: 'asc' } } }

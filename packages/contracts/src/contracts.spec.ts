@@ -467,9 +467,11 @@ describe('league team administration contracts', () => {
 
   it('requires positive integer minor units for transaction amounts', () => {
     assert.equal(MoneyMinorSchema.parse(1), 1);
+    assert.equal(MoneyMinorSchema.parse(4_294_967_295), 4_294_967_295);
     assert.throws(() => MoneyMinorSchema.parse(0));
     assert.throws(() => MoneyMinorSchema.parse(-1));
     assert.throws(() => MoneyMinorSchema.parse(1.5));
+    assert.throws(() => MoneyMinorSchema.parse(4_294_967_296));
   });
 
   it('requires salary tiers to cover every DT value without gaps or overlaps', () => {

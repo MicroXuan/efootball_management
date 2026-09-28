@@ -103,7 +103,16 @@ export class TransferWindowsService {
   }
 
   async requireAllowed(seasonId: string, operation: TransferOperation, at = new Date()) {
-    const windows = await this.prisma.transferWindow.findMany({
+    return this.requireAllowedWithClient(this.prisma, seasonId, operation, at);
+  }
+
+  async requireAllowedWithClient(
+    client: PrismaService | Prisma.TransactionClient,
+    seasonId: string,
+    operation: TransferOperation,
+    at = new Date()
+  ) {
+    const windows = await client.transferWindow.findMany({
       where: { seasonId, startsAt: { lte: at }, endsAt: { gt: at } },
       orderBy: { startsAt: 'asc' }
     });
