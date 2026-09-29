@@ -154,4 +154,64 @@ describe('SalaryRulesService', () => {
     await prisma.footballPlayer.delete({ where: { id: player.id } });
     await prisma.dataSource.delete({ where: { id: source.id } });
   });
+
+  it('marks a team over cap when an immediately-effective cap is lowered', async () => {
+    const { admin, user, league } = await fixture();
+    const current = await createRule(admin.id, league.id, 1_000, 200);
+    const team = await prisma.leagueTeam.create({
+      data: { leagueId: league.id, ownerUserId: user.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP' }
+    });
+    const source = await prisma.dataSource.create({
+      data: { code: `cap-source-${randomUUID()}`, name: 'Cap source' }
+    });
+    const player = await prisma.footballPlayer.create({ data: { nameEn: 'Cap Player' } });
+    const card = await prisma.playerCard.create({
+      data: {
+        sourceId: source.id,
+        externalId: `cap-card-${randomUUID()}`,
+        playerId: player.id,
+        cardName: 'Cap card',
+        position: 'CB',
+        overallRating: 93,
+        cardType: 'STANDARD'
+      }
+    });
+    await prisma.leaguePlayerOwnership.create({
+      data: {
+        leagueId: league.id,
+        leagueTeamId: team.id,
+        footballPlayerId: player.id,
+        currentPlayerCardId: card.id,
+        dtRatingSnapshot: 93,
+        salaryRuleVersionId: current.id,
+        salaryMinor: 200
+      }
+    });
+
+    await service.createVersion(admin.id, league.id, {
+      salaryCapMinor: 150,
+      tiers: defaultSalaryTiers(),
+      effectiveAt: new Date(Date.now() - 1_000).toISOString(),
+      expectedCurrentVersion: 1
+    });
+
+    await expect(service.createVersion(admin.id, league.id, {
+      salaryCapMinor: 10_000,
+      tiers: defaultSalaryTiers(),
+      effectiveAt: current.effectiveAt.toISOString(),
+      expectedCurrentVersion: 2
+    })).rejects.toMatchObject({ code: 'SALARY_RULE_EFFECTIVE_AT_NOT_INCREASING' });
+
+    await expect(prisma.leagueTeam.findUniqueOrThrow({
+      where: { id: team.id }, select: { rosterStatus: true }
+    })).resolves.toEqual({ rosterStatus: 'OVER_CAP' });
+    await expect(prisma.leaguePlayerOwnership.findFirstOrThrow({
+      where: { leagueTeamId: team.id }, select: { salaryMinor: true, salaryRuleVersionId: true }
+    })).resolves.toEqual({ salaryMinor: 200, salaryRuleVersionId: current.id });
+
+    await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueId: league.id } });
+    await prisma.playerCard.delete({ where: { id: card.id } });
+    await prisma.footballPlayer.delete({ where: { id: player.id } });
+    await prisma.dataSource.delete({ where: { id: source.id } });
+  });
 });

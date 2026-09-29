@@ -11,7 +11,9 @@ import {
   CreateCompetitionRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
+  CreateSalaryRuleVersionRequestSchema,
   CreateTeamProfileRequestSchema,
+  EmergencyCorrectRosterRequestSchema,
   GameAccountInputSchema,
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
@@ -21,9 +23,12 @@ import {
   PlayerSearchQuerySchema,
   PublicUserLookupSchema,
   PublicUserNumberSchema,
+  RecalculateLeagueSalaryRequestSchema,
   ResourceIdSchema,
   RosterEntrySchema,
+  RosterMutationResponseSchema,
   RosterTransactionSchema,
+  SalaryRecalculationResponseSchema,
   SalaryRuleVersionSchema,
   StandingsSnapshotResponseSchema,
   SubmitMatchResultRequestSchema,
@@ -474,6 +479,41 @@ describe('league team administration contracts', () => {
     assert.throws(() => MoneyMinorSchema.parse(4_294_967_296));
   });
 
+  it('requires explicit salary recalculation confirmation and a reasoned emergency change', () => {
+    const base = {
+      seasonId: ids.season,
+      idempotencyKey: 'roster-change-1',
+      reason: 'Administrator confirmed correction'
+    };
+    assert.equal(RecalculateLeagueSalaryRequestSchema.parse({
+      ...base,
+      leagueId: ids.league,
+      salaryRuleVersionId: ids.rule,
+      confirm: true
+    }).confirm, true);
+    assert.throws(() => RecalculateLeagueSalaryRequestSchema.parse({
+      ...base,
+      leagueId: ids.league,
+      salaryRuleVersionId: ids.rule,
+      confirm: false
+    }));
+    assert.throws(() => EmergencyCorrectRosterRequestSchema.parse({
+      ...base,
+      ownershipId: ids.ownership,
+      targetLeagueTeamId: null,
+      newPlayerCardId: null,
+      expectedVersion: 1
+    }));
+    assert.throws(() => EmergencyCorrectRosterRequestSchema.parse({
+      ...base,
+      reason: '',
+      ownershipId: ids.ownership,
+      targetLeagueTeamId: ids.team,
+      newPlayerCardId: null,
+      expectedVersion: 1
+    }));
+  });
+
   it('requires salary tiers to cover every DT value without gaps or overlaps', () => {
     const base = {
       id: ids.rule,
@@ -500,6 +540,12 @@ describe('league team administration contracts', () => {
     assert.throws(() => SalaryRuleVersionSchema.parse({
       ...base,
       tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 92 } : tier)
+    }));
+    assert.throws(() => CreateSalaryRuleVersionRequestSchema.parse({
+      salaryCapMinor: 10_000,
+      tiers: validTiers,
+      effectiveAt: '2999-01-01T00:00:00.000Z',
+      expectedCurrentVersion: 0
     }));
   });
 
@@ -632,6 +678,37 @@ describe('league team administration contracts', () => {
       createdAt
     });
     assert.equal(transaction.type, 'BUY');
+
+    assert.equal(RosterMutationResponseSchema.parse({
+      ownership: {
+        id: ids.ownership,
+        leagueId: ids.league,
+        leagueTeamId: ids.team,
+        playerId: ids.player,
+        currentPlayerCardId: ids.card,
+        dtRating: 97,
+        salaryRuleVersionId: ids.rule,
+        salaryMinor: 600,
+        acquiredAt: createdAt,
+        status: 'ACTIVE',
+        version: 2
+      },
+      transaction,
+      summary: { rosterCount: 1, salaryMinor: 600, salaryCapMinor: 10_000 }
+    }).transaction.playerId, ids.player);
+
+    assert.equal(SalaryRecalculationResponseSchema.parse({
+      leagueId: ids.league,
+      seasonId: ids.season,
+      salaryRuleVersionId: ids.rule,
+      recalculatedPlayers: 1,
+      overCapTeams: 1,
+      teams: [{
+        leagueTeamId: ids.team,
+        salaryMinor: 600,
+        rosterStatus: 'OVER_CAP'
+      }]
+    }).teams[0]?.rosterStatus, 'OVER_CAP');
 
     const ledger = FinanceLedgerEntrySchema.parse({
       id: ids.ledger,

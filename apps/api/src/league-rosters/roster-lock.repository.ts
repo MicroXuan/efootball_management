@@ -9,6 +9,13 @@ export class RosterLockRepository {
     );
   }
 
+  async lockTeams(client: Prisma.TransactionClient, leagueTeamIds: string[]) {
+    const ordered = [...new Set(leagueTeamIds)].sort();
+    for (const leagueTeamId of ordered) {
+      await this.lockTeam(client, leagueTeamId);
+    }
+  }
+
   async lockOwnership(
     client: Prisma.TransactionClient,
     leagueId: string,

@@ -6,6 +6,7 @@ import { AdminRostersController } from './admin-rosters.controller.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { RosterTransactionsService } from './roster-transactions.service.js';
 import { SalaryRulesService } from './salary-rules.service.js';
+import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 
 @Module({
@@ -15,8 +16,14 @@ import { TransferWindowsService } from './transfer-windows.service.js';
     SalaryRulesService,
     TransferWindowsService,
     RosterLockRepository,
-    RosterTransactionsService
+    RosterTransactionsService,
+    SalaryRecalculationService
   ],
-  exports: [SalaryRulesService, TransferWindowsService, RosterTransactionsService]
+  exports: [
+    SalaryRulesService,
+    TransferWindowsService,
+    RosterTransactionsService,
+    SalaryRecalculationService
+  ]
 })
 export class LeagueRostersModule {}

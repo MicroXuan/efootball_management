@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
+import {
+  RosterMutationResponseSchema,
+  SalaryRecalculationResponseSchema
+} from '@efm/contracts';
 import { config } from 'dotenv';
 import request from 'supertest';
 import { PasswordService } from '../src/admin-auth/password.service.js';
@@ -318,5 +322,78 @@ describe('atomic league roster API', () => {
     await expect(prisma.leaguePlayerOwnership.count({
       where: { leagueTeamId: f.teams[0]!.id, status: 'ACTIVE' }
     })).resolves.toBe(1);
+  });
+
+  it('executes transfer, explicit card upgrade, and confirmed salary recalculation APIs', async () => {
+    const f = await fixture('advanced-roster');
+    await prisma.leagueSalaryRuleVersion.updateMany({
+      where: { leagueId: f.league.id },
+      data: { salaryCapMinor: 1_000 }
+    });
+    const player = await createCard(f.source.id, 'Advanced base');
+    const upgrade = await createCard(f.source.id, 'Advanced upgrade', player.player.id);
+    await prisma.playerCardAutoBuild.updateMany({
+      where: { playerCardId: upgrade.card.id },
+      data: { maxOverall: 94, dtRating: 94 }
+    });
+    const acquired = await request(app.getHttpServer())
+      .post('/v1/admin/roster/acquisitions').set(auth())
+      .send(acquisition(f.season.id, f.teams[0]!.id, player.card.id))
+      .expect(201);
+    const transferred = await request(app.getHttpServer())
+      .post('/v1/admin/roster/transfers').set(auth())
+      .send({
+        seasonId: f.season.id,
+        ownershipId: acquired.body.ownership.id,
+        targetLeagueTeamId: f.teams[1]!.id,
+        amountMinor: 500,
+        expectedVersion: 1,
+        idempotencyKey: randomUUID(),
+        reason: 'E2E transfer'
+      })
+      .expect(201);
+    expect(() => RosterMutationResponseSchema.parse(transferred.body)).not.toThrow();
+    const upgraded = await request(app.getHttpServer())
+      .post('/v1/admin/roster/card-upgrades').set(auth())
+      .send({
+        seasonId: f.season.id,
+        ownershipId: acquired.body.ownership.id,
+        newPlayerCardId: upgrade.card.id,
+        amountMinor: 300,
+        expectedVersion: transferred.body.ownership.version,
+        idempotencyKey: randomUUID(),
+        reason: 'E2E card upgrade'
+      })
+      .expect(201);
+    expect(upgraded.body.ownership).toMatchObject({
+      currentPlayerCardId: upgrade.card.id,
+      salaryMinor: 300
+    });
+    expect(() => RosterMutationResponseSchema.parse(upgraded.body)).not.toThrow();
+    const rule = await prisma.leagueSalaryRuleVersion.create({
+      data: {
+        leagueId: f.league.id,
+        version: 2,
+        salaryCapMinor: 250,
+        effectiveAt: new Date('2026-09-16T00:00:00.000Z'),
+        createdByAdminId: adminId,
+        tiers: { create: defaultSalaryTiers() }
+      }
+    });
+    await request(app.getHttpServer())
+      .post('/v1/admin/roster/salary-recalculations').set(auth())
+      .send({
+        leagueId: f.league.id,
+        seasonId: f.season.id,
+        salaryRuleVersionId: rule.id,
+        confirm: true,
+        idempotencyKey: randomUUID(),
+        reason: 'E2E salary recalculation'
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(() => SalaryRecalculationResponseSchema.parse(body)).not.toThrow();
+        expect(body).toMatchObject({ recalculatedPlayers: 1, overCapTeams: 1 });
+      });
   });
 });

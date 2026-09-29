@@ -60,13 +60,22 @@ export const SalaryRuleVersionSchema = z.object({
   createdAt: TimestampSchema
 });
 
-export const CreateSalaryRuleVersionRequestSchema = z.object({
+const CreateSalaryRuleVersionFieldsSchema = z.object({
   salaryCapMinor: MoneyMinorSchema,
   tiers: SalaryTierListSchema,
   effectiveAt: TimestampSchema,
   expectedCurrentVersion: z.number().int().nonnegative()
 });
-export const PreviewSalaryRuleRequestSchema = CreateSalaryRuleVersionRequestSchema.pick({
+export const CreateSalaryRuleVersionRequestSchema = CreateSalaryRuleVersionFieldsSchema.superRefine((input, context) => {
+  if (Date.parse(input.effectiveAt) > Date.now()) {
+    context.addIssue({
+      code: 'custom',
+      path: ['effectiveAt'],
+      message: 'future salary rule activation is not supported yet'
+    });
+  }
+});
+export const PreviewSalaryRuleRequestSchema = CreateSalaryRuleVersionFieldsSchema.pick({
   salaryCapMinor: true,
   tiers: true
 });
@@ -156,6 +165,46 @@ export const RosterTransactionSchema = z.object({
   createdAt: TimestampSchema
 });
 
+export const RosterMutationOwnershipSchema = z.object({
+  id: ResourceIdSchema,
+  leagueId: ResourceIdSchema,
+  leagueTeamId: ResourceIdSchema,
+  playerId: ResourceIdSchema,
+  currentPlayerCardId: ResourceIdSchema,
+  dtRating: DtRatingSchema,
+  salaryRuleVersionId: ResourceIdSchema,
+  salaryMinor: MoneyMinorSchema,
+  acquiredAt: TimestampSchema,
+  status: RosterEntryStatusSchema,
+  version: z.number().int().positive()
+});
+
+export const RosterMutationSummarySchema = z.object({
+  rosterCount: z.number().int().nonnegative().max(25),
+  salaryMinor: NonNegativeMoneyMinorSchema,
+  salaryCapMinor: MoneyMinorSchema
+});
+
+export const RosterMutationResponseSchema = z.object({
+  ownership: RosterMutationOwnershipSchema,
+  transaction: RosterTransactionSchema,
+  summary: RosterMutationSummarySchema,
+  sourceSummary: RosterMutationSummarySchema.optional()
+});
+
+export const SalaryRecalculationResponseSchema = z.object({
+  leagueId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  salaryRuleVersionId: ResourceIdSchema,
+  recalculatedPlayers: z.number().int().nonnegative(),
+  overCapTeams: z.number().int().nonnegative(),
+  teams: z.array(z.object({
+    leagueTeamId: ResourceIdSchema,
+    salaryMinor: NonNegativeMoneyMinorSchema,
+    rosterStatus: z.enum(['COMPLIANT', 'OVER_CAP'])
+  }))
+});
+
 export const FinanceLedgerDirectionSchema = z.enum(['DEBIT', 'CREDIT']);
 export const FinanceLedgerTypeSchema = z.enum([
   'PLAYER_PURCHASE',
@@ -204,6 +253,25 @@ export const UpgradePlayerCardRequestSchema = RosterMutationBaseSchema.extend({
   amountMinor: MoneyMinorSchema.nullable().default(null),
   expectedVersion: ExpectedVersionSchema
 });
+export const RecalculateLeagueSalaryRequestSchema = RosterMutationBaseSchema.extend({
+  leagueId: ResourceIdSchema,
+  salaryRuleVersionId: ResourceIdSchema,
+  confirm: z.literal(true)
+});
+export const EmergencyCorrectRosterRequestSchema = RosterMutationBaseSchema.extend({
+  ownershipId: ResourceIdSchema,
+  targetLeagueTeamId: ResourceIdSchema.nullable().default(null),
+  newPlayerCardId: ResourceIdSchema.nullable().default(null),
+  expectedVersion: ExpectedVersionSchema
+}).superRefine((input, context) => {
+  if (input.targetLeagueTeamId === null && input.newPlayerCardId === null) {
+    context.addIssue({
+      code: 'custom',
+      path: ['targetLeagueTeamId'],
+      message: 'targetLeagueTeamId or newPlayerCardId is required'
+    });
+  }
+});
 
 export type SalaryRuleVersion = z.infer<typeof SalaryRuleVersionSchema>;
 export type CreateSalaryRuleVersionRequest = z.infer<typeof CreateSalaryRuleVersionRequestSchema>;
@@ -214,8 +282,14 @@ export type TransferOperation = z.infer<typeof TransferOperationSchema>;
 export type TransferWindow = z.infer<typeof TransferWindowSchema>;
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
 export type RosterTransaction = z.infer<typeof RosterTransactionSchema>;
+export type RosterMutationOwnership = z.infer<typeof RosterMutationOwnershipSchema>;
+export type RosterMutationSummary = z.infer<typeof RosterMutationSummarySchema>;
+export type RosterMutationResponse = z.infer<typeof RosterMutationResponseSchema>;
+export type SalaryRecalculationResponse = z.infer<typeof SalaryRecalculationResponseSchema>;
 export type FinanceLedgerEntry = z.infer<typeof FinanceLedgerEntrySchema>;
 export type AcquirePlayerRequest = z.infer<typeof AcquirePlayerRequestSchema>;
 export type ReleasePlayerRequest = z.infer<typeof ReleasePlayerRequestSchema>;
 export type TransferPlayerRequest = z.infer<typeof TransferPlayerRequestSchema>;
 export type UpgradePlayerCardRequest = z.infer<typeof UpgradePlayerCardRequestSchema>;
+export type RecalculateLeagueSalaryRequest = z.infer<typeof RecalculateLeagueSalaryRequestSchema>;
+export type EmergencyCorrectRosterRequest = z.infer<typeof EmergencyCorrectRosterRequestSchema>;

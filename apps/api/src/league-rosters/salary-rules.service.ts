@@ -60,17 +60,27 @@ export class SalaryRulesService {
           currentVersion
         });
       }
+      const effectiveAt = new Date(input.effectiveAt);
+      if (latest && effectiveAt <= latest.effectiveAt) {
+        throw new LeagueRosterError(
+          'SALARY_RULE_EFFECTIVE_AT_NOT_INCREASING',
+          'Salary rule effective time must be later than the previous version',
+          409,
+          { currentEffectiveAt: latest.effectiveAt.toISOString() }
+        );
+      }
       const created = await tx.leagueSalaryRuleVersion.create({
         data: {
           leagueId,
           version: currentVersion + 1,
           salaryCapMinor: input.salaryCapMinor,
-          effectiveAt: new Date(input.effectiveAt),
+          effectiveAt,
           createdByAdminId: adminId,
           tiers: { create: input.tiers }
         },
         include: { tiers: { orderBy: { minDtRating: 'asc' } } }
       });
+      await this.synchronizeRosterStatuses(tx, leagueId, input.salaryCapMinor);
       await this.audit.record(tx, {
         actorAdminId: adminId,
         leagueId,
@@ -81,6 +91,43 @@ export class SalaryRulesService {
       });
       return created;
     });
+  }
+
+  private async synchronizeRosterStatuses(
+    tx: Prisma.TransactionClient,
+    leagueId: string,
+    salaryCapMinor: number
+  ) {
+    const teams = await tx.leagueTeam.findMany({
+      where: { leagueId },
+      select: { id: true },
+      orderBy: { id: 'asc' }
+    });
+    if (teams.length === 0) return;
+    await tx.$queryRaw(Prisma.sql`
+      SELECT id FROM league_teams
+      WHERE league_id = ${leagueId}
+      ORDER BY id
+      FOR UPDATE
+    `);
+    const totals = await tx.leaguePlayerOwnership.groupBy({
+      by: ['leagueTeamId'],
+      where: { leagueId, status: 'ACTIVE' },
+      _sum: { salaryMinor: true }
+    });
+    const salaryByTeam = new Map(totals.map(({ leagueTeamId, _sum }) => [
+      leagueTeamId,
+      _sum.salaryMinor ?? 0
+    ]));
+    for (const team of teams) {
+      const rosterStatus = (salaryByTeam.get(team.id) ?? 0) > salaryCapMinor
+        ? 'OVER_CAP'
+        : 'COMPLIANT';
+      await tx.leagueTeam.updateMany({
+        where: { id: team.id, rosterStatus: { not: rosterStatus } },
+        data: { rosterStatus, version: { increment: 1 } }
+      });
+    }
   }
 
   async quote(leagueId: string, dtRating: number, at = new Date()) {
@@ -100,6 +147,28 @@ export class SalaryRulesService {
     });
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_CONFIGURED', 'No salary rule is active', 422);
+    }
+    return {
+      salaryRuleVersionId: rule.id,
+      version: rule.version,
+      dtRating,
+      salaryMinor: salaryFor(rule.tiers, dtRating),
+      salaryCapMinor: rule.salaryCapMinor
+    };
+  }
+
+  async quoteVersionWithClient(
+    client: PrismaService | Prisma.TransactionClient,
+    leagueId: string,
+    salaryRuleVersionId: string,
+    dtRating: number
+  ) {
+    const rule = await client.leagueSalaryRuleVersion.findFirst({
+      where: { id: salaryRuleVersionId, leagueId },
+      include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+    });
+    if (!rule) {
+      throw new LeagueRosterError('SALARY_RULE_NOT_FOUND', 'Salary rule version was not found', 404);
     }
     return {
       salaryRuleVersionId: rule.id,
