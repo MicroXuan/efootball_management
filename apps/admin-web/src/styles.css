@@ -82,6 +82,14 @@ button, input { font: inherit; }
 .detail-card .ant-descriptions { margin-bottom: 24px; }
 .modal-field-label { display: block; margin-bottom: 8px; font-weight: 600; }
 .modal-primary-action { margin-top: 20px; }
+.workspace-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); gap: 22px; align-items: start; }
+.workspace-grid .ant-card { border: 1px solid #ccd9d3; box-shadow: none; }
+.workspace-grid .ant-alert, .candidate-group, .candidate-card-grid, .ant-card .ant-table-wrapper { margin-bottom: 18px; }
+.candidate-group { margin-top: 22px; padding-top: 18px; border-top: 1px solid #dce6e1; }
+.candidate-title { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.candidate-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.candidate-card { display: grid; gap: 3px; min-width: 220px; padding: 10px; color: #31483f; border: 1px solid #d8e3de; border-radius: 6px; }
+.candidate-card span { color: #71857c; font-size: 12px; }
 
 @media (max-width: 860px) {
   .login-stage { grid-template-columns: 1fr; }
@@ -95,6 +103,7 @@ button, input { font: inherit; }
   .admin-identity > span { display: none; }
   .page-grid { grid-template-columns: 1fr; }
   .inline-fields { grid-template-columns: 1fr; }
+  .workspace-grid, .candidate-card-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

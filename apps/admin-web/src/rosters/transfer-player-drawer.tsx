@@ -1,0 +1,11 @@
+import { Alert, Button, Drawer, Form, Input, InputNumber, Select } from 'antd';
+import { useState } from 'react';
+import { RosterMutationResponseSchema, type RosterEntry } from '@efm/contracts';
+import { adminApi, type AdminApi } from '../lib/api';
+import { useMutationKey } from '../lib/mutation-key';
+
+export function TransferPlayerDrawer({ open, entry, seasonId, teams, api = adminApi, onClose, onCompleted }: { open: boolean; entry: RosterEntry | null; seasonId: string; teams: { id: string; name: string }[]; api?: AdminApi; onClose(): void; onCompleted(): void }) {
+  const [targetLeagueTeamId, setTarget] = useState<string>(); const [amountMinor, setAmount] = useState<number | null>(null); const [reason, setReason] = useState(''); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false); const key = useMutationKey();
+  const submit = async () => { if (!entry || !targetLeagueTeamId || !reason.trim()) return; setBusy(true); setError(null); try { await api.request('/v1/admin/roster/transfers', { method: 'POST', schema: RosterMutationResponseSchema, body: { seasonId, ownershipId: entry.id, targetLeagueTeamId, amountMinor, reason: reason.trim(), expectedVersion: entry.version, idempotencyKey: key.current() } }); key.reset(); onCompleted(); onClose(); } catch { setError('转会失败，请检查目标球队人数、工资帽和窗口权限'); } finally { setBusy(false); } };
+  return <Drawer open={open} onClose={onClose} title={`转会 · ${entry?.playerName ?? ''}`} size="large">{error ? <Alert role="alert" type="error" title={error} /> : null}<Form layout="vertical"><Form.Item label="目标球队"><Select aria-label="目标球队" value={targetLeagueTeamId} onChange={(value) => { setTarget(value); key.reset(); }} options={teams.filter((team) => team.id !== entry?.leagueTeamId).map((team) => ({ value: team.id, label: team.name }))} /></Form.Item><Form.Item label="成交金额（可不填）"><InputNumber min={1} precision={0} value={amountMinor} onChange={(value) => { setAmount(value); key.reset(); }} /></Form.Item><Form.Item label="操作原因"><Input value={reason} onChange={(event) => { setReason(event.target.value); key.reset(); }} /></Form.Item></Form><Button aria-label="确认转会" type="primary" loading={busy} onClick={() => void submit()}>确认转会</Button></Drawer>;
+}

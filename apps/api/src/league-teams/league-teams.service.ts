@@ -14,6 +14,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
 
 type TeamWithOwner = LeagueTeam & { owner: User; _count: { seasonEntries: number } };
+type TeamRosterMetrics = { activePlayerCount: number; salaryTotalMinor: number; salaryCapMinor: number };
 
 @Injectable()
 export class LeagueTeamsService {
@@ -141,7 +142,8 @@ export class LeagueTeamsService {
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
-    return { items: teams.map((team) => this.summary(team)), nextCursor: null };
+    const metrics = await this.rosterMetrics(this.prisma, teams);
+    return { items: teams.map((team) => this.summary(team, metrics.get(team.id))), nextCursor: null };
   }
 
   async listForLeague(leagueId: string): Promise<LeagueTeamListResponse> {
@@ -150,7 +152,8 @@ export class LeagueTeamsService {
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ teamNumber: 'asc' }, { id: 'asc' }]
     });
-    return { items: teams.map((team) => this.summary(team)), nextCursor: null };
+    const metrics = await this.rosterMetrics(this.prisma, teams);
+    return { items: teams.map((team) => this.summary(team, metrics.get(team.id))), nextCursor: null };
   }
 
   async getDetail(teamId: string, ownerUserId?: string, leagueId?: string): Promise<LeagueTeamDetail> {
@@ -163,7 +166,8 @@ export class LeagueTeamsService {
       include: { owner: true, _count: { select: { seasonEntries: true } } }
     });
     if (!team) throw this.notFound('LEAGUE_TEAM_NOT_FOUND', 'League team was not found');
-    return this.detail(team);
+    const metrics = await this.rosterMetrics(this.prisma, [team]);
+    return this.detail(team, metrics.get(team.id));
   }
 
   private async record(client: Prisma.TransactionClient, teamId: string): Promise<TeamWithOwner> {
@@ -223,7 +227,47 @@ export class LeagueTeamsService {
     }
   }
 
-  private summary(team: TeamWithOwner): LeagueTeamSummary {
+  private async rosterMetrics(
+    client: PrismaService | Prisma.TransactionClient,
+    teams: TeamWithOwner[]
+  ): Promise<Map<string, TeamRosterMetrics>> {
+    if (teams.length === 0) return new Map();
+    const teamIds = teams.map(({ id }) => id);
+    const leagueIds = [...new Set(teams.map(({ leagueId }) => leagueId))];
+    const [ownerships, rules] = await Promise.all([
+      client.leaguePlayerOwnership.groupBy({
+        by: ['leagueTeamId'],
+        where: { leagueTeamId: { in: teamIds }, status: 'ACTIVE' },
+        _count: { _all: true },
+        _sum: { salaryMinor: true }
+      }),
+      client.leagueSalaryRuleVersion.findMany({
+        where: { leagueId: { in: leagueIds }, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
+        select: { leagueId: true, salaryCapMinor: true },
+        orderBy: [{ leagueId: 'asc' }, { effectiveAt: 'desc' }, { version: 'desc' }]
+      })
+    ]);
+    const salaryCapByLeague = new Map<string, number>();
+    for (const rule of rules) {
+      if (!salaryCapByLeague.has(rule.leagueId)) salaryCapByLeague.set(rule.leagueId, rule.salaryCapMinor);
+    }
+    const ownershipByTeam = new Map(
+      ownerships.map((row) => [row.leagueTeamId, {
+        activePlayerCount: row._count._all,
+        salaryTotalMinor: row._sum.salaryMinor ?? 0
+      }])
+    );
+    return new Map(teams.map((team) => {
+      const ownership = ownershipByTeam.get(team.id);
+      return [team.id, {
+        activePlayerCount: ownership?.activePlayerCount ?? 0,
+        salaryTotalMinor: ownership?.salaryTotalMinor ?? 0,
+        salaryCapMinor: salaryCapByLeague.get(team.leagueId) ?? 0
+      }];
+    }));
+  }
+
+  private summary(team: TeamWithOwner, metrics?: TeamRosterMetrics): LeagueTeamSummary {
     if (!team.owner.publicUserNo) {
       throw new LeagueError('PUBLIC_USER_NUMBER_MISSING', 'Team owner has no public user number', 409);
     }
@@ -238,18 +282,18 @@ export class LeagueTeamsService {
       logoUrl: team.logoUrl,
       status: team.status,
       rosterStatus: team.rosterStatus,
-      activePlayerCount: 0,
-      salaryTotalMinor: 0,
-      salaryCapMinor: 0,
+      activePlayerCount: metrics?.activePlayerCount ?? 0,
+      salaryTotalMinor: metrics?.salaryTotalMinor ?? 0,
+      salaryCapMinor: metrics?.salaryCapMinor ?? 0,
       version: team.version,
       createdAt: team.createdAt.toISOString(),
       updatedAt: team.updatedAt.toISOString()
     };
   }
 
-  private detail(team: TeamWithOwner): LeagueTeamDetail {
+  private detail(team: TeamWithOwner, metrics?: TeamRosterMetrics): LeagueTeamDetail {
     return {
-      ...this.summary(team),
+      ...this.summary(team, metrics),
       ownerDisplayName: team.owner.displayName,
       defaultGameAccountId: team.defaultGameAccountId,
       participatingSeasonCount: team._count.seasonEntries

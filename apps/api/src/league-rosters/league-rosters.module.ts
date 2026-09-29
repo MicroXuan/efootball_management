@@ -8,6 +8,7 @@ import { RosterTransactionsService } from './roster-transactions.service.js';
 import { SalaryRulesService } from './salary-rules.service.js';
 import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
+import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 
 @Module({
   imports: [AdminAuthModule, AdminModule],
@@ -17,7 +18,8 @@ import { TransferWindowsService } from './transfer-windows.service.js';
     TransferWindowsService,
     RosterLockRepository,
     RosterTransactionsService,
-    SalaryRecalculationService
+    SalaryRecalculationService,
+    AdminRosterQueriesService
   ],
   exports: [
     SalaryRulesService,

@@ -12,6 +12,10 @@ const LeaguesPage = lazy(() => import('./platform/leagues-page').then((module) =
 const LeagueShell = lazy(() => import('./leagues/league-shell').then((module) => ({ default: module.LeagueShell })));
 const TeamDetailPage = lazy(() => import('./leagues/team-detail-page').then((module) => ({ default: module.TeamDetailPage })));
 const TeamsPage = lazy(() => import('./leagues/teams-page').then((module) => ({ default: module.TeamsPage })));
+const SalaryRulesPage = lazy(() => import('./leagues/salary-rules-page').then((module) => ({ default: module.SalaryRulesPage })));
+const TransferWindowsPage = lazy(() => import('./leagues/transfer-windows-page').then((module) => ({ default: module.TransferWindowsPage })));
+const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => ({ default: module.RosterPage })));
+const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
 
 const { Header, Sider, Content } = Layout;
 
@@ -89,6 +93,10 @@ export function App() {
             <Route path="leagues/:leagueId" element={deferred(<LeagueShell />)}>
               <Route path="teams" element={deferred(<TeamsPage api={adminApi} />)} />
               <Route path="teams/:teamId" element={deferred(<TeamDetailPage api={adminApi} />)} />
+              <Route path="teams/:teamId/roster" element={deferred(<RosterPage api={adminApi} />)} />
+              <Route path="salary-rules" element={deferred(<SalaryRulesPage api={adminApi} />)} />
+              <Route path="transfer-windows" element={deferred(<TransferWindowsPage api={adminApi} />)} />
+              <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
             </Route>
           </Route></Route>
           <Route path="*" element={<Navigate to="/" replace />} />

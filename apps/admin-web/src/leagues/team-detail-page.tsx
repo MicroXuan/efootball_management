@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Select, Spin } from 'antd';
+import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Select, Space, Spin } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueTeamDetailSchema, type LeagueTeamDetail } from '@efm/contracts';
@@ -61,7 +61,7 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
         <Form.Item label="球队名称" name="name" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item label="球队简称" name="shortName" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item label="球队状态" name="status"><Select options={[{ value: 'ACTIVE', label: '启用' }, { value: 'ARCHIVED', label: '归档' }]} /></Form.Item>
-        <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>保存球队</Button>
+        <Space><Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>保存球队</Button><Link to={`/leagues/${leagueId}/teams/${teamId}/roster`}><Button>管理阵容</Button></Link></Space>
       </Form>
     </> : null}
   </Card>;

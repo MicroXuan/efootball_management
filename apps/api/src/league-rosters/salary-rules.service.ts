@@ -183,11 +183,13 @@ export class SalaryRulesService {
     const input = PreviewSalaryRuleRequestSchema.parse(raw);
     const ownerships = await this.prisma.leaguePlayerOwnership.findMany({
       where: { leagueId, status: 'ACTIVE' },
+      include: { leagueTeam: { select: { name: true } } },
       orderBy: [{ leagueTeamId: 'asc' }, { id: 'asc' }]
     });
-    const teams = new Map<string, { currentSalaryMinor: number; projectedSalaryMinor: number }>();
+    const teams = new Map<string, { teamName: string; currentSalaryMinor: number; projectedSalaryMinor: number }>();
     for (const ownership of ownerships) {
       const aggregate = teams.get(ownership.leagueTeamId) ?? {
+        teamName: ownership.leagueTeam.name,
         currentSalaryMinor: 0,
         projectedSalaryMinor: 0
       };

@@ -59,6 +59,9 @@ export const SalaryRuleVersionSchema = z.object({
   createdByAdminId: ResourceIdSchema,
   createdAt: TimestampSchema
 });
+export const SalaryRuleVersionListResponseSchema = z.object({
+  items: z.array(SalaryRuleVersionSchema)
+});
 
 const CreateSalaryRuleVersionFieldsSchema = z.object({
   salaryCapMinor: MoneyMinorSchema,
@@ -78,6 +81,17 @@ export const CreateSalaryRuleVersionRequestSchema = CreateSalaryRuleVersionField
 export const PreviewSalaryRuleRequestSchema = CreateSalaryRuleVersionFieldsSchema.pick({
   salaryCapMinor: true,
   tiers: true
+});
+export const SalaryRulePreviewResponseSchema = z.object({
+  salaryCapMinor: MoneyMinorSchema,
+  teams: z.array(z.object({
+    leagueTeamId: ResourceIdSchema,
+    teamName: z.string().min(1),
+    currentSalaryMinor: NonNegativeMoneyMinorSchema,
+    projectedSalaryMinor: NonNegativeMoneyMinorSchema,
+    deltaMinor: z.number().int(),
+    projectedStatus: z.enum(['COMPLIANT', 'OVER_CAP'])
+  }))
 });
 
 export const TransferOperationSchema = z.enum(['BUY', 'SELL', 'TRANSFER', 'CARD_UPGRADE']);
@@ -119,6 +133,7 @@ export const TransferWindowSchema = TransferWindowFieldsSchema.and(z.object({
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
 }));
+export const TransferWindowListResponseSchema = z.object({ items: z.array(TransferWindowSchema) });
 
 export const RosterEntryStatusSchema = z.enum(['ACTIVE', 'RELEASED', 'TRANSFERRED']);
 export const RosterEntrySchema = z.object({
@@ -224,6 +239,56 @@ export const FinanceLedgerEntrySchema = z.object({
   note: z.string().max(512),
   createdAt: TimestampSchema
 });
+export const FinanceLedgerListItemSchema = FinanceLedgerEntrySchema.extend({
+  teamName: z.string().min(1)
+});
+export const FinanceLedgerListResponseSchema = z.object({
+  items: z.array(FinanceLedgerListItemSchema),
+  nextCursor: z.string().nullable()
+});
+
+export const RosterOperationAvailabilitySchema = z.object({
+  BUY: z.boolean(),
+  SELL: z.boolean(),
+  TRANSFER: z.boolean(),
+  CARD_UPGRADE: z.boolean()
+});
+export const TeamRosterSummarySchema = z.object({
+  rosterCount: z.number().int().nonnegative().max(25),
+  salaryMinor: NonNegativeMoneyMinorSchema,
+  salaryCapMinor: NonNegativeMoneyMinorSchema
+});
+export const TeamRosterViewSchema = z.object({
+  teamId: ResourceIdSchema,
+  teamName: z.string().min(1),
+  seasonId: ResourceIdSchema,
+  entries: z.array(RosterEntrySchema),
+  summary: TeamRosterSummarySchema,
+  operations: RosterOperationAvailabilitySchema,
+  activeWindowName: z.string().nullable()
+});
+
+export const RosterCandidateCardSchema = z.object({
+  id: ResourceIdSchema,
+  cardName: z.string().min(1),
+  imageUrl: z.string().nullable(),
+  position: z.string().min(1),
+  overallRating: z.number().int().positive(),
+  maxOverall: z.number().int().positive().nullable(),
+  dtRating: DtRatingSchema.nullable(),
+  salaryMinor: NonNegativeMoneyMinorSchema.nullable(),
+  recommended: z.boolean()
+});
+export const RosterPlayerCandidateSchema = z.object({
+  playerId: ResourceIdSchema,
+  playerName: z.string().min(1),
+  ownedByTeamId: ResourceIdSchema.nullable(),
+  recommendedPlayerCardId: ResourceIdSchema.nullable(),
+  cards: z.array(RosterCandidateCardSchema)
+});
+export const RosterPlayerCandidateListResponseSchema = z.object({
+  items: z.array(RosterPlayerCandidateSchema)
+});
 
 const RosterMutationBaseSchema = z.object({
   seasonId: ResourceIdSchema,
@@ -274,12 +339,15 @@ export const EmergencyCorrectRosterRequestSchema = RosterMutationBaseSchema.exte
 });
 
 export type SalaryRuleVersion = z.infer<typeof SalaryRuleVersionSchema>;
+export type SalaryRuleVersionListResponse = z.infer<typeof SalaryRuleVersionListResponseSchema>;
 export type CreateSalaryRuleVersionRequest = z.infer<typeof CreateSalaryRuleVersionRequestSchema>;
 export type PreviewSalaryRuleRequest = z.infer<typeof PreviewSalaryRuleRequestSchema>;
+export type SalaryRulePreviewResponse = z.infer<typeof SalaryRulePreviewResponseSchema>;
 export type CreateTransferWindowRequest = z.infer<typeof CreateTransferWindowRequestSchema>;
 export type UpdateTransferWindowRequest = z.infer<typeof UpdateTransferWindowRequestSchema>;
 export type TransferOperation = z.infer<typeof TransferOperationSchema>;
 export type TransferWindow = z.infer<typeof TransferWindowSchema>;
+export type TransferWindowListResponse = z.infer<typeof TransferWindowListResponseSchema>;
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
 export type RosterTransaction = z.infer<typeof RosterTransactionSchema>;
 export type RosterMutationOwnership = z.infer<typeof RosterMutationOwnershipSchema>;
@@ -287,6 +355,10 @@ export type RosterMutationSummary = z.infer<typeof RosterMutationSummarySchema>;
 export type RosterMutationResponse = z.infer<typeof RosterMutationResponseSchema>;
 export type SalaryRecalculationResponse = z.infer<typeof SalaryRecalculationResponseSchema>;
 export type FinanceLedgerEntry = z.infer<typeof FinanceLedgerEntrySchema>;
+export type FinanceLedgerListResponse = z.infer<typeof FinanceLedgerListResponseSchema>;
+export type TeamRosterView = z.infer<typeof TeamRosterViewSchema>;
+export type RosterPlayerCandidate = z.infer<typeof RosterPlayerCandidateSchema>;
+export type RosterPlayerCandidateListResponse = z.infer<typeof RosterPlayerCandidateListResponseSchema>;
 export type AcquirePlayerRequest = z.infer<typeof AcquirePlayerRequestSchema>;
 export type ReleasePlayerRequest = z.infer<typeof ReleasePlayerRequestSchema>;
 export type TransferPlayerRequest = z.infer<typeof TransferPlayerRequestSchema>;

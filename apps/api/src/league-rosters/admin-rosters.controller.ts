@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   AcquirePlayerRequestSchema,
   EmergencyCorrectRosterRequestSchema,
@@ -6,6 +6,7 @@ import {
   ReleasePlayerRequestSchema,
   TransferPlayerRequestSchema,
   UpgradePlayerCardRequestSchema,
+  ResourceIdSchema,
   type AcquirePlayerRequest,
   type EmergencyCorrectRosterRequest,
   type RecalculateLeagueSalaryRequest,
@@ -20,6 +21,12 @@ import { AdminScopeGuard, PlatformAdminOnly } from '../admin/admin-scope.guard.j
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { RosterTransactionsService } from './roster-transactions.service.js';
 import { SalaryRecalculationService } from './salary-recalculation.service.js';
+import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
+import { z } from 'zod';
+
+const RosterQuerySchema = z.object({ seasonId: ResourceIdSchema });
+const CandidateQuerySchema = z.object({ keyword: z.string().trim().min(1).max(80) });
+const LedgerQuerySchema = z.object({ teamId: ResourceIdSchema.optional() });
 
 @Controller('admin/roster')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
@@ -28,8 +35,34 @@ export class AdminRostersController {
     @Inject(RosterTransactionsService)
     private readonly rosterTransactions: RosterTransactionsService,
     @Inject(SalaryRecalculationService)
-    private readonly salaryRecalculation: SalaryRecalculationService
+    private readonly salaryRecalculation: SalaryRecalculationService,
+    @Inject(AdminRosterQueriesService) private readonly queries: AdminRosterQueriesService
   ) {}
+
+  @Get('leagues/:leagueId/teams/:teamId/roster')
+  roster(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string,
+    @Query(new ZodValidationPipe(RosterQuerySchema)) query: z.output<typeof RosterQuerySchema>
+  ) {
+    return this.queries.roster(leagueId, teamId, query.seasonId);
+  }
+
+  @Get('leagues/:leagueId/player-candidates')
+  candidates(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Query(new ZodValidationPipe(CandidateQuerySchema)) query: z.output<typeof CandidateQuerySchema>
+  ) {
+    return this.queries.candidates(leagueId, query.keyword);
+  }
+
+  @Get('leagues/:leagueId/ledger')
+  ledger(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Query(new ZodValidationPipe(LedgerQuerySchema)) query: z.output<typeof LedgerQuerySchema>
+  ) {
+    return this.queries.ledger(leagueId, query.teamId);
+  }
 
   @Post('acquisitions')
   acquire(
