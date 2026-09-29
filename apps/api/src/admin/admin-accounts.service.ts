@@ -29,6 +29,17 @@ export class AdminAccountsService {
     return { items: accounts.map((account) => this.account(account)) };
   }
 
+  async listLeagueGrants(adminId: string) {
+    const account = await this.prisma.adminAccount.findUnique({ where: { id: adminId }, select: { id: true } });
+    if (!account) throw new AdminError('ADMIN_ACCOUNT_NOT_FOUND', 'Administrator was not found', 404);
+    const grants = await this.prisma.adminLeagueRole.findMany({
+      where: { adminId, revokedAt: null },
+      include: { league: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+    });
+    return { items: grants.map((grant) => this.grant(grant, grant.league)) };
+  }
+
   create(actorAdminId: string, input: CreateAdminAccountRequest, key: string) {
     return this.receipts.execute(actorAdminId, 'admin.account.create', key, async (transaction) => {
       try {

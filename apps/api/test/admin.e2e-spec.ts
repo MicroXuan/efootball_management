@@ -118,6 +118,19 @@ describe('platform administration and league grants', () => {
       leagueIds.push(response.body.id as string);
     }
 
+    await request(app.getHttpServer())
+      .get('/v1/admin/platform/leagues')
+      .set(auth(platformToken))
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.items.filter((league: { id: string }) => leagueIds.includes(league.id))).toHaveLength(2);
+      });
+
+    await request(app.getHttpServer())
+      .get('/v1/admin/platform/leagues')
+      .set(auth(managerToken))
+      .expect(403);
+
     const grantIds: string[] = [];
     for (const leagueId of leagueIds) {
       const grant = await request(app.getHttpServer())
@@ -128,6 +141,13 @@ describe('platform administration and league grants', () => {
         .expect(201);
       grantIds.push(grant.body.id as string);
     }
+
+    await request(app.getHttpServer())
+      .get(`/v1/admin/accounts/${managerId}/league-grants`)
+      .set(auth(platformToken))
+      .expect(200)
+      .expect(({ body }) => expect(body.items.map((grant: { leagueId: string }) => grant.leagueId).sort())
+        .toEqual([...leagueIds].sort()));
 
     await request(app.getHttpServer())
       .get('/v1/admin/auth/me')
@@ -156,6 +176,12 @@ describe('platform administration and league grants', () => {
       .set('Idempotency-Key', key())
       .send({ expectedVersion: 1 })
       .expect(200);
+
+    await request(app.getHttpServer())
+      .get(`/v1/admin/accounts/${managerId}/league-grants`)
+      .set(auth(platformToken))
+      .expect(200)
+      .expect(({ body }) => expect(body.items).toHaveLength(1));
 
     await request(app.getHttpServer())
       .get(`/v1/admin/leagues/${leagueIds[0]}/users/${publicUserNo}`)

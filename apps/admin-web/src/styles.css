@@ -70,6 +70,18 @@ button, input { font: inherit; }
 .empty-dashboard { min-height: calc(100vh - 150px); padding: clamp(36px, 6vw, 84px); color: #163027; background: #f8faf9; border: 1px solid #d3dfda; }
 .empty-dashboard h1 { margin: 18px 0 10px; font-size: clamp(34px, 5vw, 70px); letter-spacing: -.05em; }
 .empty-dashboard p { color: #61756d; font-size: 16px; }
+.page-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; color: #163027; }
+.page-heading h1 { margin: 6px 0 0; font-size: 30px; }
+.page-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, .8fr); gap: 22px; align-items: start; }
+.page-stack { display: grid; gap: 22px; }
+.data-card, .form-card { border: 1px solid #ccd9d3; box-shadow: none; }
+.form-card .ant-alert, .data-card > .ant-card-body > .ant-alert { margin-bottom: 18px; }
+.loading-block { min-height: 180px; display: grid; place-items: center; }
+.inline-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.detail-card { max-width: 900px; }
+.detail-card .ant-descriptions { margin-bottom: 24px; }
+.modal-field-label { display: block; margin-bottom: 8px; font-weight: 600; }
+.modal-primary-action { margin-top: 20px; }
 
 @media (max-width: 860px) {
   .login-stage { grid-template-columns: 1fr; }
@@ -81,6 +93,8 @@ button, input { font: inherit; }
   .admin-sider { display: none; }
   .admin-header.ant-layout-header { padding: 0 18px; }
   .admin-identity > span { display: none; }
+  .page-grid { grid-template-columns: 1fr; }
+  .inline-fields { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

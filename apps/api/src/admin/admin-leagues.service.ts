@@ -14,6 +14,13 @@ export class AdminLeaguesService {
     @Inject(AuditLogService) private readonly audit: AuditLogService
   ) {}
 
+  async list() {
+    const leagues = await this.prisma.league.findMany({
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
+    });
+    return { items: leagues.map((league) => this.detail(league)), nextCursor: null };
+  }
+
   create(actorAdminId: string, input: ParsedCreateLeagueRequest, key: string) {
     return this.receipts.execute(actorAdminId, 'admin.league.create', key, async (transaction) => {
       const league = await transaction.league.create({

@@ -85,6 +85,13 @@ export class AdminAccountsController {
     return this.accounts.grantLeague(admin.id, adminId, body, this.key(key));
   }
 
+  @Get(':adminId/league-grants')
+  listLeagueGrants(
+    @Param('adminId', new ZodValidationPipe(ResourceIdSchema)) adminId: string
+  ) {
+    return this.accounts.listLeagueGrants(adminId);
+  }
+
   @Delete(':adminId/league-grants/:grantId')
   revokeLeague(
     @CurrentAdmin() admin: CurrentAdminIdentity,

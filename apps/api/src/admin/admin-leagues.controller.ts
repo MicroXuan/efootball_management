@@ -22,6 +22,11 @@ import { AdminUserLookupService } from './admin-user-lookup.service.js';
 export class AdminLeaguesController {
   constructor(@Inject(AdminLeaguesService) private readonly leagues: AdminLeaguesService) {}
 
+  @Get()
+  list() {
+    return this.leagues.list();
+  }
+
   @Post()
   create(
     @CurrentAdmin() admin: CurrentAdminIdentity,

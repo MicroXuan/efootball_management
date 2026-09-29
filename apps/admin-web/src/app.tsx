@@ -1,29 +1,44 @@
 import { Button, ConfigProvider, Layout, Menu, Tag } from 'antd';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AdminSessionProvider, useAdminSession } from './auth/admin-session';
 import { LoginPage } from './auth/login-page';
 import { ProtectedRoute } from './auth/protected-route';
+import { adminApi } from './lib/api';
+
+const AdminAccountsPage = lazy(() => import('./platform/admin-accounts-page').then((module) => ({ default: module.AdminAccountsPage })));
+const AuditPage = lazy(() => import('./platform/audit-page').then((module) => ({ default: module.AuditPage })));
+const LeaguesPage = lazy(() => import('./platform/leagues-page').then((module) => ({ default: module.LeaguesPage })));
+const LeagueShell = lazy(() => import('./leagues/league-shell').then((module) => ({ default: module.LeagueShell })));
+const TeamDetailPage = lazy(() => import('./leagues/team-detail-page').then((module) => ({ default: module.TeamDetailPage })));
+const TeamsPage = lazy(() => import('./leagues/teams-page').then((module) => ({ default: module.TeamsPage })));
 
 const { Header, Sider, Content } = Layout;
 
-function ApplicationShell() {
+export function ApplicationShell() {
   const session = useAdminSession();
+  const location = useLocation();
   const admin = session.identity?.admin;
+  const platformItems = session.identity?.platformAdmin ? [
+    { key: '/platform/leagues', label: <Link to="/platform/leagues">联赛管理</Link> },
+    { key: '/platform/admins', label: <Link to="/platform/admins">管理员账号</Link> },
+    { key: '/platform/audit', label: <Link to="/platform/audit">审计日志</Link> }
+  ] : [];
+  const leagueItems = (session.identity?.leagueGrants ?? []).map((grant) => ({
+    key: `/leagues/${grant.leagueId}`,
+    label: <Link to={`/leagues/${grant.leagueId}/teams`}>{grant.leagueName}</Link>
+  }));
+  const selectedKey = leagueItems.find((item) => location.pathname.startsWith(item.key))?.key ?? location.pathname;
+
   return (
     <Layout className="admin-shell">
-      <Sider width={256} className="admin-sider">
+      <Sider width={272} className="admin-sider">
         <div className="shell-brand"><span>EFM</span><strong>赛事控制台</strong></div>
-        <Menu
-          mode="inline"
-          selectedKeys={['overview']}
-          items={[
-            { key: 'overview', label: '控制台概览' },
-            { key: 'leagues', label: '联赛工作台', disabled: true },
-            { key: 'teams', label: '用户与球队', disabled: true },
-            { key: 'rosters', label: '球队阵容', disabled: true }
-          ]}
-        />
-        <div className="shell-version">ADMIN SYSTEM / 0.1</div>
+        <Menu mode="inline" selectedKeys={[selectedKey]} items={[
+          ...(platformItems.length ? [{ type: 'group' as const, label: '平台管理', children: platformItems }] : []),
+          ...(leagueItems.length ? [{ type: 'group' as const, label: '我的联赛', children: leagueItems }] : [])
+        ]} />
+        <div className="shell-version">ADMIN SYSTEM / 0.2</div>
       </Sider>
       <Layout>
         <Header className="admin-header">
@@ -34,40 +49,50 @@ function ApplicationShell() {
             <Button type="text" onClick={() => void session.logout()}>退出登录</Button>
           </div>
         </Header>
-        <Content className="admin-content">
-          <section className="empty-dashboard">
-            <span className="section-kicker">FOUNDATION READY</span>
-            <h1>后台会话已连接</h1>
-            <p>联赛、球队、阵容和工资管理页面将在下一阶段接入。</p>
-          </section>
-        </Content>
+        <Content className="admin-content"><Outlet /></Content>
       </Layout>
     </Layout>
   );
 }
 
+function DefaultRoute() {
+  const { identity } = useAdminSession();
+  if (identity?.platformAdmin) return <Navigate to="/platform/leagues" replace />;
+  const league = identity?.leagueGrants[0];
+  if (league) return <Navigate to={`/leagues/${league.leagueId}/teams`} replace />;
+  return <section className="empty-dashboard"><h1>尚未分配联赛</h1><p>请联系平台管理员添加联赛管理权限。</p></section>;
+}
+
+function PlatformRoute() {
+  const { identity } = useAdminSession();
+  return identity?.platformAdmin ? <Outlet /> : <Navigate to="/" replace />;
+}
+
+const deferred = (page: React.ReactNode) => <Suspense fallback={<div className="loading-block">正在加载页面…</div>}>{page}</Suspense>;
+
 export function App() {
   return (
-    <ConfigProvider theme={{
-      token: {
-        colorPrimary: '#22c77a',
-        colorInfo: '#22c77a',
-        colorWarning: '#d6a437',
-        colorError: '#e76f51',
-        borderRadius: 6,
-        fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif'
-      }
-    }}>
+    <ConfigProvider theme={{ token: {
+      colorPrimary: '#22c77a', colorInfo: '#22c77a', colorWarning: '#d6a437', colorError: '#e76f51',
+      borderRadius: 6, fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif'
+    } }}>
       <AdminSessionProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route element={<ProtectedRoute />}>
-              <Route path="/" element={<ApplicationShell />} />
+        <BrowserRouter><Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<ProtectedRoute />}><Route element={<ApplicationShell />}>
+            <Route index element={<DefaultRoute />} />
+            <Route element={<PlatformRoute />}>
+              <Route path="platform/leagues" element={deferred(<LeaguesPage api={adminApi} />)} />
+              <Route path="platform/admins" element={deferred(<AdminAccountsPage api={adminApi} />)} />
+              <Route path="platform/audit" element={deferred(<AuditPage api={adminApi} />)} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
+            <Route path="leagues/:leagueId" element={deferred(<LeagueShell />)}>
+              <Route path="teams" element={deferred(<TeamsPage api={adminApi} />)} />
+              <Route path="teams/:teamId" element={deferred(<TeamDetailPage api={adminApi} />)} />
+            </Route>
+          </Route></Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes></BrowserRouter>
       </AdminSessionProvider>
     </ConfigProvider>
   );
