@@ -1,46 +1,59 @@
-import type { GameAccountResponse, GamePlatform } from '@efm/contracts'
+import type { CurrentUserResponse, MyLeagueTeamSummary } from '@efm/contracts'
+import { editionLabel } from '../leagues/leagues.viewmodel'
 
-type AccountFormShape = {
-  platform: GamePlatform | ''
-  serverRegion: string
-  gamerTag: string
+export type ProfileTeamView = {
+  id: string
+  teamName: string
+  teamNumber: string
+  teamLogoUrl: string | null
+  teamLogoText: string
+  leagueName: string
+  leagueLogoUrl: string | null
+  editionLabel: string
+  seasonName: string
+  rosterCopy: string
 }
 
-export function sortAccounts(accounts: readonly GameAccountResponse[]): GameAccountResponse[] {
-  return [...accounts].sort((left, right) => Number(right.isDefault) - Number(left.isDefault))
+export type ProfileView = {
+  displayName: string
+  avatarUrl: string
+  region: string
+  publicUserNoDisplay: string
+  publicUserNoCopy: string
+  hasTeams: boolean
+  teams: ProfileTeamView[]
 }
 
-export function platformLabel(platform: GamePlatform): string {
-  const labels: Record<GamePlatform, string> = {
-    MOBILE: '移动端',
-    PLAYSTATION: 'PlayStation',
-    XBOX: 'Xbox',
-    STEAM: 'Steam',
-  }
-  return labels[platform]
+function publicNumber(value?: string): { display: string; copy: string } {
+  if (!value) return { display: '暂无编号', copy: '' }
+  const normalized = value.padStart(6, '0').slice(-6)
+  return { display: `${normalized.slice(0, 3)} ${normalized.slice(3)}`, copy: normalized }
 }
 
-export function isAccountFormValid(form: AccountFormShape): boolean {
-  return Boolean(form.platform && form.serverRegion.trim() && form.gamerTag.trim())
-}
-
-export function accountErrorMessage(code: string): string {
-  const messages: Record<string, string> = {
-    GAME_ACCOUNT_ALREADY_BOUND: '这个游戏账号已被绑定，请检查平台、区服和玩家名',
-    GAME_ACCOUNT_IN_USE: '该账号正在被赛事使用，暂时不能删除',
-    GAME_ACCOUNT_NOT_FOUND: '未找到这个游戏账号，它可能已被删除',
-    VALIDATION_FAILED: '填写内容不完整，请检查后重试',
-    NETWORK_ERROR: '网络连接失败，请稍后重试',
-  }
-  return messages[code] ?? '操作未完成，请稍后重试'
-}
-
-export function deleteConfirmation(account: Pick<GameAccountResponse, 'platform' | 'gamerTag'>): {
-  title: string
-  content: string
-} {
+export function profileView(
+  user: CurrentUserResponse | null,
+  teams: readonly MyLeagueTeamSummary[],
+): ProfileView {
+  const number = publicNumber(user?.publicUserNo ?? teams[0]?.ownerPublicUserNo)
+  const presented = teams.map((team) => ({
+    id: team.id,
+    teamName: team.name.trim() || '未命名球队',
+    teamNumber: team.teamNumber === null ? '—' : String(team.teamNumber),
+    teamLogoUrl: team.logoUrl,
+    teamLogoText: (team.shortName.trim() || team.name.trim() || '球队').slice(0, 2),
+    leagueName: team.leagueName.trim() || '未命名联赛',
+    leagueLogoUrl: team.leagueLogoUrl,
+    editionLabel: editionLabel(team.leagueEdition),
+    seasonName: team.currentSeason?.displayName || '暂无当前赛季',
+    rosterCopy: `${team.activePlayerCount}/25 人`,
+  }))
   return {
-    title: '删除游戏账号？',
-    content: `将删除 ${platformLabel(account.platform)} 账号「${account.gamerTag}」，此操作无法撤销。`,
+    displayName: user?.displayName.trim() || '微信用户',
+    avatarUrl: user?.avatarUrl || '',
+    region: user?.region?.trim() || '未设置地区',
+    publicUserNoDisplay: number.display,
+    publicUserNoCopy: number.copy,
+    hasTeams: presented.length > 0,
+    teams: presented,
   }
 }

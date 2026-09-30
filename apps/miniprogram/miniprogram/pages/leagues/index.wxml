@@ -3,7 +3,12 @@
     <view><text class="eyebrow">LEAGUE DIRECTORY</text><text class="page-title">联赛中心</text></view>
     <text class="edition">LIVE / 01</text>
   </view>
-  <text class="intro">选择一个长期联赛，查看当前赛季并完成报名或续赛确认。</text>
+  <text class="intro">查看全部联赛，或只查看管理员已经为你绑定球队的联赛。</text>
+
+  <view class="league-tabs">
+    <button class="{{activeTab === 'all' ? 'is-active' : ''}}" data-tab="all" bindtap="switchTab">全部联赛</button>
+    <button class="{{activeTab === 'mine' ? 'is-active' : ''}}" data-tab="mine" bindtap="switchTab">我的联赛</button>
+  </view>
 
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
@@ -11,15 +16,20 @@
     <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadLeagues">重新加载</button>
   </view>
   <view wx:elif="{{!hasLeagues}}" class="state-card">
-    <text class="state-code">NO PUBLIC LEAGUE</text><text class="state-title">还没有公开联赛</text>
-    <text class="state-copy">联赛管理员发布赛季后，会在这里显示报名与赛季状态。</text>
+    <text class="state-code">{{activeTab === 'mine' ? 'NO BOUND TEAM' : 'NO PUBLIC LEAGUE'}}</text>
+    <text class="state-title">{{activeTab === 'mine' ? (loggedIn ? '还没有绑定联赛球队' : '登录后查看我的联赛') : '还没有公开联赛'}}</text>
+    <text class="state-copy">{{activeTab === 'mine' ? '球队由联赛管理员在后台分配，分配后会自动显示在这里。' : '平台管理员创建联赛并设置当前赛季后，会在这里显示。'}}</text>
   </view>
   <view wx:else class="league-list">
     <view wx:for="{{leagues}}" wx:key="id" class="league-card" data-id="{{item.id}}" bindtap="openLeague">
       <view class="brand-line">
         <image wx:if="{{item.logoUrl}}" class="league-logo" src="{{item.logoUrl}}" mode="aspectFit" />
         <view wx:else class="league-logo logo-fallback">{{item.logoText}}</view>
-        <view class="brand-copy"><text class="league-name">{{item.name}}</text><text class="league-meta">{{item.eligibility}}</text></view>
+        <view class="brand-copy">
+          <view class="league-title-line"><text class="league-name">{{item.displayName}}</text><text class="edition-badge">{{item.editionLabel}}</text></view>
+          <text class="league-meta">{{item.description}}</text>
+          <text wx:if="{{item.teamName}}" class="my-team">我的球队 · {{item.teamName}}</text>
+        </view>
         <text class="arrow">↗</text>
       </view>
       <view class="season-strip">

@@ -40,6 +40,7 @@ import {
   LeagueTeamSummarySchema,
   LeagueEditionSchema,
   CurrentSeasonSummarySchema,
+  CurrentUserSchema,
   EnrollLeagueTeamsRequestSchema,
   SeasonEntrySchema,
   SetCurrentSeasonRequestSchema,
@@ -51,6 +52,19 @@ import {
 } from './index.js';
 
 describe('shared API contracts', () => {
+  it('exposes the current user public number for administrator binding', () => {
+    const user = CurrentUserSchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      publicUserNo: '000123',
+      displayName: '',
+      avatarUrl: null,
+      region: null,
+      status: 'ACTIVE',
+      profileComplete: false
+    });
+    assert.equal(user.publicUserNo, '000123');
+  });
+
   it('rejects an empty WeChat login code', () => {
     assert.throws(() => WechatLoginRequestSchema.parse({ code: ' ' }));
   });

@@ -1,8 +1,7 @@
-import type { GameAccountResponse, LeagueSeasonSummary, SeasonEntryResponse, TeamProfileResponse } from '@efm/contracts'
+import type { LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
-  defaultSeasonAccountId,
-  deriveSeasonAction,
+  entryStatusCopy,
   leagueDetailErrorMessage,
   seasonStructureCopy,
   selectSeason,
@@ -25,6 +24,7 @@ const entry = (status: SeasonEntryResponse['status']): SeasonEntryResponse => ({
   previousSeasonEntryId: null, teamNameSnapshot: '申花', teamShortNameSnapshot: '申花',
   teamLogoUrlSnapshot: null, gamePlatformSnapshot: 'MOBILE', serverRegionSnapshot: 'GLOBAL',
   gamerTagSnapshot: 'Dust', gameUidSnapshot: null, reviewedById: null, reviewedAt: null,
+  leagueEditionSnapshot: 'NATIONAL',
   decisionReason: null, confirmedAt: null, withdrawnAt: null, version: 1,
   createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z',
 })
@@ -41,19 +41,15 @@ describe('league detail view model', () => {
     expect(seasonStructureCopy(season({ seasonNumber: 2, isFirstSeason: false }))).toBe('本赛季包含超级组与冠军组，分组由管理员确认')
   })
 
-  it('derives team setup, application, renewal, and status actions', () => {
-    expect(deriveSeasonAction(false, null, 'REGISTRATION_OPEN', false)).toMatchObject({ kind: 'LOGIN', label: '登录后报名' })
-    expect(deriveSeasonAction(false, null, 'REGISTRATION_OPEN')).toMatchObject({ kind: 'NONE', label: '请联系管理员分配球队' })
-    expect(deriveSeasonAction(true, null, 'REGISTRATION_OPEN')).toMatchObject({ kind: 'APPLY', label: '报名参加' })
-    expect(deriveSeasonAction(true, entry('INVITED'), 'REGISTRATION_OPEN')).toMatchObject({ kind: 'RENEW', label: '确认参加下一赛季' })
-    expect(deriveSeasonAction(true, entry('PENDING'), 'REGISTRATION_OPEN')).toMatchObject({ kind: 'WITHDRAW', label: '审核中 · 撤回报名' })
-    expect(deriveSeasonAction(true, entry('APPROVED'), 'ALLOCATION_REVIEW')).toMatchObject({ kind: 'NONE', label: '已通过审核' })
+  it('renders read-only enrollment state without self-service actions', () => {
+    expect(entryStatusCopy(false, false, null)).toBe('登录后查看管理员分配的联赛球队')
+    expect(entryStatusCopy(true, false, null)).toBe('请联系联赛管理员分配球队')
+    expect(entryStatusCopy(true, true, null)).toBe('当前赛季尚未入组')
+    expect(entryStatusCopy(true, true, entry('APPROVED'))).toBe('已报名当前赛季')
+    expect(entryStatusCopy(true, true, entry('PENDING'))).toBe('等待管理员确认')
   })
 
-  it('defaults account selection to the team profile account and localizes conflicts', () => {
-    const profile = { defaultGameAccountId: 'account-2' } as TeamProfileResponse
-    const accounts = [{ id: 'account-1' }, { id: 'account-2' }] as GameAccountResponse[]
-    expect(defaultSeasonAccountId(profile, accounts)).toBe('account-2')
+  it('localizes read failures', () => {
     expect(leagueDetailErrorMessage('VERSION_CONFLICT')).toBe('赛季或报名状态已变更，请刷新后重试')
   })
 })

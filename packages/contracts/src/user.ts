@@ -9,6 +9,7 @@ export const UpdateProfileRequestSchema = z.object({
 
 export const CurrentUserSchema = z.object({
   id: ResourceIdSchema,
+  publicUserNo: z.string().regex(/^\d{6}$/),
   displayName: z.string(),
   avatarUrl: z.string().nullable(),
   region: z.string().nullable(),

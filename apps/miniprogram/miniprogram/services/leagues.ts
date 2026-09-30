@@ -7,6 +7,7 @@ import type {
   CreateTeamProfileRequest,
   LeagueDetail,
   LeagueListResponse,
+  MyLeagueTeamListResponse,
   LeagueSeasonDetail,
   LeagueSeasonSummary,
   OverrideSeasonEntryRequest,
@@ -43,6 +44,9 @@ export const leaguesApi = {
       path: query('/leagues', { cursor, limit }),
       skipAuth: true,
     })
+  },
+  mine() {
+    return api.request<MyLeagueTeamListResponse>({ path: '/me/league-teams' })
   },
   detail(leagueId: string) {
     return api.request<LeagueDetail>({ path: `/leagues/${id(leagueId)}` })
