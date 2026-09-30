@@ -37,6 +37,12 @@ describe('LeagueTeamsService', () => {
   afterEach(async () => {
     await prisma.auditLog.deleteMany({ where: { actorAdminId: { in: adminIds } } });
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: adminIds } } });
+    await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
+    await prisma.league.updateMany({
+      where: { id: { in: leagueIds } },
+      data: { currentSeasonId: null }
+    });
+    await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.gameAccount.deleteMany({ where: { userId: { in: userIds } } });
@@ -58,31 +64,57 @@ describe('LeagueTeamsService', () => {
       }
     });
     userIds.push(user.id);
-    const account = await prisma.gameAccount.create({
-      data: {
-        userId: user.id,
-        platform: 'MOBILE',
-        serverRegion: 'GLOBAL',
-        gamerTag: `${label}-${randomUUID()}`,
-        isDefault: true
-      }
-    });
-    return { user, account };
+    return { user };
   }
 
-  async function createLeague(label: string) {
+  async function createLeague(label: string, withCurrentSeason = true) {
     const league = await prisma.league.create({
       data: {
         name: `${label}-${randomUUID()}`,
         shortName: label,
+        edition: 'INTERNATIONAL',
         defaultPlatform: 'MOBILE',
         defaultServerRegion: 'GLOBAL',
         createdByAdminId: actorId
       }
     });
     leagueIds.push(league.id);
-    return league;
+    if (!withCurrentSeason) return league;
+    const season = await prisma.leagueSeason.create({
+      data: {
+        leagueId: league.id,
+        seasonNumber: 1,
+        displayName: 'S1',
+        isFirstSeason: true,
+        registrationOpensAt: new Date('2026-09-01T00:00:00.000Z'),
+        registrationClosesAt: new Date('2026-09-08T00:00:00.000Z'),
+        startsAt: new Date('2026-09-09T00:00:00.000Z'),
+        endsAt: new Date('2026-10-09T00:00:00.000Z'),
+        superCapacity: 23,
+        championCapacity: 18,
+        promotionCount: 4,
+        createdByAdminId: actorId
+      }
+    });
+    return prisma.league.update({
+      where: { id: league.id },
+      data: { currentSeasonId: season.id }
+    });
   }
+
+  it('rejects binding when the league has no current season and creates no orphan team', async () => {
+    const { user } = await createUser('未开赛用户');
+    const league = await createLeague('未设置赛季', false);
+
+    await expect(service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      teamNumber: 1,
+      name: '未开赛球队',
+      shortName: '未开赛',
+      logoUrl: null
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_CURRENT_SEASON_REQUIRED' } });
+    await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(0);
+  });
 
   it('allows one owner to have independent teams in different leagues', async () => {
     const { user } = await createUser('同一用户');
@@ -106,6 +138,9 @@ describe('LeagueTeamsService', () => {
 
     expect(first.ownerUserId).toBe(second.ownerUserId);
     expect(first.leagueId).not.toBe(second.leagueId);
+    await expect(prisma.seasonEntry.count({
+      where: { leagueTeamId: { in: [first.id, second.id] }, status: 'APPROVED' }
+    })).resolves.toBe(2);
   });
 
   it('rejects duplicate owners and duplicate team numbers inside one league', async () => {
@@ -135,6 +170,59 @@ describe('LeagueTeamsService', () => {
       shortName: '重复号',
       logoUrl: null
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS' } });
+    await expect(prisma.seasonEntry.count({ where: { season: { leagueId: league.id } } })).resolves.toBe(1);
+  });
+
+  it('creates one approved current-season entry without a game account and replays idempotently', async () => {
+    const { user } = await createUser('幂等用户');
+    const league = await createLeague('幂等绑定');
+    const key = randomUUID();
+    const input = {
+      ownerUserId: user.id,
+      teamNumber: 21,
+      name: '幂等球队',
+      shortName: '幂等',
+      logoUrl: null
+    };
+
+    const first = await service.create(actorId, league.id, input, key);
+    const replay = await service.create(actorId, league.id, input, key);
+    expect(replay).toEqual(first);
+    await expect(prisma.seasonEntry.findMany({ where: { leagueTeamId: first.id } })).resolves.toEqual([
+      expect.objectContaining({
+        gameAccountId: null,
+        source: 'NEW_APPLICATION',
+        status: 'APPROVED',
+        teamNameSnapshot: '幂等球队',
+        leagueEditionSnapshot: 'INTERNATIONAL'
+      })
+    ]);
+  });
+
+  it('serializes concurrent bindings and leaves no orphan season entry', async () => {
+    const { user } = await createUser('并发用户');
+    const league = await createLeague('并发绑定');
+    const results = await Promise.allSettled([
+      service.create(actorId, league.id, {
+        ownerUserId: user.id,
+        teamNumber: 31,
+        name: '并发球队甲',
+        shortName: '并发甲',
+        logoUrl: null
+      }, randomUUID()),
+      service.create(actorId, league.id, {
+        ownerUserId: user.id,
+        teamNumber: 32,
+        name: '并发球队乙',
+        shortName: '并发乙',
+        logoUrl: null
+      }, randomUUID())
+    ]);
+
+    expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(({ status }) => status === 'rejected')).toHaveLength(1);
+    await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(1);
+    await expect(prisma.seasonEntry.count({ where: { season: { leagueId: league.id } } })).resolves.toBe(1);
   });
 
   it('keeps a migrated legacy team readable while its number awaits assignment', async () => {

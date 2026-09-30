@@ -42,7 +42,7 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
     try {
       await api.request(`/v1/admin/leagues/${leagueId}/teams`, {
         method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: LeagueTeamDetailSchema,
-        body: { ownerUserId: owner.id, teamNumber: values.teamNumber, name: values.name, shortName: values.shortName, logoUrl: null, defaultGameAccountId: null }
+        body: { ownerUserId: owner.id, teamNumber: values.teamNumber, name: values.name, shortName: values.shortName, logoUrl: null }
       });
       mutationKey.reset(); form.resetFields(); setOwner(null); await load();
     } catch (error) {
@@ -50,7 +50,9 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         ? '球队编号已被占用，请选择其他编号'
         : error instanceof ApiError && error.code === 'LEAGUE_TEAM_OWNER_ALREADY_EXISTS'
           ? '该用户在此联赛中已经拥有球队'
-          : '球队创建失败，请稍后重试');
+          : error instanceof ApiError && error.code === 'LEAGUE_CURRENT_SEASON_REQUIRED'
+            ? '请先在赛季管理中设置当前赛季，再绑定球队'
+            : '球队创建失败，请稍后重试');
     } finally { setSubmitting(false); }
   };
 

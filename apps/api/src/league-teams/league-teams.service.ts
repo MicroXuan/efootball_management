@@ -33,8 +33,16 @@ export class LeagueTeamsService {
     key: string
   ): Promise<LeagueTeamDetail> {
     return this.receipts.execute(actorAdminId, `league-team.create:${leagueId}`, key, async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
       const league = await transaction.league.findUnique({ where: { id: leagueId } });
       if (!league) throw this.notFound('LEAGUE_NOT_FOUND', 'League was not found');
+      if (!league.currentSeasonId) {
+        throw new LeagueError(
+          'LEAGUE_CURRENT_SEASON_REQUIRED',
+          'Set the current season before binding a team',
+          409
+        );
+      }
       const owner = await transaction.user.findUnique({ where: { id: input.ownerUserId } });
       if (!owner?.publicUserNo) throw this.notFound('PUBLIC_USER_NOT_FOUND', 'User was not found');
       await this.assertAvailable(transaction, leagueId, owner.id, input.teamNumber);
@@ -51,17 +59,59 @@ export class LeagueTeamsService {
             defaultGameAccountId: null
           }
         });
+        const now = new Date();
+        await transaction.seasonEntry.create({
+          data: {
+            seasonId: league.currentSeasonId,
+            teamProfileId: null,
+            leagueTeamId: team.id,
+            ownerUserId: owner.id,
+            gameAccountId: null,
+            source: 'NEW_APPLICATION',
+            status: 'APPROVED',
+            previousSeasonEntryId: null,
+            teamNameSnapshot: team.name,
+            teamShortNameSnapshot: team.shortName,
+            teamNumberSnapshot: team.teamNumber,
+            teamLogoUrlSnapshot: team.logoUrl,
+            gamePlatformSnapshot: null,
+            serverRegionSnapshot: null,
+            gamerTagSnapshot: null,
+            gameUidSnapshot: null,
+            leagueEditionSnapshot: league.edition,
+            confirmedAt: now
+          }
+        });
         await this.audit.record(transaction, {
           actorAdminId,
           leagueId,
           action: 'league-team.create',
           resourceType: 'LeagueTeam',
           resourceId: team.id,
-          metadata: { ownerUserId: owner.id, teamNumber: team.teamNumber }
+          metadata: {
+            ownerUserId: owner.id,
+            teamNumber: team.teamNumber,
+            currentSeasonId: league.currentSeasonId
+          }
         });
-        return this.detail({ ...team, owner, _count: { seasonEntries: 0 } });
+        return this.detail({ ...team, owner, _count: { seasonEntries: 1 } });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          const target = JSON.stringify(error.meta?.target ?? '');
+          if (target.includes('owner')) {
+            throw new LeagueError(
+              'LEAGUE_TEAM_OWNER_ALREADY_EXISTS',
+              'This user already owns a team in the league',
+              409
+            );
+          }
+          if (target.includes('number')) {
+            throw new LeagueError(
+              'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS',
+              'Team number is already assigned in this league',
+              409
+            );
+          }
           throw new LeagueError('LEAGUE_TEAM_CONFLICT', 'League team already exists', 409);
         }
         throw error;

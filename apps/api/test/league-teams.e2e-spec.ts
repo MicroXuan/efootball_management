@@ -96,6 +96,26 @@ describe('league-scoped team API', () => {
         }
       });
       leagueIds.push(league.id);
+      const season = await prisma.leagueSeason.create({
+        data: {
+          leagueId: league.id,
+          seasonNumber: 1,
+          displayName: '当前赛季',
+          isFirstSeason: true,
+          registrationOpensAt: new Date('2026-09-01T00:00:00.000Z'),
+          registrationClosesAt: new Date('2026-09-08T00:00:00.000Z'),
+          startsAt: new Date('2026-09-09T00:00:00.000Z'),
+          endsAt: new Date('2026-10-09T00:00:00.000Z'),
+          superCapacity: 23,
+          championCapacity: 18,
+          promotionCount: 4,
+          createdByAdminId: platformId
+        }
+      });
+      await prisma.league.update({
+        where: { id: league.id },
+        data: { currentSeasonId: season.id }
+      });
     }
     await prisma.adminLeagueRole.create({
       data: {
@@ -111,6 +131,10 @@ describe('league-scoped team API', () => {
       where: { seasonEntry: { season: { leagueId: { in: leagueIds } } } }
     });
     await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
+    await prisma.league.updateMany({
+      where: { id: { in: leagueIds } },
+      data: { currentSeasonId: null }
+    });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.auditLog.deleteMany({ where: { actorAdminId: { in: [platformId, managerId] } } });
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: [platformId, managerId] } } });
@@ -139,8 +163,7 @@ describe('league-scoped team API', () => {
         teamNumber: 8,
         name: '第一赛季球队名',
         shortName: '一队',
-        logoUrl: null,
-        defaultGameAccountId: playerAccountId
+        logoUrl: null
       }).expect(201);
 
     await request(app.getHttpServer())
@@ -151,8 +174,7 @@ describe('league-scoped team API', () => {
         teamNumber: 9,
         name: '重复所有者',
         shortName: '重复',
-        logoUrl: null,
-        defaultGameAccountId: playerAccountId
+        logoUrl: null
       }).expect(409);
 
     await request(app.getHttpServer())
@@ -163,8 +185,7 @@ describe('league-scoped team API', () => {
         teamNumber: 8,
         name: '重复编号',
         shortName: '重号',
-        logoUrl: null,
-        defaultGameAccountId: secondAccountId
+        logoUrl: null
       }).expect(409);
 
     await request(app.getHttpServer())
@@ -175,8 +196,7 @@ describe('league-scoped team API', () => {
         teamNumber: 8,
         name: '跨联赛球队',
         shortName: '二队',
-        logoUrl: null,
-        defaultGameAccountId: playerAccountId
+        logoUrl: null
       }).expect(403);
 
     await prisma.adminLeagueRole.create({
@@ -190,8 +210,7 @@ describe('league-scoped team API', () => {
         teamNumber: 8,
         name: '跨联赛球队',
         shortName: '二队',
-        logoUrl: null,
-        defaultGameAccountId: playerAccountId
+        logoUrl: null
       }).expect(201);
 
     expect(secondLeagueTeam.body.id).toEqual(expect.any(String));
@@ -207,9 +226,9 @@ describe('league-scoped team API', () => {
     const season = await prisma.leagueSeason.create({
       data: {
         leagueId: leagueIds[0]!,
-        seasonNumber: 1,
-        displayName: 'S1',
-        isFirstSeason: true,
+        seasonNumber: 2,
+        displayName: 'S2',
+        isFirstSeason: false,
         registrationOpensAt: new Date(now - 60_000),
         registrationClosesAt: new Date(now + 600_000),
         startsAt: new Date(now + 1_200_000),

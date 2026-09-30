@@ -52,6 +52,25 @@ describe('league teams page', () => {
       method: 'POST',
       body: expect.objectContaining({ ownerUserId: userId, teamNumber: 0, name: '巴塞罗那-小宣', shortName: '巴萨' })
     }));
+    expect(request.mock.calls.at(-1)?.[1]?.body).not.toHaveProperty('defaultGameAccountId');
+  });
+
+  it('explains that a current season must be selected before binding', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ items: [], nextCursor: null })
+      .mockResolvedValueOnce({ id: userId, publicUserNo: '000123', displayName: '小宣', avatarUrl: null })
+      .mockRejectedValueOnce(new ApiError({ status: 409, code: 'LEAGUE_CURRENT_SEASON_REQUIRED' }));
+    renderPage(request);
+    await screen.findByText('暂无球队');
+    await userEvent.type(screen.getByLabelText('用户编号'), '000123');
+    await userEvent.click(screen.getByRole('button', { name: '查找用户' }));
+    await screen.findByText('小宣');
+    await userEvent.type(screen.getByLabelText('球队编号'), '8');
+    await userEvent.type(screen.getByLabelText('球队名称'), '测试球队');
+    await userEvent.type(screen.getByLabelText('球队简称'), '测试');
+    await userEvent.click(screen.getByRole('button', { name: '创建球队' }));
+
+    expect(await screen.findByText('请先在赛季管理中设置当前赛季，再绑定球队')).toBeInTheDocument();
   });
 
   it('shows a recoverable loading error', async () => {
