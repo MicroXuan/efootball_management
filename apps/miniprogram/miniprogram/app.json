@@ -13,6 +13,8 @@
     "pages/competition-editor/index",
     "pages/login/index",
     "pages/profile/index",
+    "pages/my-league-teams/index",
+    "pages/league-team-detail/index",
     "pages/team-profile/index",
     "pages/game-account-edit/index",
     "pages/player-card-detail/index"

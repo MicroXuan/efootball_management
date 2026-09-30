@@ -13,7 +13,15 @@ export class MyLeagueTeamsController {
 
   @Get()
   list(@CurrentUser() user: AuthenticatedUser) {
-    return this.teams.listMine(user.id);
+    return this.teams.listMineViews(user.id);
+  }
+
+  @Get(':teamId/overview')
+  overview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string
+  ) {
+    return this.teams.getMyOverview(teamId, user.id);
   }
 
   @Get(':teamId')

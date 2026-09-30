@@ -1,6 +1,7 @@
-import type { GameAccountResponse, LeagueDetail, LeagueSeasonSummary, SeasonEntryResponse, TeamProfileResponse } from '@efm/contracts'
+import type { GameAccountResponse, LeagueDetail, LeagueSeasonSummary, LeagueTeamSummary, SeasonEntryResponse } from '@efm/contracts'
 import { ApiError, api } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
+import { leagueTeamsApi } from '../../services/league-teams'
 import { session } from '../../services/session'
 import { platformLabel } from '../profile/profile.viewmodel'
 import {
@@ -31,7 +32,7 @@ Page({
     registrationCloseDate: '',
     leagueLogoText: '',
     loggedIn: false,
-    profile: null as TeamProfileResponse | null,
+    profile: null as LeagueTeamSummary | null,
     accounts: [] as Array<GameAccountResponse & { label: string }>,
     rawAccounts: [] as GameAccountResponse[],
     selectedAccountIndex: 0,
@@ -61,11 +62,11 @@ Page({
       const [league, seasons, profile, accounts] = await Promise.all([
         this.loadLeague(),
         leaguesApi.seasons(this.data.leagueId),
-        loggedIn ? leaguesApi.teamProfile() : Promise.resolve(null),
+        loggedIn ? leagueTeamsApi.mine().then((result) => result.items.find((team) => team.leagueId === this.data.leagueId) ?? null) : Promise.resolve(null),
         loggedIn ? api.request<GameAccountResponse[]>({ path: '/me/game-accounts' }) : Promise.resolve([]),
       ])
       const selectedSeason = selectSeason(seasons, this.data.selectedSeason?.id)
-      const selectedAccountId = defaultSeasonAccountId(profile, accounts)
+      const selectedAccountId = defaultSeasonAccountId(null, accounts)
       const selectedAccountIndex = Math.max(0, accounts.findIndex((account) => account.id === selectedAccountId))
       this.setData({
         state: 'loaded', errorMessage: '', league, seasons, loggedIn,
@@ -139,10 +140,6 @@ Page({
     const action = this.data.action
     if (action.kind === 'LOGIN') {
       wx.navigateTo({ url: '/pages/login/index' })
-      return
-    }
-    if (action.kind === 'TEAM_PROFILE') {
-      wx.navigateTo({ url: '/pages/team-profile/index' })
       return
     }
     if (!season || action.kind === 'NONE') return

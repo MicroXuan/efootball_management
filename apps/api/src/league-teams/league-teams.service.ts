@@ -4,6 +4,8 @@ import type {
   LeagueTeamDetail,
   LeagueTeamListResponse,
   LeagueTeamSummary,
+  MyLeagueTeamListResponse,
+  MyLeagueTeamOverview,
   UpdateLeagueTeamRequest
 } from '@efm/contracts';
 import { Prisma } from '../generated/prisma/client.js';
@@ -144,6 +146,90 @@ export class LeagueTeamsService {
     });
     const metrics = await this.rosterMetrics(this.prisma, teams);
     return { items: teams.map((team) => this.summary(team, metrics.get(team.id))), nextCursor: null };
+  }
+
+  async listMineViews(ownerUserId: string): Promise<MyLeagueTeamListResponse> {
+    const result = await this.listMine(ownerUserId);
+    const leagues = await this.prisma.league.findMany({
+      where: { id: { in: result.items.map(({ leagueId }) => leagueId) } },
+      select: { id: true, name: true }
+    });
+    const names = new Map(leagues.map((league) => [league.id, league.name]));
+    return {
+      items: result.items.map((team) => ({ ...team, leagueName: names.get(team.leagueId) ?? '未命名联赛' })),
+      nextCursor: null
+    };
+  }
+
+  async getMyOverview(teamId: string, ownerUserId: string): Promise<MyLeagueTeamOverview> {
+    const team = await this.getDetail(teamId, ownerUserId);
+    const [league, roster, ledger, currentWindow] = await Promise.all([
+      this.prisma.league.findUniqueOrThrow({ where: { id: team.leagueId }, select: { name: true } }),
+      this.prisma.leaguePlayerOwnership.findMany({
+        where: { leagueTeamId: teamId, status: 'ACTIVE' },
+        include: {
+          footballPlayer: true,
+          currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } }
+        },
+        orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
+      }),
+      this.prisma.financeLedgerEntry.findMany({
+        where: { leagueTeamId: teamId },
+        include: { leagueTeam: { select: { name: true } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 50
+      }),
+      this.prisma.transferWindow.findFirst({
+        where: {
+          season: { leagueId: team.leagueId },
+          startsAt: { lte: new Date() },
+          endsAt: { gt: new Date() }
+        },
+        orderBy: { startsAt: 'asc' }
+      })
+    ]);
+    return {
+      team,
+      leagueName: league.name,
+      roster: roster.map((entry) => ({
+        id: entry.id,
+        leagueId: entry.leagueId,
+        leagueTeamId: entry.leagueTeamId,
+        playerId: entry.footballPlayerId,
+        playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
+        currentPlayerCardId: entry.currentPlayerCardId,
+        cardName: entry.currentPlayerCard.cardName,
+        maxOverall: entry.currentPlayerCard.autoBuilds[0]?.maxOverall ?? entry.currentPlayerCard.overallRating,
+        dtRating: entry.dtRatingSnapshot,
+        salaryRuleVersionId: entry.salaryRuleVersionId,
+        salaryMinor: entry.salaryMinor,
+        acquiredAt: entry.acquiredAt.toISOString(),
+        status: entry.status,
+        version: entry.version
+      })),
+      ledger: ledger.map((entry) => ({
+        id: entry.id,
+        leagueId: entry.leagueId,
+        leagueTeamId: entry.leagueTeamId,
+        teamName: entry.leagueTeam.name,
+        rosterTransactionId: entry.rosterTransactionId,
+        direction: entry.direction,
+        type: entry.type,
+        amountMinor: entry.amountMinor,
+        note: entry.note,
+        createdAt: entry.createdAt.toISOString()
+      })),
+      currentWindow: currentWindow ? {
+        name: currentWindow.name,
+        endsAt: currentWindow.endsAt.toISOString(),
+        operations: {
+          BUY: currentWindow.allowBuy,
+          SELL: currentWindow.allowSell,
+          TRANSFER: currentWindow.allowTransfer,
+          CARD_UPGRADE: currentWindow.allowCardUpgrade
+        }
+      } : null
+    };
   }
 
   async listForLeague(leagueId: string): Promise<LeagueTeamListResponse> {

@@ -122,7 +122,7 @@ Page({
   },
 
   openTeamProfile() {
-    wx.navigateTo({ url: '/pages/team-profile/index' })
+    wx.navigateTo({ url: '/pages/my-league-teams/index' })
   },
 
   editAccount(event: AccountTapEvent) {

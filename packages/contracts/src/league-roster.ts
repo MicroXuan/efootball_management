@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ResourceIdSchema } from './common.js';
 import { ExpectedVersionSchema, IdempotencyKeySchema } from './competition.js';
+import { LeagueTeamDetailSchema, LeagueTeamSummarySchema } from './league-team.js';
 
 const TimestampSchema = z.iso.datetime();
 const MAX_UNSIGNED_INT = 4_294_967_295;
@@ -290,6 +291,25 @@ export const RosterPlayerCandidateListResponseSchema = z.object({
   items: z.array(RosterPlayerCandidateSchema)
 });
 
+export const MyLeagueTeamSummarySchema = LeagueTeamSummarySchema.extend({
+  leagueName: z.string().min(1)
+});
+export const MyLeagueTeamListResponseSchema = z.object({
+  items: z.array(MyLeagueTeamSummarySchema),
+  nextCursor: z.string().nullable()
+});
+export const MyLeagueTeamOverviewSchema = z.object({
+  team: LeagueTeamDetailSchema,
+  leagueName: z.string().min(1),
+  roster: z.array(RosterEntrySchema),
+  ledger: z.array(FinanceLedgerListItemSchema),
+  currentWindow: z.object({
+    name: z.string().min(1),
+    endsAt: TimestampSchema,
+    operations: RosterOperationAvailabilitySchema
+  }).nullable()
+});
+
 const RosterMutationBaseSchema = z.object({
   seasonId: ResourceIdSchema,
   idempotencyKey: IdempotencyKeySchema,
@@ -359,6 +379,10 @@ export type FinanceLedgerListResponse = z.infer<typeof FinanceLedgerListResponse
 export type TeamRosterView = z.infer<typeof TeamRosterViewSchema>;
 export type RosterPlayerCandidate = z.infer<typeof RosterPlayerCandidateSchema>;
 export type RosterPlayerCandidateListResponse = z.infer<typeof RosterPlayerCandidateListResponseSchema>;
+export type MyLeagueTeamSummary = z.infer<typeof MyLeagueTeamSummarySchema>;
+export type MyLeagueTeamListResponse = z.infer<typeof MyLeagueTeamListResponseSchema>;
+export type MyLeagueTeamOverview = z.infer<typeof MyLeagueTeamOverviewSchema>;
+export type FinanceLedgerDirection = z.infer<typeof FinanceLedgerDirectionSchema>;
 export type AcquirePlayerRequest = z.infer<typeof AcquirePlayerRequestSchema>;
 export type ReleasePlayerRequest = z.infer<typeof ReleasePlayerRequestSchema>;
 export type TransferPlayerRequest = z.infer<typeof TransferPlayerRequestSchema>;
