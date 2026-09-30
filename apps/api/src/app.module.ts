@@ -16,6 +16,7 @@ import { PlayerImportModule } from './player-import/player-import.module.js';
 import { PlayerBuildsModule } from './player-builds/player-builds.module.js';
 import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { UsersModule } from './users/users.module.js';
     PlayerBuildsModule,
     PlayerImportModule,
     PesdataSyncModule,
+    StorageModule,
     UsersModule
   ]
 })

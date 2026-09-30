@@ -1,4 +1,5 @@
 import { EnvironmentSchema } from './env.schema.js';
+import { resolve } from 'node:path';
 
 export function configuration() {
   const environment = EnvironmentSchema.parse(process.env);
@@ -19,6 +20,16 @@ export function configuration() {
       requestsPerSecond: environment.PESDATA_REQUESTS_PER_SECOND,
       timeoutMs: environment.PESDATA_TIMEOUT_MS,
       maxRetries: environment.PESDATA_MAX_RETRIES
+    },
+    storage: {
+      provider: environment.STORAGE_PROVIDER,
+      localDirectory: resolve(environment.LOCAL_STORAGE_DIR),
+      publicApiBaseUrl: environment.PUBLIC_API_BASE_URL,
+      cloudbase: {
+        environmentId: environment.CLOUDBASE_ENV_ID,
+        secretId: environment.CLOUDBASE_SECRET_ID,
+        secretKey: environment.CLOUDBASE_SECRET_KEY
+      }
     }
   };
 }

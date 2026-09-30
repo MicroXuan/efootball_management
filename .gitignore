@@ -10,3 +10,4 @@ apps/miniprogram/miniprogram_npm/
 apps/miniprogram/project.private.config.json
 apps/api/src/generated/
 .mysql/
+.data/
