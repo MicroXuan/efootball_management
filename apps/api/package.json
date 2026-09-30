@@ -20,7 +20,8 @@
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts",
     "player-import": "tsx src/player-import/player-import.cli.ts",
     "sync:pesdata": "tsx src/pesdata-sync/pesdata-sync.cli.ts",
-    "competition:demo": "tsx src/competitions/competition-demo.cli.ts"
+    "competition:demo": "tsx src/competitions/competition-demo.cli.ts",
+    "league-teams:migrate": "tsx src/league-teams/league-team-backfill.cli.ts"
   },
   "dependencies": {
     "@efm/contracts": "workspace:*",
