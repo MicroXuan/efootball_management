@@ -141,6 +141,19 @@ describe('LeagueTeamsService', () => {
     await expect(prisma.seasonEntry.count({
       where: { leagueTeamId: { in: [first.id, second.id] }, status: 'APPROVED' }
     })).resolves.toBe(2);
+    const mine = await service.listMineViews(user.id);
+    expect(mine.items).toHaveLength(2);
+    expect(mine.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        leagueId: firstLeague.id,
+        leagueName: expect.any(String),
+        leagueDescription: '',
+        leagueLogoUrl: null,
+        leagueEdition: 'INTERNATIONAL',
+        currentSeason: expect.objectContaining({ id: firstLeague.currentSeasonId, approvedEntryCount: 1 })
+      }),
+      expect.objectContaining({ leagueId: secondLeague.id })
+    ]));
   });
 
   it('rejects duplicate owners and duplicate team numbers inside one league', async () => {

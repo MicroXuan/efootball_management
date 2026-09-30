@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ResourceIdSchema } from './common.js';
 import { ExpectedVersionSchema, IdempotencyKeySchema } from './competition.js';
+import { CurrentSeasonSummarySchema, LeagueEditionSchema } from './league.js';
 import { LeagueTeamDetailSchema, LeagueTeamSummarySchema } from './league-team.js';
 
 const TimestampSchema = z.iso.datetime();
@@ -292,7 +293,11 @@ export const RosterPlayerCandidateListResponseSchema = z.object({
 });
 
 export const MyLeagueTeamSummarySchema = LeagueTeamSummarySchema.extend({
-  leagueName: z.string().min(1)
+  leagueName: z.string().min(1),
+  leagueDescription: z.string(),
+  leagueLogoUrl: z.string().nullable(),
+  leagueEdition: LeagueEditionSchema,
+  currentSeason: CurrentSeasonSummarySchema.nullable()
 });
 export const MyLeagueTeamListResponseSchema = z.object({
   items: z.array(MyLeagueTeamSummarySchema),

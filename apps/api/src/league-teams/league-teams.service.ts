@@ -191,14 +191,40 @@ export class LeagueTeamsService {
   }
 
   async listMineViews(ownerUserId: string): Promise<MyLeagueTeamListResponse> {
-    const result = await this.listMine(ownerUserId);
-    const leagues = await this.prisma.league.findMany({
-      where: { id: { in: result.items.map(({ leagueId }) => leagueId) } },
-      select: { id: true, name: true }
+    const teams = await this.prisma.leagueTeam.findMany({
+      where: { ownerUserId },
+      include: {
+        owner: true,
+        _count: { select: { seasonEntries: true } },
+        league: {
+          include: {
+            currentSeason: {
+              include: {
+                _count: {
+                  select: { entries: { where: { status: 'APPROVED' } } }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
-    const names = new Map(leagues.map((league) => [league.id, league.name]));
+    const metrics = await this.rosterMetrics(this.prisma, teams);
     return {
-      items: result.items.map((team) => ({ ...team, leagueName: names.get(team.leagueId) ?? '未命名联赛' })),
+      items: teams.map((team) => ({
+        ...this.summary(team, metrics.get(team.id)),
+        leagueName: team.league.name,
+        leagueDescription: team.league.description,
+        leagueLogoUrl: team.league.logoUrl,
+        leagueEdition: team.league.edition,
+        currentSeason: team.league.currentSeason ? {
+          id: team.league.currentSeason.id,
+          displayName: team.league.currentSeason.displayName,
+          status: team.league.currentSeason.status,
+          approvedEntryCount: team.league.currentSeason._count.entries
+        } : null
+      })),
       nextCursor: null
     };
   }
