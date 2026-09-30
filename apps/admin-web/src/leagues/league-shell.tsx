@@ -11,8 +11,9 @@ export function LeagueShell() {
   return <div className="league-workspace">
     <div className="page-heading">
       <div><span className="section-kicker">LEAGUE WORKSPACE</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1></div>
-      <Tabs activeKey={location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams'} items={[
+      <Tabs activeKey={location.pathname.includes('/seasons') ? 'seasons' : location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams'} items={[
         { key: 'teams', label: <Link to={`/leagues/${leagueId}/teams`}>用户与球队</Link> },
+        { key: 'seasons', label: <Link to={`/leagues/${leagueId}/seasons`}>赛季管理</Link> },
         { key: 'salary', label: <Link to={`/leagues/${leagueId}/salary-rules`}>工资规则</Link> },
         { key: 'windows', label: <Link to={`/leagues/${leagueId}/transfer-windows`}>转会窗口</Link> },
         { key: 'ledger', label: <Link to={`/leagues/${leagueId}/ledger`}>财务流水</Link> }

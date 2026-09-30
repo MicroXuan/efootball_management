@@ -40,6 +40,7 @@ export interface AdminApi {
   logout(): Promise<void>;
   onSessionExpired(listener: () => void): () => void;
   request<T>(path: string, options: RequestOptions<T>): Promise<T>;
+  upload?<T>(path: string, file: File, schema: z.ZodType<T>): Promise<T>;
 }
 
 export class AdminApiClient implements AdminApi {
@@ -113,6 +114,12 @@ export class AdminApiClient implements AdminApi {
     return this.send(path, options, true);
   }
 
+  upload<T>(path: string, file: File, schema: z.ZodType<T>): Promise<T> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.send(path, { method: 'POST', body: formData, schema }, true);
+  }
+
   private me(): Promise<AdminMeResponse> {
     return this.send('/v1/admin/auth/me', { schema: AdminMeResponseSchema }, true);
   }
@@ -150,16 +157,17 @@ export class AdminApiClient implements AdminApi {
     retryAfterRefresh: boolean
   ): Promise<T> {
     const { schema, body, headers: optionHeaders, ...requestInit } = options;
+    const isMultipart = typeof FormData !== 'undefined' && body instanceof FormData;
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(body === undefined || isMultipart ? {} : { 'Content-Type': 'application/json' }),
       ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
       ...this.normalizeHeaders(optionHeaders)
     };
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...requestInit,
       headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      ...(body === undefined ? {} : { body: isMultipart ? body : JSON.stringify(body) })
     });
     if (response.status === 401 && retryAfterRefresh && this.readRefreshToken()) {
       await this.refresh();

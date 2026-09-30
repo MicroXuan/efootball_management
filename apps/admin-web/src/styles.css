@@ -110,3 +110,7 @@ button, input { font: inherit; }
   .login-card { animation: card-in .45s ease-out both; }
   @keyframes card-in { from { opacity: 0; transform: translateY(14px); } }
 }
+.page-grid--seasons { align-items: start; }
+.season-enrollment-card { grid-column: 1 / -1; }
+.season-team-options { display: grid; gap: 12px; margin: 16px 0 22px; }
+.season-team-options .ant-checkbox-wrapper { margin-inline-start: 0; }

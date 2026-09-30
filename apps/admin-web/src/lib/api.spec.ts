@@ -55,6 +55,21 @@ describe('AdminApiClient', () => {
     expect(fetcher.mock.calls.flatMap(([url]) => String(url))).not.toContain('new-access');
   });
 
+  it('uploads multipart files with authentication and lets the browser set the boundary', async () => {
+    const fetcher = vi.fn().mockResolvedValue(ok({ url: 'https://media.example/league.png' }));
+    const client = new AdminApiClient({ fetcher });
+    client.accept(auth('access-token', 'r'.repeat(32)));
+    const file = new File(['png'], 'league.png', { type: 'image/png' });
+
+    await client.upload('/v1/admin/uploads/league-images', file, z.object({ url: z.url() }));
+
+    const init = fetcher.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get('file')).toBe(file);
+    expect(init.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer access-token' }));
+    expect(init.headers).not.toEqual(expect.objectContaining({ 'Content-Type': expect.any(String) }));
+  });
+
   it('returns a safe typed error without echoing server secrets', async () => {
     const secret = 'access-secret-that-must-not-render';
     const fetcher = vi.fn().mockResolvedValue(ok({
