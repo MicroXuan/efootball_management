@@ -11,7 +11,6 @@
       <text class="hero-kicker">{{league.shortName}} LEAGUE OFFICE</text>
       <text class="hero-title">{{league.name}}</text>
       <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
-      <button wx:if="{{league.capabilities.canManage}}" class="manager-button" bindtap="openManager">进入报名工作台 →</button>
     </view>
 
     <view wx:if="{{seasons.length}}" class="season-picker-card">
@@ -38,17 +37,11 @@
       <view wx:if="{{profile}}" class="team-line">
         <image wx:if="{{profile.logoUrl}}" class="team-logo" src="{{profile.logoUrl}}" mode="aspectFit" />
         <view wx:else class="team-logo team-fallback">{{profile.shortName}}</view>
-        <view><text class="team-name">{{profile.name}}</text><text class="entry-status">{{action.label}}</text></view>
+        <view><text class="team-name">{{profile.name}}</text><text class="entry-status">管理员分配球队</text></view>
       </view>
-      <text wx:else class="state-copy">{{loggedIn ? '先建立球队档案，之后即可报名当前赛季。' : '登录后可建立球队档案并报名当前赛季。'}}</text>
-      <view wx:if="{{(action.kind === 'APPLY' || action.kind === 'RENEW') && accounts.length}}" class="account-select">
-        <text class="field-label">本赛季使用账号</text>
-        <picker range="{{accounts}}" range-key="label" value="{{selectedAccountIndex}}" bindchange="onAccountChange">
-          <view class="picker-control"><text>{{selectedAccountLabel}}</text><text>⌄</text></view>
-        </picker>
-      </view>
+      <text wx:else class="state-copy">{{entryStatus}}</text>
       <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
-      <button class="action-button {{action.tone}}" loading="{{mutating}}" disabled="{{action.kind === 'NONE' || mutating}}" bindtap="performAction">{{action.label}}</button>
+      <view class="entry-readonly"><text class="entry-readonly-label">参赛状态</text><text class="entry-readonly-value">{{entryStatus}}</text></view>
     </view>
 
     <view wx:else class="state-card compact"><text class="state-title">暂无公开赛季</text><text class="state-copy">等待联赛管理员发布新赛季。</text></view>

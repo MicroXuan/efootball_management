@@ -20,6 +20,10 @@ export const PesdataPlayerDetailSchema = PesdataPlayerSummarySchema.extend({
   skillList: z.unknown().optional(),
   Skills: z.unknown().optional(),
   PositionHot: z.unknown().optional(),
+  autoBuildAllocation: z.record(z.string(), z.coerce.number().int().nonnegative()).nullish(),
+  autoBuildMaxOverall: z.coerce.number().int().nullish(),
+  dtRating: z.coerce.number().int().nullish(),
+  algorithmVersion: z.string().nullish(),
   created_at: z.union([z.string(), z.number(), z.date()]).nullish()
 }).passthrough();
 
@@ -38,4 +42,3 @@ export const PesdataDetailEnvelopeSchema = z.object({
 
 export type PesdataPlayerSummary = z.infer<typeof PesdataPlayerSummarySchema>;
 export type PesdataPlayerDetail = z.infer<typeof PesdataPlayerDetailSchema>;
-

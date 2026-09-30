@@ -28,6 +28,13 @@ describe('LeaguesService', () => {
 
   afterAll(async () => {
     await prisma.mutationReceipt.deleteMany({ where: { actorId } });
+    await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
+    await prisma.league.updateMany({
+      where: { id: { in: leagueIds } },
+      data: { currentSeasonId: null }
+    });
+    await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.userRoleBinding.deleteMany({
       where: { OR: [{ userId: actorId }, { scopeId: { in: leagueIds } }] }
     });
@@ -41,8 +48,7 @@ describe('LeaguesService', () => {
     shortName: 'CELL',
     description: '长期运营联赛',
     logoUrl: null,
-    defaultPlatform: 'MOBILE' as const,
-    defaultServerRegion: 'GLOBAL',
+    edition: 'INTERNATIONAL' as const,
     defaultSuperCapacity: 23,
     defaultChampionCapacity: 18,
     defaultPromotionCount: 4
@@ -57,7 +63,7 @@ describe('LeaguesService', () => {
       defaultSuperCapacity: 23,
       defaultChampionCapacity: 18,
       defaultPromotionCount: 4,
-      featuredSeason: null,
+      currentSeason: null,
       version: 1,
       capabilities: { canManage: true, canCreateSeason: true }
     });
@@ -118,5 +124,83 @@ describe('LeaguesService', () => {
       id: created.id,
       status: 'ARCHIVED'
     });
+  });
+
+  it('uses only the explicitly selected current season and its live approved count', async () => {
+    const created = await service.create(actorId, {
+      ...input,
+      name: '显式当前赛季联赛'
+    }, `current-season-${suffix}`);
+    leagueIds.push(created.id);
+    const team = await prisma.leagueTeam.create({
+      data: {
+        leagueId: created.id,
+        ownerUserId: actorId,
+        teamNumber: 3,
+        name: '测试球队',
+        shortName: '测试'
+      }
+    });
+    const first = await prisma.leagueSeason.create({
+      data: {
+        leagueId: created.id,
+        seasonNumber: 1,
+        displayName: '状态更优但未选中的赛季',
+        isFirstSeason: true,
+        registrationOpensAt: new Date('2026-07-01T00:00:00.000Z'),
+        registrationClosesAt: new Date('2026-07-08T00:00:00.000Z'),
+        startsAt: new Date('2026-07-09T00:00:00.000Z'),
+        endsAt: new Date('2026-08-09T00:00:00.000Z'),
+        superCapacity: 23,
+        championCapacity: 18,
+        promotionCount: 4,
+        status: 'IN_PROGRESS',
+        createdById: actorId
+      }
+    });
+    const selected = await prisma.leagueSeason.create({
+      data: {
+        leagueId: created.id,
+        seasonNumber: 2,
+        displayName: '管理员选中的赛季',
+        isFirstSeason: false,
+        registrationOpensAt: new Date('2026-09-01T00:00:00.000Z'),
+        registrationClosesAt: new Date('2026-09-08T00:00:00.000Z'),
+        startsAt: new Date('2026-09-09T00:00:00.000Z'),
+        endsAt: new Date('2026-10-09T00:00:00.000Z'),
+        superCapacity: 23,
+        championCapacity: 18,
+        promotionCount: 4,
+        status: 'DRAFT',
+        createdById: actorId
+      }
+    });
+    await prisma.league.update({ where: { id: created.id }, data: { currentSeasonId: selected.id } });
+    const entry = await prisma.seasonEntry.create({
+      data: {
+        seasonId: selected.id,
+        leagueTeamId: team.id,
+        ownerUserId: actorId,
+        source: 'NEW_APPLICATION',
+        status: 'APPROVED',
+        teamNameSnapshot: team.name,
+        teamShortNameSnapshot: team.shortName,
+        teamNumberSnapshot: team.teamNumber,
+        leagueEditionSnapshot: 'INTERNATIONAL'
+      }
+    });
+
+    await expect(service.getPublic(created.id)).resolves.toMatchObject({
+      currentSeason: { id: selected.id, displayName: '管理员选中的赛季', approvedEntryCount: 1 }
+    });
+    await prisma.seasonEntry.update({ where: { id: entry.id }, data: { status: 'WITHDRAWN' } });
+    await expect(service.getPublic(created.id)).resolves.toMatchObject({
+      currentSeason: { id: selected.id, approvedEntryCount: 0 }
+    });
+    await prisma.league.update({ where: { id: created.id }, data: { currentSeasonId: first.id } });
+    await expect(service.getPublic(created.id)).resolves.toMatchObject({
+      currentSeason: { id: first.id, approvedEntryCount: 0 }
+    });
+    await expect(prisma.seasonEntry.count({ where: { seasonId: first.id } })).resolves.toBe(0);
   });
 });

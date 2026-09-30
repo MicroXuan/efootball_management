@@ -21,6 +21,7 @@
     "player-import:publish": "pnpm --filter @efm/api player-import -- publish",
     "sync:pesdata": "pnpm --filter @efm/api sync:pesdata --",
     "competition:demo": "pnpm --filter @efm/api competition:demo --",
+    "league-teams:migrate": "pnpm --filter @efm/api league-teams:migrate --",
     "dev:db": "docker compose up -d mysql",
     "dev:db:stop": "docker compose down"
   }

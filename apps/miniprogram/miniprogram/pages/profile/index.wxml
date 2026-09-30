@@ -1,98 +1,57 @@
 <view class="page-shell">
   <view class="topbar">
-    <view>
-      <text class="eyebrow">CLUB OPERATIONS</text>
-      <text class="page-title">我的球队</text>
-    </view>
-    <view class="season-mark">S01</view>
+    <view><text class="eyebrow">MEMBER IDENTITY</text><text class="page-title">我的</text></view>
+    <text class="record-mark">EFM / 01</text>
   </view>
 
-  <loading-state wx:if="{{state === 'loading'}}" label="正在加载球队资料" />
-
+  <loading-state wx:if="{{state === 'loading'}}" label="正在加载身份资料" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-icon">!</text>
-    <text class="state-title">暂时无法加载</text>
-    <text class="state-copy">{{errorMessage}}</text>
-    <button class="secondary-button" bindtap="loadPage">重新加载</button>
+    <text class="state-code">IDENTITY / ERROR</text><text class="state-title">暂时无法加载</text>
+    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
   </view>
 
   <block wx:else>
-    <view class="profile-card">
-      <view class="profile-head">
-        <image wx:if="{{user.avatarUrl}}" class="avatar" src="{{user.avatarUrl}}" mode="aspectFill" />
+    <view wx:if="{{!loggedIn}}" class="state-card login-card">
+      <text class="state-code">WECHAT IDENTITY</text><text class="state-title">登录后查看我的球队</text>
+      <text class="state-copy">管理员绑定联赛球队后，球队与当前赛季会自动显示在这里。</text>
+      <button class="primary-button" bindtap="login">微信登录</button>
+    </view>
+
+    <block wx:else>
+      <view class="identity-card">
+        <image wx:if="{{profile.avatarUrl}}" class="avatar" src="{{profile.avatarUrl}}" mode="aspectFill" />
         <view wx:else class="avatar avatar-fallback">⚽</view>
-        <view class="identity">
-          <text class="name">{{user.displayName}}</text>
-          <text class="region">{{user.region || '未设置地区'}}</text>
+        <view class="identity-copy">
+          <text class="member-name">{{profile.displayName}}</text>
+          <text class="member-region">{{profile.region}}</text>
         </view>
-        <view class="complete {{user.profileComplete ? 'is-complete' : ''}}">
-          {{user.profileComplete ? '资料完整' : '待完善'}}
+        <view class="number-block" bindtap="copyUserNo">
+          <text class="number-label">用户编号</text><text class="public-number">{{profile.publicUserNoDisplay}}</text>
+          <text wx:if="{{profile.publicUserNoCopy}}" class="copy-hint">点击复制</text>
         </view>
       </view>
 
-      <view class="form-grid">
-        <label class="field">
-          <text class="field-label">显示名称 *</text>
-          <input value="{{displayName}}" maxlength="32" placeholder="输入昵称" bindinput="onDisplayNameInput" />
-        </label>
-        <label class="field">
-          <text class="field-label">所在地区</text>
-          <input value="{{region}}" maxlength="64" placeholder="例如：上海" bindinput="onRegionInput" />
-        </label>
-        <label class="field">
-          <text class="field-label">头像链接</text>
-          <input value="{{avatarUrl}}" placeholder="https://..." bindinput="onAvatarUrlInput" />
-        </label>
+      <view class="section-head">
+        <view><text class="section-kicker">ASSIGNED TEAMS</text><text class="section-title">已绑定联赛球队</text></view>
+        <text class="team-count">{{profile.teams.length}} 支</text>
       </view>
-      <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
-      <button class="primary-button" loading="{{saving}}" disabled="{{!profileCanSave || saving}}" bindtap="saveProfile">
-        保存资料
-      </button>
-    </view>
 
-    <view class="section-head operation-head">
-      <view><text class="section-kicker">MATCHDAY DESK</text><text class="section-title">赛事工具</text></view>
-    </view>
-    <view class="operation-grid">
-      <button bindtap="openTeamProfile"><text class="operation-index">01</text><text class="operation-title">我的球队</text><text class="operation-copy">维护队名、队徽与参赛账号</text></button>
-      <button bindtap="openMyMatches"><text class="operation-index">02</text><text class="operation-title">我的比赛</text><text class="operation-copy">提交、确认或拒绝比分</text></button>
-      <button bindtap="createCompetition"><text class="operation-index">03</text><text class="operation-title">创建赛事</text><text class="operation-copy">管理员新建个人循环赛</text></button>
-      <button bindtap="createLeague"><text class="operation-index">04</text><text class="operation-title">创建联赛</text><text class="operation-copy">建立多赛季联赛与报名规则</text></button>
-    </view>
-
-    <view class="section-head">
-      <view>
-        <text class="section-kicker">GAME IDENTITIES</text>
-        <text class="section-title">游戏账号</text>
+      <view wx:if="{{!profile.hasTeams}}" class="state-card compact">
+        <text class="state-title">还没有绑定球队</text>
+        <text class="state-copy">球队由联赛管理员在后台创建并绑定。绑定后会自动报名当前赛季，无需你手动填写资料。</text>
       </view>
-      <button class="add-button" bindtap="addAccount">＋ 添加</button>
-    </view>
-
-    <view wx:if="{{!hasAccounts}}" class="empty-card">
-      <text class="empty-mark">01</text>
-      <text class="state-title">还没有游戏账号</text>
-      <text class="state-copy">添加你的平台、区服与玩家名，之后即可用于赛事报名。</text>
-      <button class="secondary-button" bindtap="addAccount">添加第一个账号</button>
-    </view>
-
-    <view wx:else class="account-list">
-      <view
-        wx:for="{{accounts}}"
-        wx:key="id"
-        class="account-card"
-        data-id="{{item.id}}"
-        bindtap="editAccount"
-      >
-        <view class="account-platform">{{item.platformName}}</view>
-        <view class="account-main">
-          <view class="account-name-line">
-            <text class="account-name">{{item.gamerTag}}</text>
-            <text wx:if="{{item.isDefault}}" class="default-badge">默认</text>
+      <view wx:else class="team-list">
+        <view wx:for="{{profile.teams}}" wx:key="id" class="team-card" data-id="{{item.id}}" bindtap="openTeam">
+          <image wx:if="{{item.teamLogoUrl}}" class="team-logo" src="{{item.teamLogoUrl}}" mode="aspectFit" />
+          <view wx:else class="team-logo logo-fallback">{{item.teamLogoText}}</view>
+          <view class="team-copy">
+            <view class="team-name-line"><text class="team-number">{{item.teamNumber}}</text><text class="team-name">{{item.teamName}}</text></view>
+            <text class="league-name">{{item.leagueName}} · {{item.editionLabel}}</text>
+            <text class="season-name">{{item.seasonName}} · 阵容 {{item.rosterCopy}}</text>
           </view>
-          <text class="account-meta">{{item.serverRegion}} · {{item.verificationStatus === 'VERIFIED' ? '已认证' : '未认证'}}</text>
+          <text class="chevron">›</text>
         </view>
-        <text class="chevron">›</text>
       </view>
-    </view>
+    </block>
   </block>
 </view>

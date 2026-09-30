@@ -1,277 +1,38 @@
-page {
-  background: #07110d;
-  color: #eef7f1;
-}
-
-.page-shell {
-  min-height: 100vh;
-  box-sizing: border-box;
-  padding: calc(env(safe-area-inset-top) + 38rpx) 32rpx 80rpx;
-  background: linear-gradient(165deg, #07110d 0%, #0c1d15 52%, #101711 100%);
-}
-
-.topbar,
-.profile-head,
-.section-head,
-.account-card,
-.account-name-line {
-  display: flex;
-  align-items: center;
-}
-
-.topbar,
-.section-head {
-  justify-content: space-between;
-}
-
-.eyebrow,
-.section-kicker {
-  display: block;
-  color: #d4b05f;
-  font-size: 18rpx;
-  letter-spacing: 5rpx;
-}
-
-.page-title {
-  display: block;
-  margin-top: 8rpx;
-  font-family: STKaiti, KaiTi, serif;
-  font-size: 54rpx;
-  font-weight: 700;
-}
-
-.season-mark,
-.empty-mark {
-  color: rgba(85, 239, 139, 0.42);
-  font-size: 36rpx;
-  font-weight: 700;
-  letter-spacing: 3rpx;
-}
-
-.profile-card,
-.state-card,
-.empty-card {
-  margin-top: 44rpx;
-  padding: 32rpx;
-  border: 2rpx solid rgba(85, 239, 139, 0.22);
-  background: rgba(18, 38, 27, 0.9);
-}
-
-.avatar {
-  width: 116rpx;
-  height: 116rpx;
-  flex: none;
-  border: 2rpx solid rgba(85, 239, 139, 0.38);
-  border-radius: 50%;
-}
-
-.avatar-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #1a3022;
-  font-size: 48rpx;
-}
-
-.identity {
-  min-width: 0;
-  margin-left: 24rpx;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-
-.name {
-  overflow: hidden;
-  font-size: 36rpx;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.region,
-.account-meta {
-  margin-top: 8rpx;
-  color: #8ea497;
-  font-size: 22rpx;
-}
-
-.complete,
-.default-badge {
-  padding: 8rpx 14rpx;
-  color: #d4b05f;
-  border: 2rpx solid rgba(212, 176, 95, 0.4);
-  font-size: 18rpx;
-}
-
-.complete.is-complete,
-.default-badge {
-  color: #55ef8b;
-  border-color: rgba(85, 239, 139, 0.4);
-}
-
-.form-grid {
-  margin-top: 34rpx;
-}
-
-.field {
-  display: block;
-  margin-top: 22rpx;
-}
-
-.field-label {
-  display: block;
-  margin-bottom: 12rpx;
-  color: #8ea497;
-  font-size: 22rpx;
-}
-
-.field input {
-  height: 88rpx;
-  box-sizing: border-box;
-  padding: 0 22rpx;
-  border-bottom: 2rpx solid rgba(142, 164, 151, 0.26);
-  background: rgba(7, 17, 13, 0.56);
-  color: #eef7f1;
-  font-size: 28rpx;
-}
-
-.primary-button,
-.secondary-button,
-.add-button {
-  border-radius: 0;
-  font-weight: 700;
-}
-
-.primary-button::after,
-.secondary-button::after,
-.add-button::after {
-  border: 0;
-}
-
-.primary-button {
-  margin-top: 30rpx;
-  background: #55ef8b;
-  color: #07110d;
-}
-
-.primary-button[disabled] {
-  background: #315c40;
-  color: #8ea497;
-}
-
-.error-copy {
-  display: block;
-  margin-top: 22rpx;
-  color: #ff9c8e;
-  font-size: 22rpx;
-}
-
-.section-head {
-  margin-top: 58rpx;
-}
-
-.section-title {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 38rpx;
-  font-weight: 700;
-}
-
-.add-button {
-  margin: 0;
-  padding: 0 24rpx;
-  background: transparent;
-  color: #55ef8b;
-  font-size: 24rpx;
-}
-
-.state-card,
-.empty-card {
-  min-height: 340rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.state-icon {
-  color: #ff9c8e;
-  font-size: 50rpx;
-}
-
-.state-title {
-  margin-top: 20rpx;
-  font-size: 32rpx;
-  font-weight: 700;
-}
-
-.state-copy {
-  margin-top: 16rpx;
-  color: #8ea497;
-  font-size: 24rpx;
-  line-height: 1.6;
-}
-
-.secondary-button {
-  margin: 28rpx 0 0;
-  padding: 0 26rpx;
-  border: 2rpx solid rgba(85, 239, 139, 0.42);
-  background: transparent;
-  color: #55ef8b;
-  font-size: 24rpx;
-}
-
-.account-list {
-  margin-top: 22rpx;
-}
-
-.account-card {
-  margin-top: 16rpx;
-  padding: 26rpx 24rpx;
-  border-left: 4rpx solid #55ef8b;
-  background: rgba(18, 38, 27, 0.92);
-}
-
-.account-platform {
-  width: 142rpx;
-  color: #d4b05f;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.account-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.account-name-line {
-  gap: 14rpx;
-}
-
-.account-name {
-  max-width: 300rpx;
-  overflow: hidden;
-  font-size: 30rpx;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.default-badge {
-  padding: 4rpx 10rpx;
-}
-
-.chevron {
-  color: #55ef8b;
-  font-size: 46rpx;
-}
-
-.operation-head { margin-top: 42rpx; }
-.operation-grid { margin-top: 20rpx; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16rpx; }
-.operation-grid button { min-height: 190rpx; margin: 0; padding: 24rpx; border: 2rpx solid rgba(85,239,139,.24); border-radius: 0; background: rgba(18,38,27,.9); color: #eef7f1; text-align: left; }
-.operation-grid button::after { border: 0; }
-.operation-index,.operation-title,.operation-copy { display: block; }
-.operation-index { color: #d4b05f; font-family: "DIN Alternate", sans-serif; font-size: 20rpx; }
-.operation-title { margin-top: 19rpx; font-size: 28rpx; font-weight: 800; }
-.operation-copy { margin-top: 8rpx; color: #8ea497; font-size: 19rpx; line-height: 1.5; }
+page { background: #07110d; color: #eef7f1; }
+.page-shell { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 38rpx) 30rpx 96rpx; background: radial-gradient(circle at 82% 8%, rgba(52,126,73,.2), transparent 32%), linear-gradient(165deg,#07110d 0%,#0b1b14 58%,#0d130f 100%); }
+.topbar,.identity-card,.section-head,.team-card,.team-name-line { display:flex; align-items:center; }
+.topbar,.section-head { justify-content:space-between; }
+.eyebrow,.section-kicker,.state-code { display:block; color:#d4b05f; font-size:18rpx; letter-spacing:5rpx; }
+.page-title { display:block; margin-top:8rpx; font-family:STKaiti,KaiTi,serif; font-size:54rpx; font-weight:700; }
+.record-mark { color:rgba(85,239,139,.46); font-size:20rpx; letter-spacing:3rpx; }
+.identity-card,.state-card { margin-top:42rpx; padding:30rpx; border:2rpx solid rgba(85,239,139,.25); background:rgba(15,34,24,.9); }
+.avatar { width:108rpx; height:108rpx; flex:none; border:2rpx solid rgba(85,239,139,.38); border-radius:50%; }
+.avatar-fallback { display:flex; align-items:center; justify-content:center; background:#183123; font-size:42rpx; }
+.identity-copy { min-width:0; margin-left:22rpx; display:flex; flex:1; flex-direction:column; }
+.member-name { overflow:hidden; font-size:34rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.member-region { margin-top:8rpx; color:#8ea497; font-size:21rpx; }
+.number-block { flex:none; padding-left:18rpx; border-left:2rpx solid rgba(142,164,151,.2); text-align:right; }
+.number-label,.copy-hint { display:block; color:#8ea497; font-size:17rpx; }
+.public-number { display:block; margin:7rpx 0 4rpx; color:#55ef8b; font-family:"DIN Alternate",monospace; font-size:27rpx; font-weight:800; letter-spacing:2rpx; }
+.section-head { margin-top:54rpx; }
+.section-title { display:block; margin-top:8rpx; font-size:36rpx; font-weight:800; }
+.team-count { color:#55ef8b; font-size:22rpx; }
+.team-list { margin-top:22rpx; }
+.team-card { margin-top:16rpx; padding:24rpx; border-left:4rpx solid #55ef8b; background:rgba(16,36,25,.92); }
+.team-logo { width:90rpx; height:90rpx; flex:none; border-radius:16rpx; background:#09140e; }
+.logo-fallback { display:flex; align-items:center; justify-content:center; color:#55ef8b; font-size:24rpx; font-weight:800; }
+.team-copy { min-width:0; margin-left:20rpx; display:flex; flex:1; flex-direction:column; }
+.team-name-line { min-width:0; gap:12rpx; }
+.team-number { color:#d4b05f; font-size:21rpx; font-weight:800; }
+.team-name { overflow:hidden; font-size:29rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.league-name,.season-name { margin-top:8rpx; overflow:hidden; color:#9caf9f; font-size:20rpx; text-overflow:ellipsis; white-space:nowrap; }
+.season-name { color:#6fd895; }
+.chevron { color:#55ef8b; font-size:44rpx; }
+.state-card { min-height:280rpx; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; }
+.state-card.compact { min-height:230rpx; }
+.state-title { margin-top:18rpx; font-size:31rpx; font-weight:800; }
+.state-copy { margin-top:14rpx; color:#8ea497; font-size:23rpx; line-height:1.65; }
+.primary-button,.outline-button { margin:28rpx 0 0; border-radius:0; font-weight:800; }
+.primary-button::after,.outline-button::after { border:0; }
+.primary-button { min-width:280rpx; background:#55ef8b; color:#07110d; }
+.outline-button { padding:0 28rpx; border:2rpx solid rgba(85,239,139,.45); background:transparent; color:#55ef8b; font-size:23rpx; }

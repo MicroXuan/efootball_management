@@ -1,22 +1,49 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  AdminAccountSummarySchema,
+  AdminAuthResponseSchema,
+  AdminLeagueGrantSchema,
+  AdminLoginRequestSchema,
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionParticipantTypeSchema,
   CreateCompetitionRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
+  CreateLeagueTeamRequestSchema,
+  CreateSalaryRuleVersionRequestSchema,
   CreateTeamProfileRequestSchema,
+  EmergencyCorrectRosterRequestSchema,
   GameAccountInputSchema,
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
+  MoneyMinorSchema,
   NormalizedPlayerCardRecordSchema,
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
+  PublicUserLookupSchema,
+  PublicUserNumberSchema,
+  RecalculateLeagueSalaryRequestSchema,
   ResourceIdSchema,
+  RosterEntrySchema,
+  RosterMutationResponseSchema,
+  RosterTransactionSchema,
+  SalaryRecalculationResponseSchema,
+  SalaryRuleVersionSchema,
   StandingsSnapshotResponseSchema,
   SubmitMatchResultRequestSchema,
+  TeamNumberSchema,
+  TransferWindowSchema,
+  FinanceLedgerEntrySchema,
+  LeagueTeamDetailSchema,
+  LeagueTeamSummarySchema,
+  LeagueEditionSchema,
+  CurrentSeasonSummarySchema,
+  CurrentUserSchema,
+  EnrollLeagueTeamsRequestSchema,
+  SeasonEntrySchema,
+  SetCurrentSeasonRequestSchema,
   SeasonEntryListQuerySchema,
   UpdateLeagueRequestSchema,
   UpdateLeagueSeasonRequestSchema,
@@ -25,6 +52,19 @@ import {
 } from './index.js';
 
 describe('shared API contracts', () => {
+  it('exposes the current user public number for administrator binding', () => {
+    const user = CurrentUserSchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      publicUserNo: '000123',
+      displayName: '',
+      avatarUrl: null,
+      region: null,
+      status: 'ACTIVE',
+      profileComplete: false
+    });
+    assert.equal(user.publicUserNo, '000123');
+  });
+
   it('rejects an empty WeChat login code', () => {
     assert.throws(() => WechatLoginRequestSchema.parse({ code: ' ' }));
   });
@@ -68,8 +108,7 @@ describe('shared API contracts', () => {
       shortName: '  CELL  ',
       description: '  长期联赛  ',
       logoUrl: null,
-      defaultPlatform: 'MOBILE',
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL'
     });
     const team = CreateTeamProfileRequestSchema.parse({
       name: '  上海申花  ',
@@ -136,8 +175,7 @@ describe('shared API contracts', () => {
       shortName: 'CELL',
       description: '',
       logoUrl: null,
-      defaultPlatform: 'MOBILE' as const,
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL' as const
     };
 
     assert.throws(() => CreateLeagueRequestSchema.parse({ ...valid, defaultSuperCapacity: 1 }));
@@ -151,8 +189,7 @@ describe('shared API contracts', () => {
       name: 'CELL 传奇联赛',
       shortName: 'CELL',
       logoUrl: null,
-      defaultPlatform: 'MOBILE',
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL'
     }).logoUrl, null);
     assert.equal(CreateTeamProfileRequestSchema.parse({
       name: '上海申花',
@@ -160,6 +197,103 @@ describe('shared API contracts', () => {
       logoUrl: null,
       defaultGameAccountId: gameAccountId
     }).logoUrl, null);
+  });
+
+  it('requires a supported league edition and strips retired league identity fields', () => {
+    assert.equal(LeagueEditionSchema.parse('NATIONAL'), 'NATIONAL');
+    assert.throws(() => LeagueEditionSchema.parse('GLOBAL'));
+    assert.throws(() => CreateLeagueRequestSchema.parse({
+      name: 'CELL 传奇联赛',
+      shortName: 'CELL'
+    }));
+
+    const parsed = CreateLeagueRequestSchema.parse({
+      name: 'CELL 传奇联赛',
+      shortName: 'CELL',
+      edition: 'INTERNATIONAL',
+      defaultPlatform: 'MOBILE',
+      defaultServerRegion: 'GLOBAL'
+    });
+
+    assert.equal(parsed.edition, 'INTERNATIONAL');
+    assert.equal('defaultPlatform' in parsed, false);
+    assert.equal('defaultServerRegion' in parsed, false);
+  });
+
+  it('strips the retired default game account when creating a league team', () => {
+    const parsed = CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: '11111111-1111-4111-8111-111111111111',
+      teamNumber: 1,
+      name: '上海申花',
+      shortName: '申花',
+      defaultGameAccountId: '22222222-2222-4222-8222-222222222222'
+    });
+
+    assert.equal('defaultGameAccountId' in parsed, false);
+  });
+
+  it('accepts nullable legacy game identity snapshots on season entries', () => {
+    const parsed = SeasonEntrySchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      seasonId: '22222222-2222-4222-8222-222222222222',
+      teamProfileId: null,
+      leagueTeamId: '33333333-3333-4333-8333-333333333333',
+      ownerUserId: '44444444-4444-4444-8444-444444444444',
+      gameAccountId: null,
+      source: 'NEW_APPLICATION',
+      status: 'APPROVED',
+      previousSeasonEntryId: null,
+      teamNameSnapshot: '上海申花',
+      teamShortNameSnapshot: '申花',
+      teamNumberSnapshot: 1,
+      teamLogoUrlSnapshot: null,
+      gamePlatformSnapshot: null,
+      serverRegionSnapshot: null,
+      gamerTagSnapshot: null,
+      gameUidSnapshot: null,
+      leagueEditionSnapshot: 'NATIONAL',
+      reviewedById: null,
+      reviewedAt: null,
+      decisionReason: null,
+      confirmedAt: null,
+      withdrawnAt: null,
+      version: 1,
+      createdAt: '2026-09-30T00:00:00.000Z',
+      updatedAt: '2026-09-30T00:00:00.000Z'
+    });
+
+    assert.equal(parsed.gameAccountId, null);
+    assert.equal(parsed.leagueEditionSnapshot, 'NATIONAL');
+  });
+
+  it('validates the compact current season summary', () => {
+    const parsed = CurrentSeasonSummarySchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      displayName: 'S20 赛季',
+      status: 'REGISTRATION_OPEN',
+      approvedEntryCount: 18
+    });
+
+    assert.equal(parsed.approvedEntryCount, 18);
+    assert.throws(() => CurrentSeasonSummarySchema.parse({ ...parsed, approvedEntryCount: -1 }));
+  });
+
+  it('requires optimistic versions and duplicate-free team enrollment ids', () => {
+    const firstId = '11111111-1111-4111-8111-111111111111';
+    assert.deepEqual(SetCurrentSeasonRequestSchema.parse({ expectedVersion: 2 }), {
+      expectedVersion: 2
+    });
+    assert.deepEqual(EnrollLeagueTeamsRequestSchema.parse({
+      leagueTeamIds: [firstId],
+      expectedSeasonVersion: 3
+    }), {
+      leagueTeamIds: [firstId],
+      expectedSeasonVersion: 3
+    });
+    assert.throws(() => EnrollLeagueTeamsRequestSchema.parse({
+      leagueTeamIds: [firstId, firstId],
+      expectedSeasonVersion: 3
+    }));
   });
 
   it('requires positive optimistic versions for league foundation updates', () => {
@@ -236,6 +370,31 @@ describe('shared API contracts', () => {
       boost: { Tackling: 2 },
       featured: true
     });
+  });
+
+  it('accepts a complete automatic build and rejects partial build metadata', () => {
+    const base = {
+      externalId: '88045755859255',
+      playerNameEn: 'Leonardo Bonucci',
+      cardName: 'Epic Power Tackle',
+      position: 'CB',
+      overallRating: 87,
+      cardType: 'EPIC'
+    } as const;
+    const parsed = NormalizedPlayerCardRecordSchema.parse({
+      ...base,
+      autoBuildAllocation: { defending: 12, aerialStrength: 8 },
+      autoBuildMaxOverall: 98,
+      dtRating: 97,
+      algorithmVersion: 'pesdata-auto-v1'
+    });
+
+    assert.equal(parsed.autoBuildMaxOverall, 98);
+    assert.equal(parsed.dtRating, 97);
+    assert.throws(() => NormalizedPlayerCardRecordSchema.parse({
+      ...base,
+      autoBuildMaxOverall: 98
+    }));
   });
 
   it('accepts the first-release individual round-robin competition shape', () => {
@@ -390,5 +549,292 @@ describe('shared API contracts', () => {
       createdAt: '2026-10-10T12:00:00.000Z'
     });
     assert.equal(resultVersion.submittedByMe, true);
+  });
+});
+
+describe('league team administration contracts', () => {
+  const ids = {
+    admin: '11111111-1111-4111-8111-111111111111',
+    league: '22222222-2222-4222-8222-222222222222',
+    user: '33333333-3333-4333-8333-333333333333',
+    team: '44444444-4444-4444-8444-444444444444',
+    season: '55555555-5555-4555-8555-555555555555',
+    player: '66666666-6666-4666-8666-666666666666',
+    card: '77777777-7777-4777-8777-777777777777',
+    ownership: '88888888-8888-4888-8888-888888888888',
+    rule: '99999999-9999-4999-8999-999999999999',
+    transaction: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    ledger: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    window: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    grant: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  };
+  const createdAt = '2026-09-27T12:00:00.000Z';
+
+  it('requires an exact six-digit public user number', () => {
+    assert.equal(PublicUserNumberSchema.parse('100069'), '100069');
+    assert.throws(() => PublicUserNumberSchema.parse('00001'));
+    assert.throws(() => PublicUserNumberSchema.parse('1000000'));
+    assert.throws(() => PublicUserNumberSchema.parse('10A069'));
+  });
+
+  it('allows memorable zero-based integer team numbers', () => {
+    assert.equal(TeamNumberSchema.parse(0), 0);
+    assert.equal(TeamNumberSchema.parse(23), 23);
+    assert.throws(() => TeamNumberSchema.parse(-1));
+    assert.throws(() => TeamNumberSchema.parse(1.5));
+  });
+
+  it('requires positive integer minor units for transaction amounts', () => {
+    assert.equal(MoneyMinorSchema.parse(1), 1);
+    assert.equal(MoneyMinorSchema.parse(4_294_967_295), 4_294_967_295);
+    assert.throws(() => MoneyMinorSchema.parse(0));
+    assert.throws(() => MoneyMinorSchema.parse(-1));
+    assert.throws(() => MoneyMinorSchema.parse(1.5));
+    assert.throws(() => MoneyMinorSchema.parse(4_294_967_296));
+  });
+
+  it('requires explicit salary recalculation confirmation and a reasoned emergency change', () => {
+    const base = {
+      seasonId: ids.season,
+      idempotencyKey: 'roster-change-1',
+      reason: 'Administrator confirmed correction'
+    };
+    assert.equal(RecalculateLeagueSalaryRequestSchema.parse({
+      ...base,
+      leagueId: ids.league,
+      salaryRuleVersionId: ids.rule,
+      confirm: true
+    }).confirm, true);
+    assert.throws(() => RecalculateLeagueSalaryRequestSchema.parse({
+      ...base,
+      leagueId: ids.league,
+      salaryRuleVersionId: ids.rule,
+      confirm: false
+    }));
+    assert.throws(() => EmergencyCorrectRosterRequestSchema.parse({
+      ...base,
+      ownershipId: ids.ownership,
+      targetLeagueTeamId: null,
+      newPlayerCardId: null,
+      expectedVersion: 1
+    }));
+    assert.throws(() => EmergencyCorrectRosterRequestSchema.parse({
+      ...base,
+      reason: '',
+      ownershipId: ids.ownership,
+      targetLeagueTeamId: ids.team,
+      newPlayerCardId: null,
+      expectedVersion: 1
+    }));
+  });
+
+  it('requires salary tiers to cover every DT value without gaps or overlaps', () => {
+    const base = {
+      id: ids.rule,
+      leagueId: ids.league,
+      version: 1,
+      salaryCapMinor: 10_000,
+      status: 'ACTIVE' as const,
+      effectiveAt: createdAt,
+      createdByAdminId: ids.admin,
+      createdAt
+    };
+    const validTiers = [
+      { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
+      { minDtRating: 93, maxDtRating: 93, salaryMinor: 200 },
+      { minDtRating: 94, maxDtRating: 99, salaryMinor: 300 },
+      { minDtRating: 100, maxDtRating: 120, salaryMinor: 900 }
+    ];
+
+    assert.equal(SalaryRuleVersionSchema.parse({ ...base, tiers: validTiers }).tiers.length, 4);
+    assert.throws(() => SalaryRuleVersionSchema.parse({
+      ...base,
+      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 94 } : tier)
+    }));
+    assert.throws(() => SalaryRuleVersionSchema.parse({
+      ...base,
+      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 92 } : tier)
+    }));
+    assert.throws(() => CreateSalaryRuleVersionRequestSchema.parse({
+      salaryCapMinor: 10_000,
+      tiers: validTiers,
+      effectiveAt: '2999-01-01T00:00:00.000Z',
+      expectedCurrentVersion: 0
+    }));
+  });
+
+  it('requires an increasing transfer timeline and at least one enabled operation', () => {
+    const valid = {
+      id: ids.window,
+      seasonId: ids.season,
+      name: '冬季窗口',
+      startsAt: '2026-12-01T00:00:00.000Z',
+      endsAt: '2026-12-15T00:00:00.000Z',
+      allowBuy: true,
+      allowSell: false,
+      allowTransfer: false,
+      allowCardUpgrade: true,
+      createdByAdminId: ids.admin,
+      version: 1,
+      createdAt,
+      updatedAt: createdAt
+    };
+
+    assert.equal(TransferWindowSchema.parse(valid).allowCardUpgrade, true);
+    assert.throws(() => TransferWindowSchema.parse({ ...valid, endsAt: valid.startsAt }));
+    assert.throws(() => TransferWindowSchema.parse({
+      ...valid,
+      allowBuy: false,
+      allowCardUpgrade: false
+    }));
+  });
+
+  it('validates every core administrator and league-team response schema', () => {
+    const admin = AdminAccountSummarySchema.parse({
+      id: ids.admin,
+      username: 'manager01',
+      displayName: '赛事管理员',
+      status: 'ACTIVE',
+      failedLoginCount: 0,
+      lockedUntil: null,
+      lastLoginAt: null,
+      version: 1,
+      createdAt,
+      updatedAt: createdAt
+    });
+    assert.equal(AdminLoginRequestSchema.parse({ username: ' manager01 ', password: 'password-123' }).username, 'manager01');
+    assert.equal(AdminAuthResponseSchema.parse({
+      accessToken: 'access-token',
+      expiresInSeconds: 900,
+      refreshToken: 'r'.repeat(32),
+      refreshExpiresInSeconds: 2_592_000,
+      admin
+    }).admin.id, ids.admin);
+    assert.equal(AdminLeagueGrantSchema.parse({
+      id: ids.grant,
+      adminId: ids.admin,
+      leagueId: ids.league,
+      leagueName: 'CELL 联赛',
+      role: 'LEAGUE_MANAGER',
+      grantedById: ids.admin,
+      createdAt,
+      revokedAt: null,
+      version: 1
+    }).leagueName, 'CELL 联赛');
+
+    const user = PublicUserLookupSchema.parse({
+      id: ids.user,
+      publicUserNo: '100069',
+      displayName: '小宣',
+      avatarUrl: null
+    });
+    assert.equal(user.publicUserNo, '100069');
+
+    const team = {
+      id: ids.team,
+      leagueId: ids.league,
+      ownerUserId: ids.user,
+      ownerPublicUserNo: '100069',
+      teamNumber: 0,
+      name: '巴西红牛',
+      shortName: '红牛',
+      logoUrl: null,
+      status: 'ACTIVE' as const,
+      rosterStatus: 'COMPLIANT' as const,
+      activePlayerCount: 1,
+      salaryTotalMinor: 600,
+      salaryCapMinor: 10_000,
+      version: 1,
+      createdAt,
+      updatedAt: createdAt
+    };
+    assert.equal(LeagueTeamSummarySchema.parse(team).teamNumber, 0);
+    assert.equal(LeagueTeamDetailSchema.parse({
+      ...team,
+      ownerDisplayName: '小宣',
+      defaultGameAccountId: null,
+      participatingSeasonCount: 2
+    }).participatingSeasonCount, 2);
+
+    const rosterEntry = RosterEntrySchema.parse({
+      id: ids.ownership,
+      leagueId: ids.league,
+      leagueTeamId: ids.team,
+      playerId: ids.player,
+      playerName: 'Leonardo Bonucci',
+      currentPlayerCardId: ids.card,
+      cardName: 'Epic Italy',
+      maxOverall: 97,
+      dtRating: 97,
+      salaryRuleVersionId: ids.rule,
+      salaryMinor: 600,
+      acquiredAt: createdAt,
+      status: 'ACTIVE',
+      version: 1
+    });
+    assert.equal(rosterEntry.playerId, ids.player);
+
+    const transaction = RosterTransactionSchema.parse({
+      id: ids.transaction,
+      leagueId: ids.league,
+      seasonId: ids.season,
+      type: 'BUY',
+      playerId: ids.player,
+      sourceLeagueTeamId: null,
+      targetLeagueTeamId: ids.team,
+      oldPlayerCardId: null,
+      newPlayerCardId: ids.card,
+      oldSalaryMinor: null,
+      newSalaryMinor: 600,
+      amountMinor: 2_000,
+      reason: '管理员登记购买',
+      createdByAdminId: ids.admin,
+      createdAt
+    });
+    assert.equal(transaction.type, 'BUY');
+
+    assert.equal(RosterMutationResponseSchema.parse({
+      ownership: {
+        id: ids.ownership,
+        leagueId: ids.league,
+        leagueTeamId: ids.team,
+        playerId: ids.player,
+        currentPlayerCardId: ids.card,
+        dtRating: 97,
+        salaryRuleVersionId: ids.rule,
+        salaryMinor: 600,
+        acquiredAt: createdAt,
+        status: 'ACTIVE',
+        version: 2
+      },
+      transaction,
+      summary: { rosterCount: 1, salaryMinor: 600, salaryCapMinor: 10_000 }
+    }).transaction.playerId, ids.player);
+
+    assert.equal(SalaryRecalculationResponseSchema.parse({
+      leagueId: ids.league,
+      seasonId: ids.season,
+      salaryRuleVersionId: ids.rule,
+      recalculatedPlayers: 1,
+      overCapTeams: 1,
+      teams: [{
+        leagueTeamId: ids.team,
+        salaryMinor: 600,
+        rosterStatus: 'OVER_CAP'
+      }]
+    }).teams[0]?.rosterStatus, 'OVER_CAP');
+
+    const ledger = FinanceLedgerEntrySchema.parse({
+      id: ids.ledger,
+      leagueId: ids.league,
+      leagueTeamId: ids.team,
+      rosterTransactionId: ids.transaction,
+      direction: 'DEBIT',
+      type: 'PLAYER_PURCHASE',
+      amountMinor: 2_000,
+      note: '购买博努奇',
+      createdAt
+    });
+    assert.equal(ledger.direction, 'DEBIT');
   });
 });

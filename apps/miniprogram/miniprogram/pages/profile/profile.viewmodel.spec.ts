@@ -1,61 +1,37 @@
-import type { GameAccountResponse } from '@efm/contracts'
+import type { CurrentUserResponse, MyLeagueTeamSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import {
-  accountErrorMessage,
-  deleteConfirmation,
-  isAccountFormValid,
-  platformLabel,
-  sortAccounts,
-} from './profile.viewmodel'
+import { profileView } from './profile.viewmodel'
 
-const account = (overrides: Partial<GameAccountResponse> = {}): GameAccountResponse => ({
-  id: 'account-1',
-  platform: 'MOBILE',
-  serverRegion: '国服',
-  gamerTag: 'Dust',
-  gameUid: null,
-  isDefault: false,
-  verificationStatus: 'UNVERIFIED',
-  createdAt: '2026-09-24T12:00:00.000Z',
-  updatedAt: '2026-09-24T12:00:00.000Z',
-  ...overrides,
-})
+const user: CurrentUserResponse = {
+  id: 'user-1', publicUserNo: '000123', displayName: 'Dust', avatarUrl: null, region: null, status: 'ACTIVE', profileComplete: false,
+}
+const team: MyLeagueTeamSummary = {
+  id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', ownerPublicUserNo: '000123', teamNumber: 25,
+  name: '上海申花', shortName: '申花', logoUrl: null, status: 'ACTIVE', activePlayerCount: 3,
+  salaryTotalMinor: 600, salaryCapMinor: 2000, rosterStatus: 'COMPLIANT', version: 1,
+  createdAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z',
+  leagueName: 'CELL传奇联赛', leagueDescription: '', leagueLogoUrl: null, leagueEdition: 'NATIONAL',
+  currentSeason: { id: 'season-1', displayName: 'CELL S20', status: 'IN_PROGRESS', approvedEntryCount: 18 },
+}
 
-describe('profile view model', () => {
-  it('keeps an empty account list empty', () => {
-    expect(sortAccounts([])).toEqual([])
+describe('read-only profile view model', () => {
+  it('presents identity, memorable public number, and bound league teams', () => {
+    expect(profileView(user, [team])).toMatchObject({
+      displayName: 'Dust', publicUserNoDisplay: '000 123', hasTeams: true,
+      teams: [{ teamName: '上海申花', leagueName: 'CELL传奇联赛', editionLabel: '国服', seasonName: 'CELL S20' }],
+    })
   })
 
-  it('places the default account first without mutating the source list', () => {
-    const source = [account(), account({ id: 'account-2', isDefault: true })]
-
-    expect(sortAccounts(source).map(({ id }) => id)).toEqual(['account-2', 'account-1'])
-    expect(source.map(({ id }) => id)).toEqual(['account-1', 'account-2'])
+  it('is safe before identity data exists and has no editable-form state', () => {
+    expect(profileView(null, [])).toEqual({
+      displayName: '微信用户', avatarUrl: '', region: '未设置地区', publicUserNoDisplay: '暂无编号',
+      publicUserNoCopy: '', hasTeams: false, teams: [],
+    })
   })
 
-  it.each([
-    ['MOBILE', '移动端'],
-    ['PLAYSTATION', 'PlayStation'],
-    ['XBOX', 'Xbox'],
-    ['STEAM', 'Steam'],
-  ] as const)('formats %s with a user-facing label', (platform, label) => {
-    expect(platformLabel(platform)).toBe(label)
-  })
-
-  it('requires platform, server region, and gamer tag before save is enabled', () => {
-    expect(isAccountFormValid({ platform: 'MOBILE', serverRegion: '', gamerTag: 'Dust' })).toBe(false)
-    expect(isAccountFormValid({ platform: 'MOBILE', serverRegion: '国服', gamerTag: '  ' })).toBe(false)
-    expect(isAccountFormValid({ platform: 'MOBILE', serverRegion: '国服', gamerTag: 'Dust' })).toBe(true)
-  })
-
-  it('maps account conflicts to actionable Chinese copy', () => {
-    expect(accountErrorMessage('GAME_ACCOUNT_ALREADY_BOUND')).toBe('这个游戏账号已被绑定，请检查平台、区服和玩家名')
-  })
-
-  it('builds a specific destructive confirmation message', () => {
-    expect(deleteConfirmation(account({ gamerTag: 'Dust', platform: 'STEAM' }))).toEqual({
-      title: '删除游戏账号？',
-      content: '将删除 Steam 账号「Dust」，此操作无法撤销。',
+  it('shows the user number before any league team is bound', () => {
+    expect(profileView(user, [])).toMatchObject({
+      publicUserNoDisplay: '000 123', publicUserNoCopy: '000123', hasTeams: false,
     })
   })
 })

@@ -1,16 +1,4 @@
-import type {
-  GameAccountResponse,
-  LeagueSeasonStatus,
-  LeagueSeasonSummary,
-  SeasonEntryResponse,
-  TeamProfileResponse,
-} from '@efm/contracts'
-
-export type SeasonAction = {
-  kind: 'LOGIN' | 'TEAM_PROFILE' | 'APPLY' | 'RENEW' | 'WITHDRAW' | 'NONE'
-  label: string
-  tone: 'primary' | 'secondary' | 'muted'
-}
+import type { LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
 
 export function selectSeason(
   seasons: readonly LeagueSeasonSummary[],
@@ -25,45 +13,22 @@ export function seasonStructureCopy(season: LeagueSeasonSummary): string {
     : '本赛季包含超级组与冠军组，分组由管理员确认'
 }
 
-export function deriveSeasonAction(
-  hasTeamProfile: boolean,
+export function entryStatusCopy(
+  isAuthenticated: boolean,
+  hasLeagueTeam: boolean,
   entry: SeasonEntryResponse | null,
-  seasonStatus: LeagueSeasonStatus,
-  isAuthenticated = true,
-): SeasonAction {
-  if (!isAuthenticated) return { kind: 'LOGIN', label: '登录后报名', tone: 'primary' }
-  if (!hasTeamProfile) return { kind: 'TEAM_PROFILE', label: '先建立球队档案', tone: 'primary' }
-  const registrationOpen = seasonStatus === 'REGISTRATION_OPEN'
-  if (!entry) {
-    return registrationOpen
-      ? { kind: 'APPLY', label: '报名参加', tone: 'primary' }
-      : { kind: 'NONE', label: '当前未开放报名', tone: 'muted' }
-  }
-  if (entry.status === 'INVITED') {
-    return registrationOpen
-      ? { kind: 'RENEW', label: '确认参加下一赛季', tone: 'primary' }
-      : { kind: 'NONE', label: '续赛确认已截止', tone: 'muted' }
-  }
-  if (entry.status === 'PENDING') {
-    return registrationOpen
-      ? { kind: 'WITHDRAW', label: '审核中 · 撤回报名', tone: 'secondary' }
-      : { kind: 'NONE', label: '审核中', tone: 'muted' }
-  }
-  if (entry.status === 'APPROVED') {
-    return registrationOpen
-      ? { kind: 'WITHDRAW', label: '已通过 · 撤回报名', tone: 'secondary' }
-      : { kind: 'NONE', label: '已通过审核', tone: 'muted' }
-  }
-  if (entry.status === 'REJECTED') return { kind: 'NONE', label: '报名未通过', tone: 'muted' }
-  return { kind: 'NONE', label: '已撤回报名', tone: 'muted' }
-}
-
-export function defaultSeasonAccountId(
-  profile: TeamProfileResponse | null,
-  accounts: readonly GameAccountResponse[],
 ): string {
-  const profileAccount = accounts.find((account) => account.id === profile?.defaultGameAccountId)
-  return profileAccount?.id ?? accounts.find((account) => account.isDefault)?.id ?? accounts[0]?.id ?? ''
+  if (!isAuthenticated) return '登录后查看管理员分配的联赛球队'
+  if (!hasLeagueTeam) return '请联系联赛管理员分配球队'
+  if (!entry) return '当前赛季尚未入组'
+  const labels: Record<SeasonEntryResponse['status'], string> = {
+    INVITED: '等待确认参赛资格',
+    PENDING: '等待管理员确认',
+    APPROVED: '已报名当前赛季',
+    REJECTED: '本赛季未通过审核',
+    WITHDRAWN: '本赛季已退出',
+  }
+  return labels[entry.status]
 }
 
 export function leagueDetailErrorMessage(code: string): string {

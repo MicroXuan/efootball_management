@@ -7,6 +7,7 @@ import type {
   CreateTeamProfileRequest,
   LeagueDetail,
   LeagueListResponse,
+  MyLeagueTeamListResponse,
   LeagueSeasonDetail,
   LeagueSeasonSummary,
   OverrideSeasonEntryRequest,
@@ -43,6 +44,9 @@ export const leaguesApi = {
       path: query('/leagues', { cursor, limit }),
       skipAuth: true,
     })
+  },
+  mine() {
+    return api.request<MyLeagueTeamListResponse>({ path: '/me/league-teams' })
   },
   detail(leagueId: string) {
     return api.request<LeagueDetail>({ path: `/leagues/${id(leagueId)}` })
@@ -109,11 +113,11 @@ export const leaguesApi = {
     return api.request<LeagueSeasonDetail>({ path: `/admin/seasons/${id(seasonId)}` })
   },
   managerSeasons(leagueId: string) {
-    return api.request<LeagueSeasonDetail[]>({ path: `/admin/leagues/${id(leagueId)}/seasons` })
+    return api.request<LeagueSeasonDetail[]>({ path: `/legacy/admin/leagues/${id(leagueId)}/seasons` })
   },
   createSeason(leagueId: string, input: ParsedCreateLeagueSeasonRequest | CreateLeagueSeasonRequest) {
     return api.request<LeagueSeasonDetail>({
-      path: `/admin/leagues/${id(leagueId)}/seasons`, method: 'POST', headers: mutationHeaders(), data: input,
+      path: `/legacy/admin/leagues/${id(leagueId)}/seasons`, method: 'POST', headers: mutationHeaders(), data: input,
     })
   },
   updateSeason(seasonId: string, input: UpdateLeagueSeasonRequest) {

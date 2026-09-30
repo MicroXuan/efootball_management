@@ -29,6 +29,10 @@
     "./**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "miniprogram/pages/game-account-edit/**",
+    "miniprogram/pages/league-editor/**",
+    "miniprogram/pages/season-manage/**",
+    "miniprogram/pages/team-profile/**"
   ]
 }

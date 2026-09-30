@@ -39,10 +39,29 @@ export const NormalizedPlayerCardRecordSchema = z.object({
   releaseDate: z.iso.date().optional(),
   sourceUpdatedAt: z.iso.datetime().optional(),
   skills: z.array(z.string().trim().min(1).max(128)).default([]),
-  attributes: PlayerAttributesSchema.default({})
+  attributes: PlayerAttributesSchema.default({}),
+  autoBuildAllocation: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  autoBuildMaxOverall: z.number().int().min(1).max(110).optional(),
+  dtRating: z.number().int().min(1).max(120).optional(),
+  algorithmVersion: z.string().trim().min(1).max(64).optional()
 }).refine((value) => Boolean(value.playerNameZh || value.playerNameEn), {
   message: 'At least one player name is required',
   path: ['playerNameZh']
+}).superRefine((value, context) => {
+  const hasAnyBuildField = value.autoBuildAllocation !== undefined
+    || value.autoBuildMaxOverall !== undefined
+    || value.dtRating !== undefined
+    || value.algorithmVersion !== undefined;
+  if (!hasAnyBuildField) return;
+  for (const field of ['autoBuildAllocation', 'autoBuildMaxOverall', 'algorithmVersion'] as const) {
+    if (value[field] === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: [field],
+        message: `${field} is required when automatic build metadata is provided`
+      });
+    }
+  }
 });
 
 export const CreateImportBatchRequestSchema = z.object({

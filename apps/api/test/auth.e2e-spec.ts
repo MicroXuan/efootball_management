@@ -37,8 +37,10 @@ describe('authentication', () => {
   it('creates one user on first login and reuses it on repeated login', async () => {
     const identity = loginCode();
 
-    const first = await login(identity.code).expect(200);
-    const second = await login(identity.code).expect(200);
+    const [first, second] = await Promise.all([
+      login(identity.code).expect(200),
+      login(identity.code).expect(200)
+    ]);
     const users = await prisma.user.findMany({ where: { wechatOpenId: identity.openId } });
 
     expect(first.body.accessToken).toEqual(expect.any(String));
@@ -46,6 +48,7 @@ describe('authentication', () => {
     expect(second.body.refreshToken).not.toBe(first.body.refreshToken);
     expect(users).toHaveLength(1);
     expect(users[0]?.displayName).toBe('实况玩家');
+    expect(users[0]?.publicUserNo).toMatch(/^\d{6}$/);
   });
 
   it('rotates refresh tokens and rejects replayed tokens', async () => {

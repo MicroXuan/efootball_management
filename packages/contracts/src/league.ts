@@ -9,6 +9,7 @@ const CapacitySchema = z.number().int().min(2).max(64);
 const PromotionCountSchema = z.number().int().min(0).max(32);
 
 export const LeagueStatusSchema = z.enum(['ACTIVE', 'ARCHIVED']);
+export const LeagueEditionSchema = z.enum(['NATIONAL', 'INTERNATIONAL']);
 export const TeamProfileStatusSchema = z.enum(['ACTIVE', 'ARCHIVED']);
 export const LeagueSeasonStatusSchema = z.enum([
   'DRAFT',
@@ -59,8 +60,7 @@ const LeagueFieldsSchema = z.object({
   shortName: z.string().trim().min(1).max(24),
   description: z.string().trim().max(500),
   logoUrl: NullableLogoUrlSchema,
-  defaultPlatform: GamePlatformSchema,
-  defaultServerRegion: z.string().trim().min(1).max(32),
+  edition: LeagueEditionSchema,
   defaultSuperCapacity: CapacitySchema,
   defaultChampionCapacity: CapacitySchema,
   defaultPromotionCount: PromotionCountSchema
@@ -175,19 +175,22 @@ export const LeagueSeasonCapabilitiesSchema = z.object({
 export const SeasonEntrySchema = z.object({
   id: ResourceIdSchema,
   seasonId: ResourceIdSchema,
-  teamProfileId: ResourceIdSchema,
+  teamProfileId: ResourceIdSchema.nullable(),
+  leagueTeamId: ResourceIdSchema,
   ownerUserId: ResourceIdSchema,
-  gameAccountId: ResourceIdSchema,
+  gameAccountId: ResourceIdSchema.nullable(),
   source: SeasonEntrySourceSchema,
   status: SeasonEntryStatusSchema,
   previousSeasonEntryId: ResourceIdSchema.nullable(),
   teamNameSnapshot: z.string(),
   teamShortNameSnapshot: z.string(),
+  teamNumberSnapshot: z.number().int().min(0).max(9_999).nullable(),
   teamLogoUrlSnapshot: z.string().nullable(),
-  gamePlatformSnapshot: GamePlatformSchema,
-  serverRegionSnapshot: z.string(),
-  gamerTagSnapshot: z.string(),
+  gamePlatformSnapshot: GamePlatformSchema.nullable(),
+  serverRegionSnapshot: z.string().nullable(),
+  gamerTagSnapshot: z.string().nullable(),
   gameUidSnapshot: z.string().nullable(),
+  leagueEditionSnapshot: LeagueEditionSchema,
   reviewedById: ResourceIdSchema.nullable(),
   reviewedAt: TimestampSchema.nullable(),
   decisionReason: z.string().nullable(),
@@ -203,6 +206,13 @@ export const LeagueSeasonDetailSchema = LeagueSeasonSummarySchema.extend({
   capabilities: LeagueSeasonCapabilitiesSchema
 });
 
+export const CurrentSeasonSummarySchema = z.object({
+  id: ResourceIdSchema,
+  displayName: z.string(),
+  status: LeagueSeasonStatusSchema,
+  approvedEntryCount: z.number().int().nonnegative()
+});
+
 export const LeagueSummarySchema = z.object({
   id: ResourceIdSchema,
   name: z.string(),
@@ -210,12 +220,11 @@ export const LeagueSummarySchema = z.object({
   description: z.string(),
   logoUrl: z.string().nullable(),
   status: LeagueStatusSchema,
-  defaultPlatform: GamePlatformSchema,
-  defaultServerRegion: z.string(),
+  edition: LeagueEditionSchema,
   defaultSuperCapacity: CapacitySchema,
   defaultChampionCapacity: CapacitySchema,
   defaultPromotionCount: PromotionCountSchema,
-  featuredSeason: LeagueSeasonSummarySchema.nullable(),
+  currentSeason: CurrentSeasonSummarySchema.nullable(),
   version: z.number().int().positive(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
@@ -271,8 +280,19 @@ export const SeasonEntryListQuerySchema = z.object({
 export const WithdrawSeasonEntryRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema
 });
+export const SetCurrentSeasonRequestSchema = z.object({
+  expectedVersion: ExpectedVersionSchema
+});
+export const EnrollLeagueTeamsRequestSchema = z.object({
+  leagueTeamIds: z.array(ResourceIdSchema).min(1).max(64).refine(
+    (ids) => new Set(ids).size === ids.length,
+    { message: 'leagueTeamIds must not contain duplicates' }
+  ),
+  expectedSeasonVersion: ExpectedVersionSchema
+});
 
 export type LeagueStatus = z.infer<typeof LeagueStatusSchema>;
+export type LeagueEdition = z.infer<typeof LeagueEditionSchema>;
 export type TeamProfileStatus = z.infer<typeof TeamProfileStatusSchema>;
 export type LeagueSeasonStatus = z.infer<typeof LeagueSeasonStatusSchema>;
 export type SeasonEntrySource = z.infer<typeof SeasonEntrySourceSchema>;
@@ -296,6 +316,7 @@ export type ParsedCreateLeagueSeasonRequest = z.output<typeof CreateLeagueSeason
 export type UpdateLeagueSeasonRequest = z.infer<typeof UpdateLeagueSeasonRequestSchema>;
 export type LeagueSeasonSummary = z.infer<typeof LeagueSeasonSummarySchema>;
 export type LeagueSeasonDetail = z.infer<typeof LeagueSeasonDetailSchema>;
+export type CurrentSeasonSummary = z.infer<typeof CurrentSeasonSummarySchema>;
 export type SeasonTransitionRequest = z.infer<typeof SeasonTransitionRequestSchema>;
 export type CancelLeagueSeasonRequest = z.infer<typeof CancelLeagueSeasonRequestSchema>;
 
@@ -305,4 +326,6 @@ export type ReviewSeasonEntryRequest = z.infer<typeof ReviewSeasonEntryRequestSc
 export type OverrideSeasonEntryRequest = z.infer<typeof OverrideSeasonEntryRequestSchema>;
 export type SeasonEntryListQuery = z.infer<typeof SeasonEntryListQuerySchema>;
 export type WithdrawSeasonEntryRequest = z.infer<typeof WithdrawSeasonEntryRequestSchema>;
+export type SetCurrentSeasonRequest = z.infer<typeof SetCurrentSeasonRequestSchema>;
+export type EnrollLeagueTeamsRequest = z.infer<typeof EnrollLeagueTeamsRequestSchema>;
 export type SeasonEntryResponse = z.infer<typeof SeasonEntrySchema>;

@@ -4,6 +4,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerImportPublisher } from './player-import.publisher.js';
 import { PlayerImportService } from './player-import.service.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -11,7 +12,8 @@ describe('PlayerImportPublisher', () => {
   const prisma = new PrismaService();
   const authorization = { can: async () => true };
   const service = new PlayerImportService(prisma, authorization as never);
-  const publisher = new PlayerImportPublisher(prisma, authorization as never);
+  const builds = new PlayerBuildsService(prisma);
+  const publisher = new PlayerImportPublisher(prisma, authorization as never, builds);
   const actorId = randomUUID();
   let sourceId: string;
   let sourceCode: string;
@@ -61,6 +63,10 @@ describe('PlayerImportPublisher', () => {
     const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
     const cardIds = cards.map(({ id }) => id);
     const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
+    if (playerIds.length) {
+      await prisma.footballPlayerBestCard.deleteMany({ where: { footballPlayerId: { in: playerIds } } });
+    }
+    if (cardIds.length) await prisma.playerCardAutoBuild.deleteMany({ where: { playerCardId: { in: cardIds } } });
     if (cardIds.length) await prisma.playerCardVersion.deleteMany({ where: { playerCardId: { in: cardIds } } });
     await prisma.catalogRelease.deleteMany({ where: { batch: { sourceId } } });
     await prisma.importBatch.deleteMany({ where: { sourceId } });
@@ -92,6 +98,25 @@ describe('PlayerImportPublisher', () => {
     expect(stored?.attributes?.attributesJson).toEqual({ passing: 96 });
     expect(stored?.versions).toHaveLength(1);
     await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(1);
+  });
+
+  it('persists a source-provided automatic build and refreshes the recommended card', async () => {
+    const batch = await createBatch([card('auto-build', {
+      autoBuildAllocation: { defending: 12, aerialStrength: 8 },
+      autoBuildMaxOverall: 98,
+      dtRating: 97,
+      algorithmVersion: 'pesdata-auto-v1'
+    })]);
+
+    await publisher.publish(actorId, batch.id);
+
+    const stored = await prisma.playerCard.findUniqueOrThrow({
+      where: { sourceId_externalId: { sourceId, externalId: 'auto-build' } },
+      include: { autoBuilds: true, player: { include: { bestCard: true } } }
+    });
+    expect(stored.autoBuilds).toHaveLength(1);
+    expect(stored.autoBuilds[0]).toMatchObject({ maxOverall: 98, dtRating: 97 });
+    expect(stored.player.bestCard?.playerCardId).toBe(stored.id);
   });
 
   it('updates only reviewed source fields and preserves omitted cards', async () => {

@@ -55,6 +55,20 @@ function normalizeAttributes(raw: RawImportRow): unknown {
   return {};
 }
 
+function normalizeAllocation(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim();
+  return normalized ? JSON.parse(normalized) as unknown : undefined;
+}
+
+function normalizeNumber(value: unknown): unknown {
+  return typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value)
+      : value;
+}
+
 export function normalizeImportRow(raw: RawImportRow): NormalizedPlayerCardRecord {
   const normalizedStrings = Object.fromEntries(
     Object.entries(raw).map(([key, value]) => [key, normalizeDisplayString(value)])
@@ -66,6 +80,9 @@ export function normalizeImportRow(raw: RawImportRow): NormalizedPlayerCardRecor
     overallRating:
       typeof rating === 'number' ? rating : typeof rating === 'string' ? Number(rating) : rating,
     skills: normalizeSkills(raw.skills),
-    attributes: normalizeAttributes(raw)
+    attributes: normalizeAttributes(raw),
+    autoBuildAllocation: normalizeAllocation(raw.autoBuildAllocation),
+    autoBuildMaxOverall: normalizeNumber(raw.autoBuildMaxOverall),
+    dtRating: normalizeNumber(raw.dtRating)
   });
 }

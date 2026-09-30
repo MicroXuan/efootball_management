@@ -4,8 +4,6 @@
     "pages/competitions/index",
     "pages/leagues/index",
     "pages/league-detail/index",
-    "pages/league-editor/index",
-    "pages/season-manage/index",
     "pages/competition-detail/index",
     "pages/my-matches/index",
     "pages/match-result/index",
@@ -13,8 +11,8 @@
     "pages/competition-editor/index",
     "pages/login/index",
     "pages/profile/index",
-    "pages/team-profile/index",
-    "pages/game-account-edit/index",
+    "pages/my-league-teams/index",
+    "pages/league-team-detail/index",
     "pages/player-card-detail/index"
   ],
   "window": {
