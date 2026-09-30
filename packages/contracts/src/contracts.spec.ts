@@ -11,6 +11,7 @@ import {
   CreateCompetitionRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
+  CreateLeagueTeamRequestSchema,
   CreateSalaryRuleVersionRequestSchema,
   CreateTeamProfileRequestSchema,
   EmergencyCorrectRosterRequestSchema,
@@ -37,6 +38,11 @@ import {
   FinanceLedgerEntrySchema,
   LeagueTeamDetailSchema,
   LeagueTeamSummarySchema,
+  LeagueEditionSchema,
+  CurrentSeasonSummarySchema,
+  EnrollLeagueTeamsRequestSchema,
+  SeasonEntrySchema,
+  SetCurrentSeasonRequestSchema,
   SeasonEntryListQuerySchema,
   UpdateLeagueRequestSchema,
   UpdateLeagueSeasonRequestSchema,
@@ -88,8 +94,7 @@ describe('shared API contracts', () => {
       shortName: '  CELL  ',
       description: '  长期联赛  ',
       logoUrl: null,
-      defaultPlatform: 'MOBILE',
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL'
     });
     const team = CreateTeamProfileRequestSchema.parse({
       name: '  上海申花  ',
@@ -156,8 +161,7 @@ describe('shared API contracts', () => {
       shortName: 'CELL',
       description: '',
       logoUrl: null,
-      defaultPlatform: 'MOBILE' as const,
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL' as const
     };
 
     assert.throws(() => CreateLeagueRequestSchema.parse({ ...valid, defaultSuperCapacity: 1 }));
@@ -171,8 +175,7 @@ describe('shared API contracts', () => {
       name: 'CELL 传奇联赛',
       shortName: 'CELL',
       logoUrl: null,
-      defaultPlatform: 'MOBILE',
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL'
     }).logoUrl, null);
     assert.equal(CreateTeamProfileRequestSchema.parse({
       name: '上海申花',
@@ -180,6 +183,103 @@ describe('shared API contracts', () => {
       logoUrl: null,
       defaultGameAccountId: gameAccountId
     }).logoUrl, null);
+  });
+
+  it('requires a supported league edition and strips retired league identity fields', () => {
+    assert.equal(LeagueEditionSchema.parse('NATIONAL'), 'NATIONAL');
+    assert.throws(() => LeagueEditionSchema.parse('GLOBAL'));
+    assert.throws(() => CreateLeagueRequestSchema.parse({
+      name: 'CELL 传奇联赛',
+      shortName: 'CELL'
+    }));
+
+    const parsed = CreateLeagueRequestSchema.parse({
+      name: 'CELL 传奇联赛',
+      shortName: 'CELL',
+      edition: 'INTERNATIONAL',
+      defaultPlatform: 'MOBILE',
+      defaultServerRegion: 'GLOBAL'
+    });
+
+    assert.equal(parsed.edition, 'INTERNATIONAL');
+    assert.equal('defaultPlatform' in parsed, false);
+    assert.equal('defaultServerRegion' in parsed, false);
+  });
+
+  it('strips the retired default game account when creating a league team', () => {
+    const parsed = CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: '11111111-1111-4111-8111-111111111111',
+      teamNumber: 1,
+      name: '上海申花',
+      shortName: '申花',
+      defaultGameAccountId: '22222222-2222-4222-8222-222222222222'
+    });
+
+    assert.equal('defaultGameAccountId' in parsed, false);
+  });
+
+  it('accepts nullable legacy game identity snapshots on season entries', () => {
+    const parsed = SeasonEntrySchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      seasonId: '22222222-2222-4222-8222-222222222222',
+      teamProfileId: null,
+      leagueTeamId: '33333333-3333-4333-8333-333333333333',
+      ownerUserId: '44444444-4444-4444-8444-444444444444',
+      gameAccountId: null,
+      source: 'NEW_APPLICATION',
+      status: 'APPROVED',
+      previousSeasonEntryId: null,
+      teamNameSnapshot: '上海申花',
+      teamShortNameSnapshot: '申花',
+      teamNumberSnapshot: 1,
+      teamLogoUrlSnapshot: null,
+      gamePlatformSnapshot: null,
+      serverRegionSnapshot: null,
+      gamerTagSnapshot: null,
+      gameUidSnapshot: null,
+      leagueEditionSnapshot: 'NATIONAL',
+      reviewedById: null,
+      reviewedAt: null,
+      decisionReason: null,
+      confirmedAt: null,
+      withdrawnAt: null,
+      version: 1,
+      createdAt: '2026-09-30T00:00:00.000Z',
+      updatedAt: '2026-09-30T00:00:00.000Z'
+    });
+
+    assert.equal(parsed.gameAccountId, null);
+    assert.equal(parsed.leagueEditionSnapshot, 'NATIONAL');
+  });
+
+  it('validates the compact current season summary', () => {
+    const parsed = CurrentSeasonSummarySchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      displayName: 'S20 赛季',
+      status: 'REGISTRATION_OPEN',
+      approvedEntryCount: 18
+    });
+
+    assert.equal(parsed.approvedEntryCount, 18);
+    assert.throws(() => CurrentSeasonSummarySchema.parse({ ...parsed, approvedEntryCount: -1 }));
+  });
+
+  it('requires optimistic versions and duplicate-free team enrollment ids', () => {
+    const firstId = '11111111-1111-4111-8111-111111111111';
+    assert.deepEqual(SetCurrentSeasonRequestSchema.parse({ expectedVersion: 2 }), {
+      expectedVersion: 2
+    });
+    assert.deepEqual(EnrollLeagueTeamsRequestSchema.parse({
+      leagueTeamIds: [firstId],
+      expectedSeasonVersion: 3
+    }), {
+      leagueTeamIds: [firstId],
+      expectedSeasonVersion: 3
+    });
+    assert.throws(() => EnrollLeagueTeamsRequestSchema.parse({
+      leagueTeamIds: [firstId, firstId],
+      expectedSeasonVersion: 3
+    }));
   });
 
   it('requires positive optimistic versions for league foundation updates', () => {

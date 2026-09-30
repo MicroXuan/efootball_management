@@ -22,14 +22,12 @@ const LeagueTeamMutableFieldsSchema = z.object({
   teamNumber: TeamNumberSchema,
   name: z.string().trim().min(1).max(64),
   shortName: z.string().trim().min(1).max(24),
-  logoUrl: NullableLogoUrlSchema,
-  defaultGameAccountId: ResourceIdSchema.nullable()
+  logoUrl: NullableLogoUrlSchema
 });
 
 export const CreateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.extend({
   ownerUserId: ResourceIdSchema,
-  logoUrl: NullableLogoUrlSchema.default(null),
-  defaultGameAccountId: ResourceIdSchema.nullable().default(null)
+  logoUrl: NullableLogoUrlSchema.default(null)
 });
 
 export const UpdateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.partial().extend({
