@@ -19,14 +19,15 @@ describe('league image storage', () => {
   });
 
   it('uploads a validated image through the provider boundary', async () => {
-    const storage: jest.Mocked<ObjectStorage> = {
-      put: jest.fn().mockResolvedValue({
+    const put = jest.fn(async () => ({
         key: 'league-images--opaque.png',
         url: 'http://127.0.0.1:3000/v1/media/league-images--opaque.png',
-        mimeType: 'image/png',
+        mimeType: 'image/png' as const,
         size: png.length
-      }),
-      delete: jest.fn()
+      }));
+    const storage: ObjectStorage = {
+      put,
+      delete: jest.fn(async () => undefined)
     };
     const controller = new AdminUploadsController(storage);
 
@@ -36,7 +37,7 @@ describe('league image storage', () => {
       mimetype: 'image/png',
       size: png.length
     })).resolves.toMatchObject({ key: 'league-images--opaque.png', mimeType: 'image/png' });
-    expect(storage.put).toHaveBeenCalledWith('league-images', expect.objectContaining({ extension: 'png' }));
+    expect(put).toHaveBeenCalledWith('league-images', expect.objectContaining({ extension: 'png' }));
   });
 
   it('stores local objects behind a stable public media URL', async () => {
@@ -71,10 +72,11 @@ describe('league image storage', () => {
   });
 
   it('maps opaque keys and public URLs through a mocked CloudBase client', async () => {
-    const client: jest.Mocked<CloudBaseStorageClient> = {
-      uploadFile: jest.fn().mockResolvedValue({ fileID: 'cloud://env/league-images--opaque.webp' }),
-      deleteFile: jest.fn().mockResolvedValue(undefined),
-      downloadFile: jest.fn()
+    const uploadFile = jest.fn(async () => ({ fileID: 'cloud://env/league-images--opaque.webp' }));
+    const client: CloudBaseStorageClient = {
+      uploadFile,
+      deleteFile: jest.fn(async () => undefined),
+      downloadFile: jest.fn(async () => ({ fileContent: undefined }))
     };
     const storage = new CloudBaseObjectStorage(client, 'https://api.example.test');
 
@@ -87,7 +89,7 @@ describe('league image storage', () => {
 
     expect(stored.key).toBe('cloud://env/league-images--opaque.webp');
     expect(stored.url).toBe('cloud://env/league-images--opaque.webp');
-    expect(client.uploadFile).toHaveBeenCalledWith({
+    expect(uploadFile).toHaveBeenCalledWith({
       cloudPath: expect.stringMatching(/^league-images--[0-9a-f-]+\.webp$/),
       fileContent: expect.any(Buffer)
     });

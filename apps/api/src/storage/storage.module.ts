@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { init as initCloudBase } from '@cloudbase/node-sdk';
+import cloudbase from '@cloudbase/node-sdk';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminUploadsController } from './admin-uploads.controller.js';
 import { CloudBaseObjectStorage, type CloudBaseStorageClient } from './cloudbase-object-storage.js';
@@ -22,7 +22,7 @@ import { PublicMediaController } from './public-media.controller.js';
           config.getOrThrow<string>('storage.publicApiBaseUrl')
         );
       }
-      const client = initCloudBase({
+      const client = cloudbase.init({
         env: config.getOrThrow<string>('storage.cloudbase.environmentId'),
         secretId: config.getOrThrow<string>('storage.cloudbase.secretId'),
         secretKey: config.getOrThrow<string>('storage.cloudbase.secretKey')

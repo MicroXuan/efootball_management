@@ -90,8 +90,7 @@ describe('SeasonsService', () => {
       shortName: name.slice(0, 12),
       description: '',
       logoUrl: null,
-      defaultPlatform: 'MOBILE',
-      defaultServerRegion: 'GLOBAL',
+      edition: 'INTERNATIONAL',
       defaultSuperCapacity: 23,
       defaultChampionCapacity: 18,
       defaultPromotionCount: 4

@@ -109,11 +109,11 @@ export const leaguesApi = {
     return api.request<LeagueSeasonDetail>({ path: `/admin/seasons/${id(seasonId)}` })
   },
   managerSeasons(leagueId: string) {
-    return api.request<LeagueSeasonDetail[]>({ path: `/admin/leagues/${id(leagueId)}/seasons` })
+    return api.request<LeagueSeasonDetail[]>({ path: `/legacy/admin/leagues/${id(leagueId)}/seasons` })
   },
   createSeason(leagueId: string, input: ParsedCreateLeagueSeasonRequest | CreateLeagueSeasonRequest) {
     return api.request<LeagueSeasonDetail>({
-      path: `/admin/leagues/${id(leagueId)}/seasons`, method: 'POST', headers: mutationHeaders(), data: input,
+      path: `/legacy/admin/leagues/${id(leagueId)}/seasons`, method: 'POST', headers: mutationHeaders(), data: input,
     })
   },
   updateSeason(seasonId: string, input: UpdateLeagueSeasonRequest) {

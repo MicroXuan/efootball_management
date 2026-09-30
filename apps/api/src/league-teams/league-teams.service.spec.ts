@@ -85,7 +85,7 @@ describe('LeagueTeamsService', () => {
   }
 
   it('allows one owner to have independent teams in different leagues', async () => {
-    const { user, account } = await createUser('同一用户');
+    const { user } = await createUser('同一用户');
     const firstLeague = await createLeague('甲');
     const secondLeague = await createLeague('乙');
 
@@ -94,16 +94,14 @@ describe('LeagueTeamsService', () => {
       teamNumber: 7,
       name: '甲联赛球队',
       shortName: '甲队',
-      logoUrl: null,
-      defaultGameAccountId: account.id
+      logoUrl: null
     }, randomUUID());
     const second = await service.create(actorId, secondLeague.id, {
       ownerUserId: user.id,
       teamNumber: 7,
       name: '乙联赛球队',
       shortName: '乙队',
-      logoUrl: null,
-      defaultGameAccountId: account.id
+      logoUrl: null
     }, randomUUID());
 
     expect(first.ownerUserId).toBe(second.ownerUserId);
@@ -119,8 +117,7 @@ describe('LeagueTeamsService', () => {
       teamNumber: 12,
       name: '一号队',
       shortName: '一号',
-      logoUrl: null,
-      defaultGameAccountId: firstOwner.account.id
+      logoUrl: null
     }, randomUUID());
 
     await expect(service.create(actorId, league.id, {
@@ -128,8 +125,7 @@ describe('LeagueTeamsService', () => {
       teamNumber: 13,
       name: '重复用户队',
       shortName: '重复',
-      logoUrl: null,
-      defaultGameAccountId: firstOwner.account.id
+      logoUrl: null
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_OWNER_ALREADY_EXISTS' } });
 
     await expect(service.create(actorId, league.id, {
@@ -137,8 +133,7 @@ describe('LeagueTeamsService', () => {
       teamNumber: 12,
       name: '重复编号队',
       shortName: '重复号',
-      logoUrl: null,
-      defaultGameAccountId: secondOwner.account.id
+      logoUrl: null
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS' } });
   });
 

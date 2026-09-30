@@ -9,7 +9,7 @@ import type {
   UpdateLeagueTeamRequest
 } from '@efm/contracts';
 import { Prisma } from '../generated/prisma/client.js';
-import type { League, LeagueTeam, User } from '../generated/prisma/client.js';
+import type { LeagueTeam, User } from '../generated/prisma/client.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
@@ -37,7 +37,6 @@ export class LeagueTeamsService {
       if (!league) throw this.notFound('LEAGUE_NOT_FOUND', 'League was not found');
       const owner = await transaction.user.findUnique({ where: { id: input.ownerUserId } });
       if (!owner?.publicUserNo) throw this.notFound('PUBLIC_USER_NOT_FOUND', 'User was not found');
-      await this.assertAccount(transaction, league, owner.id, input.defaultGameAccountId);
       await this.assertAvailable(transaction, leagueId, owner.id, input.teamNumber);
 
       try {
@@ -49,7 +48,7 @@ export class LeagueTeamsService {
             name: input.name,
             shortName: input.shortName,
             logoUrl: input.logoUrl,
-            defaultGameAccountId: input.defaultGameAccountId
+            defaultGameAccountId: null
           }
         });
         await this.audit.record(transaction, {
@@ -81,10 +80,6 @@ export class LeagueTeamsService {
       await transaction.$queryRaw`SELECT id FROM league_teams WHERE id = ${teamId} FOR UPDATE`;
       const existing = await transaction.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
       if (!existing) throw this.notFound('LEAGUE_TEAM_NOT_FOUND', 'League team was not found');
-      const league = await transaction.league.findUniqueOrThrow({ where: { id: leagueId } });
-      if (input.defaultGameAccountId !== undefined) {
-        await this.assertAccount(transaction, league, existing.ownerUserId, input.defaultGameAccountId);
-      }
       if (input.teamNumber !== undefined && input.teamNumber !== existing.teamNumber) {
         const participationCount = await transaction.seasonEntry.count({
           where: { leagueTeamId: teamId }
@@ -115,9 +110,6 @@ export class LeagueTeamsService {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.shortName !== undefined ? { shortName: input.shortName } : {}),
           ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
-          ...(input.defaultGameAccountId !== undefined
-            ? { defaultGameAccountId: input.defaultGameAccountId }
-            : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           version: { increment: 1 }
         }
@@ -288,26 +280,6 @@ export class LeagueTeamsService {
       throw new LeagueError(
         'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS',
         'Team number is already assigned in this league',
-        409
-      );
-    }
-  }
-
-  private async assertAccount(
-    client: Prisma.TransactionClient,
-    league: League,
-    ownerUserId: string,
-    accountId: string | null
-  ) {
-    if (!accountId) return;
-    const account = await client.gameAccount.findFirst({ where: { id: accountId, userId: ownerUserId } });
-    if (!account) {
-      throw new LeagueError('GAME_ACCOUNT_NOT_OWNED', 'Game account is not owned by the team owner', 400);
-    }
-    if (account.platform !== league.defaultPlatform || account.serverRegion !== league.defaultServerRegion) {
-      throw new LeagueError(
-        'GAME_ACCOUNT_INELIGIBLE',
-        'Game account does not match league platform and server eligibility',
         409
       );
     }

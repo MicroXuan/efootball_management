@@ -108,8 +108,7 @@ describe('platform administration and league grants', () => {
           shortName: `联赛${suffix}`,
           description: '',
           logoUrl: null,
-          defaultPlatform: 'MOBILE',
-          defaultServerRegion: 'CN',
+          edition: 'NATIONAL',
           defaultSuperCapacity: 23,
           defaultChampionCapacity: 18,
           defaultPromotionCount: 4

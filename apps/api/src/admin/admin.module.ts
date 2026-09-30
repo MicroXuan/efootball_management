@@ -6,6 +6,8 @@ import { AdminAuditController } from './admin-audit.controller.js';
 import { AdminAuthorizationService } from './admin-authorization.service.js';
 import { AdminLeaguesController, AdminLeagueUsersController } from './admin-leagues.controller.js';
 import { AdminLeaguesService } from './admin-leagues.service.js';
+import { AdminLeagueSeasonsController } from './admin-league-seasons.controller.js';
+import { AdminLeagueSeasonsService } from './admin-league-seasons.service.js';
 import { AdminMutationReceiptService } from './admin-mutation-receipt.service.js';
 import { AdminScopeGuard } from './admin-scope.guard.js';
 import {
@@ -21,12 +23,14 @@ import { AuditLogService } from './audit-log.service.js';
     AdminAccountsController,
     AdminAuditController,
     AdminLeaguesController,
-    AdminLeagueUsersController
+    AdminLeagueUsersController,
+    AdminLeagueSeasonsController
   ],
   providers: [
     AdminAccountsService,
     AdminAuthorizationService,
     AdminLeaguesService,
+    AdminLeagueSeasonsService,
     AdminMutationReceiptService,
     AdminScopeGuard,
     AdminUserLookupService,

@@ -38,4 +38,8 @@ export class AdminAuthorizationService {
     }
     return admin;
   }
+
+  requireLeagueAccess(adminId: string, leagueId: string) {
+    return this.requireLeagueManager(adminId, leagueId);
+  }
 }

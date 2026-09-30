@@ -3,7 +3,6 @@ import type {
   LeagueDetail,
   LeagueListQuery,
   LeagueListResponse,
-  LeagueSeasonSummary,
   LeagueSummary,
   ParsedCreateLeagueRequest,
   UpdateLeagueRequest
@@ -20,13 +19,11 @@ type SeasonWithCount = LeagueSeason & {
   entries: Array<{ id: string }>;
 };
 const LEAGUE_INCLUDE = {
-  seasons: {
-    where: { status: { notIn: ['DRAFT', 'CANCELLED'] } },
+  currentSeason: {
     include: {
       _count: { select: { entries: true } },
       entries: { where: { status: 'APPROVED' }, select: { id: true } }
-    },
-    orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
+    }
   }
 } satisfies Prisma.LeagueInclude;
 type LeagueRecord = Prisma.LeagueGetPayload<{ include: typeof LEAGUE_INCLUDE }>;
@@ -57,8 +54,9 @@ export class LeaguesService {
           shortName: input.shortName,
           description: input.description,
           logoUrl: input.logoUrl,
-          defaultPlatform: input.defaultPlatform,
-          defaultServerRegion: input.defaultServerRegion,
+          edition: input.edition,
+          defaultPlatform: 'MOBILE',
+          defaultServerRegion: this.legacyRegion(input.edition),
           defaultSuperCapacity: input.defaultSuperCapacity,
           defaultChampionCapacity: input.defaultChampionCapacity,
           defaultPromotionCount: input.defaultPromotionCount,
@@ -96,10 +94,10 @@ export class LeaguesService {
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.defaultPlatform !== undefined ? { defaultPlatform: input.defaultPlatform } : {}),
-          ...(input.defaultServerRegion !== undefined
-            ? { defaultServerRegion: input.defaultServerRegion }
-            : {}),
+          ...(input.edition !== undefined ? {
+            edition: input.edition,
+            defaultServerRegion: this.legacyRegion(input.edition)
+          } : {}),
           ...(input.defaultSuperCapacity !== undefined
             ? { defaultSuperCapacity: input.defaultSuperCapacity }
             : {}),
@@ -175,7 +173,7 @@ export class LeaguesService {
     };
   }
 
-  private summary(record: League & { seasons: SeasonWithCount[] }): LeagueSummary {
+  private summary(record: League & { currentSeason: SeasonWithCount | null }): LeagueSummary {
     return {
       id: record.id,
       name: record.name,
@@ -183,48 +181,19 @@ export class LeaguesService {
       description: record.description,
       logoUrl: record.logoUrl,
       status: record.status,
-      defaultPlatform: record.defaultPlatform,
-      defaultServerRegion: record.defaultServerRegion,
+      edition: record.edition,
       defaultSuperCapacity: record.defaultSuperCapacity,
       defaultChampionCapacity: record.defaultChampionCapacity,
       defaultPromotionCount: record.defaultPromotionCount,
-      featuredSeason: this.featuredSeason(record.seasons),
+      currentSeason: record.currentSeason ? {
+        id: record.currentSeason.id,
+        displayName: record.currentSeason.displayName,
+        status: record.currentSeason.status,
+        approvedEntryCount: record.currentSeason.entries.length
+      } : null,
       version: record.version,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString()
-    };
-  }
-
-  private featuredSeason(seasons: SeasonWithCount[]): LeagueSeasonSummary | null {
-    const priority = ['IN_PROGRESS', 'REGISTRATION_OPEN', 'ALLOCATION_REVIEW', 'READY', 'COMPLETED'];
-    const selected = [...seasons].sort((left, right) => {
-      const status = priority.indexOf(left.status) - priority.indexOf(right.status);
-      return status || left.startsAt.getTime() - right.startsAt.getTime();
-    })[0];
-    return selected ? this.seasonSummary(selected) : null;
-  }
-
-  private seasonSummary(season: SeasonWithCount): LeagueSeasonSummary {
-    return {
-      id: season.id,
-      leagueId: season.leagueId,
-      seasonNumber: season.seasonNumber,
-      displayName: season.displayName,
-      previousSeasonId: season.previousSeasonId,
-      isFirstSeason: season.isFirstSeason,
-      registrationOpensAt: season.registrationOpensAt.toISOString(),
-      registrationClosesAt: season.registrationClosesAt.toISOString(),
-      startsAt: season.startsAt.toISOString(),
-      endsAt: season.endsAt.toISOString(),
-      superCapacity: season.superCapacity,
-      championCapacity: season.championCapacity,
-      promotionCount: season.promotionCount,
-      status: season.status,
-      entryCount: season._count.entries,
-      approvedEntryCount: season.entries.length,
-      version: season.version,
-      createdAt: season.createdAt.toISOString(),
-      updatedAt: season.updatedAt.toISOString()
     };
   }
 
@@ -249,5 +218,9 @@ export class LeaguesService {
 
   private notFound(): LeagueError {
     return new LeagueError('LEAGUE_NOT_FOUND', 'League was not found', 404);
+  }
+
+  private legacyRegion(edition: 'NATIONAL' | 'INTERNATIONAL'): string {
+    return edition === 'NATIONAL' ? 'CN' : 'GLOBAL';
   }
 }

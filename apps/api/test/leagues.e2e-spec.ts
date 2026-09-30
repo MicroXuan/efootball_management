@@ -98,8 +98,7 @@ describe('league foundation lifecycle API', () => {
       shortName: 'CELL E2E',
       description: '联赛基础切片端到端验证',
       logoUrl: null,
-      defaultPlatform: 'MOBILE',
-      defaultServerRegion: 'GLOBAL'
+      edition: 'INTERNATIONAL'
     };
     const createdLeague = await request(app.getHttpServer()).post('/v1/admin/leagues')
       .set('Authorization', authorization(adminToken)).set('Idempotency-Key', createKey)
@@ -191,7 +190,7 @@ describe('league foundation lifecycle API', () => {
     });
 
     const season1 = await request(app.getHttpServer())
-      .post(`/v1/admin/leagues/${createdLeague.body.id}/seasons`)
+      .post(`/v1/legacy/admin/leagues/${createdLeague.body.id}/seasons`)
       .set('Authorization', authorization(managerToken)).set('Idempotency-Key', idempotency())
       .send(seasonBody(1)).expect(201);
     await request(app.getHttpServer()).get(`/v1/admin/seasons/${season1.body.id}`)
@@ -259,7 +258,7 @@ describe('league foundation lifecycle API', () => {
     });
 
     const season2 = await request(app.getHttpServer())
-      .post(`/v1/admin/leagues/${createdLeague.body.id}/seasons`)
+      .post(`/v1/legacy/admin/leagues/${createdLeague.body.id}/seasons`)
       .set('Authorization', authorization(managerToken)).set('Idempotency-Key', idempotency())
       .send(seasonBody(2)).expect(201);
     await request(app.getHttpServer())

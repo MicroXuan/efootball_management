@@ -11,7 +11,7 @@ import { AdminAuthGuard } from '../admin-auth/admin-auth.guard.js';
 import { validateLeagueImage, type BufferedUpload } from './image-validation.js';
 import { OBJECT_STORAGE, type ObjectStorage, type StoredObject } from './object-storage.js';
 
-@Controller('v1/admin/uploads')
+@Controller('admin/uploads')
 @UseGuards(AdminAuthGuard)
 export class AdminUploadsController {
   constructor(@Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage) {}

@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, NotFoundException, Param, StreamableFile } from '@nestjs/common';
 import { OBJECT_STORAGE, type ObjectStorage } from './object-storage.js';
 
-@Controller('v1/media')
+@Controller('media')
 export class PublicMediaController {
   constructor(@Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage) {}
 

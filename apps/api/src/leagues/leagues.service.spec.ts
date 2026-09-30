@@ -41,8 +41,7 @@ describe('LeaguesService', () => {
     shortName: 'CELL',
     description: '长期运营联赛',
     logoUrl: null,
-    defaultPlatform: 'MOBILE' as const,
-    defaultServerRegion: 'GLOBAL',
+    edition: 'INTERNATIONAL' as const,
     defaultSuperCapacity: 23,
     defaultChampionCapacity: 18,
     defaultPromotionCount: 4
@@ -57,7 +56,7 @@ describe('LeaguesService', () => {
       defaultSuperCapacity: 23,
       defaultChampionCapacity: 18,
       defaultPromotionCount: 4,
-      featuredSeason: null,
+      currentSeason: null,
       version: 1,
       capabilities: { canManage: true, canCreateSeason: true }
     });

@@ -228,7 +228,7 @@ export class SeasonsService {
           teamProfileId: previous.teamProfileId,
           leagueTeamId: previous.leagueTeamId,
           ownerUserId: previous.ownerUserId,
-          gameAccountId: account.id,
+          gameAccountId: account?.id ?? null,
           source: 'RENEWAL',
           status: 'INVITED',
           previousSeasonEntryId: previous.id,
@@ -236,10 +236,11 @@ export class SeasonsService {
           teamShortNameSnapshot: previous.leagueTeam.shortName,
           teamNumberSnapshot: previous.leagueTeam.teamNumber,
           teamLogoUrlSnapshot: previous.leagueTeam.logoUrl,
-          gamePlatformSnapshot: account.platform,
-          serverRegionSnapshot: account.serverRegion,
-          gamerTagSnapshot: account.gamerTag,
-          gameUidSnapshot: account.gameUid
+          gamePlatformSnapshot: account?.platform ?? null,
+          serverRegionSnapshot: account?.serverRegion ?? null,
+          gamerTagSnapshot: account?.gamerTag ?? null,
+          gameUidSnapshot: account?.gameUid ?? null,
+          leagueEditionSnapshot: previous.leagueEditionSnapshot
         }
       });
       await transaction.seasonEntryStatusHistory.create({

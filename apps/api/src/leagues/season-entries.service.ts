@@ -339,6 +339,7 @@ export class SeasonEntriesService {
       serverRegionSnapshot: entry.serverRegionSnapshot,
       gamerTagSnapshot: entry.gamerTagSnapshot,
       gameUidSnapshot: entry.gameUidSnapshot,
+      leagueEditionSnapshot: entry.leagueEditionSnapshot,
       reviewedById: entry.reviewedById,
       reviewedAt: entry.reviewedAt?.toISOString() ?? null,
       decisionReason: entry.decisionReason,

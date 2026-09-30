@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ParsedCreateLeagueRequest, UpdateLeagueRequest } from '@efm/contracts';
-import type { League } from '../generated/prisma/client.js';
+import type { League, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { AdminError } from './admin.errors.js';
 import { AdminMutationReceiptService } from './admin-mutation-receipt.service.js';
@@ -16,6 +16,11 @@ export class AdminLeaguesService {
 
   async list() {
     const leagues = await this.prisma.league.findMany({
+      include: {
+        currentSeason: {
+          include: { _count: { select: { entries: { where: { status: 'APPROVED' } } } } }
+        }
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
     return { items: leagues.map((league) => this.detail(league)), nextCursor: null };
@@ -29,8 +34,9 @@ export class AdminLeaguesService {
           shortName: input.shortName,
           description: input.description,
           logoUrl: input.logoUrl,
-          defaultPlatform: input.defaultPlatform,
-          defaultServerRegion: input.defaultServerRegion,
+          edition: input.edition,
+          defaultPlatform: 'MOBILE',
+          defaultServerRegion: this.legacyRegion(input.edition),
           defaultSuperCapacity: input.defaultSuperCapacity,
           defaultChampionCapacity: input.defaultChampionCapacity,
           defaultPromotionCount: input.defaultPromotionCount,
@@ -59,8 +65,10 @@ export class AdminLeaguesService {
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.defaultPlatform !== undefined ? { defaultPlatform: input.defaultPlatform } : {}),
-          ...(input.defaultServerRegion !== undefined ? { defaultServerRegion: input.defaultServerRegion } : {}),
+          ...(input.edition !== undefined ? {
+            edition: input.edition,
+            defaultServerRegion: this.legacyRegion(input.edition)
+          } : {}),
           ...(input.defaultSuperCapacity !== undefined ? { defaultSuperCapacity: input.defaultSuperCapacity } : {}),
           ...(input.defaultChampionCapacity !== undefined ? { defaultChampionCapacity: input.defaultChampionCapacity } : {}),
           ...(input.defaultPromotionCount !== undefined ? { defaultPromotionCount: input.defaultPromotionCount } : {}),
@@ -83,7 +91,11 @@ export class AdminLeaguesService {
     });
   }
 
-  private detail(league: League) {
+  private detail(league: League & {
+    currentSeason?: (Prisma.LeagueSeasonGetPayload<Record<string, never>> & {
+      _count: { entries: number };
+    }) | null;
+  }) {
     return {
       id: league.id,
       name: league.name,
@@ -91,16 +103,24 @@ export class AdminLeaguesService {
       description: league.description,
       logoUrl: league.logoUrl,
       status: league.status,
-      defaultPlatform: league.defaultPlatform,
-      defaultServerRegion: league.defaultServerRegion,
+      edition: league.edition,
       defaultSuperCapacity: league.defaultSuperCapacity,
       defaultChampionCapacity: league.defaultChampionCapacity,
       defaultPromotionCount: league.defaultPromotionCount,
-      featuredSeason: null,
+      currentSeason: league.currentSeason ? {
+        id: league.currentSeason.id,
+        displayName: league.currentSeason.displayName,
+        status: league.currentSeason.status,
+        approvedEntryCount: league.currentSeason._count.entries
+      } : null,
       version: league.version,
       createdAt: league.createdAt.toISOString(),
       updatedAt: league.updatedAt.toISOString(),
       capabilities: { canManage: true, canCreateSeason: true }
     };
+  }
+
+  private legacyRegion(edition: 'NATIONAL' | 'INTERNATIONAL'): string {
+    return edition === 'NATIONAL' ? 'CN' : 'GLOBAL';
   }
 }
