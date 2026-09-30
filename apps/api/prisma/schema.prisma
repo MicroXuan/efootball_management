@@ -19,6 +19,11 @@ enum GamePlatform {
   STEAM
 }
 
+enum LeagueEdition {
+  NATIONAL
+  INTERNATIONAL
+}
+
 enum VerificationStatus {
   UNVERIFIED
   PENDING
@@ -408,6 +413,7 @@ model AdminAccount {
   grantedLeagueRoles     AdminLeagueRole[]         @relation("AdminLeagueRoleGrantor")
   auditLogs              AuditLog[]                @relation("AuditActor")
   createdLeagues         League[]                  @relation("AdminLeagueCreator")
+  createdLeagueSeasons   LeagueSeason[]            @relation("LeagueSeasonAdminCreator")
   mutationReceipts       AdminMutationReceipt[]
   createdSalaryRules     LeagueSalaryRuleVersion[]
   createdTransferWindows TransferWindow[]
@@ -462,6 +468,8 @@ model League {
   description             String                    @default("") @db.VarChar(500)
   logoUrl                 String?                   @map("logo_url") @db.VarChar(2048)
   status                  LeagueStatus              @default(ACTIVE)
+  edition                 LeagueEdition             @default(INTERNATIONAL)
+  currentSeasonId         String?                   @unique @map("current_season_id") @db.Char(36)
   defaultPlatform         GamePlatform              @map("default_platform")
   defaultServerRegion     String                    @map("default_server_region") @db.VarChar(32)
   defaultSuperCapacity    Int                       @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
@@ -475,6 +483,7 @@ model League {
   creator                 User?                     @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
   adminCreator            AdminAccount?             @relation("AdminLeagueCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   seasons                 LeagueSeason[]
+  currentSeason           LeagueSeason?             @relation("LeagueCurrentSeason", fields: [currentSeasonId], references: [id], onDelete: SetNull)
   teams                   LeagueTeam[]
   adminRoles              AdminLeagueRole[]
   auditLogs               AuditLog[]
@@ -555,14 +564,17 @@ model LeagueSeason {
   promotionCount       Int                         @map("promotion_count") @db.UnsignedSmallInt
   status               LeagueSeasonStatus          @default(DRAFT)
   cancellationReason   String?                     @map("cancellation_reason") @db.VarChar(512)
-  createdById          String                      @map("created_by_id") @db.Char(36)
+  createdById          String?                     @map("created_by_id") @db.Char(36)
+  createdByAdminId     String?                     @map("created_by_admin_id") @db.Char(36)
   version              Int                         @default(1) @db.UnsignedInt
   createdAt            DateTime                    @default(now()) @map("created_at")
   updatedAt            DateTime                    @updatedAt @map("updated_at")
   league               League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  currentForLeague     League?                     @relation("LeagueCurrentSeason")
   previousSeason       LeagueSeason?               @relation("LeagueSeasonPredecessor", fields: [previousSeasonId], references: [id], onDelete: Restrict)
   nextSeason           LeagueSeason?               @relation("LeagueSeasonPredecessor")
-  creator              User                        @relation("LeagueSeasonCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  creator              User?                       @relation("LeagueSeasonCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator         AdminAccount?               @relation("LeagueSeasonAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   entries              SeasonEntry[]
   statusHistory        LeagueSeasonStatusHistory[]
   transferWindows      TransferWindow[]
@@ -572,6 +584,7 @@ model LeagueSeason {
   @@index([leagueId, status], map: "league_seasons_status_idx")
   @@index([leagueId, registrationOpensAt, id], map: "league_seasons_timeline_idx")
   @@index([createdById], map: "league_seasons_creator_idx")
+  @@index([createdByAdminId], map: "league_seasons_admin_creator_idx")
   @@map("league_seasons")
 }
 
@@ -736,7 +749,7 @@ model SeasonEntry {
   teamProfileId         String?                    @map("team_profile_id") @db.Char(36)
   leagueTeamId          String                     @map("league_team_id") @db.Char(36)
   ownerUserId           String                     @map("owner_user_id") @db.Char(36)
-  gameAccountId         String                     @map("game_account_id") @db.Char(36)
+  gameAccountId         String?                    @map("game_account_id") @db.Char(36)
   source                SeasonEntrySource
   status                SeasonEntryStatus          @default(PENDING)
   previousSeasonEntryId String?                    @unique @map("previous_season_entry_id") @db.Char(36)
@@ -744,10 +757,11 @@ model SeasonEntry {
   teamShortNameSnapshot String                     @map("team_short_name_snapshot") @db.VarChar(24)
   teamNumberSnapshot    Int?                       @map("team_number_snapshot") @db.UnsignedSmallInt
   teamLogoUrlSnapshot   String?                    @map("team_logo_url_snapshot") @db.VarChar(2048)
-  gamePlatformSnapshot  GamePlatform               @map("game_platform_snapshot")
-  serverRegionSnapshot  String                     @map("server_region_snapshot") @db.VarChar(32)
-  gamerTagSnapshot      String                     @map("gamer_tag_snapshot") @db.VarChar(64)
+  gamePlatformSnapshot  GamePlatform?              @map("game_platform_snapshot")
+  serverRegionSnapshot  String?                    @map("server_region_snapshot") @db.VarChar(32)
+  gamerTagSnapshot      String?                    @map("gamer_tag_snapshot") @db.VarChar(64)
   gameUidSnapshot       String?                    @map("game_uid_snapshot") @db.VarChar(64)
+  leagueEditionSnapshot LeagueEdition              @default(INTERNATIONAL) @map("league_edition_snapshot")
   reviewedById          String?                    @map("reviewed_by_id") @db.Char(36)
   reviewedAt            DateTime?                  @map("reviewed_at")
   decisionReason        String?                    @map("decision_reason") @db.VarChar(512)
@@ -760,7 +774,7 @@ model SeasonEntry {
   teamProfile           TeamProfile?               @relation(fields: [teamProfileId], references: [id], onDelete: Restrict)
   leagueTeam            LeagueTeam                 @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
   owner                 User                       @relation("SeasonEntryOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  gameAccount           GameAccount                @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
+  gameAccount           GameAccount?               @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
   previousSeasonEntry   SeasonEntry?               @relation("SeasonEntryPredecessor", fields: [previousSeasonEntryId], references: [id], onDelete: Restrict)
   nextSeasonEntry       SeasonEntry?               @relation("SeasonEntryPredecessor")
   reviewer              User?                      @relation("SeasonEntryReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
