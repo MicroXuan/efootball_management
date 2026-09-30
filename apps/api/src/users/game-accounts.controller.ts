@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import type { ParsedGameAccountInput } from '@efm/contracts';
 import { GameAccountInputSchema } from '@efm/contracts';
 import { CurrentUser } from '../common/auth/current-user.decorator.js';
@@ -18,6 +18,7 @@ export class GameAccountsController {
   }
 
   @Post()
+  @Header('Deprecation', 'true')
   create(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(GameAccountInputSchema)) body: ParsedGameAccountInput
@@ -26,6 +27,7 @@ export class GameAccountsController {
   }
 
   @Patch(':id')
+  @Header('Deprecation', 'true')
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') accountId: string,
@@ -36,6 +38,7 @@ export class GameAccountsController {
 
   @Delete(':id')
   @HttpCode(200)
+  @Header('Deprecation', 'true')
   delete(@CurrentUser() user: AuthenticatedUser, @Param('id') accountId: string) {
     return this.accounts.delete(user.id, accountId);
   }

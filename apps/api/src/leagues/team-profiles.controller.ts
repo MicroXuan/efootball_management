@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Inject, Patch, Post, UseGuards } from '@nestjs/common';
 import {
   CreateTeamProfileRequestSchema,
   UpdateTeamProfileRequestSchema,
@@ -22,6 +22,7 @@ export class TeamProfilesController {
   }
 
   @Post()
+  @Header('Deprecation', 'true')
   create(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(CreateTeamProfileRequestSchema)) body: ParsedCreateTeamProfileRequest
@@ -30,6 +31,7 @@ export class TeamProfilesController {
   }
 
   @Patch()
+  @Header('Deprecation', 'true')
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(UpdateTeamProfileRequestSchema)) body: UpdateTeamProfileRequest
