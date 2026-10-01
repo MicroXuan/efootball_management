@@ -1,7 +1,7 @@
 <view class="page-shell">
   <view class="masthead">
-    <view><text class="eyebrow">LEAGUE DIRECTORY</text><text class="page-title">联赛中心</text></view>
-    <text class="edition">LIVE / 01</text>
+    <view><text class="eyebrow">联赛目录</text><text class="page-title">联赛中心</text></view>
+    <text class="edition">实时 · 01</text>
   </view>
   <text class="intro">查看全部联赛，或只查看管理员已经为你绑定球队的联赛。</text>
 
@@ -12,11 +12,11 @@
 
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">OFFLINE / RETRY</text><text class="state-title">暂时无法读取联赛</text>
+    <text class="state-code">离线 · 可重试</text><text class="state-title">暂时无法读取联赛</text>
     <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadLeagues">重新加载</button>
   </view>
   <view wx:elif="{{!hasLeagues}}" class="state-card">
-    <text class="state-code">{{activeTab === 'mine' ? 'NO BOUND TEAM' : 'NO PUBLIC LEAGUE'}}</text>
+    <text class="state-code">{{activeTab === 'mine' ? '暂无绑定球队' : '暂无公开联赛'}}</text>
     <text class="state-title">{{activeTab === 'mine' ? (loggedIn ? '还没有绑定联赛球队' : '登录后查看我的联赛') : '还没有公开联赛'}}</text>
     <text class="state-copy">{{activeTab === 'mine' ? '球队由联赛管理员在后台分配，分配后会自动显示在这里。' : '平台管理员创建联赛并设置当前赛季后，会在这里显示。'}}</text>
   </view>
@@ -33,7 +33,7 @@
         <text class="arrow">↗</text>
       </view>
       <view class="season-strip">
-        <view><text class="season-label">CURRENT SEASON</text><text class="season-name">{{item.seasonName}}</text></view>
+        <view><text class="season-label">当前赛季</text><text class="season-name">{{item.seasonName}}</text></view>
         <view class="season-state"><text>{{item.seasonState}}</text><text class="entry-copy">{{item.entryCopy}}</text></view>
       </view>
     </view>

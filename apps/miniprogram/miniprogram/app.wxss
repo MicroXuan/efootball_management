@@ -1,15 +1,114 @@
 page {
   min-height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --efm-bg: #0b100e;
-  --efm-surface: #141c18;
-  --efm-border: #294c3a;
-  --efm-primary: #66f05a;
-  --efm-accent: #f0b84b;
-  --efm-text: #f5f7f6;
-  --efm-muted: #98a69f;
+  color: #f7f8f5;
+  background: #0a0a0a;
+  --efm-bg: #0a0a0a;
+  --efm-surface: #171917;
+  --efm-surface-raised: #20231f;
+  --efm-border: #343832;
+  --efm-primary: #b0ff00;
+  --efm-accent: #d9e342;
+  --efm-text: #f7f8f5;
+  --efm-muted: #a0a69d;
+  --efm-radius-card: 28rpx;
+  --efm-radius-control: 20rpx;
 }
 
 button {
   font-family: inherit;
+  border-radius: 999rpx;
+}
+
+button::after { border: 0; }
+
+input,
+textarea,
+picker { font-family: inherit; }
+
+.state-card,
+.panel,
+.form-card,
+.data-card {
+  border-radius: var(--efm-radius-card);
+}
+
+/* 全局表面语言：不依赖图片、字体或动画库。 */
+.hero,
+.league-hero,
+.season-picker-card,
+.season-board,
+.entry-card,
+.team-card,
+.match-card,
+.event-card,
+.detail-section,
+.scoreboard,
+.form,
+.panel,
+.standing-table,
+.empty-panel,
+.state,
+.state-card,
+.form-card,
+.season-card,
+.queue-card,
+.account,
+.candidate-card,
+.player,
+.ledger-row,
+.metrics view,
+.capacity-board,
+.terminal {
+  border-radius: 28rpx !important;
+}
+
+.filter,
+.tab,
+.status,
+.registration,
+.picker,
+.picker-control,
+.skill-chip,
+.account-select {
+  border-radius: 999rpx !important;
+}
+
+.field input,
+.field textarea,
+.score-inputs input,
+.form textarea,
+input,
+textarea {
+  border-radius: 20rpx !important;
+}
+
+.players-page,
+.competitions-page,
+.leagues-page,
+.profile-page,
+.matches-page,
+.page-shell,
+.detail-page,
+.manage-page,
+.editor-page,
+.result-page {
+  box-sizing: border-box;
+  background-color: #0a0a0a !important;
+}
+
+.primary-button,
+.outline-button,
+.action-button,
+.retry-button,
+.manager-button,
+.secondary-button,
+.save,
+.primary,
+.gold,
+.danger,
+.action,
+.edit,
+.account-empty {
+  border-radius: 999rpx !important;
 }

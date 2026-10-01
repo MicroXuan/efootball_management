@@ -18,12 +18,15 @@
   "window": {
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "非概念实况",
-    "navigationBarBackgroundColor": "#07110d"
+    "navigationBarBackgroundColor": "#0A0A0A",
+    "backgroundColor": "#0A0A0A",
+    "backgroundTextStyle": "light"
   },
   "tabBar": {
-    "color": "#718078",
-    "selectedColor": "#66f05a",
-    "backgroundColor": "#0b100e",
+    "custom": true,
+    "color": "#8F968C",
+    "selectedColor": "#B0FF00",
+    "backgroundColor": "#1A1A1A",
     "borderStyle": "black",
     "list": [
       {

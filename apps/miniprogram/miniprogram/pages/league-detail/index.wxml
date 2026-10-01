@@ -1,14 +1,14 @@
 <view class="page-shell">
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取赛季资料" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">SEASON / ERROR</text><text class="state-title">暂时无法读取联赛</text>
+    <text class="state-code">赛季读取失败</text><text class="state-title">暂时无法读取联赛</text>
     <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
   </view>
   <block wx:else>
     <view class="league-hero">
       <image wx:if="{{league.logoUrl}}" class="league-logo" src="{{league.logoUrl}}" mode="aspectFit" />
       <view wx:else class="league-logo logo-fallback">{{leagueLogoText}}</view>
-      <text class="hero-kicker">{{league.shortName}} LEAGUE OFFICE</text>
+      <text class="hero-kicker">{{league.shortName}} · 联赛中心</text>
       <text class="hero-title">{{league.name}}</text>
       <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
     </view>
@@ -21,7 +21,7 @@
     </view>
 
     <view wx:if="{{selectedSeason}}" class="season-board">
-      <view class="board-head"><text class="board-kicker">SEASON SNAPSHOT</text><text class="season-number">S{{selectedSeason.seasonNumber}}</text></view>
+      <view class="board-head"><text class="board-kicker">赛季概览</text><text class="season-number">S{{selectedSeason.seasonNumber}}</text></view>
       <text class="board-title">{{selectedSeason.displayName}}</text>
       <text class="structure-copy">{{structureCopy}}</text>
       <view class="metric-grid">
@@ -33,7 +33,7 @@
     </view>
 
     <view wx:if="{{selectedSeason}}" class="entry-card">
-      <text class="section-kicker">MY ENTRY</text><text class="section-title">我的赛季资格</text>
+      <text class="section-kicker">我的资格</text><text class="section-title">我的赛季资格</text>
       <view wx:if="{{profile}}" class="team-line">
         <image wx:if="{{profile.logoUrl}}" class="team-logo" src="{{profile.logoUrl}}" mode="aspectFit" />
         <view wx:else class="team-logo team-fallback">{{profile.shortName}}</view>

@@ -1,6 +1,6 @@
 <view class="editor-page">
   <view class="header">
-    <text class="kicker">LEAGUE CHARTER / 01</text>
+    <text class="kicker">联赛章程 · 01</text>
     <text class="title">{{title}}</text>
     <text class="subtitle">先定义长期联赛规则；每个赛季仍可单独覆盖人数。</text>
   </view>
@@ -10,7 +10,7 @@
     <button class="secondary" bindtap="loadLeague">重新加载</button>
   </view>
   <view wx:else class="form-card">
-    <view class="serial-strip"><text>CHARTER</text><text>{{id ? 'REVISION' : 'NEW FILE'}}</text></view>
+    <view class="serial-strip"><text>章程</text><text>{{id ? '修订版本' : '新建档案'}}</text></view>
     <label class="field"><text>联赛名称 *</text><input value="{{form.name}}" data-field="name" bindinput="onInput" maxlength="64" placeholder="例如：CELL 传奇联赛" /></label>
     <label class="field"><text>简称 *</text><input value="{{form.shortName}}" data-field="shortName" bindinput="onInput" maxlength="24" placeholder="例如：CELL" /></label>
     <label class="field"><text>联赛介绍</text><textarea value="{{form.description}}" data-field="description" bindinput="onInput" maxlength="500" placeholder="说明联赛定位与参赛要求" /></label>
@@ -20,7 +20,7 @@
       <label class="field"><text>默认区服 *</text><input value="{{form.defaultServerRegion}}" data-field="defaultServerRegion" bindinput="onInput" /></label>
     </view>
     <view class="capacity-board">
-      <text class="section-kicker">DEFAULT CAPACITY</text><text class="section-title">赛季默认人数</text>
+      <text class="section-kicker">默认容量</text><text class="section-title">赛季默认人数</text>
       <view class="capacity-grid">
         <label><text>超级组</text><input type="number" value="{{form.defaultSuperCapacity}}" data-field="defaultSuperCapacity" bindinput="onInput" /></label>
         <label><text>冠军组每组</text><input type="number" value="{{form.defaultChampionCapacity}}" data-field="defaultChampionCapacity" bindinput="onInput" /></label>

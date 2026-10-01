@@ -10,7 +10,7 @@ export function LeagueShell() {
   if (!identity?.platformAdmin && !grant) return <Alert showIcon type="error" title="你没有此联赛的管理权限" />;
   return <div className="league-workspace">
     <div className="page-heading">
-      <div><span className="section-kicker">LEAGUE WORKSPACE</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1></div>
+      <div><span className="section-kicker">联赛工作区</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1></div>
       <Tabs activeKey={location.pathname.includes('/seasons') ? 'seasons' : location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams'} items={[
         { key: 'teams', label: <Link to={`/leagues/${leagueId}/teams`}>用户与球队</Link> },
         { key: 'seasons', label: <Link to={`/leagues/${leagueId}/seasons`}>赛季管理</Link> },

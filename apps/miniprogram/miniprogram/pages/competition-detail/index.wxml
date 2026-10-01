@@ -1,12 +1,12 @@
 <view class="detail-page">
   <loading-state wx:if="{{loading && !detail}}" label="正在打开赛事档案" />
   <view wx:elif="{{errorMessage && !detail}}" class="state-panel">
-    <text class="state-code">DATA UNAVAILABLE</text><text class="state-title">无法打开赛事</text>
+    <text class="state-code">数据不可用</text><text class="state-title">无法打开赛事</text>
     <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="retry">重新加载</button>
   </view>
   <block wx:elif="{{detail}}">
     <view class="hero">
-      <view class="hero-top"><text class="status">{{lifecycleName}}</text><text class="serial">MATCH FILE / {{detail.version}}</text></view>
+      <view class="hero-top"><text class="status">{{lifecycleName}}</text><text class="serial">比赛档案 · {{detail.version}}</text></view>
       <text class="name">{{detail.name}}</text>
       <text class="description">{{detail.description || '一场讲规则、也讲公平的个人赛事。'}}</text>
       <view class="scoreboard">
@@ -22,16 +22,16 @@
     </view>
 
     <view wx:if="{{activeTab === 'overview'}}" class="section-stack">
-      <view class="panel"><text class="panel-kicker">REGISTRATION</text><text class="panel-title">报名信息</text>
+      <view class="panel"><text class="panel-kicker">报名信息</text><text class="panel-title">报名信息</text>
         <view class="fact"><text>报名时间</text><text>{{registrationWindow}}</text></view>
         <view class="fact"><text>开赛时间</text><text>{{startLabel}}</text></view>
         <view class="fact"><text>赛制</text><text>个人单循环</text></view>
       </view>
-      <view class="panel"><text class="panel-kicker">RULEBOOK V{{detail.activeRuleVersion}}</text><text class="panel-title">积分规则</text>
+      <view class="panel"><text class="panel-kicker">规则版本 {{detail.activeRuleVersion}}</text><text class="panel-title">积分规则</text>
         <view class="rule-grid"><text>胜 {{detail.rules.winPoints}}</text><text>平 {{detail.rules.drawPoints}}</text><text>负 {{detail.rules.lossPoints}}</text></view>
       </view>
       <view wx:if="{{loggedIn && !registration}}" class="panel account-panel">
-        <text class="panel-kicker">GAME ACCOUNT</text><text class="panel-title">选择参赛账号</text>
+        <text class="panel-kicker">游戏账号</text><text class="panel-title">选择参赛账号</text>
         <view wx:for="{{accounts}}" wx:key="id" class="account {{selectedAccountId === item.id ? 'is-selected' : ''}} {{!item.eligible ? 'is-disabled' : ''}}" data-id="{{item.id}}" data-eligible="{{item.eligible}}" bindtap="selectAccount">
           <view><text class="account-name">{{item.gamerTag}}</text><text class="account-meta">{{item.platform}} · {{item.serverRegion}}</text></view>
           <text>{{item.eligible ? (selectedAccountId === item.id ? '已选' : '选择') : item.disabledReason}}</text>
@@ -48,8 +48,8 @@
     <view wx:elif="{{activeTab === 'schedule'}}" class="section-stack">
       <view wx:if="{{matches.length === 0}}" class="empty-panel">赛程发布后会显示在这里。</view>
       <view wx:for="{{matches}}" wx:key="id" class="match-card">
-        <text class="round">ROUND {{item.roundNumber}} · #{{item.matchNumber}}</text>
-        <view class="versus"><text>{{item.homeParticipant.displayName}}</text><text class="vs">VS</text><text>{{item.awayParticipant.displayName}}</text></view>
+        <text class="round">第 {{item.roundNumber}} 轮 · 第 {{item.matchNumber}} 场</text>
+        <view class="versus"><text>{{item.homeParticipant.displayName}}</text><text class="vs">对阵</text><text>{{item.awayParticipant.displayName}}</text></view>
         <text wx:if="{{item.officialResult}}" class="official-score">{{item.officialResult.homeScore}} : {{item.officialResult.awayScore}}</text>
       </view>
     </view>

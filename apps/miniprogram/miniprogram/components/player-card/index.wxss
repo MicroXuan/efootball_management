@@ -2,7 +2,7 @@
   width: 218rpx;
   min-height: 390rpx;
   display: block;
-  color: #f5f7f6;
+  color: #f7f8f5;
   transition: transform 120ms ease, opacity 120ms ease;
 }
 
@@ -17,7 +17,7 @@
   overflow: hidden;
   border: 2rpx solid #3c7656;
   border-radius: 18rpx 18rpx 6rpx 6rpx;
-  background: linear-gradient(145deg, #203d2d 0%, #14241d 48%, #0b100e 100%);
+  background: linear-gradient(145deg, #203d2d 0%, #14241d 48%, #0a0a0a 100%);
 }
 
 .pitch-line {
@@ -43,7 +43,7 @@
 }
 
 .rating {
-  font-family: "DIN Alternate", "Arial Narrow", sans-serif;
+  font-family:inherit;
   font-size: 54rpx;
   font-weight: 800;
   line-height: 1;
@@ -51,7 +51,7 @@
 
 .position {
   margin-top: 2rpx;
-  color: #66f05a;
+  color: #b0ff00;
   font-size: 24rpx;
   font-weight: 800;
 }
@@ -72,7 +72,7 @@
 
 .fallback-initials {
   margin-top: 22rpx;
-  font-family: STKaiti, KaiTi, serif;
+  font-family:inherit;
   color: #dfffd9;
   font-size: 58rpx;
   font-weight: 700;
@@ -108,5 +108,5 @@
 .player-name { font-size: 24rpx; font-weight: 800; }
 .card-copy { padding: 14rpx 4rpx 0; }
 .card-name { font-size: 25rpx; font-weight: 700; }
-.card-meta { margin-top: 6rpx; color: #f0b84b; font-size: 20rpx; }
-.play-style { margin-top: 4rpx; color: #98a69f; font-size: 19rpx; }
+.card-meta { margin-top: 6rpx; color: #d9e342; font-size: 20rpx; }
+.play-style { margin-top: 4rpx; color: #a0a69d; font-size: 19rpx; }

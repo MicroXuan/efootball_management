@@ -1,5 +1,5 @@
 <view class="page-shell">
-  <view class="hero"><text class="kicker">LEAGUE IDENTITIES</text><text class="title">我的联赛球队</text><button class="user-no" bindtap="copyUserNo">用户编号 {{publicUserNoDisplay}} · 点击复制</button></view>
+  <view class="hero"><text class="kicker">联赛身份</text><text class="title">我的联赛球队</text><button class="user-no" bindtap="copyUserNo">用户编号 {{publicUserNoDisplay}} · 点击复制</button></view>
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛球队" />
   <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">暂时无法读取</text><text class="muted">{{errorMessage}}</text><button class="outline" bindtap="loadPage">重新加载</button></view>
   <view wx:elif="{{!teams.length}}" class="state-card"><text class="state-title">暂无联赛球队</text><text class="muted">球队由联赛管理员创建并分配；你无需在小程序中自行建队。</text></view>

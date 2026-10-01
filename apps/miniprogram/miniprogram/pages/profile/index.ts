@@ -19,6 +19,7 @@ Page({
   },
 
   onShow() {
+    this.getTabBar?.()?.setData({ selected: 2 })
     void this.loadPage()
   },
 

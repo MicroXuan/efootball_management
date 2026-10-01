@@ -45,14 +45,14 @@ export function LoginPage() {
         <span className="pitch-line pitch-line--half" />
         <span className="pitch-circle" />
         <div className="brand-lockup">
-          <span className="brand-kicker">EFOOTBALL LEAGUE OPERATIONS</span>
+          <span className="brand-kicker">联赛运营中枢</span>
           <strong>非概念实况</strong>
           <span>赛事规则、球队阵容与财务流水，在同一块战术板上。</span>
         </div>
       </section>
       <section className="login-panel">
         <div className="login-card">
-          <div className="login-index">CONTROL / 01</div>
+          <div className="login-index">安全登录 · 01</div>
           <h1>赛事管理后台</h1>
           <p>使用平台管理员或已授权的联赛管理员账号登录。</p>
           {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}

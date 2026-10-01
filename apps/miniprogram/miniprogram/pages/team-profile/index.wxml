@@ -1,16 +1,16 @@
 <view class="page-shell">
   <view class="topbar">
     <view>
-      <text class="eyebrow">CLUB REGISTRATION</text>
+      <text class="eyebrow">球队登记</text>
       <text class="page-title">{{title}}</text>
     </view>
-    <text class="record-mark">TEAM / 01</text>
+    <text class="record-mark">球队档案 · 01</text>
   </view>
 
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取球队档案" />
 
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">LOAD / ERROR</text>
+    <text class="state-code">加载失败</text>
     <text class="state-title">暂时无法读取球队档案</text>
     <text class="state-copy">{{errorMessage}}</text>
     <button class="secondary-button" bindtap="loadPage">重新加载</button>
