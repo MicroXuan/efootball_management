@@ -4,7 +4,11 @@ import { AdminAccountsController } from './admin-accounts.controller.js';
 import { AdminAccountsService } from './admin-accounts.service.js';
 import { AdminAuditController } from './admin-audit.controller.js';
 import { AdminAuthorizationService } from './admin-authorization.service.js';
-import { AdminLeaguesController, AdminLeagueUsersController } from './admin-leagues.controller.js';
+import {
+  AdminLeaguesController,
+  AdminLeagueUsersController,
+  AdminLeagueWorkspaceController
+} from './admin-leagues.controller.js';
 import { AdminLeaguesService } from './admin-leagues.service.js';
 import { AdminLeagueSeasonsController } from './admin-league-seasons.controller.js';
 import { AdminLeagueSeasonsService } from './admin-league-seasons.service.js';
@@ -23,6 +27,7 @@ import { AuditLogService } from './audit-log.service.js';
     AdminAccountsController,
     AdminAuditController,
     AdminLeaguesController,
+    AdminLeagueWorkspaceController,
     AdminLeagueUsersController,
     AdminLeagueSeasonsController
   ],

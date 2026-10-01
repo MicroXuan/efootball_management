@@ -54,6 +54,19 @@ export class AdminLeaguesController {
   }
 }
 
+@Controller('admin/leagues/:leagueId/workspace')
+@UseGuards(AdminAuthGuard, AdminScopeGuard)
+export class AdminLeagueWorkspaceController {
+  constructor(@Inject(AdminLeaguesService) private readonly leagues: AdminLeaguesService) {}
+
+  @Get()
+  get(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string
+  ) {
+    return this.leagues.get(leagueId);
+  }
+}
+
 @Controller('admin/leagues/:leagueId/users')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
 export class AdminLeagueUsersController {

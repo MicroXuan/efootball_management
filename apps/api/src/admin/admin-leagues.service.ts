@@ -26,6 +26,19 @@ export class AdminLeaguesService {
     return { items: leagues.map((league) => this.detail(league)), nextCursor: null };
   }
 
+  async get(leagueId: string) {
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      include: {
+        currentSeason: {
+          include: { _count: { select: { entries: { where: { status: 'APPROVED' } } } } }
+        }
+      }
+    });
+    if (!league) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
+    return this.detail(league);
+  }
+
   create(actorAdminId: string, input: ParsedCreateLeagueRequest, key: string) {
     return this.receipts.execute(actorAdminId, 'admin.league.create', key, async (transaction) => {
       const league = await transaction.league.create({
