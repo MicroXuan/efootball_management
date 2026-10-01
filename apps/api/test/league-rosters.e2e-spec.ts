@@ -89,6 +89,7 @@ describe('atomic league roster API', () => {
   });
 
   async function fixture(label: string) {
+    const now = Date.now();
     const users = await Promise.all([1, 2].map((index) => prisma.user.create({
       data: { wechatOpenId: `roster-e2e-${label}-${index}-${suffix}`, displayName: `${label} ${index}` }
     })));
@@ -142,8 +143,8 @@ describe('atomic league roster API', () => {
       data: {
         seasonId: season.id,
         name: 'Main',
-        startsAt: new Date('2026-09-10T00:00:00.000Z'),
-        endsAt: new Date('2026-10-01T00:00:00.000Z'),
+        startsAt: new Date(now - 24 * 60 * 60 * 1_000),
+        endsAt: new Date(now + 24 * 60 * 60 * 1_000),
         allowBuy: true,
         allowSell: true,
         allowTransfer: true,

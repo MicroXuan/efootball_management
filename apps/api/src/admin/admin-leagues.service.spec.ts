@@ -69,4 +69,42 @@ describe('AdminLeaguesService', () => {
       items: [{ currentSeason: { id: 'season-20', approvedEntryCount: 67 } }]
     });
   });
+
+  it('loads one scoped league workspace with its current season', async () => {
+    const findUnique = jest.fn(async () => ({
+      id: 'league-1',
+      name: 'CELL 联赛',
+      shortName: 'CELL',
+      description: '',
+      logoUrl: null,
+      status: 'ACTIVE',
+      edition: 'INTERNATIONAL',
+      defaultSuperCapacity: 23,
+      defaultChampionCapacity: 18,
+      defaultPromotionCount: 4,
+      currentSeason: {
+        id: 'season-20',
+        displayName: 'S20',
+        status: 'IN_PROGRESS',
+        _count: { entries: 67 }
+      },
+      version: 3,
+      createdAt: new Date('2026-09-30T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-30T00:00:00.000Z')
+    }));
+    const service = new AdminLeaguesService(
+      { league: { findUnique } } as never,
+      {} as never,
+      {} as never
+    );
+
+    await expect(service.get('league-1')).resolves.toMatchObject({
+      id: 'league-1',
+      currentSeason: { id: 'season-20', approvedEntryCount: 67 },
+      capabilities: { canManage: true, canCreateSeason: true }
+    });
+    expect(findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'league-1' }
+    }));
+  });
 });

@@ -32,7 +32,7 @@ const team = {
 
 it('marks the current season and switches it with the league version', async () => {
   const request = vi.fn(async (path: string, options?: { method?: string }) => {
-    if (path === `/v1/leagues/${leagueId}`) return league;
+    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons` && !options?.method) return { items: [season(firstId, 1, 'S1'), season(secondId, 2, 'S2')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     if (path.endsWith(`/${secondId}/set-current`)) return { leagueId, currentSeasonId: secondId, version: 6 };
@@ -53,7 +53,7 @@ it('marks the current season and switches it with the league version', async () 
 
 it('does not preselect every existing team when enrolling teams', async () => {
   const request = vi.fn(async (path: string) => {
-    if (path === `/v1/leagues/${leagueId}`) return league;
+    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     throw new Error(`unexpected ${path}`);
