@@ -1,6 +1,6 @@
 page {
-  background: #07110d;
-  color: #eef7f1;
+  background: #0a0a0a;
+  color: #f7f8f5;
 }
 
 .page-shell {
@@ -10,7 +10,7 @@ page {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: linear-gradient(165deg, #07110d 0%, #10241a 62%, #162019 100%);
+  background: linear-gradient(165deg, #0a0a0a 0%, #10241a 62%, #162019 100%);
 }
 
 .stadium-mark {
@@ -65,14 +65,14 @@ page {
 }
 
 .eyebrow {
-  color: #d4b05f;
+  color: #d9e342;
   font-size: 20rpx;
   letter-spacing: 6rpx;
 }
 
 .title {
   margin-top: 18rpx;
-  font-family: STKaiti, KaiTi, serif;
+  font-family:inherit;
   font-size: 76rpx;
   font-weight: 700;
   line-height: 1;
@@ -103,15 +103,15 @@ page {
 }
 
 .panel-code {
-  color: #55ef8b;
+  color: #b0ff00;
 }
 
 .login-button {
   margin-top: 34rpx;
   border: 0;
-  border-radius: 0;
-  background: #55ef8b;
-  color: #07110d;
+  border-radius:20rpx;
+  background: #b0ff00;
+  color: #0a0a0a;
   font-size: 32rpx;
   font-weight: 700;
   letter-spacing: 4rpx;

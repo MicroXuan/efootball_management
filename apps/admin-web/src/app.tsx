@@ -38,16 +38,16 @@ export function ApplicationShell() {
   return (
     <Layout className="admin-shell">
       <Sider width={272} className="admin-sider">
-        <div className="shell-brand"><span>EFM</span><strong>赛事控制台</strong></div>
+        <div className="shell-brand"><span>球</span><strong>赛事控制台</strong></div>
         <Menu mode="inline" selectedKeys={[selectedKey]} items={[
           ...(platformItems.length ? [{ type: 'group' as const, label: '平台管理', children: platformItems }] : []),
           ...(leagueItems.length ? [{ type: 'group' as const, label: '我的联赛', children: leagueItems }] : [])
         ]} />
-        <div className="shell-version">ADMIN SYSTEM / 0.2</div>
+        <div className="shell-version">管理系统 · 0.2</div>
       </Sider>
       <Layout>
         <Header className="admin-header">
-          <div><span className="section-kicker">OPERATIONS</span><strong>管理工作台</strong></div>
+          <div><span className="section-kicker">赛事运营</span><strong>管理工作台</strong></div>
           <div className="admin-identity">
             <Tag color="green">{session.identity?.platformAdmin ? '平台管理员' : '联赛管理员'}</Tag>
             <span>{admin?.displayName}</span>
@@ -78,8 +78,9 @@ const deferred = (page: React.ReactNode) => <Suspense fallback={<div className="
 export function App() {
   return (
     <ConfigProvider theme={{ token: {
-      colorPrimary: '#22c77a', colorInfo: '#22c77a', colorWarning: '#d6a437', colorError: '#e76f51',
-      borderRadius: 6, fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif'
+      colorPrimary: '#82c900', colorInfo: '#82c900', colorWarning: '#b7a600', colorError: '#d85d50',
+      colorText: '#171a17', colorBgLayout: '#f3f5f1', colorBorder: '#dde2d9',
+      borderRadius: 14, fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif'
     } }}>
       <AdminSessionProvider>
         <BrowserRouter><Routes>

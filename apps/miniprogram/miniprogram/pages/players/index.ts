@@ -62,6 +62,10 @@ Page({
     void this.loadCards('refresh')
   },
 
+  onShow() {
+    this.getTabBar?.()?.setData({ selected: 0 })
+  },
+
   onUnload() {
     unloaded = true
     requestToken += 1

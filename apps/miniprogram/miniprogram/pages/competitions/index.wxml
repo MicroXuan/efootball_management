@@ -1,10 +1,10 @@
 <view class="competition-page">
   <view class="page-head">
     <view>
-      <text class="kicker">MATCH CONTROL</text>
+      <text class="kicker">赛事中枢</text>
       <text class="title">赛事中枢</text>
     </view>
-    <text class="head-mark">EFM / 02</text>
+    <text class="head-mark">比赛日程 · 02</text>
   </view>
 
   <view class="briefing">
@@ -14,13 +14,13 @@
 
   <loading-state wx:if="{{loading && items.length === 0}}" label="正在读取赛事" />
   <view wx:elif="{{errorMessage && items.length === 0}}" class="state-panel">
-    <text class="state-code">CONNECTION LOST</text>
+    <text class="state-code">连接中断</text>
     <text class="state-title">赛事数据暂时不可用</text>
     <text class="state-copy">{{errorMessage}}</text>
     <button class="outline-button" bindtap="retry">重新加载</button>
   </view>
   <view wx:elif="{{!loading && items.length === 0}}" class="state-panel">
-    <text class="state-code">NO FIXTURES</text>
+    <text class="state-code">暂无赛程</text>
     <text class="state-title">暂时没有公开赛事</text>
     <text class="state-copy">新赛事发布后会出现在这里。</text>
   </view>

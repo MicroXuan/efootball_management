@@ -2,14 +2,14 @@
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员卡档案" />
 
   <view wx:elif="{{state === 'unavailable'}}" class="detail-state">
-    <text class="state-code">CARD UNAVAILABLE</text>
+    <text class="state-code">卡片不可用</text>
     <text class="state-title">当前无法查看</text>
     <text class="state-copy">{{errorMessage}}</text>
     <button class="back-button" bindtap="goBack">返回球员库</button>
   </view>
 
   <view wx:elif="{{state === 'error'}}" class="detail-state">
-    <text class="state-code">CONNECTION LOST</text>
+    <text class="state-code">连接中断</text>
     <text class="state-title">详情加载失败</text>
     <text class="state-copy">{{errorMessage}}</text>
     <button class="back-button" bindtap="retry">重新加载</button>
@@ -19,7 +19,7 @@
     <view class="hero">
       <view class="hero-card"><player-card card="{{card}}" /></view>
       <view class="hero-copy">
-        <text class="hero-kicker">PLAYER DOSSIER</text>
+        <text class="hero-kicker">球员档案</text>
         <text class="hero-name">{{card.displayName}}</text>
         <text class="hero-card-name">{{card.cardName}}</text>
         <view class="hero-rule"></view>

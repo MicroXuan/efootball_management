@@ -1,7 +1,7 @@
 <view class="result-page">
   <loading-state wx:if="{{loading && !item}}" label="正在核对比赛" />
   <view wx:elif="{{item}}">
-    <text class="kicker">RESULT CONSOLE</text><text class="title">比分确认</text>
+    <text class="kicker">赛果控制台</text><text class="title">比分确认</text>
     <view class="scoreboard"><text>{{item.match.homeParticipant.displayName}}</text><text class="divider">—</text><text>{{item.match.awayParticipant.displayName}}</text></view>
     <view wx:if="{{item.action === 'SUBMIT'}}" class="form">
       <text class="label">录入最终比分</text><view class="score-inputs"><input type="number" maxlength="2" value="{{homeScore}}" bindinput="onHomeInput"/><text>:</text><input type="number" maxlength="2" value="{{awayScore}}" bindinput="onAwayInput"/></view>

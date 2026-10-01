@@ -1,10 +1,10 @@
 <view class="catalog-page">
   <view class="catalog-head">
     <view>
-      <text class="head-kicker">SCOUTING INDEX</text>
+      <text class="head-kicker">球员索引</text>
       <text class="head-title">球员档案</text>
     </view>
-    <view class="head-mark">EFM / 01</view>
+    <view class="head-mark">球员档案 · 01</view>
   </view>
 
   <view class="search-box">
@@ -40,14 +40,14 @@
   <loading-state wx:if="{{loading && cards.length === 0}}" label="正在检索球员档案" />
 
   <view wx:elif="{{errorMessage && cards.length === 0}}" class="catalog-state">
-    <text class="state-code">OFFLINE / RETRY</text>
+    <text class="state-code">离线 · 可重试</text>
     <text class="state-title">暂时无法读取球员库</text>
     <text class="state-copy">{{errorMessage}}</text>
     <button class="retry-button" bindtap="retry">重新加载</button>
   </view>
 
   <view wx:elif="{{!loading && cards.length === 0}}" class="catalog-state">
-    <text class="state-code">NO MATCH</text>
+    <text class="state-code">无匹配结果</text>
     <text class="state-title">没有找到符合条件的球员</text>
     <text class="state-copy">调整名称或筛选条件后再试。</text>
   </view>
@@ -56,7 +56,7 @@
     <view wx:for="{{groups}}" wx:key="id" class="card-group">
       <view class="group-head">
         <text class="group-title">{{item.title}}</text>
-        <text class="group-count">{{item.cards.length}} CARDS</text>
+        <text class="group-count">{{item.cards.length}} 张卡片</text>
       </view>
       <view class="card-grid">
         <player-card

@@ -114,3 +114,130 @@ button, input { font: inherit; }
 .season-enrollment-card { grid-column: 1 / -1; }
 .season-team-options { display: grid; gap: 12px; margin: 16px 0 22px; }
 .season-team-options .ant-checkbox-wrapper { margin-inline-start: 0; }
+
+/* 赛场夜视 × 数据白场 */
+:root {
+  color: #171a17;
+  background: #f3f5f1;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body { background: #f3f5f1; }
+
+.login-stage {
+  grid-template-columns: minmax(460px, 1.2fr) minmax(400px, .8fr);
+  background: #0a0a0a;
+}
+.login-field {
+  padding: clamp(44px, 7vw, 112px);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(176, 255, 0, .15), transparent 28%),
+    linear-gradient(130deg, rgba(10, 10, 10, .98), rgba(25, 28, 23, .96));
+  border-right-color: rgba(176, 255, 0, .14);
+}
+.login-field::before,
+.login-field::after { border-color: rgba(176, 255, 0, .16); }
+.pitch-line--half { border-left-color: rgba(176, 255, 0, .16); }
+.pitch-circle { border-color: #b0ff00; box-shadow: 0 0 0 12px rgba(176, 255, 0, .08), 0 0 36px rgba(176, 255, 0, .18); }
+.brand-lockup { gap: 16px; }
+.brand-lockup strong { font-family: inherit; font-size: clamp(54px, 7vw, 96px); font-weight: 850; letter-spacing: -.06em; }
+.brand-lockup > span:last-child { color: #a0a69d; }
+.brand-kicker,
+.section-kicker { color: #b0ff00; font: 750 12px/1.2 inherit; letter-spacing: .14em; }
+.login-panel { padding: 48px; background: #121312; }
+.login-card {
+  width: min(440px, 100%);
+  padding: 42px;
+  background: #fdfdfd;
+  color: #171a17;
+  border: 1px solid rgba(176, 255, 0, .28);
+  border-top: 1px solid rgba(176, 255, 0, .28);
+  border-radius: 24px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .4);
+}
+.login-index { color: #608f00; font: 750 12px/1.2 inherit; letter-spacing: .12em; }
+.login-card h1 { margin-top: 16px; font: 820 34px/1.18 inherit; letter-spacing: -.03em; }
+.login-card > p { color: #697067; line-height: 1.65; }
+.login-note { border-top-color: #e3e7df; color: #747b72; }
+.login-card .ant-input,
+.login-card .ant-input-affix-wrapper { min-height: 44px; border-radius: 12px; }
+.login-card .ant-btn { min-height: 44px; border-radius: 999px; font-weight: 750; }
+
+.session-loader { color: #a0a69d; background: #0a0a0a; }
+.admin-shell { background: #f3f5f1; }
+.admin-sider.ant-layout-sider { background: #0a0a0a; border-right: 1px solid #282b26; }
+.shell-brand { height: 88px; padding: 24px 22px; color: #f7f8f5; border-bottom-color: #282b26; }
+.shell-brand span { min-width: 32px; padding: 7px 9px; color: #0a0a0a; background: #b0ff00; border-radius: 10px; text-align: center; }
+.shell-brand strong { font-size: 17px; letter-spacing: .04em; }
+.admin-sider .ant-menu { color: #a0a69d; padding: 18px 12px; }
+.admin-sider .ant-menu-item,
+.admin-sider .ant-menu-item-group-title { border-radius: 12px; }
+.admin-sider .ant-menu-item-group-title { color: #6f756c !important; letter-spacing: .08em; }
+.admin-sider .ant-menu-item:hover { color: #f7f8f5 !important; background: #1a1a1a !important; }
+.admin-sider .ant-menu-item-selected { color: #b0ff00 !important; background: #20231f !important; box-shadow: inset 3px 0 0 #b0ff00; }
+.shell-version { color: #656b62; font-family: inherit; letter-spacing: .08em; }
+.admin-header.ant-layout-header { height: 88px; padding: 0 34px; background: rgba(253, 253, 253, .95); border-bottom-color: #dde2d9; }
+.admin-header > div:first-child { color: #171a17; }
+.admin-header .section-kicker { color: #608f00; }
+.admin-identity { color: #444a42; }
+.admin-identity .ant-tag { border-radius: 999px; }
+.admin-content { padding: 30px; background: #f3f5f1; }
+.empty-dashboard { min-height: calc(100vh - 150px); color: #171a17; background: #fdfdfd; border-color: #dde2d9; border-radius: 20px; }
+.empty-dashboard p { color: #697067; }
+.page-heading { align-items: center; margin-bottom: 24px; color: #171a17; }
+.page-heading h1 { margin-top: 8px; font-size: clamp(28px, 3vw, 38px); line-height: 1.15; letter-spacing: -.035em; }
+.page-heading .section-kicker { color: #608f00; }
+.page-grid,
+.page-stack,
+.workspace-grid { gap: 20px; }
+.data-card,
+.form-card,
+.workspace-grid .ant-card,
+.detail-card {
+  border-color: #dde2d9;
+  border-radius: 18px;
+  box-shadow: 0 10px 34px rgba(24, 31, 23, .055);
+  overflow: hidden;
+}
+.ant-card .ant-card-head { min-height: 58px; border-bottom-color: #e6eae3; }
+.ant-card .ant-card-head-title { font-weight: 780; }
+.ant-card .ant-table-container { border-radius: 12px; overflow: hidden; }
+.ant-table-wrapper .ant-table-thead > tr > th { color: #555c53; background: #f2f5ef; font-size: 12px; letter-spacing: .04em; }
+.ant-table-wrapper .ant-table-tbody > tr:hover > td { background: #f6faef !important; }
+.ant-btn { border-radius: 999px; font-weight: 650; box-shadow: none; }
+.ant-btn-primary { color: #11130f; background: #b0ff00; border-color: #b0ff00; }
+.ant-btn-primary:not(:disabled):hover { color: #11130f !important; background: #9ee800 !important; border-color: #9ee800 !important; }
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker { border-radius: 12px !important; }
+.ant-tag { border-radius: 999px; padding-inline: 10px; }
+.ant-modal-content,
+.ant-drawer-content,
+.ant-alert { border-radius: 16px; }
+.ant-tabs .ant-tabs-nav::before { border-bottom-color: #dde2d9; }
+.ant-tabs .ant-tabs-tab { padding: 10px 16px; border-radius: 999px; }
+.ant-tabs .ant-tabs-tab-active { background: #e9f7cc; }
+.ant-tabs .ant-tabs-ink-bar { display: none; }
+.candidate-group { border-top-color: #e2e6df; }
+.candidate-card { padding: 14px; color: #31372f; border-color: #dde2d9; border-radius: 14px; background: #fafbf9; }
+.candidate-card span { color: #737a71; }
+
+@media (max-width: 1100px) {
+  .admin-sider.ant-layout-sider { flex: 0 0 220px !important; width: 220px !important; max-width: 220px !important; min-width: 220px !important; }
+  .page-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .page-heading .ant-tabs { width: 100%; overflow-x: auto; }
+  .page-grid,
+  .workspace-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 860px) {
+  .login-stage { grid-template-columns: 1fr; }
+  .login-field { min-height: 34vh; }
+  .login-panel { padding: 28px 18px 44px; }
+  .login-card { padding: 30px 24px; border-radius: 20px; }
+  .admin-sider.ant-layout-sider { display: none; }
+  .admin-header.ant-layout-header { padding: 0 18px; }
+  .admin-content { padding: 20px 16px; }
+}

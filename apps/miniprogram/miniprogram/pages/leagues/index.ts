@@ -27,6 +27,7 @@ Page({
   },
 
   onShow() {
+    this.getTabBar?.()?.setData({ selected: 1 })
     void this.loadLeagues()
   },
 

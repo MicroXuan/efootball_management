@@ -1,18 +1,18 @@
 <view class="page-shell">
   <view class="topbar">
-    <view><text class="eyebrow">MEMBER IDENTITY</text><text class="page-title">我的</text></view>
-    <text class="record-mark">EFM / 01</text>
+    <view><text class="eyebrow">成员身份</text><text class="page-title">我的</text></view>
+    <text class="record-mark">球员档案 · 01</text>
   </view>
 
   <loading-state wx:if="{{state === 'loading'}}" label="正在加载身份资料" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">IDENTITY / ERROR</text><text class="state-title">暂时无法加载</text>
+    <text class="state-code">身份读取失败</text><text class="state-title">暂时无法加载</text>
     <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
   </view>
 
   <block wx:else>
     <view wx:if="{{!loggedIn}}" class="state-card login-card">
-      <text class="state-code">WECHAT IDENTITY</text><text class="state-title">登录后查看我的球队</text>
+      <text class="state-code">微信身份</text><text class="state-title">登录后查看我的球队</text>
       <text class="state-copy">管理员绑定联赛球队后，球队与当前赛季会自动显示在这里。</text>
       <button class="primary-button" bindtap="login">微信登录</button>
     </view>
@@ -32,7 +32,7 @@
       </view>
 
       <view class="section-head">
-        <view><text class="section-kicker">ASSIGNED TEAMS</text><text class="section-title">已绑定联赛球队</text></view>
+        <view><text class="section-kicker">已绑定球队</text><text class="section-title">已绑定联赛球队</text></view>
         <text class="team-count">{{profile.teams.length}} 支</text>
       </view>
 
