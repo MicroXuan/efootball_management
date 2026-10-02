@@ -1,0 +1,33 @@
+:host {
+  display: block;
+}
+
+.artwork {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 2rpx solid #344047;
+  border-radius: 18rpx;
+  background: #10181c;
+}
+
+.artwork--square { aspect-ratio: 1 / 1; }
+.artwork--portrait { aspect-ratio: 3 / 4; }
+
+.artwork__image,
+.artwork__fallback {
+  width: 100%;
+  height: 100%;
+}
+
+.artwork__image { display: block; }
+
+.artwork__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d8e2e5;
+  background: linear-gradient(145deg, #213038, #10181c);
+  font-size: 34rpx;
+  font-weight: 800;
+}

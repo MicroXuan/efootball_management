@@ -1,6 +1,14 @@
 <view class="tabbar-shell">
   <view class="tabbar">
-    <view wx:for="{{items}}" wx:key="text" class="tab-item {{selected === index ? 'is-active' : ''}}" data-index="{{index}}" bindtap="switchTab">
+    <view
+      wx:for="{{items}}"
+      wx:key="text"
+      class="tab-item {{selected === index ? 'is-active' : ''}}"
+      data-index="{{index}}"
+      bindtap="switchTab"
+      role="button"
+      aria-label="{{item.text}}{{selected === index ? '，当前页面' : ''}}"
+    >
       <view class="icon-wrap">
         <image class="icon" src="{{selected === index ? item.activeIcon : item.icon}}" mode="aspectFit" />
       </view>
