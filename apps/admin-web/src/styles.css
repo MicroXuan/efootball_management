@@ -95,6 +95,22 @@ select { font: inherit; }
 .page-stack { display: grid; gap: 20px; }
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); gap: 20px; align-items: start; }
 .season-enrollment-card { grid-column: 1 / -1; }
+.current-season-card { grid-column: 1 / -1; overflow: hidden; border: 1px solid #cbd8c0; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #f7faef 100%); box-shadow: var(--admin-shadow-card); }
+.current-season-card--cancelled { border-color: #e1c8c5; background: linear-gradient(135deg, #ffffff 0%, #fbf4f3 100%); }
+.current-season-summary { display: grid; gap: 30px; }
+.current-season-summary__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.current-season-summary__heading h2 { margin: 7px 0 8px; color: var(--admin-text); font-size: clamp(30px, 4vw, 46px); line-height: 1; letter-spacing: -.045em; }
+.current-season-summary__heading p { margin: 0; display: flex; align-items: center; gap: 14px; color: var(--admin-text-secondary); }
+.current-season-summary__heading p strong { color: var(--admin-text); }
+.season-rail { margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; }
+.season-rail__item { position: relative; min-width: 0; display: grid; gap: 9px; color: var(--admin-text-weak); font-size: 12px; font-weight: 680; }
+.season-rail__item:not(:last-child)::after { position: absolute; top: 13px; left: 30px; right: 8px; height: 2px; background: var(--admin-border); content: ""; }
+.season-rail__marker { position: relative; z-index: 1; width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid var(--admin-border-strong); border-radius: 50%; color: var(--admin-text-secondary); background: #fff; }
+.season-rail__item--complete .season-rail__marker { color: var(--admin-on-accent); border-color: var(--admin-accent); background: var(--admin-accent); }
+.season-rail__item--complete:not(:last-child)::after { background: var(--admin-accent); }
+.season-rail__item--current { color: var(--admin-text); }
+.season-rail__item--current .season-rail__marker { color: var(--admin-on-accent); border-color: var(--admin-accent); box-shadow: 0 0 0 5px rgba(182,241,58,.2); }
+.season-rail__item--cancelled .season-rail__marker { color: var(--admin-danger); border-color: #d9aaa6; background: #fff7f6; }
 .loading-block { min-height: 180px; display: grid; place-items: center; color: var(--admin-text-secondary); }
 
 /* Shared components */
@@ -167,6 +183,10 @@ select { font: inherit; }
   .admin-content { padding: 20px 16px; }
   .inline-fields,
   .candidate-card-grid { grid-template-columns: 1fr; }
+  .current-season-summary__heading { flex-direction: column; }
+  .season-rail { gap: 14px; grid-template-columns: 1fr; }
+  .season-rail__item { grid-template-columns: 28px 1fr; align-items: center; }
+  .season-rail__item:not(:last-child)::after { width: 2px; height: 14px; top: 28px; left: 13px; right: auto; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
