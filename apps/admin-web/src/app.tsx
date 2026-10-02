@@ -5,6 +5,7 @@ import { AdminSessionProvider, useAdminSession } from './auth/admin-session';
 import { LoginPage } from './auth/login-page';
 import { ProtectedRoute } from './auth/protected-route';
 import { adminApi } from './lib/api';
+import { premiumAdminTheme } from './design-system/theme';
 
 const AdminAccountsPage = lazy(() => import('./platform/admin-accounts-page').then((module) => ({ default: module.AdminAccountsPage })));
 const AuditPage = lazy(() => import('./platform/audit-page').then((module) => ({ default: module.AuditPage })));
@@ -77,11 +78,7 @@ const deferred = (page: React.ReactNode) => <Suspense fallback={<div className="
 
 export function App() {
   return (
-    <ConfigProvider theme={{ token: {
-      colorPrimary: '#82c900', colorInfo: '#82c900', colorWarning: '#b7a600', colorError: '#d85d50',
-      colorText: '#171a17', colorBgLayout: '#f3f5f1', colorBorder: '#dde2d9',
-      borderRadius: 14, fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif'
-    } }}>
+    <ConfigProvider theme={premiumAdminTheme}>
       <AdminSessionProvider>
         <BrowserRouter><Routes>
           <Route path="/login" element={<LoginPage />} />
