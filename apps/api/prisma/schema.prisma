@@ -767,23 +767,24 @@ model FinanceLedgerEntry {
 }
 
 model ValuationWindow {
-  id                   String                       @id @default(uuid()) @db.Char(36)
-  seasonId             String                       @map("season_id") @db.Char(36)
-  name                 String                       @db.VarChar(64)
-  startsAt             DateTime                     @map("starts_at")
-  endsAt               DateTime                     @map("ends_at")
-  closedAt             DateTime?                    @map("closed_at")
-  currentRuleVersionId String?                      @unique @map("current_rule_version_id") @db.Char(36)
-  createdByAdminId     String                       @map("created_by_admin_id") @db.Char(36)
-  version              Int                          @default(1) @db.UnsignedInt
-  createdAt            DateTime                     @default(now()) @map("created_at")
-  updatedAt            DateTime                     @updatedAt @map("updated_at")
-  season               LeagueSeason                 @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  createdByAdmin       AdminAccount                 @relation("ValuationWindowCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  currentRuleVersion   ValuationWindowRuleVersion?  @relation("ValuationWindowCurrentRule", fields: [currentRuleVersionId], references: [id], onDelete: Restrict)
-  ruleVersions         ValuationWindowRuleVersion[] @relation("ValuationWindowRules")
-  rosterSnapshots      ValuationRosterSnapshot[]
-  submissions          ValuationSubmission[]
+  id                    String                       @id @default(uuid()) @db.Char(36)
+  seasonId              String                       @map("season_id") @db.Char(36)
+  name                  String                       @db.VarChar(64)
+  startsAt              DateTime                     @map("starts_at")
+  endsAt                DateTime                     @map("ends_at")
+  closedAt              DateTime?                    @map("closed_at")
+  snapshotInitializedAt DateTime?                    @map("snapshot_initialized_at")
+  currentRuleVersionId  String?                      @unique @map("current_rule_version_id") @db.Char(36)
+  createdByAdminId      String                       @map("created_by_admin_id") @db.Char(36)
+  version               Int                          @default(1) @db.UnsignedInt
+  createdAt             DateTime                     @default(now()) @map("created_at")
+  updatedAt             DateTime                     @updatedAt @map("updated_at")
+  season                LeagueSeason                 @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin        AdminAccount                 @relation("ValuationWindowCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  currentRuleVersion    ValuationWindowRuleVersion?  @relation("ValuationWindowCurrentRule", fields: [currentRuleVersionId], references: [id], onDelete: Restrict)
+  ruleVersions          ValuationWindowRuleVersion[] @relation("ValuationWindowRules")
+  rosterSnapshots       ValuationRosterSnapshot[]
+  submissions           ValuationSubmission[]
 
   @@index([seasonId, startsAt, endsAt], map: "valuation_windows_season_timeline_idx")
   @@index([createdByAdminId], map: "valuation_windows_creator_idx")
