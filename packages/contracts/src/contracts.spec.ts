@@ -194,12 +194,17 @@ describe('league economy contracts', () => {
       leagueId: ids.league,
       teamId: ids.team,
       teamName: '海港竞技',
+      teamNumber: 7,
+      teamLogoUrl: null,
+      ownerDisplayName: '小宣',
+      ownerPublicUserNo: '100069',
       shellValueMinor: 5000,
       knownPlayerValueMinor: 8000,
       totalKnownValueMinor: 13_000,
       valuationCompleteness: 'INCOMPLETE',
       missingValuationCount: 1,
       activePlayerCount: 3,
+      activeSalaryMinor: 1200,
       players: []
     });
     assert.equal(assets.valuationCompleteness, 'INCOMPLETE');

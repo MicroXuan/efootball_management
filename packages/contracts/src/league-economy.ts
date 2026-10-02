@@ -18,6 +18,15 @@ export const TeamAssetPlayerSchema = z.object({
   playerName: z.string().min(1),
   cardName: z.string().min(1),
   cardImageUrl: z.string().nullable(),
+  position: z.string().nullable(),
+  nationality: z.string().nullable(),
+  club: z.string().nullable(),
+  age: z.number().int().nonnegative().nullable(),
+  heightCm: z.number().int().positive().nullable(),
+  preferredFoot: z.string().nullable(),
+  atRating: z.number().int().nonnegative().nullable(),
+  acquiredAt: TimestampSchema,
+  salaryMinor: ValuationMoneyMinorSchema,
   rosterStatus: RosterEntryStatusSchema,
   currentValueMinor: ValuationMoneyMinorSchema.nullable(),
   lastEffectiveAt: TimestampSchema.nullable()
@@ -27,13 +36,31 @@ export const TeamAssetOverviewSchema = z.object({
   leagueId: ResourceIdSchema,
   teamId: ResourceIdSchema,
   teamName: z.string().min(1),
+  teamNumber: z.number().int().nonnegative().nullable(),
+  teamLogoUrl: z.string().nullable(),
+  ownerDisplayName: z.string().min(1),
+  ownerPublicUserNo: z.string().regex(/^\d{6}$/),
   shellValueMinor: ValuationMoneyMinorSchema,
   knownPlayerValueMinor: ValuationMoneyMinorSchema,
   totalKnownValueMinor: ValuationMoneyMinorSchema,
   valuationCompleteness: ValuationCompletenessSchema,
   missingValuationCount: z.number().int().nonnegative(),
   activePlayerCount: z.number().int().nonnegative(),
+  activeSalaryMinor: ValuationMoneyMinorSchema,
   players: z.array(TeamAssetPlayerSchema)
+});
+
+export const PlayerValuationHistoryPointSchema = z.object({
+  id: ResourceIdSchema,
+  previousValueMinor: ValuationMoneyMinorSchema.nullable(),
+  valueMinor: ValuationMoneyMinorSchema,
+  effectiveAt: TimestampSchema
+});
+export const PlayerValuationHistoryResponseSchema = z.object({
+  leagueId: ResourceIdSchema,
+  playerId: ResourceIdSchema,
+  playerName: z.string().min(1),
+  items: z.array(PlayerValuationHistoryPointSchema)
 });
 
 export const LeagueTransactionListItemSchema = z.object({
@@ -101,6 +128,7 @@ export const CreateTransactionFeeRuleRequestSchema = z.object({
 
 export type ValuationCompleteness = z.infer<typeof ValuationCompletenessSchema>;
 export type TeamAssetOverview = z.infer<typeof TeamAssetOverviewSchema>;
+export type PlayerValuationHistoryResponse = z.infer<typeof PlayerValuationHistoryResponseSchema>;
 export type LeagueTransactionListItem = z.infer<typeof LeagueTransactionListItemSchema>;
 export type LeagueTransactionListResponse = z.infer<typeof LeagueTransactionListResponseSchema>;
 export type TeamFinanceSummary = z.infer<typeof TeamFinanceSummarySchema>;

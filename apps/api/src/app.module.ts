@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module.js';
 import { LeaguesModule } from './leagues/leagues.module.js';
 import { LeagueTeamsModule } from './league-teams/league-teams.module.js';
 import { LeagueRostersModule } from './league-rosters/league-rosters.module.js';
+import { LeagueEconomyModule } from './league-economy/league-economy.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
 import { PlayerValuationsModule } from './player-valuations/player-valuations.module.js';
@@ -36,6 +37,7 @@ import { StorageModule } from './storage/storage.module.js';
     LeaguesModule,
     LeagueTeamsModule,
     LeagueRostersModule,
+    LeagueEconomyModule,
     PlayerCatalogModule,
     PlayerBuildsModule,
     PlayerImportModule,
