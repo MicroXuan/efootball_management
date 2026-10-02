@@ -178,7 +178,7 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
         { title: '赛季', dataIndex: 'displayName' },
         { title: '时间', render: (_, row) => `${row.startsAt.slice(0, 10)} 至 ${row.endsAt.slice(0, 10)}` },
         { title: '参赛球队', dataIndex: 'approvedEntryCount' },
-        { title: '状态', render: (_, row) => league?.currentSeason?.id === row.id ? <Tag color="green">当前赛季</Tag> : <Tag>{row.status}</Tag> },
+        { title: '状态', render: (_, row) => league?.currentSeason?.id === row.id ? <Tag color="success">当前赛季</Tag> : <Tag>{row.status}</Tag> },
         { title: '操作', render: (_, row) => <>
           {row.status === 'DRAFT' ? <Button type="link" disabled={submitting} onClick={() => beginEdit(row)}>编辑</Button> : null}
           {league?.currentSeason?.id !== row.id ? <Button type="link" disabled={submitting} onClick={() => void setCurrent(row)}>设为当前赛季</Button> : null}

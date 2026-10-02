@@ -11,6 +11,7 @@ export const adminSemanticColors = Object.freeze({
   textSecondary: '#5E6A70',
   border: '#D8E0E4',
   accent: '#B6F13A',
+  success: '#52720F',
 });
 
 export const premiumAdminTheme: ThemeConfig = {
@@ -20,6 +21,7 @@ export const premiumAdminTheme: ThemeConfig = {
     colorPrimaryActive: '#93C52C',
     colorPrimaryBorder: '#93C52C',
     colorInfo: '#3277A8',
+    colorSuccess: adminSemanticColors.success,
     colorWarning: '#A76D11',
     colorError: '#C34F47',
     colorText: adminSemanticColors.text,

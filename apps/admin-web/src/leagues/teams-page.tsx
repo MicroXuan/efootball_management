@@ -65,7 +65,7 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         { title: '球队', dataIndex: 'name', render: (value, row) => <Link to={`/leagues/${leagueId}/teams/${row.id}`}>{value}</Link> },
         { title: '用户编号', dataIndex: 'ownerPublicUserNo' },
         { title: '阵容', render: (_, row) => `${row.activePlayerCount}/25` },
-        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'green' : 'red'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
+        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
       ]} /> : null}
     </Card>
     <Card title="创建球队" className="form-card">

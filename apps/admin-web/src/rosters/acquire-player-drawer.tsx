@@ -48,7 +48,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
       <div className="candidate-title"><strong>{player.playerName}</strong>{player.ownedByTeamId ? <Tag color="red">本联赛已归属</Tag> : null}</div>
       <Radio.Group value={selectedCardId} onChange={(event) => { setSelectedCardId(event.target.value); mutationKey.reset(); }}>
         <div className="candidate-card-grid">{player.cards.map((card) => <Radio key={card.id} value={card.id} aria-label={card.cardName} disabled={Boolean(player.ownedByTeamId)}>
-          <div className="candidate-card"><strong>{card.cardName}</strong>{card.recommended ? <Tag color="green">系统推荐</Tag> : null}<span>{card.position} · 初始 {card.overallRating}</span><span>自动加点 {card.maxOverall ?? '—'} · DT {card.dtRating ?? '—'}</span></div>
+          <div className="candidate-card"><strong>{card.cardName}</strong>{card.recommended ? <Tag color="success">系统推荐</Tag> : null}<span>{card.position} · 初始 {card.overallRating}</span><span>自动加点 {card.maxOverall ?? '—'} · DT {card.dtRating ?? '—'}</span></div>
         </Radio>)}</div>
       </Radio.Group>
     </section>)}

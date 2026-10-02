@@ -76,7 +76,7 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
         { title: '球队', dataIndex: 'teamName' }, { title: '当前工资', dataIndex: 'currentSalaryMinor' },
         { title: '预计工资', dataIndex: 'projectedSalaryMinor' },
         { title: '变化', render: (_, row) => `${row.deltaMinor >= 0 ? '+' : ''}${row.deltaMinor}` },
-        { title: '状态', render: (_, row) => <Tag color={row.projectedStatus === 'COMPLIANT' ? 'green' : 'red'}>{row.projectedStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
+        { title: '状态', render: (_, row) => <Tag color={row.projectedStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.projectedStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
       ]} /> : <Typography.Text type="secondary">修改档位后先预览，确认各队工资变化再发布。</Typography.Text>}
     </Card>
   </div>;

@@ -14,6 +14,7 @@ describe('premium admin theme', () => {
       textSecondary: '#5E6A70',
       border: '#D8E0E4',
       accent: '#B6F13A',
+      success: '#52720F',
     });
   });
 
@@ -24,6 +25,7 @@ describe('premium admin theme', () => {
       colorTextSecondary: '#5E6A70',
       colorBgLayout: '#F2F5F7',
       colorBorder: '#D8E0E4',
+      colorSuccess: '#52720F',
       controlHeight: 44,
       borderRadius: 12,
       fontFamily: expect.stringContaining('PingFang SC'),
