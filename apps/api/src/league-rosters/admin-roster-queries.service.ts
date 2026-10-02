@@ -181,6 +181,7 @@ export class AdminRosterQueriesService {
         id: entry.id,
         leagueId: entry.leagueId,
         leagueTeamId: entry.leagueTeamId,
+        seasonId: entry.seasonId,
         teamName: entry.leagueTeam.name,
         rosterTransactionId: entry.rosterTransactionId,
         direction: entry.direction,

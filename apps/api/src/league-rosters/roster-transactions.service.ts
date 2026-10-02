@@ -830,6 +830,9 @@ export class RosterTransactionsService {
       oldSalaryMinor: number | null;
       newSalaryMinor: number | null;
       amountMinor: number | null;
+      valuationSnapshotMinor: number | null;
+      transactionFeeMinor: number | null;
+      transactionFeeRuleVersionId: string | null;
       reason: string;
       createdByAdminId: string;
       createdAt: Date;
@@ -863,6 +866,9 @@ export class RosterTransactionsService {
         oldSalaryMinor: transaction.oldSalaryMinor,
         newSalaryMinor: transaction.newSalaryMinor,
         amountMinor: transaction.amountMinor,
+        valuationSnapshotMinor: transaction.valuationSnapshotMinor,
+        transactionFeeMinor: transaction.transactionFeeMinor,
+        transactionFeeRuleVersionId: transaction.transactionFeeRuleVersionId,
         reason: transaction.reason,
         createdByAdminId: transaction.createdByAdminId,
         createdAt: transaction.createdAt.toISOString()

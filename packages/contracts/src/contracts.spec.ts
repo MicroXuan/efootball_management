@@ -52,6 +52,203 @@ import {
   UpdateTeamProfileRequestSchema,
   WechatLoginRequestSchema
 } from './index.js';
+import {
+  AuditLogSchema,
+  CreateManualFinanceEntryRequestSchema,
+  LeagueTransactionListResponseSchema,
+  PublishValuationSubmissionRequestSchema,
+  ReviewValuationSubmissionRequestSchema,
+  SaveValuationDraftRequestSchema,
+  TeamAssetOverviewSchema,
+  TeamFinanceSummarySchema,
+  ValuationWindowSchema,
+  ValuationWorkspaceSchema
+} from './index.js';
+
+describe('league economy contracts', () => {
+  const ids = {
+    admin: '11111111-1111-4111-8111-111111111111',
+    league: '22222222-2222-4222-8222-222222222222',
+    season: '33333333-3333-4333-8333-333333333333',
+    team: '44444444-4444-4444-8444-444444444444',
+    player: '55555555-5555-4555-8555-555555555555',
+    window: '66666666-6666-4666-8666-666666666666',
+    rule: '77777777-7777-4777-8777-777777777777',
+    snapshot: '88888888-8888-4888-8888-888888888888',
+    submission: '99999999-9999-4999-8999-999999999999'
+  };
+  const startsAt = '2026-10-01T00:00:00.000Z';
+  const endsAt = '2026-10-07T00:00:00.000Z';
+
+  it('accepts integer basis-point limits and rejects invalid valuation window rules', () => {
+    const window = ValuationWindowSchema.parse({
+      id: ids.window,
+      seasonId: ids.season,
+      name: '季前身价申报',
+      startsAt,
+      endsAt,
+      closedAt: null,
+      state: 'OPEN',
+      currentRule: {
+        id: ids.rule,
+        windowId: ids.window,
+        version: 2,
+        minimumValueMinor: 100,
+        maximumValueMinor: 10_000,
+        maximumIncreaseBps: 2500,
+        maximumDecreaseBps: 1500,
+        createdByAdminId: ids.admin,
+        createdAt: startsAt
+      },
+      createdByAdminId: ids.admin,
+      version: 3,
+      createdAt: startsAt,
+      updatedAt: startsAt
+    });
+    assert.equal(window.currentRule.maximumIncreaseBps, 2500);
+    assert.throws(() => ValuationWindowSchema.parse({
+      ...window,
+      currentRule: { ...window.currentRule, maximumIncreaseBps: 10_001 }
+    }));
+    assert.throws(() => ValuationWindowSchema.parse({
+      ...window,
+      currentRule: { ...window.currentRule, minimumValueMinor: 10_001 }
+    }));
+    assert.throws(() => ValuationWindowSchema.parse({
+      ...window,
+      currentRule: { ...window.currentRule, minimumValueMinor: 100.5 }
+    }));
+  });
+
+  it('parses a complete owner workspace and write requests while rejecting unknown states', () => {
+    const workspace = ValuationWorkspaceSchema.parse({
+      window: {
+        id: ids.window,
+        name: '季前身价申报',
+        state: 'OPEN',
+        startsAt,
+        endsAt,
+        rule: {
+          id: ids.rule,
+          version: 1,
+          minimumValueMinor: 100,
+          maximumValueMinor: 10_000,
+          maximumIncreaseBps: 2000,
+          maximumDecreaseBps: 2000
+        }
+      },
+      team: { id: ids.team, name: '海港竞技' },
+      submission: null,
+      players: [{
+        snapshotId: ids.snapshot,
+        playerId: ids.player,
+        playerName: '测试球员',
+        cardName: '基础卡',
+        cardImageUrl: null,
+        rosterStatus: 'ACTIVE',
+        baseValueMinor: null,
+        currentValueMinor: null,
+        minimumAllowedMinor: 100,
+        maximumAllowedMinor: 10_000,
+        draftValueMinor: null,
+        exceedsRange: false
+      }]
+    });
+    assert.equal(workspace.players.length, 1);
+    assert.throws(() => ValuationWorkspaceSchema.parse({
+      ...workspace,
+      window: { ...workspace.window, state: 'PAUSED' }
+    }));
+
+    const draft = SaveValuationDraftRequestSchema.parse({
+      windowId: ids.window,
+      expectedVersion: 1,
+      items: [{ snapshotId: ids.snapshot, proposedValueMinor: 1200 }]
+    });
+    assert.equal(draft.items[0]?.proposedValueMinor, 1200);
+    assert.throws(() => SaveValuationDraftRequestSchema.parse({
+      ...draft,
+      items: [{ snapshotId: ids.snapshot, proposedValueMinor: 1.2 }]
+    }));
+    assert.equal(PublishValuationSubmissionRequestSchema.parse({
+      windowId: ids.window,
+      expectedVersion: 1,
+      idempotencyKey: 'publish-team-1'
+    }).expectedVersion, 1);
+    assert.equal(ReviewValuationSubmissionRequestSchema.parse({
+      expectedVersion: 1,
+      idempotencyKey: 'review-team-1',
+      reason: '核对完成，整批通过'
+    }).reason, '核对完成，整批通过');
+    assert.throws(() => ReviewValuationSubmissionRequestSchema.parse({
+      expectedVersion: 1,
+      idempotencyKey: 'review-team-1',
+      reason: ' '
+    }));
+  });
+
+  it('marks incomplete assets and supports transaction and legacy finance views', () => {
+    const assets = TeamAssetOverviewSchema.parse({
+      leagueId: ids.league,
+      teamId: ids.team,
+      teamName: '海港竞技',
+      shellValueMinor: 5000,
+      knownPlayerValueMinor: 8000,
+      totalKnownValueMinor: 13_000,
+      valuationCompleteness: 'INCOMPLETE',
+      missingValuationCount: 1,
+      activePlayerCount: 3,
+      players: []
+    });
+    assert.equal(assets.valuationCompleteness, 'INCOMPLETE');
+    assert.throws(() => TeamAssetOverviewSchema.parse({ ...assets, valuationCompleteness: 'PARTIAL' }));
+
+    const transactions = LeagueTransactionListResponseSchema.parse({ items: [], nextCursor: null });
+    assert.equal(transactions.items.length, 0);
+
+    const finance = TeamFinanceSummarySchema.parse({
+      leagueId: ids.league,
+      teamId: ids.team,
+      seasonId: null,
+      creditTotalMinor: 500,
+      debitTotalMinor: 200,
+      balanceMinor: 300,
+      uncategorizedEntryCount: 2,
+      entries: []
+    });
+    assert.equal(finance.seasonId, null);
+    assert.equal(CreateManualFinanceEntryRequestSchema.parse({
+      leagueTeamId: ids.team,
+      seasonId: null,
+      direction: 'DEBIT',
+      type: 'MANUAL_ADJUSTMENT',
+      amountMinor: 100,
+      note: '赛季外调整',
+      reason: '管理员纠正历史余额',
+      idempotencyKey: 'finance-adjustment-1'
+    }).seasonId, null);
+  });
+
+  it('requires Chinese-ready audit display context', () => {
+    const audit = AuditLogSchema.parse({
+      id: ids.submission,
+      actorAdminId: ids.admin,
+      actorDisplayName: '小宣',
+      leagueId: ids.league,
+      leagueName: 'CELL 传奇联赛',
+      action: 'VALUATION_SUBMISSION_APPROVE',
+      resourceType: 'ValuationSubmission',
+      resourceId: ids.submission,
+      subjectDisplayName: '海港竞技季前身价申报',
+      reason: '核对完成',
+      metadata: {},
+      createdAt: startsAt
+    });
+    assert.equal(audit.actorDisplayName, '小宣');
+    assert.equal(audit.leagueName, 'CELL 传奇联赛');
+    assert.equal(audit.subjectDisplayName, '海港竞技季前身价申报');
+  });
+});
 
 describe('shared API contracts', () => {
   it('exposes the current user public number for administrator binding', () => {

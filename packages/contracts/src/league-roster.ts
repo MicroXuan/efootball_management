@@ -183,6 +183,9 @@ export const RosterTransactionSchema = z.object({
   oldSalaryMinor: NonNegativeMoneyMinorSchema.nullable(),
   newSalaryMinor: NonNegativeMoneyMinorSchema.nullable(),
   amountMinor: NullablePositiveMoneyMinorSchema,
+  valuationSnapshotMinor: NonNegativeMoneyMinorSchema.nullable().default(null),
+  transactionFeeMinor: NonNegativeMoneyMinorSchema.nullable().default(null),
+  transactionFeeRuleVersionId: ResourceIdSchema.nullable().default(null),
   reason: z.string().min(1).max(512),
   createdByAdminId: ResourceIdSchema,
   createdAt: TimestampSchema
@@ -247,6 +250,7 @@ export const FinanceLedgerEntrySchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
   leagueTeamId: ResourceIdSchema,
+  seasonId: ResourceIdSchema.nullable().default(null),
   rosterTransactionId: ResourceIdSchema.nullable(),
   direction: FinanceLedgerDirectionSchema,
   type: FinanceLedgerTypeSchema,
