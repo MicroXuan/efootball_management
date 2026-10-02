@@ -38,6 +38,7 @@ pnpm dev:db
 docker compose ps
 pnpm db:migrate
 pnpm db:status
+pnpm --filter @efm/api exec prisma db seed
 ```
 
 本机 MySQL 方案：先确保 `.env` 的 `DATABASE_URL` 指向已有数据库，再执行：
@@ -57,10 +58,16 @@ pnpm db:status
 pnpm verify
 ```
 
-开发启动：
+API 开发启动：
 
 ```bash
 pnpm start:api
+```
+
+另开一个终端启动管理后台：
+
+```bash
+pnpm --filter @efm/admin-web dev
 ```
 
 后台管理前端的启动、账号权限和完整验收见 [后台管理系统本地开发与验收](./admin-web-local-development.zh-CN.md)。联赛图片、赛季、球队绑定与小程序联动见 [联赛展示与管理员绑定验收手册](./league-presentation-verification.zh-CN.md)。联赛球队发布前必须按 [联赛球队迁移与回滚手册](./league-team-migration.zh-CN.md)完成干跑检查。
@@ -77,11 +84,33 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 
 第二个请求会返回 access token 与 refresh token。不要把 token 提交到仓库或发到群聊。
 
+## 5. 经营闭环演示数据与入口账号
+
+执行种子命令时，如果 `.env` 已配置 `LOCAL_ADMIN_USERNAME` 和有效的
+`LOCAL_ADMIN_PASSWORD_HASH`，系统会幂等创建“本地经营演示联赛”，包括：
+
+- 正在开放的身价窗口和转会窗口；
+- 一支身价完整的球队，以及一支含超限身价草稿的待审核球队；
+- 正式球员身价、5% 交易手续费规则和最低手续费；
+- 球队壳价值、工资、运营补贴与奢侈税财务明细。
+
+后台入口为 `http://127.0.0.1:4173/login`。用户名取自
+`LOCAL_ADMIN_USERNAME`，密码使用生成该 bcrypt 哈希时对应的本地明文；仓库不保存明文密码。
+
+小程序使用假微信网关时，可分别用以下测试 code 登录两个演示球队老板：
+
+```text
+test-code-economy-demo-complete
+test-code-economy-demo-review
+```
+
+进入“联赛 → 我的联赛 → 球队工作台”后，可打开“身价管理”“球队资产”“交易记录”和“球队财务”。完整队用于查看已生效身价和资产汇总；待审队用于查看超限草稿并在后台完成审核。
+
 需要同步已获授权的 PESDATA 球员数据时，先完成基础迁移与种子数据，再按 [PESDATA 授权同步操作指南](./pesdata-sync.md)执行 2 条干跑和 100 条样本验收。同步签名材料只写入本地 `.env` 或部署平台密钥，不能放入小程序。
 
 需要验收个人赛事的报名、赛程、比分确认与积分榜闭环时，按 [个人赛事闭环本地验收指南](./competition-loop.md)创建幂等的四人演示赛事。
 
-## 5. 导入微信小程序
+## 6. 导入微信小程序
 
 1. 在微信开发者工具选择“导入项目”。
 2. 目录选择仓库中的 `apps/miniprogram`，AppID 选择已注册的小程序。
@@ -91,7 +120,7 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 
 真机无法把 `127.0.0.1` 解释为 Mac。真机联调应改成同一局域网可访问的 Mac 地址，或直接填写已部署的 HTTPS API 域名，然后重新编译。正式发布前还需要在微信公众平台把该 HTTPS 域名加入 `request` 合法域名。
 
-## 6. 手工验收路径
+## 7. 手工验收路径
 
 按顺序验证：
 
@@ -103,7 +132,7 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 
 旧 `/me/game-accounts` 与 `/me/team-profile` 的读取能力仅用于历史数据兼容；写接口会返回 `Deprecation: true` 响应头。新小程序流程不再调用这些写接口。
 
-## 7. 常见问题
+## 8. 常见问题
 
 - `ECONNREFUSED 127.0.0.1:3307`：MySQL 未启动或端口与 `.env` 不一致。
 - `Environment validation failed`：`.env` 缺少必填项，或密钥长度不足 32 个字符。
