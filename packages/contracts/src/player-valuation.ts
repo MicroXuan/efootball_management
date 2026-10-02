@@ -188,6 +188,7 @@ export type ValuationWindow = z.infer<typeof ValuationWindowSchema>;
 export type CreateValuationWindowRequest = z.infer<typeof CreateValuationWindowRequestSchema>;
 export type UpdateValuationWindowRequest = z.infer<typeof UpdateValuationWindowRequestSchema>;
 export type ValuationWorkspace = z.infer<typeof ValuationWorkspaceSchema>;
+export type ValuationWorkspacePlayer = z.infer<typeof ValuationWorkspacePlayerSchema>;
 export type SaveValuationDraftRequest = z.infer<typeof SaveValuationDraftRequestSchema>;
 export type PublishValuationSubmissionRequest = z.infer<typeof PublishValuationSubmissionRequestSchema>;
 export type ReviewValuationSubmissionRequest = z.infer<typeof ReviewValuationSubmissionRequestSchema>;

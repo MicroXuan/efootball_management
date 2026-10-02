@@ -12,4 +12,5 @@ Page({
       this.setData({ state: 'loaded', overview, rosterEmpty: flags.empty, overCap: flags.overCap, ledger: overview.ledger.map((entry) => ({ ...entry, amountCopy: ledgerAmount(entry.direction, entry.amountMinor) })) })
     } catch { this.setData({ state: 'error', errorMessage: '球队档案加载失败，请稍后重试' }) }
   },
+  openValuation() { if (this.data.overview) wx.navigateTo({ url: `/pages/valuation-manage/index?teamId=${this.data.overview.team.id}` }) },
 })

@@ -13,6 +13,7 @@
     "pages/profile/index",
     "pages/my-league-teams/index",
     "pages/league-team-detail/index",
+    "pages/valuation-manage/index",
     "pages/player-card-detail/index"
   ],
   "window": {
