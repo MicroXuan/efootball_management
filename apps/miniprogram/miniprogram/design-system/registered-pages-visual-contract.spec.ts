@@ -15,6 +15,20 @@ const browsingPages = [
 ]
 
 describe('registered browsing pages visual boundary', () => {
+  it('keeps every registered page free from deprecated neon-era colors', () => {
+    const app = JSON.parse(readFileSync(resolve(miniRoot, 'app.json'), 'utf8')) as { pages: string[] }
+
+    for (const page of app.pages) {
+      const styles = readFileSync(resolve(miniRoot, `${page}.wxss`), 'utf8').toLowerCase()
+      const config = JSON.parse(readFileSync(resolve(miniRoot, `${page}.json`), 'utf8')) as {
+        backgroundColor?: string
+      }
+
+      expect(styles, page).not.toMatch(/#0a0a0a|#b0ff00|#d9e342|999rpx/)
+      if (config.backgroundColor) expect(config.backgroundColor, page).toBe('#0E1417')
+    }
+  })
+
   it.each(browsingPages)('%s uses premium dark surfaces and readable neutral text', (page) => {
     const styles = readFileSync(resolve(miniRoot, `pages/${page}/index.wxss`), 'utf8').toLowerCase()
 
