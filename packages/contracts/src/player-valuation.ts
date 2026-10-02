@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ResourceIdSchema } from './common.js';
-import { ExpectedVersionSchema, IdempotencyKeySchema } from './competition.js';
+import { ExpectedVersionSchema } from './competition.js';
 import { RosterEntryStatusSchema } from './league-roster.js';
 
 const TimestampSchema = z.iso.datetime();
@@ -61,8 +61,7 @@ export const CreateValuationWindowRequestSchema = z.object({
   name: z.string().trim().min(1).max(64),
   startsAt: TimestampSchema,
   endsAt: TimestampSchema,
-  rule: ValuationRuleFieldsSchema,
-  idempotencyKey: IdempotencyKeySchema
+  rule: ValuationRuleFieldsSchema
 }).refine((window) => Date.parse(window.startsAt) < Date.parse(window.endsAt), {
   path: ['endsAt'],
   message: 'endsAt must be later than startsAt'
@@ -74,8 +73,7 @@ export const UpdateValuationWindowRequestSchema = z.object({
   endsAt: TimestampSchema.optional(),
   rule: ValuationRuleFieldsSchema.optional(),
   close: z.boolean().optional(),
-  expectedVersion: ExpectedVersionSchema,
-  idempotencyKey: IdempotencyKeySchema
+  expectedVersion: ExpectedVersionSchema
 });
 
 export const ValuationWorkspaceWindowSchema = z.object({
@@ -150,13 +148,11 @@ export const SaveValuationDraftRequestSchema = z.object({
 
 export const PublishValuationSubmissionRequestSchema = z.object({
   windowId: ResourceIdSchema,
-  expectedVersion: ExpectedVersionSchema,
-  idempotencyKey: IdempotencyKeySchema
+  expectedVersion: ExpectedVersionSchema
 });
 
 export const ReviewValuationSubmissionRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema,
-  idempotencyKey: IdempotencyKeySchema,
   reason: z.string().trim().min(1).max(512)
 });
 

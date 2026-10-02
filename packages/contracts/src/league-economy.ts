@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { ResourceIdSchema } from './common.js';
-import { IdempotencyKeySchema } from './competition.js';
 import {
   FinanceLedgerDirectionSchema,
   FinanceLedgerEntrySchema,
@@ -80,8 +79,7 @@ export const CreateManualFinanceEntryRequestSchema = z.object({
   type: FinanceLedgerTypeSchema,
   amountMinor: z.number().int().positive().max(4_294_967_295),
   note: z.string().trim().max(512),
-  reason: z.string().trim().min(1).max(512),
-  idempotencyKey: IdempotencyKeySchema
+  reason: z.string().trim().min(1).max(512)
 });
 
 export const TransactionFeeRuleVersionSchema = z.object({
@@ -98,8 +96,7 @@ export const TransactionFeeRuleVersionSchema = z.object({
 export const CreateTransactionFeeRuleRequestSchema = z.object({
   rateBps: z.number().int().min(0).max(10_000),
   minimumFeeMinor: ValuationMoneyMinorSchema,
-  effectiveAt: TimestampSchema,
-  idempotencyKey: IdempotencyKeySchema
+  effectiveAt: TimestampSchema
 });
 
 export type ValuationCompleteness = z.infer<typeof ValuationCompletenessSchema>;

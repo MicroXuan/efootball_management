@@ -13,6 +13,7 @@ import { LeagueTeamsModule } from './league-teams/league-teams.module.js';
 import { LeagueRostersModule } from './league-rosters/league-rosters.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
+import { PlayerValuationsModule } from './player-valuations/player-valuations.module.js';
 import { PlayerBuildsModule } from './player-builds/player-builds.module.js';
 import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -38,6 +39,7 @@ import { StorageModule } from './storage/storage.module.js';
     PlayerCatalogModule,
     PlayerBuildsModule,
     PlayerImportModule,
+    PlayerValuationsModule,
     PesdataSyncModule,
     StorageModule,
     UsersModule
