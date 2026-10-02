@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { LeagueError } from '../leagues/league.errors.js';
 import { ValuationWindowsService } from './valuation-windows.service.js';
+import { valuationRange } from './valuation-calculator.js';
 
 const snapshotInclude = {
   ownership: {
@@ -175,7 +176,7 @@ export class ValuationSnapshotsService {
         version: submission.version
       } : null,
       players: snapshots.map((snapshot) => {
-        const range = this.range(snapshot.baseValueMinor, effective.rule);
+        const range = valuationRange(snapshot.baseValueMinor, effective.rule);
         const draft = draftBySnapshot.get(snapshot.id);
         const draftValueMinor = draft?.proposedValueMinor ?? null;
         return {
@@ -200,27 +201,4 @@ export class ValuationSnapshotsService {
     };
   }
 
-  private range(
-    baseValueMinor: number | null,
-    rule: {
-      minimumValueMinor: number;
-      maximumValueMinor: number;
-      maximumIncreaseBps: number;
-      maximumDecreaseBps: number;
-    }
-  ) {
-    if (baseValueMinor === null) {
-      return { minimum: rule.minimumValueMinor, maximum: rule.maximumValueMinor };
-    }
-    return {
-      minimum: Math.max(
-        rule.minimumValueMinor,
-        Math.ceil(baseValueMinor * (10_000 - rule.maximumDecreaseBps) / 10_000)
-      ),
-      maximum: Math.min(
-        rule.maximumValueMinor,
-        Math.floor(baseValueMinor * (10_000 + rule.maximumIncreaseBps) / 10_000)
-      )
-    };
-  }
 }

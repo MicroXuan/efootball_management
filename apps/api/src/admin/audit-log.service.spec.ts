@@ -10,6 +10,7 @@ describe('AuditLogService', () => {
           id: 'log-1',
           actorAdminId: 'admin-1',
           actorAdmin: { displayName: '小宣' },
+          actorUser: null,
           leagueId: 'league-1',
           league: { name: 'CELL 联赛' },
           action: 'admin.league-season.set-current',
@@ -35,6 +36,7 @@ describe('AuditLogService', () => {
     expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
       include: {
         actorAdmin: { select: { displayName: true } },
+        actorUser: { select: { displayName: true } },
         league: { select: { name: true } }
       }
     }));

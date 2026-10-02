@@ -4,7 +4,8 @@ import { PrismaService } from '../database/prisma.service.js';
 
 type AuditClient = PrismaService | Prisma.TransactionClient;
 type AuditInput = {
-  actorAdminId: string;
+  actorAdminId?: string;
+  actorUserId?: string;
   leagueId?: string | null;
   action: string;
   resourceType: string;
@@ -43,9 +44,13 @@ export class AuditLogService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   record(client: AuditClient, input: AuditInput) {
+    if (Boolean(input.actorAdminId) === Boolean(input.actorUserId)) {
+      throw new Error('Audit records require exactly one actor');
+    }
     return client.auditLog.create({
       data: {
-        actorAdminId: input.actorAdminId,
+        actorAdminId: input.actorAdminId ?? null,
+        actorUserId: input.actorUserId ?? null,
         leagueId: input.leagueId ?? null,
         action: input.action,
         resourceType: input.resourceType,
@@ -61,6 +66,7 @@ export class AuditLogService {
       ...(leagueId ? { where: { leagueId } } : {}),
       include: {
         actorAdmin: { select: { displayName: true } },
+        actorUser: { select: { displayName: true } },
         league: { select: { name: true } }
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -83,7 +89,7 @@ export class AuditLogService {
       : [];
     const seasonNames = new Map(seasons.map((season) => [season.id, season.displayName]));
 
-    return logs.map(({ actorAdmin, league, ...log }) => {
+    return logs.map(({ actorAdmin, actorUser, league, ...log }) => {
       const metadata = metadataRecord(log.metadata);
       const seasonId = log.action === 'admin.league-season.set-current'
         ? stringMetadata(metadata, 'newSeasonId')
@@ -94,7 +100,7 @@ export class AuditLogService {
         ?? stringMetadata(metadata, 'username');
       return {
         ...log,
-        actorDisplayName: actorAdmin.displayName,
+        actorDisplayName: actorAdmin?.displayName ?? actorUser?.displayName ?? '未知用户',
         leagueName: league?.name ?? null,
         subjectDisplayName: seasonId
           ? seasonNames.get(seasonId) ?? metadataName

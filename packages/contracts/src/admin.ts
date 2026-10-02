@@ -56,7 +56,8 @@ export const CreateAdminLeagueGrantRequestSchema = z.object({
 
 export const AuditLogSchema = z.object({
   id: ResourceIdSchema,
-  actorAdminId: ResourceIdSchema,
+  actorAdminId: ResourceIdSchema.nullable(),
+  actorUserId: ResourceIdSchema.nullable().default(null),
   actorDisplayName: z.string().min(1).nullable().default(null),
   leagueId: ResourceIdSchema.nullable(),
   leagueName: z.string().min(1).nullable().default(null),

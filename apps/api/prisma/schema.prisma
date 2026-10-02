@@ -312,6 +312,7 @@ model User {
   seasonEntryHistoryActions        SeasonEntryStatusHistory[]             @relation("SeasonEntryStatusActor")
   leagueSeasonHistoryActions       LeagueSeasonStatusHistory[]            @relation("LeagueSeasonStatusActor")
   valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
+  auditLogs                        AuditLog[]                             @relation("AuditUserActor")
 
   @@map("users")
 }
@@ -1003,19 +1004,22 @@ model SeasonEntry {
 }
 
 model AuditLog {
-  id           String       @id @default(uuid()) @db.Char(36)
-  actorAdminId String       @map("actor_admin_id") @db.Char(36)
-  leagueId     String?      @map("league_id") @db.Char(36)
-  action       String       @db.VarChar(128)
-  resourceType String       @map("resource_type") @db.VarChar(64)
-  resourceId   String?      @map("resource_id") @db.Char(36)
-  reason       String?      @db.VarChar(512)
+  id           String        @id @default(uuid()) @db.Char(36)
+  actorAdminId String?       @map("actor_admin_id") @db.Char(36)
+  actorUserId  String?       @map("actor_user_id") @db.Char(36)
+  leagueId     String?       @map("league_id") @db.Char(36)
+  action       String        @db.VarChar(128)
+  resourceType String        @map("resource_type") @db.VarChar(64)
+  resourceId   String?       @map("resource_id") @db.Char(36)
+  reason       String?       @db.VarChar(512)
   metadata     Json
-  createdAt    DateTime     @default(now()) @map("created_at")
-  actorAdmin   AdminAccount @relation("AuditActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
-  league       League?      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  actorAdmin   AdminAccount? @relation("AuditActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
+  actorUser    User?         @relation("AuditUserActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  league       League?       @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   @@index([actorAdminId, createdAt], map: "audit_logs_actor_idx")
+  @@index([actorUserId, createdAt], map: "audit_logs_user_actor_idx")
   @@index([leagueId, createdAt], map: "audit_logs_league_idx")
   @@index([resourceType, resourceId], map: "audit_logs_resource_idx")
   @@map("audit_logs")

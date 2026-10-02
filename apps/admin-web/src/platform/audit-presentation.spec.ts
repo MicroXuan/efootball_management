@@ -4,6 +4,7 @@ import { presentAuditLog } from './audit-presentation';
 const base: AuditLog = {
   id: '11111111-1111-4111-8111-111111111111',
   actorAdminId: '22222222-2222-4222-8222-222222222222',
+  actorUserId: null,
   actorDisplayName: '小宣',
   leagueId: '33333333-3333-4333-8333-333333333333',
   leagueName: 'CELL 联赛',
