@@ -19,6 +19,7 @@ const mine = (overrides: Partial<MyLeagueTeamSummary> = {}): MyLeagueTeamSummary
   id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', ownerPublicUserNo: '000123', teamNumber: 25,
   name: '上海申花', shortName: '申花', logoUrl: null, status: 'ACTIVE', activePlayerCount: 0,
   salaryTotalMinor: 0, salaryCapMinor: 0, rosterStatus: 'COMPLIANT', version: 1,
+  shellValueMinor: 0,
   createdAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z',
   leagueName: 'CELL传奇联赛', leagueDescription: '国内实况联赛', leagueLogoUrl: null,
   leagueEdition: 'INTERNATIONAL', currentSeason: null, ...overrides,

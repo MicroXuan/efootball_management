@@ -6,12 +6,14 @@ import {
   ReleasePlayerRequestSchema,
   TransferPlayerRequestSchema,
   UpgradePlayerCardRequestSchema,
+  UpdateRosterLifecycleRequestSchema,
   ResourceIdSchema,
   type AcquirePlayerRequest,
   type EmergencyCorrectRosterRequest,
   type RecalculateLeagueSalaryRequest,
   type ReleasePlayerRequest,
   type TransferPlayerRequest,
+  type UpdateRosterLifecycleRequest,
   type UpgradePlayerCardRequest
 } from '@efm/contracts';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard.js';
@@ -103,6 +105,15 @@ export class AdminRostersController {
     body: RecalculateLeagueSalaryRequest
   ) {
     return this.salaryRecalculation.recalculateLeague(body, admin.id);
+  }
+
+  @Post('lifecycle-status')
+  updateLifecycleStatus(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Body(new ZodValidationPipe(UpdateRosterLifecycleRequestSchema))
+    body: UpdateRosterLifecycleRequest
+  ) {
+    return this.rosterTransactions.updateLifecycleStatus(body, admin.id);
   }
 
   @Post('emergency-corrections')

@@ -5,12 +5,14 @@ import {
   ReleasePlayerRequestSchema,
   TransferPlayerRequestSchema,
   UpgradePlayerCardRequestSchema,
+  UpdateRosterLifecycleRequestSchema,
   type AcquirePlayerRequest,
   type EmergencyCorrectRosterRequest,
   type ReleasePlayerRequest,
   type RosterMutationOwnership,
   type RosterMutationResponse,
   type TransferPlayerRequest,
+  type UpdateRosterLifecycleRequest,
   type UpgradePlayerCardRequest
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
@@ -673,6 +675,46 @@ export class RosterTransactionsService {
       }, input);
   }
 
+  async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string) {
+    const input = UpdateRosterLifecycleRequestSchema.parse(raw);
+    const current = await this.loadOwnership(input.ownershipId, input.seasonId);
+    await this.authorization.requireLeagueManager(adminId, current.leagueId);
+
+    return this.receipts.execute(adminId, 'ROSTER_PLAYER_LIFECYCLE_UPDATE', input.idempotencyKey,
+      async (tx) => {
+        await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
+        const locked = await tx.leaguePlayerOwnership.findUniqueOrThrow({
+          where: { id: input.ownershipId }
+        });
+        if (locked.version !== input.expectedVersion) {
+          throw new LeagueRosterError('VERSION_CONFLICT', 'Roster entry has changed', 409, {
+            currentVersion: locked.version
+          });
+        }
+        if (!['ACTIVE', 'DISAPPEARED', 'RETIRED'].includes(locked.status)) {
+          throw new LeagueRosterError(
+            'ROSTER_LIFECYCLE_CHANGE_NOT_ALLOWED',
+            'Released or transferred entries cannot be restored directly',
+            409
+          );
+        }
+        const ownership = await tx.leaguePlayerOwnership.update({
+          where: { id: locked.id },
+          data: { status: input.status, version: { increment: 1 } }
+        });
+        await this.audit.record(tx, {
+          actorAdminId: adminId,
+          leagueId: locked.leagueId,
+          action: 'ROSTER_PLAYER_LIFECYCLE_UPDATED',
+          resourceType: 'LEAGUE_PLAYER_OWNERSHIP',
+          resourceId: locked.id,
+          reason: input.reason,
+          metadata: { previousStatus: locked.status, status: input.status }
+        });
+        return this.ownershipResult(ownership);
+      }, input);
+  }
+
   private async loadScope(seasonId: string, leagueTeamId: string) {
     return this.loadScopeWithClient(this.prisma, seasonId, leagueTeamId);
   }
@@ -840,19 +882,7 @@ export class RosterTransactionsService {
     summary: { rosterCount: number; salaryMinor: number; salaryCapMinor: number }
   ): RosterMutationResponse {
     return {
-      ownership: {
-        id: ownership.id,
-        leagueId: ownership.leagueId,
-        leagueTeamId: ownership.leagueTeamId,
-        playerId: ownership.footballPlayerId,
-        currentPlayerCardId: ownership.currentPlayerCardId,
-        dtRating: ownership.dtRatingSnapshot,
-        salaryRuleVersionId: ownership.salaryRuleVersionId,
-        salaryMinor: ownership.salaryMinor,
-        acquiredAt: ownership.acquiredAt.toISOString(),
-        status: ownership.status,
-        version: ownership.version
-      },
+      ownership: this.ownershipResult(ownership),
       transaction: {
         id: transaction.id,
         leagueId: transaction.leagueId,
@@ -874,6 +904,34 @@ export class RosterTransactionsService {
         createdAt: transaction.createdAt.toISOString()
       },
       summary
+    };
+  }
+
+  private ownershipResult(ownership: {
+    id: string;
+    leagueId: string;
+    leagueTeamId: string;
+    footballPlayerId: string;
+    currentPlayerCardId: string;
+    dtRatingSnapshot: number;
+    salaryRuleVersionId: string;
+    salaryMinor: number;
+    acquiredAt: Date;
+    status: RosterMutationOwnership['status'];
+    version: number;
+  }): RosterMutationOwnership {
+    return {
+      id: ownership.id,
+      leagueId: ownership.leagueId,
+      leagueTeamId: ownership.leagueTeamId,
+      playerId: ownership.footballPlayerId,
+      currentPlayerCardId: ownership.currentPlayerCardId,
+      dtRating: ownership.dtRatingSnapshot,
+      salaryRuleVersionId: ownership.salaryRuleVersionId,
+      salaryMinor: ownership.salaryMinor,
+      acquiredAt: ownership.acquiredAt.toISOString(),
+      status: ownership.status,
+      version: ownership.version
     };
   }
 }

@@ -379,6 +379,12 @@ export const EmergencyCorrectRosterRequestSchema = RosterMutationBaseSchema.exte
     });
   }
 });
+export const UpdateRosterLifecycleRequestSchema = RosterMutationBaseSchema.extend({
+  ownershipId: ResourceIdSchema,
+  status: z.enum(['ACTIVE', 'DISAPPEARED', 'RETIRED']),
+  expectedVersion: ExpectedVersionSchema
+});
+export const RosterLifecycleUpdateResponseSchema = RosterMutationOwnershipSchema;
 
 export type SalaryRuleVersion = z.infer<typeof SalaryRuleVersionSchema>;
 export type SalaryRuleVersionListResponse = z.infer<typeof SalaryRuleVersionListResponseSchema>;
@@ -411,3 +417,5 @@ export type TransferPlayerRequest = z.infer<typeof TransferPlayerRequestSchema>;
 export type UpgradePlayerCardRequest = z.infer<typeof UpgradePlayerCardRequestSchema>;
 export type RecalculateLeagueSalaryRequest = z.infer<typeof RecalculateLeagueSalaryRequestSchema>;
 export type EmergencyCorrectRosterRequest = z.infer<typeof EmergencyCorrectRosterRequestSchema>;
+export type UpdateRosterLifecycleRequest = z.infer<typeof UpdateRosterLifecycleRequestSchema>;
+export type RosterLifecycleUpdateResponse = z.infer<typeof RosterLifecycleUpdateResponseSchema>;

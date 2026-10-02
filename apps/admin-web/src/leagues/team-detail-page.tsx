@@ -5,7 +5,13 @@ import { LeagueTeamDetailSchema, type LeagueTeamDetail } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 
-type Fields = { teamNumber: number; name: string; shortName: string; status: 'ACTIVE' | 'ARCHIVED' };
+type Fields = {
+  teamNumber: number;
+  name: string;
+  shortName: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  shellValueMinor: number;
+};
 
 export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '', teamId = '' } = useParams();
@@ -20,7 +26,7 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
     try {
       const next = await api.request(`/v1/admin/leagues/${leagueId}/teams/${teamId}`, { schema: LeagueTeamDetailSchema });
       setDetail(next);
-      form.setFieldsValue({ teamNumber: next.teamNumber ?? 0, name: next.name, shortName: next.shortName, status: next.status === 'NEEDS_NUMBER' ? 'ACTIVE' : next.status });
+      form.setFieldsValue({ teamNumber: next.teamNumber ?? 0, name: next.name, shortName: next.shortName, status: next.status === 'NEEDS_NUMBER' ? 'ACTIVE' : next.status, shellValueMinor: next.shellValueMinor });
     } catch { setError('球队详情加载失败'); }
     finally { setLoading(false); }
   }, [api, form, leagueId, teamId]);
@@ -39,7 +45,8 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
         teamNumber: updated.teamNumber ?? 0,
         name: updated.name,
         shortName: updated.shortName,
-        status: updated.status === 'NEEDS_NUMBER' ? 'ACTIVE' : updated.status
+        status: updated.status === 'NEEDS_NUMBER' ? 'ACTIVE' : updated.status,
+        shellValueMinor: updated.shellValueMinor
       });
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') {
@@ -55,12 +62,16 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
         { key: 'owner', label: '所属用户', children: `${detail.ownerDisplayName} · ${detail.ownerPublicUserNo}` },
         { key: 'roster', label: '阵容', children: `${detail.activePlayerCount}/25` },
         { key: 'salary', label: '工资', children: `${detail.salaryTotalMinor} / ${detail.salaryCapMinor}` }
+        , { key: 'shell', label: '队壳价值', children: detail.shellValueMinor }
       ]} />
       <Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save}>
         <Form.Item label="球队编号" name="teamNumber" rules={[{ required: true }]}><InputNumber min={0} max={9999} precision={0} /></Form.Item>
         <Form.Item label="球队名称" name="name" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item label="球队简称" name="shortName" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item label="球队状态" name="status"><Select options={[{ value: 'ACTIVE', label: '启用' }, { value: 'ARCHIVED', label: '归档' }]} /></Form.Item>
+        <Form.Item label="队壳价值" name="shellValueMinor" rules={[{ required: true, message: '请输入队壳价值' }]} extra="使用系统最小金额单位记录">
+          <InputNumber min={0} max={4_294_967_295} precision={0} style={{ width: '100%' }} />
+        </Form.Item>
         <Space><Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>保存球队</Button><Link to={`/leagues/${leagueId}/teams/${teamId}/roster`}><Button>管理阵容</Button></Link></Space>
       </Form>
     </> : null}

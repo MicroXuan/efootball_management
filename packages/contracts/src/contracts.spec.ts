@@ -48,7 +48,9 @@ import {
   SetCurrentSeasonRequestSchema,
   SeasonEntryListQuerySchema,
   UpdateLeagueRequestSchema,
+  UpdateLeagueTeamRequestSchema,
   UpdateLeagueSeasonRequestSchema,
+  UpdateRosterLifecycleRequestSchema,
   UpdateTeamProfileRequestSchema,
   WechatLoginRequestSchema
 } from './index.js';
@@ -763,6 +765,29 @@ describe('league team administration contracts', () => {
     assert.equal(FinanceLedgerTypeSchema.parse('ROOKIE_SELECTION'), 'ROOKIE_SELECTION');
     assert.equal(FinanceLedgerTypeSchema.parse('INSTALLMENT_PAYMENT'), 'INSTALLMENT_PAYMENT');
   });
+
+  it('validates team shell value and roster lifecycle maintenance requests', () => {
+    assert.equal(UpdateLeagueTeamRequestSchema.parse({
+      shellValueMinor: 12_000,
+      expectedVersion: 1
+    }).shellValueMinor, 12_000);
+    assert.equal(UpdateRosterLifecycleRequestSchema.parse({
+      seasonId: '11111111-1111-4111-8111-111111111111',
+      ownershipId: '22222222-2222-4222-8222-222222222222',
+      status: 'DISAPPEARED',
+      reason: '球员从游戏数据库中消失',
+      expectedVersion: 1,
+      idempotencyKey: 'roster-lifecycle-1'
+    }).status, 'DISAPPEARED');
+    assert.throws(() => UpdateRosterLifecycleRequestSchema.parse({
+      seasonId: '11111111-1111-4111-8111-111111111111',
+      ownershipId: '22222222-2222-4222-8222-222222222222',
+      status: 'RELEASED',
+      reason: '不允许',
+      expectedVersion: 1,
+      idempotencyKey: 'roster-lifecycle-2'
+    }));
+  });
   const ids = {
     admin: '11111111-1111-4111-8111-111111111111',
     league: '22222222-2222-4222-8222-222222222222',
@@ -954,6 +979,7 @@ describe('league team administration contracts', () => {
       activePlayerCount: 1,
       salaryTotalMinor: 600,
       salaryCapMinor: 10_000,
+      shellValueMinor: 20_000,
       version: 1,
       createdAt,
       updatedAt: createdAt

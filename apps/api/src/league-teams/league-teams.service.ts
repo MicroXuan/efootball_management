@@ -161,6 +161,7 @@ export class LeagueTeamsService {
           ...(input.shortName !== undefined ? { shortName: input.shortName } : {}),
           ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.shellValueMinor !== undefined ? { shellValueMinor: input.shellValueMinor } : {}),
           version: { increment: 1 }
         }
       });
@@ -169,7 +170,9 @@ export class LeagueTeamsService {
       await this.audit.record(transaction, {
         actorAdminId,
         leagueId,
-        action: 'league-team.update',
+        action: input.shellValueMinor !== undefined
+          ? 'LEAGUE_TEAM_SHELL_VALUE_UPDATED'
+          : 'league-team.update',
         resourceType: 'LeagueTeam',
         resourceId: teamId,
         metadata: Object.fromEntries(
@@ -420,6 +423,7 @@ export class LeagueTeamsService {
       activePlayerCount: metrics?.activePlayerCount ?? 0,
       salaryTotalMinor: metrics?.salaryTotalMinor ?? 0,
       salaryCapMinor: metrics?.salaryCapMinor ?? 0,
+      shellValueMinor: team.shellValueMinor,
       version: team.version,
       createdAt: team.createdAt.toISOString(),
       updatedAt: team.updatedAt.toISOString()

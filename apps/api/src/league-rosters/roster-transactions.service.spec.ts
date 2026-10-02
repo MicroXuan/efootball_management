@@ -835,4 +835,73 @@ describe('RosterTransactionsService', () => {
       where: { leagueId: f.league.id, type: 'EMERGENCY_CORRECTION' }
     })).resolves.toBe(1);
   });
+
+  it('marks a player disappeared or retired and restores active without deleting history', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Lifecycle');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+
+    const disappeared = await service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'DISAPPEARED',
+      reason: '游戏数据库暂时移除',
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id);
+    const retired = await service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'RETIRED',
+      reason: '确认退役',
+      expectedVersion: disappeared.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id);
+    const active = await service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'ACTIVE',
+      reason: '重新加入游戏数据库',
+      expectedVersion: retired.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id);
+
+    expect([disappeared.status, retired.status, active.status])
+      .toEqual(['DISAPPEARED', 'RETIRED', 'ACTIVE']);
+    await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
+    await expect(prisma.auditLog.count({
+      where: { leagueId: f.league.id, action: 'ROSTER_PLAYER_LIFECYCLE_UPDATED' }
+    })).resolves.toBe(3);
+  });
+
+  it('does not restore a released roster record through lifecycle maintenance', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Released lifecycle');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    const released = await service.release({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      amountMinor: null,
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID(),
+      reason: '正常解约'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+
+    await expect(service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'ACTIVE',
+      reason: '错误恢复',
+      expectedVersion: released.ownership.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id)).rejects.toMatchObject({ code: 'ROSTER_LIFECYCLE_CHANGE_NOT_ALLOWED' });
+  });
 });

@@ -6,6 +6,7 @@ const team = (id: string, leagueId: string, name: string): LeagueTeamSummary => 
   id, leagueId, ownerUserId: '33333333-3333-4333-8333-333333333333', ownerPublicUserNo: '000123',
   teamNumber: 7, name, shortName: name, logoUrl: null, status: 'ACTIVE', rosterStatus: 'COMPLIANT',
   activePlayerCount: 2, salaryTotalMinor: 300, salaryCapMinor: 2_000, version: 1,
+  shellValueMinor: 0,
   createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z',
 })
 

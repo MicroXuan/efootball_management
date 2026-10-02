@@ -70,7 +70,7 @@ export class AdminRosterQueriesService {
     const team = await this.prisma.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
     if (!team) throw new LeagueRosterError('LEAGUE_TEAM_NOT_FOUND', 'League team was not found', 404);
     const entries = await this.prisma.leaguePlayerOwnership.findMany({
-      where: { leagueTeamId: teamId, status: 'ACTIVE' },
+      where: { leagueTeamId: teamId, status: { in: ['ACTIVE', 'DISAPPEARED', 'RETIRED'] } },
       include: { footballPlayer: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } },
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
@@ -103,8 +103,10 @@ export class AdminRosterQueriesService {
         version: entry.version
       })),
       summary: {
-        rosterCount: entries.length,
-        salaryMinor: entries.reduce((total, entry) => total + entry.salaryMinor, 0),
+        rosterCount: entries.filter((entry) => entry.status === 'ACTIVE').length,
+        salaryMinor: entries
+          .filter((entry) => entry.status === 'ACTIVE')
+          .reduce((total, entry) => total + entry.salaryMinor, 0),
         salaryCapMinor: salaryRule?.salaryCapMinor ?? 0
       },
       operations: {

@@ -32,6 +32,7 @@ export const CreateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.exten
 
 export const UpdateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.partial().extend({
   status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
+  shellValueMinor: NonNegativeMoneyMinorSchema.max(4_294_967_295).optional(),
   expectedVersion: ExpectedVersionSchema
 });
 
@@ -49,6 +50,7 @@ export const LeagueTeamSummarySchema = z.object({
   activePlayerCount: z.number().int().min(0).max(25),
   salaryTotalMinor: NonNegativeMoneyMinorSchema,
   salaryCapMinor: NonNegativeMoneyMinorSchema,
+  shellValueMinor: NonNegativeMoneyMinorSchema,
   version: z.number().int().positive(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
