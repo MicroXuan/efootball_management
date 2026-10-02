@@ -123,7 +123,8 @@ export const TransactionFeeRuleVersionSchema = z.object({
 export const CreateTransactionFeeRuleRequestSchema = z.object({
   rateBps: z.number().int().min(0).max(10_000),
   minimumFeeMinor: ValuationMoneyMinorSchema,
-  effectiveAt: TimestampSchema
+  effectiveAt: TimestampSchema,
+  expectedCurrentVersion: z.number().int().nonnegative()
 });
 
 export type ValuationCompleteness = z.infer<typeof ValuationCompletenessSchema>;
