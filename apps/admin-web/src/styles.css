@@ -188,6 +188,17 @@ select { font: inherit; }
 .candidate-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .candidate-card { min-width: 220px; padding: 14px; display: grid; gap: 3px; border: 1px solid var(--admin-border); border-radius: 12px; color: var(--admin-text); background: #fafcfc; }
 .candidate-card span { color: var(--admin-text-secondary); font-size: 12px; }
+.audit-card .ant-table-cell { vertical-align: top; }
+.audit-subject { min-width: 240px; display: grid; gap: 4px; }
+.audit-subject strong { color: var(--admin-text); }
+.audit-subject span { color: var(--admin-text-secondary); font-size: 12px; line-height: 1.55; }
+.audit-metadata { margin-top: 24px; }
+.audit-metadata h3 { margin: 0 0 12px; font-size: 14px; }
+.audit-metadata dl { margin: 0; border: 1px solid var(--admin-border); border-radius: 12px; overflow: hidden; }
+.audit-metadata dl > div { display: grid; grid-template-columns: minmax(140px, 34%) 1fr; border-bottom: 1px solid var(--admin-border); }
+.audit-metadata dl > div:last-child { border-bottom: 0; }
+.audit-metadata dt, .audit-metadata dd { margin: 0; padding: 10px 12px; overflow-wrap: anywhere; }
+.audit-metadata dt { color: var(--admin-text-secondary); background: #f5f7f8; font-weight: 700; }
 
 @media (max-width: 1100px) {
   .admin-sider.ant-layout-sider { flex: 0 0 220px !important; width: 220px !important; min-width: 220px !important; max-width: 220px !important; }
