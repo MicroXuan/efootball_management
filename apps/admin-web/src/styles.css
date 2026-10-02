@@ -31,9 +31,12 @@ textarea,
 select { font: inherit; }
 
 :where(button, a, input, textarea, [tabindex]):focus-visible {
-  outline: 3px solid rgba(147, 197, 44, 0.5);
+  outline: 3px solid #6f981a !important;
   outline-offset: 2px;
 }
+.admin-sider :where(button, a, [tabindex]):focus-visible { outline-color: var(--admin-accent) !important; }
+.ant-input-affix-wrapper:focus-within,
+.ant-select-focused .ant-select-selector { outline: 3px solid #6f981a !important; outline-offset: 2px; }
 
 /* Authentication */
 .login-stage { min-height: 100vh; display: grid; grid-template-columns: minmax(460px, 1.15fr) minmax(400px, .85fr); background: var(--admin-sidebar); }
