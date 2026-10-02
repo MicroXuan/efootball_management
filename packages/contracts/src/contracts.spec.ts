@@ -27,6 +27,7 @@ import {
   RecalculateLeagueSalaryRequestSchema,
   ResourceIdSchema,
   RosterEntrySchema,
+  RosterEntryStatusSchema,
   RosterMutationResponseSchema,
   RosterTransactionSchema,
   SalaryRecalculationResponseSchema,
@@ -36,6 +37,7 @@ import {
   TeamNumberSchema,
   TransferWindowSchema,
   FinanceLedgerEntrySchema,
+  FinanceLedgerTypeSchema,
   LeagueTeamDetailSchema,
   LeagueTeamSummarySchema,
   LeagueEditionSchema,
@@ -553,6 +555,17 @@ describe('shared API contracts', () => {
 });
 
 describe('league team administration contracts', () => {
+  it('accepts non-active asset lifecycle states and league economy ledger types', () => {
+    assert.equal(RosterEntryStatusSchema.parse('DISAPPEARED'), 'DISAPPEARED');
+    assert.equal(RosterEntryStatusSchema.parse('RETIRED'), 'RETIRED');
+    assert.equal(FinanceLedgerTypeSchema.parse('TRANSACTION_FEE'), 'TRANSACTION_FEE');
+    assert.equal(FinanceLedgerTypeSchema.parse('LUXURY_TAX'), 'LUXURY_TAX');
+    assert.equal(FinanceLedgerTypeSchema.parse('OFFSEASON_FEE'), 'OFFSEASON_FEE');
+    assert.equal(FinanceLedgerTypeSchema.parse('UNFINISHED_MATCH_PENALTY'), 'UNFINISHED_MATCH_PENALTY');
+    assert.equal(FinanceLedgerTypeSchema.parse('AUCTION'), 'AUCTION');
+    assert.equal(FinanceLedgerTypeSchema.parse('ROOKIE_SELECTION'), 'ROOKIE_SELECTION');
+    assert.equal(FinanceLedgerTypeSchema.parse('INSTALLMENT_PAYMENT'), 'INSTALLMENT_PAYMENT');
+  });
   const ids = {
     admin: '11111111-1111-4111-8111-111111111111',
     league: '22222222-2222-4222-8222-222222222222',

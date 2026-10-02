@@ -8,6 +8,7 @@ import {
   type AcquirePlayerRequest,
   type EmergencyCorrectRosterRequest,
   type ReleasePlayerRequest,
+  type RosterMutationOwnership,
   type RosterMutationResponse,
   type TransferPlayerRequest,
   type UpgradePlayerCardRequest
@@ -812,7 +813,7 @@ export class RosterTransactionsService {
       salaryRuleVersionId: string;
       salaryMinor: number;
       acquiredAt: Date;
-      status: 'ACTIVE' | 'RELEASED' | 'TRANSFERRED';
+      status: RosterMutationOwnership['status'];
       version: number;
     },
     transaction: {

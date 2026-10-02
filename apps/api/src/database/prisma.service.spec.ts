@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { RosterEntryStatus } from '../generated/prisma/client.js';
 import { PrismaService } from './prisma.service.js';
 
 config({ path: '../../.env', quiet: true });
@@ -63,6 +64,19 @@ describe('PrismaService', () => {
     expect(prisma.leagueTeam).toBeDefined();
     expect(prisma.auditLog).toBeDefined();
     expect(prisma.publicUserNumberSequence).toBeDefined();
+  });
+
+  it('exposes valuation economy delegates and lifecycle statuses', () => {
+    expect(prisma.valuationWindow).toBeDefined();
+    expect(prisma.valuationWindowRuleVersion).toBeDefined();
+    expect(prisma.valuationRosterSnapshot).toBeDefined();
+    expect(prisma.valuationSubmission).toBeDefined();
+    expect(prisma.valuationSubmissionItem).toBeDefined();
+    expect(prisma.leaguePlayerValuation).toBeDefined();
+    expect(prisma.playerValuationHistory).toBeDefined();
+    expect(prisma.leagueTransactionFeeRuleVersion).toBeDefined();
+    expect(RosterEntryStatus.DISAPPEARED).toBe('DISAPPEARED');
+    expect(RosterEntryStatus.RETIRED).toBe('RETIRED');
   });
 
   it('enforces league-scoped team ownership and numbering while preserving public user numbers', async () => {

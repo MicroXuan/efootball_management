@@ -137,7 +137,13 @@ export const TransferWindowSchema = TransferWindowFieldsSchema.and(z.object({
 }));
 export const TransferWindowListResponseSchema = z.object({ items: z.array(TransferWindowSchema) });
 
-export const RosterEntryStatusSchema = z.enum(['ACTIVE', 'RELEASED', 'TRANSFERRED']);
+export const RosterEntryStatusSchema = z.enum([
+  'ACTIVE',
+  'RELEASED',
+  'TRANSFERRED',
+  'DISAPPEARED',
+  'RETIRED'
+]);
 export const RosterEntrySchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
@@ -228,6 +234,13 @@ export const FinanceLedgerTypeSchema = z.enum([
   'PLAYER_SALE',
   'PLAYER_TRANSFER',
   'CARD_UPGRADE',
+  'TRANSACTION_FEE',
+  'LUXURY_TAX',
+  'OFFSEASON_FEE',
+  'UNFINISHED_MATCH_PENALTY',
+  'AUCTION',
+  'ROOKIE_SELECTION',
+  'INSTALLMENT_PAYMENT',
   'MANUAL_ADJUSTMENT'
 ]);
 export const FinanceLedgerEntrySchema = z.object({

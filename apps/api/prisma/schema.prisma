@@ -81,6 +81,16 @@ enum RosterEntryStatus {
   ACTIVE
   RELEASED
   TRANSFERRED
+  DISAPPEARED
+  RETIRED
+}
+
+enum ValuationSubmissionStatus {
+  DRAFT
+  PUBLISHED
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
 }
 
 enum RosterTransactionType {
@@ -103,6 +113,13 @@ enum FinanceLedgerType {
   PLAYER_SALE
   PLAYER_TRANSFER
   CARD_UPGRADE
+  TRANSACTION_FEE
+  LUXURY_TAX
+  OFFSEASON_FEE
+  UNFINISHED_MATCH_PENALTY
+  AUCTION
+  ROOKIE_SELECTION
+  INSTALLMENT_PAYMENT
   MANUAL_ADJUSTMENT
 }
 
@@ -294,6 +311,7 @@ model User {
   reviewedSeasonEntries            SeasonEntry[]                          @relation("SeasonEntryReviewer")
   seasonEntryHistoryActions        SeasonEntryStatusHistory[]             @relation("SeasonEntryStatusActor")
   leagueSeasonHistoryActions       LeagueSeasonStatusHistory[]            @relation("LeagueSeasonStatusActor")
+  valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
 
   @@map("users")
 }
@@ -396,28 +414,32 @@ model PublicUserNumberSequence {
 }
 
 model AdminAccount {
-  id                     String                    @id @default(uuid()) @db.Char(36)
-  username               String                    @unique @db.VarChar(64)
-  displayName            String                    @map("display_name") @db.VarChar(64)
-  passwordHash           String                    @map("password_hash") @db.VarChar(255)
-  status                 AdminStatus               @default(ACTIVE)
-  platformRole           AdminRole?                @map("platform_role")
-  failedLoginCount       Int                       @default(0) @map("failed_login_count") @db.UnsignedInt
-  lockedUntil            DateTime?                 @map("locked_until")
-  lastLoginAt            DateTime?                 @map("last_login_at")
-  version                Int                       @default(1) @db.UnsignedInt
-  createdAt              DateTime                  @default(now()) @map("created_at")
-  updatedAt              DateTime                  @updatedAt @map("updated_at")
-  sessions               AdminSession[]
-  leagueRoles            AdminLeagueRole[]         @relation("AdminLeagueRoleAdmin")
-  grantedLeagueRoles     AdminLeagueRole[]         @relation("AdminLeagueRoleGrantor")
-  auditLogs              AuditLog[]                @relation("AuditActor")
-  createdLeagues         League[]                  @relation("AdminLeagueCreator")
-  createdLeagueSeasons   LeagueSeason[]            @relation("LeagueSeasonAdminCreator")
-  mutationReceipts       AdminMutationReceipt[]
-  createdSalaryRules     LeagueSalaryRuleVersion[]
-  createdTransferWindows TransferWindow[]
-  rosterTransactions     RosterTransaction[]
+  id                           String                            @id @default(uuid()) @db.Char(36)
+  username                     String                            @unique @db.VarChar(64)
+  displayName                  String                            @map("display_name") @db.VarChar(64)
+  passwordHash                 String                            @map("password_hash") @db.VarChar(255)
+  status                       AdminStatus                       @default(ACTIVE)
+  platformRole                 AdminRole?                        @map("platform_role")
+  failedLoginCount             Int                               @default(0) @map("failed_login_count") @db.UnsignedInt
+  lockedUntil                  DateTime?                         @map("locked_until")
+  lastLoginAt                  DateTime?                         @map("last_login_at")
+  version                      Int                               @default(1) @db.UnsignedInt
+  createdAt                    DateTime                          @default(now()) @map("created_at")
+  updatedAt                    DateTime                          @updatedAt @map("updated_at")
+  sessions                     AdminSession[]
+  leagueRoles                  AdminLeagueRole[]                 @relation("AdminLeagueRoleAdmin")
+  grantedLeagueRoles           AdminLeagueRole[]                 @relation("AdminLeagueRoleGrantor")
+  auditLogs                    AuditLog[]                        @relation("AuditActor")
+  createdLeagues               League[]                          @relation("AdminLeagueCreator")
+  createdLeagueSeasons         LeagueSeason[]                    @relation("LeagueSeasonAdminCreator")
+  mutationReceipts             AdminMutationReceipt[]
+  createdSalaryRules           LeagueSalaryRuleVersion[]
+  createdTransferWindows       TransferWindow[]
+  rosterTransactions           RosterTransaction[]
+  createdValuationWindows      ValuationWindow[]                 @relation("ValuationWindowCreator")
+  createdValuationRules        ValuationWindowRuleVersion[]      @relation("ValuationRuleCreator")
+  reviewedValuationSubmissions ValuationSubmission[]             @relation("ValuationSubmissionReviewer")
+  createdTransactionFeeRules   LeagueTransactionFeeRuleVersion[] @relation("TransactionFeeRuleCreator")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -462,28 +484,28 @@ model AdminLeagueRole {
 }
 
 model League {
-  id                      String                    @id @default(uuid()) @db.Char(36)
-  name                    String                    @db.VarChar(64)
-  shortName               String                    @map("short_name") @db.VarChar(24)
-  description             String                    @default("") @db.VarChar(500)
-  logoUrl                 String?                   @map("logo_url") @db.VarChar(2048)
-  status                  LeagueStatus              @default(ACTIVE)
-  edition                 LeagueEdition             @default(INTERNATIONAL)
-  currentSeasonId         String?                   @unique @map("current_season_id") @db.Char(36)
-  defaultPlatform         GamePlatform              @map("default_platform")
-  defaultServerRegion     String                    @map("default_server_region") @db.VarChar(32)
-  defaultSuperCapacity    Int                       @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
-  defaultChampionCapacity Int                       @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
-  defaultPromotionCount   Int                       @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
-  createdById             String?                   @map("created_by_id") @db.Char(36)
-  createdByAdminId        String?                   @map("created_by_admin_id") @db.Char(36)
-  version                 Int                       @default(1) @db.UnsignedInt
-  createdAt               DateTime                  @default(now()) @map("created_at")
-  updatedAt               DateTime                  @updatedAt @map("updated_at")
-  creator                 User?                     @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  adminCreator            AdminAccount?             @relation("AdminLeagueCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  id                      String                            @id @default(uuid()) @db.Char(36)
+  name                    String                            @db.VarChar(64)
+  shortName               String                            @map("short_name") @db.VarChar(24)
+  description             String                            @default("") @db.VarChar(500)
+  logoUrl                 String?                           @map("logo_url") @db.VarChar(2048)
+  status                  LeagueStatus                      @default(ACTIVE)
+  edition                 LeagueEdition                     @default(INTERNATIONAL)
+  currentSeasonId         String?                           @unique @map("current_season_id") @db.Char(36)
+  defaultPlatform         GamePlatform                      @map("default_platform")
+  defaultServerRegion     String                            @map("default_server_region") @db.VarChar(32)
+  defaultSuperCapacity    Int                               @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
+  defaultChampionCapacity Int                               @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
+  defaultPromotionCount   Int                               @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
+  createdById             String?                           @map("created_by_id") @db.Char(36)
+  createdByAdminId        String?                           @map("created_by_admin_id") @db.Char(36)
+  version                 Int                               @default(1) @db.UnsignedInt
+  createdAt               DateTime                          @default(now()) @map("created_at")
+  updatedAt               DateTime                          @updatedAt @map("updated_at")
+  creator                 User?                             @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator            AdminAccount?                     @relation("AdminLeagueCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   seasons                 LeagueSeason[]
-  currentSeason           LeagueSeason?             @relation("LeagueCurrentSeason", fields: [currentSeasonId], references: [id], onDelete: SetNull)
+  currentSeason           LeagueSeason?                     @relation("LeagueCurrentSeason", fields: [currentSeasonId], references: [id], onDelete: SetNull)
   teams                   LeagueTeam[]
   adminRoles              AdminLeagueRole[]
   auditLogs               AuditLog[]
@@ -491,6 +513,9 @@ model League {
   playerOwnerships        LeaguePlayerOwnership[]
   rosterTransactions      RosterTransaction[]
   financeLedgerEntries    FinanceLedgerEntry[]
+  playerValuations        LeaguePlayerValuation[]
+  playerValuationHistory  PlayerValuationHistory[]
+  transactionFeeRules     LeagueTransactionFeeRuleVersion[]
 
   @@index([status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -518,27 +543,30 @@ model TeamProfile {
 }
 
 model LeagueTeam {
-  id                         String                  @id @default(uuid()) @db.Char(36)
-  leagueId                   String                  @map("league_id") @db.Char(36)
-  ownerUserId                String                  @map("owner_user_id") @db.Char(36)
-  teamNumber                 Int?                    @map("team_number") @db.UnsignedSmallInt
-  name                       String                  @db.VarChar(64)
-  shortName                  String                  @map("short_name") @db.VarChar(24)
-  logoUrl                    String?                 @map("logo_url") @db.VarChar(2048)
-  defaultGameAccountId       String?                 @map("default_game_account_id") @db.Char(36)
-  status                     LeagueTeamStatus        @default(ACTIVE)
-  rosterStatus               LeagueTeamRosterStatus  @default(COMPLIANT) @map("roster_status")
-  version                    Int                     @default(1) @db.UnsignedInt
-  createdAt                  DateTime                @default(now()) @map("created_at")
-  updatedAt                  DateTime                @updatedAt @map("updated_at")
-  league                     League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  owner                      User                    @relation("LeagueTeamOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  defaultGameAccount         GameAccount?            @relation(fields: [defaultGameAccountId], references: [id], onDelete: SetNull)
+  id                         String                    @id @default(uuid()) @db.Char(36)
+  leagueId                   String                    @map("league_id") @db.Char(36)
+  ownerUserId                String                    @map("owner_user_id") @db.Char(36)
+  teamNumber                 Int?                      @map("team_number") @db.UnsignedSmallInt
+  name                       String                    @db.VarChar(64)
+  shortName                  String                    @map("short_name") @db.VarChar(24)
+  logoUrl                    String?                   @map("logo_url") @db.VarChar(2048)
+  defaultGameAccountId       String?                   @map("default_game_account_id") @db.Char(36)
+  status                     LeagueTeamStatus          @default(ACTIVE)
+  rosterStatus               LeagueTeamRosterStatus    @default(COMPLIANT) @map("roster_status")
+  shellValueMinor            Int                       @default(0) @map("shell_value_minor") @db.UnsignedInt
+  version                    Int                       @default(1) @db.UnsignedInt
+  createdAt                  DateTime                  @default(now()) @map("created_at")
+  updatedAt                  DateTime                  @updatedAt @map("updated_at")
+  league                     League                    @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  owner                      User                      @relation("LeagueTeamOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  defaultGameAccount         GameAccount?              @relation(fields: [defaultGameAccountId], references: [id], onDelete: SetNull)
   seasonEntries              SeasonEntry[]
   playerOwnerships           LeaguePlayerOwnership[]
-  outgoingRosterTransactions RosterTransaction[]     @relation("RosterTransactionSourceTeam")
-  incomingRosterTransactions RosterTransaction[]     @relation("RosterTransactionTargetTeam")
+  outgoingRosterTransactions RosterTransaction[]       @relation("RosterTransactionSourceTeam")
+  incomingRosterTransactions RosterTransaction[]       @relation("RosterTransactionTargetTeam")
   financeLedgerEntries       FinanceLedgerEntry[]
+  valuationSnapshots         ValuationRosterSnapshot[]
+  valuationSubmissions       ValuationSubmission[]
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
   @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
@@ -579,6 +607,8 @@ model LeagueSeason {
   statusHistory        LeagueSeasonStatusHistory[]
   transferWindows      TransferWindow[]
   rosterTransactions   RosterTransaction[]
+  valuationWindows     ValuationWindow[]
+  financeLedgerEntries FinanceLedgerEntry[]
 
   @@unique([leagueId, seasonNumber], map: "league_seasons_number_unique")
   @@index([leagueId, status], map: "league_seasons_status_idx")
@@ -644,24 +674,25 @@ model TransferWindow {
 }
 
 model LeaguePlayerOwnership {
-  id                  String                  @id @default(uuid()) @db.Char(36)
-  leagueId            String                  @map("league_id") @db.Char(36)
-  leagueTeamId        String                  @map("league_team_id") @db.Char(36)
-  footballPlayerId    String                  @map("football_player_id") @db.Char(36)
-  currentPlayerCardId String                  @map("current_player_card_id") @db.Char(36)
-  dtRatingSnapshot    Int                     @map("dt_rating_snapshot") @db.UnsignedTinyInt
-  salaryRuleVersionId String                  @map("salary_rule_version_id") @db.Char(36)
-  salaryMinor         Int                     @map("salary_minor") @db.UnsignedInt
-  acquiredAt          DateTime                @default(now()) @map("acquired_at")
-  status              RosterEntryStatus       @default(ACTIVE)
-  version             Int                     @default(1) @db.UnsignedInt
-  createdAt           DateTime                @default(now()) @map("created_at")
-  updatedAt           DateTime                @updatedAt @map("updated_at")
-  league              League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  leagueTeam          LeagueTeam              @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
-  footballPlayer      FootballPlayer          @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
-  currentPlayerCard   PlayerCard              @relation(fields: [currentPlayerCardId], references: [id], onDelete: Restrict)
-  salaryRuleVersion   LeagueSalaryRuleVersion @relation(fields: [salaryRuleVersionId], references: [id], onDelete: Restrict)
+  id                  String                    @id @default(uuid()) @db.Char(36)
+  leagueId            String                    @map("league_id") @db.Char(36)
+  leagueTeamId        String                    @map("league_team_id") @db.Char(36)
+  footballPlayerId    String                    @map("football_player_id") @db.Char(36)
+  currentPlayerCardId String                    @map("current_player_card_id") @db.Char(36)
+  dtRatingSnapshot    Int                       @map("dt_rating_snapshot") @db.UnsignedTinyInt
+  salaryRuleVersionId String                    @map("salary_rule_version_id") @db.Char(36)
+  salaryMinor         Int                       @map("salary_minor") @db.UnsignedInt
+  acquiredAt          DateTime                  @default(now()) @map("acquired_at")
+  status              RosterEntryStatus         @default(ACTIVE)
+  version             Int                       @default(1) @db.UnsignedInt
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  updatedAt           DateTime                  @updatedAt @map("updated_at")
+  league              League                    @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueTeam          LeagueTeam                @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  footballPlayer      FootballPlayer            @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  currentPlayerCard   PlayerCard                @relation(fields: [currentPlayerCardId], references: [id], onDelete: Restrict)
+  salaryRuleVersion   LeagueSalaryRuleVersion   @relation(fields: [salaryRuleVersionId], references: [id], onDelete: Restrict)
+  valuationSnapshots  ValuationRosterSnapshot[]
 
   @@unique([leagueId, footballPlayerId], map: "league_player_ownerships_player_unique")
   @@index([leagueTeamId, status], map: "league_player_ownerships_team_status_idx")
@@ -671,30 +702,34 @@ model LeaguePlayerOwnership {
 }
 
 model RosterTransaction {
-  id                 String                @id @default(uuid()) @db.Char(36)
-  leagueId           String                @map("league_id") @db.Char(36)
-  seasonId           String                @map("season_id") @db.Char(36)
-  type               RosterTransactionType
-  footballPlayerId   String                @map("football_player_id") @db.Char(36)
-  sourceLeagueTeamId String?               @map("source_league_team_id") @db.Char(36)
-  targetLeagueTeamId String?               @map("target_league_team_id") @db.Char(36)
-  oldPlayerCardId    String?               @map("old_player_card_id") @db.Char(36)
-  newPlayerCardId    String?               @map("new_player_card_id") @db.Char(36)
-  oldSalaryMinor     Int?                  @map("old_salary_minor") @db.UnsignedInt
-  newSalaryMinor     Int?                  @map("new_salary_minor") @db.UnsignedInt
-  amountMinor        Int?                  @map("amount_minor") @db.UnsignedInt
-  reason             String                @db.VarChar(512)
-  createdByAdminId   String                @map("created_by_admin_id") @db.Char(36)
-  createdAt          DateTime              @default(now()) @map("created_at")
-  league             League                @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  season             LeagueSeason          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  footballPlayer     FootballPlayer        @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
-  sourceLeagueTeam   LeagueTeam?           @relation("RosterTransactionSourceTeam", fields: [sourceLeagueTeamId], references: [id], onDelete: Restrict)
-  targetLeagueTeam   LeagueTeam?           @relation("RosterTransactionTargetTeam", fields: [targetLeagueTeamId], references: [id], onDelete: Restrict)
-  oldPlayerCard      PlayerCard?           @relation("RosterTransactionOldCard", fields: [oldPlayerCardId], references: [id], onDelete: Restrict)
-  newPlayerCard      PlayerCard?           @relation("RosterTransactionNewCard", fields: [newPlayerCardId], references: [id], onDelete: Restrict)
-  createdByAdmin     AdminAccount          @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  financeEntries     FinanceLedgerEntry[]
+  id                          String                           @id @default(uuid()) @db.Char(36)
+  leagueId                    String                           @map("league_id") @db.Char(36)
+  seasonId                    String                           @map("season_id") @db.Char(36)
+  type                        RosterTransactionType
+  footballPlayerId            String                           @map("football_player_id") @db.Char(36)
+  sourceLeagueTeamId          String?                          @map("source_league_team_id") @db.Char(36)
+  targetLeagueTeamId          String?                          @map("target_league_team_id") @db.Char(36)
+  oldPlayerCardId             String?                          @map("old_player_card_id") @db.Char(36)
+  newPlayerCardId             String?                          @map("new_player_card_id") @db.Char(36)
+  oldSalaryMinor              Int?                             @map("old_salary_minor") @db.UnsignedInt
+  newSalaryMinor              Int?                             @map("new_salary_minor") @db.UnsignedInt
+  amountMinor                 Int?                             @map("amount_minor") @db.UnsignedInt
+  valuationSnapshotMinor      Int?                             @map("valuation_snapshot_minor") @db.UnsignedInt
+  transactionFeeMinor         Int?                             @map("transaction_fee_minor") @db.UnsignedInt
+  transactionFeeRuleVersionId String?                          @map("transaction_fee_rule_version_id") @db.Char(36)
+  reason                      String                           @db.VarChar(512)
+  createdByAdminId            String                           @map("created_by_admin_id") @db.Char(36)
+  createdAt                   DateTime                         @default(now()) @map("created_at")
+  league                      League                           @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season                      LeagueSeason                     @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  footballPlayer              FootballPlayer                   @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  sourceLeagueTeam            LeagueTeam?                      @relation("RosterTransactionSourceTeam", fields: [sourceLeagueTeamId], references: [id], onDelete: Restrict)
+  targetLeagueTeam            LeagueTeam?                      @relation("RosterTransactionTargetTeam", fields: [targetLeagueTeamId], references: [id], onDelete: Restrict)
+  oldPlayerCard               PlayerCard?                      @relation("RosterTransactionOldCard", fields: [oldPlayerCardId], references: [id], onDelete: Restrict)
+  newPlayerCard               PlayerCard?                      @relation("RosterTransactionNewCard", fields: [newPlayerCardId], references: [id], onDelete: Restrict)
+  createdByAdmin              AdminAccount                     @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  financeEntries              FinanceLedgerEntry[]
+  transactionFeeRuleVersion   LeagueTransactionFeeRuleVersion? @relation(fields: [transactionFeeRuleVersionId], references: [id], onDelete: Restrict)
 
   @@index([leagueId, createdAt, id], map: "roster_transactions_league_timeline_idx")
   @@index([seasonId, type], map: "roster_transactions_season_type_idx")
@@ -704,6 +739,7 @@ model RosterTransaction {
   @@index([oldPlayerCardId], map: "roster_transactions_old_card_idx")
   @@index([newPlayerCardId], map: "roster_transactions_new_card_idx")
   @@index([createdByAdminId], map: "roster_transactions_creator_idx")
+  @@index([transactionFeeRuleVersionId], map: "roster_transactions_fee_rule_idx")
   @@map("roster_transactions")
 }
 
@@ -711,6 +747,7 @@ model FinanceLedgerEntry {
   id                  String                 @id @default(uuid()) @db.Char(36)
   leagueId            String                 @map("league_id") @db.Char(36)
   leagueTeamId        String                 @map("league_team_id") @db.Char(36)
+  seasonId            String?                @map("season_id") @db.Char(36)
   rosterTransactionId String?                @map("roster_transaction_id") @db.Char(36)
   direction           FinanceLedgerDirection
   type                FinanceLedgerType
@@ -719,12 +756,187 @@ model FinanceLedgerEntry {
   createdAt           DateTime               @default(now()) @map("created_at")
   league              League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   leagueTeam          LeagueTeam             @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  season              LeagueSeason?          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
   rosterTransaction   RosterTransaction?     @relation(fields: [rosterTransactionId], references: [id], onDelete: Restrict)
 
   @@index([leagueId, createdAt, id], map: "finance_ledger_entries_league_timeline_idx")
   @@index([leagueTeamId, createdAt, id], map: "finance_ledger_entries_team_timeline_idx")
   @@index([rosterTransactionId], map: "finance_ledger_entries_transaction_idx")
+  @@index([seasonId, leagueTeamId, createdAt], map: "finance_ledger_entries_season_team_idx")
   @@map("finance_ledger_entries")
+}
+
+model ValuationWindow {
+  id                   String                       @id @default(uuid()) @db.Char(36)
+  seasonId             String                       @map("season_id") @db.Char(36)
+  name                 String                       @db.VarChar(64)
+  startsAt             DateTime                     @map("starts_at")
+  endsAt               DateTime                     @map("ends_at")
+  closedAt             DateTime?                    @map("closed_at")
+  currentRuleVersionId String?                      @unique @map("current_rule_version_id") @db.Char(36)
+  createdByAdminId     String                       @map("created_by_admin_id") @db.Char(36)
+  version              Int                          @default(1) @db.UnsignedInt
+  createdAt            DateTime                     @default(now()) @map("created_at")
+  updatedAt            DateTime                     @updatedAt @map("updated_at")
+  season               LeagueSeason                 @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin       AdminAccount                 @relation("ValuationWindowCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  currentRuleVersion   ValuationWindowRuleVersion?  @relation("ValuationWindowCurrentRule", fields: [currentRuleVersionId], references: [id], onDelete: Restrict)
+  ruleVersions         ValuationWindowRuleVersion[] @relation("ValuationWindowRules")
+  rosterSnapshots      ValuationRosterSnapshot[]
+  submissions          ValuationSubmission[]
+
+  @@index([seasonId, startsAt, endsAt], map: "valuation_windows_season_timeline_idx")
+  @@index([createdByAdminId], map: "valuation_windows_creator_idx")
+  @@map("valuation_windows")
+}
+
+model ValuationWindowRuleVersion {
+  id                 String                @id @default(uuid()) @db.Char(36)
+  windowId           String                @map("window_id") @db.Char(36)
+  version            Int                   @db.UnsignedInt
+  minimumValueMinor  Int                   @map("minimum_value_minor") @db.UnsignedInt
+  maximumValueMinor  Int                   @map("maximum_value_minor") @db.UnsignedInt
+  maximumIncreaseBps Int                   @map("maximum_increase_bps") @db.UnsignedSmallInt
+  maximumDecreaseBps Int                   @map("maximum_decrease_bps") @db.UnsignedSmallInt
+  createdByAdminId   String                @map("created_by_admin_id") @db.Char(36)
+  createdAt          DateTime              @default(now()) @map("created_at")
+  window             ValuationWindow       @relation("ValuationWindowRules", fields: [windowId], references: [id], onDelete: Restrict)
+  currentForWindow   ValuationWindow?      @relation("ValuationWindowCurrentRule")
+  createdByAdmin     AdminAccount          @relation("ValuationRuleCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  submissions        ValuationSubmission[]
+
+  @@unique([windowId, version], map: "valuation_window_rule_versions_unique")
+  @@index([createdByAdminId], map: "valuation_window_rule_versions_creator_idx")
+  @@map("valuation_window_rule_versions")
+}
+
+model ValuationRosterSnapshot {
+  id               String                    @id @default(uuid()) @db.Char(36)
+  windowId         String                    @map("window_id") @db.Char(36)
+  leagueTeamId     String                    @map("league_team_id") @db.Char(36)
+  ownershipId      String                    @map("ownership_id") @db.Char(36)
+  footballPlayerId String                    @map("football_player_id") @db.Char(36)
+  baseValueMinor   Int?                      @map("base_value_minor") @db.UnsignedInt
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  window           ValuationWindow           @relation(fields: [windowId], references: [id], onDelete: Restrict)
+  leagueTeam       LeagueTeam                @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  ownership        LeaguePlayerOwnership     @relation(fields: [ownershipId], references: [id], onDelete: Restrict)
+  footballPlayer   FootballPlayer            @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  submissionItems  ValuationSubmissionItem[]
+
+  @@unique([windowId, ownershipId], map: "valuation_roster_snapshots_ownership_unique")
+  @@unique([windowId, leagueTeamId, footballPlayerId], map: "valuation_roster_snapshots_player_unique")
+  @@index([leagueTeamId, createdAt], map: "valuation_roster_snapshots_team_idx")
+  @@index([footballPlayerId], map: "valuation_roster_snapshots_player_idx")
+  @@map("valuation_roster_snapshots")
+}
+
+model ValuationSubmission {
+  id                String                     @id @default(uuid()) @db.Char(36)
+  windowId          String                     @map("window_id") @db.Char(36)
+  leagueTeamId      String                     @map("league_team_id") @db.Char(36)
+  ruleVersionId     String                     @map("rule_version_id") @db.Char(36)
+  attemptNumber     Int                        @map("attempt_number") @db.UnsignedInt
+  status            ValuationSubmissionStatus  @default(DRAFT)
+  submittedByUserId String                     @map("submitted_by_user_id") @db.Char(36)
+  submittedAt       DateTime?                  @map("submitted_at")
+  reviewedByAdminId String?                    @map("reviewed_by_admin_id") @db.Char(36)
+  reviewedAt        DateTime?                  @map("reviewed_at")
+  reviewReason      String?                    @map("review_reason") @db.VarChar(512)
+  version           Int                        @default(1) @db.UnsignedInt
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  window            ValuationWindow            @relation(fields: [windowId], references: [id], onDelete: Restrict)
+  leagueTeam        LeagueTeam                 @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  ruleVersion       ValuationWindowRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+  submittedByUser   User                       @relation("ValuationSubmissionSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviewedByAdmin   AdminAccount?              @relation("ValuationSubmissionReviewer", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
+  items             ValuationSubmissionItem[]
+  valuationHistory  PlayerValuationHistory[]
+  currentValuations LeaguePlayerValuation[]
+
+  @@unique([windowId, leagueTeamId, attemptNumber], map: "valuation_submissions_attempt_unique")
+  @@index([windowId, status, createdAt], map: "valuation_submissions_window_status_idx")
+  @@index([leagueTeamId, status, createdAt], map: "valuation_submissions_team_status_idx")
+  @@index([ruleVersionId], map: "valuation_submissions_rule_idx")
+  @@index([submittedByUserId], map: "valuation_submissions_submitter_idx")
+  @@index([reviewedByAdminId], map: "valuation_submissions_reviewer_idx")
+  @@map("valuation_submissions")
+}
+
+model ValuationSubmissionItem {
+  id                  String                  @id @default(uuid()) @db.Char(36)
+  submissionId        String                  @map("submission_id") @db.Char(36)
+  snapshotId          String                  @map("snapshot_id") @db.Char(36)
+  baseValueMinor      Int?                    @map("base_value_minor") @db.UnsignedInt
+  proposedValueMinor  Int                     @map("proposed_value_minor") @db.UnsignedInt
+  minimumAllowedMinor Int                     @map("minimum_allowed_minor") @db.UnsignedInt
+  maximumAllowedMinor Int                     @map("maximum_allowed_minor") @db.UnsignedInt
+  exceedsRange        Boolean                 @default(false) @map("exceeds_range")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  submission          ValuationSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  snapshot            ValuationRosterSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, snapshotId], map: "valuation_submission_items_snapshot_unique")
+  @@index([snapshotId], map: "valuation_submission_items_snapshot_idx")
+  @@map("valuation_submission_items")
+}
+
+model LeaguePlayerValuation {
+  id                 String               @id @default(uuid()) @db.Char(36)
+  leagueId           String               @map("league_id") @db.Char(36)
+  footballPlayerId   String               @map("football_player_id") @db.Char(36)
+  currentValueMinor  Int                  @map("current_value_minor") @db.UnsignedInt
+  sourceSubmissionId String?              @map("source_submission_id") @db.Char(36)
+  effectiveAt        DateTime             @map("effective_at")
+  version            Int                  @default(1) @db.UnsignedInt
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  league             League               @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  footballPlayer     FootballPlayer       @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  sourceSubmission   ValuationSubmission? @relation(fields: [sourceSubmissionId], references: [id], onDelete: Restrict)
+
+  @@unique([leagueId, footballPlayerId], map: "league_player_valuations_unique")
+  @@index([sourceSubmissionId], map: "league_player_valuations_submission_idx")
+  @@map("league_player_valuations")
+}
+
+model PlayerValuationHistory {
+  id                 String              @id @default(uuid()) @db.Char(36)
+  leagueId           String              @map("league_id") @db.Char(36)
+  footballPlayerId   String              @map("football_player_id") @db.Char(36)
+  submissionId       String              @map("submission_id") @db.Char(36)
+  previousValueMinor Int?                @map("previous_value_minor") @db.UnsignedInt
+  newValueMinor      Int                 @map("new_value_minor") @db.UnsignedInt
+  effectiveAt        DateTime            @map("effective_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  league             League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  footballPlayer     FootballPlayer      @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  submission         ValuationSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+
+  @@index([leagueId, footballPlayerId, effectiveAt], map: "player_valuation_history_timeline_idx")
+  @@index([submissionId], map: "player_valuation_history_submission_idx")
+  @@map("player_valuation_history")
+}
+
+model LeagueTransactionFeeRuleVersion {
+  id                 String              @id @default(uuid()) @db.Char(36)
+  leagueId           String              @map("league_id") @db.Char(36)
+  version            Int                 @db.UnsignedInt
+  rateBps            Int                 @map("rate_bps") @db.UnsignedSmallInt
+  minimumFeeMinor    Int                 @map("minimum_fee_minor") @db.UnsignedInt
+  effectiveAt        DateTime            @map("effective_at")
+  createdByAdminId   String              @map("created_by_admin_id") @db.Char(36)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  league             League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  createdByAdmin     AdminAccount        @relation("TransactionFeeRuleCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  rosterTransactions RosterTransaction[]
+
+  @@unique([leagueId, version], map: "league_transaction_fee_rules_unique")
+  @@index([leagueId, effectiveAt], map: "league_transaction_fee_rules_effective_idx")
+  @@index([createdByAdminId], map: "league_transaction_fee_rules_creator_idx")
+  @@map("league_transaction_fee_rule_versions")
 }
 
 model LeagueSeasonStatusHistory {
@@ -842,23 +1054,26 @@ model DataSource {
 }
 
 model FootballPlayer {
-  id                           String                  @id @default(uuid()) @db.Char(36)
-  nameZh                       String?                 @map("name_zh") @db.VarChar(128)
-  nameEn                       String?                 @map("name_en") @db.VarChar(128)
-  normalizedNameZh             String?                 @map("normalized_name_zh") @db.VarChar(128)
-  normalizedNameEn             String?                 @map("normalized_name_en") @db.VarChar(128)
-  shortName                    String?                 @map("short_name") @db.VarChar(64)
-  nationality                  String?                 @db.VarChar(64)
-  club                         String?                 @db.VarChar(128)
-  publishedAt                  DateTime?               @map("published_at")
-  lastPublishedReleaseSequence Int?                    @map("last_published_release_sequence")
-  createdAt                    DateTime                @default(now()) @map("created_at")
-  updatedAt                    DateTime                @updatedAt @map("updated_at")
+  id                           String                    @id @default(uuid()) @db.Char(36)
+  nameZh                       String?                   @map("name_zh") @db.VarChar(128)
+  nameEn                       String?                   @map("name_en") @db.VarChar(128)
+  normalizedNameZh             String?                   @map("normalized_name_zh") @db.VarChar(128)
+  normalizedNameEn             String?                   @map("normalized_name_en") @db.VarChar(128)
+  shortName                    String?                   @map("short_name") @db.VarChar(64)
+  nationality                  String?                   @db.VarChar(64)
+  club                         String?                   @db.VarChar(128)
+  publishedAt                  DateTime?                 @map("published_at")
+  lastPublishedReleaseSequence Int?                      @map("last_published_release_sequence")
+  createdAt                    DateTime                  @default(now()) @map("created_at")
+  updatedAt                    DateTime                  @updatedAt @map("updated_at")
   sources                      FootballPlayerSource[]
   cards                        PlayerCard[]
   bestCard                     FootballPlayerBestCard?
   leagueOwnerships             LeaguePlayerOwnership[]
   rosterTransactions           RosterTransaction[]
+  valuationSnapshots           ValuationRosterSnapshot[]
+  leagueValuations             LeaguePlayerValuation[]
+  valuationHistory             PlayerValuationHistory[]
   importRecords                ImportRecord[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
