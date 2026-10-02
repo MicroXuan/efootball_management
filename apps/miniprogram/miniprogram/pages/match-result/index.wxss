@@ -1,1 +1,16 @@
-page{background:#0a0a0a;color:#f7f8f5}.result-page{min-height:100vh;box-sizing:border-box;padding:calc(env(safe-area-inset-top) + 36rpx) 28rpx}.kicker{display:block;color:#b0ff00;font-size:17rpx;letter-spacing:5rpx}.title{display:block;margin-top:8rpx;font-family:inherit;font-size:52rpx;font-weight:700}.scoreboard{margin-top:50rpx;padding:34rpx 20rpx;display:grid;grid-template-columns:1fr 50rpx 1fr;align-items:center;border:2rpx solid #294c3a;background:#171917;text-align:center;font-size:26rpx;font-weight:800}.divider{color:#d9e342}.form{margin-top:28rpx;padding:28rpx;border:2rpx solid #294c3a;background:#171917}.label{display:block;color:#a0a69d;font-size:21rpx}.score-inputs{margin:30rpx 0;display:flex;align-items:center;justify-content:center;gap:22rpx;font-size:38rpx}.score-inputs input{width:150rpx;height:100rpx;border:2rpx solid #365744;color:#b0ff00;font-size:48rpx;text-align:center}.form button{background:#b0ff00;color:#0a0a0a;font-weight:800}.form button::after{border:0}.proposal{display:block;margin:30rpx 0;color:#b0ff00;font-size:58rpx;text-align:center}.form textarea{width:100%;height:130rpx;margin:18rpx 0;box-sizing:border-box;padding:18rpx;border:1rpx solid #365744;color:#f7f8f5}.form .reject{border:2rpx solid #d9e342;background:transparent;color:#d9e342}.error{display:block;margin-top:22rpx;color:#d9e342;font-size:22rpx}
+page { background: #0e1417; color: #f4f7f8; }
+.result-page { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 36rpx) 28rpx 80rpx; background: #0e1417; }
+.kicker { display: block; color: #aab5ba; font-size: 17rpx; letter-spacing: 5rpx; }
+.title { display: block; margin-top: 8rpx; font-size: 52rpx; font-weight: 800; }
+.scoreboard { margin-top: 50rpx; padding: 36rpx 22rpx; display: grid; grid-template-columns: 1fr 50rpx 1fr; align-items: center; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; box-shadow: 0 16rpx 44rpx rgba(0,0,0,.18); text-align: center; font-size: 26rpx; font-weight: 800; }
+.divider { color: #aab5ba; }
+.form { margin-top: 28rpx; padding: 30rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
+.label { display: block; color: #aab5ba; font-size: 21rpx; }
+.score-inputs { margin: 30rpx 0; display: flex; align-items: center; justify-content: center; gap: 22rpx; font-size: 38rpx; }
+.score-inputs input { width: 150rpx; height: 100rpx; border: 2rpx solid #46545b; border-radius: 16rpx; color: #f4f7f8; background: #1c262b; font-size: 48rpx; text-align: center; }
+.form button { min-height: 88rpx; border-radius: 16rpx; background: #b6f13a; color: #111810; font-weight: 800; }
+.form button::after { border: 0; }
+.proposal { display: block; margin: 30rpx 0; color: #f4f7f8; font-size: 58rpx; font-weight: 850; text-align: center; }
+.form textarea { width: 100%; height: 130rpx; margin: 18rpx 0; padding: 18rpx; border: 2rpx solid #46545b; border-radius: 16rpx; color: #f4f7f8; background: #1c262b; }
+.form .reject { border: 2rpx solid rgba(255,127,120,.42); background: rgba(255,127,120,.08); color: #ffaaa5; }
+.error { display: block; margin-top: 22rpx; color: #ffaaa5; font-size: 22rpx; }
