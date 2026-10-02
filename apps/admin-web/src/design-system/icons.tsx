@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-export type AdminIconName = 'league' | 'administrators' | 'audit' | 'teams' | 'seasons';
+export type AdminIconName = 'league' | 'administrators' | 'audit' | 'teams' | 'seasons' | 'valuation' | 'review';
 
 const labels: Record<AdminIconName, string> = {
   league: '联赛',
@@ -8,6 +8,8 @@ const labels: Record<AdminIconName, string> = {
   audit: '审计',
   teams: '球队',
   seasons: '赛季',
+  valuation: '身价',
+  review: '审核',
 };
 
 const paths: Record<AdminIconName, ReactElement> = {
@@ -16,6 +18,8 @@ const paths: Record<AdminIconName, ReactElement> = {
   audit: <><path d="M7 3h10v4H7zM5 5H3v16h18V5h-2" /><path d="m8 14 2.5 2.5L16 11" /></>,
   teams: <><path d="m4 6 8-3 8 3-2 13H6L4 6Z" /><path d="M9 11h6M12 8v6" /></>,
   seasons: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2M5 5l2 2M19 5l-2 2" /></>,
+  valuation: <><circle cx="12" cy="12" r="8" /><path d="M9 9.5c0-1 1.1-1.8 3-1.8s3 .8 3 1.8-1 1.6-3 2-3 1-3 2 1.1 1.8 3 1.8 3-.8 3-1.8M12 6v12" /></>,
+  review: <><path d="M7 3h10v4H7zM5 5H3v16h18V5h-2" /><path d="m8 14 2.5 2.5L16 11" /></>,
 };
 
 export function AdminIcon({ name, decorative = true }: {

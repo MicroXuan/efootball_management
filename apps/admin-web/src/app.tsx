@@ -20,6 +20,8 @@ const SalaryRulesPage = lazy(() => import('./leagues/salary-rules-page').then((m
 const TransferWindowsPage = lazy(() => import('./leagues/transfer-windows-page').then((module) => ({ default: module.TransferWindowsPage })));
 const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => ({ default: module.RosterPage })));
 const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
+const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
+const ValuationReviewsPage = lazy(() => import('./valuations/valuation-reviews-page').then((module) => ({ default: module.ValuationReviewsPage })));
 
 const { Header, Sider, Content } = Layout;
 
@@ -100,6 +102,8 @@ export function App() {
               <Route path="salary-rules" element={deferred(<SalaryRulesPage api={adminApi} />)} />
               <Route path="transfer-windows" element={deferred(<TransferWindowsPage api={adminApi} />)} />
               <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
+              <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
+              <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
             </Route>
           </Route></Route>
           <Route path="*" element={<Navigate to="/" replace />} />
