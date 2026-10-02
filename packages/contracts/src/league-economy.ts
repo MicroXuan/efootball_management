@@ -39,6 +39,7 @@ export const TeamAssetOverviewSchema = z.object({
   teamLogoUrl: z.string().nullable(),
   ownerDisplayName: z.string().min(1),
   ownerPublicUserNo: z.string().regex(/^\d{6}$/),
+  ownerAvatarUrl: z.string().nullable(),
   shellValueMinor: ValuationMoneyMinorSchema,
   knownPlayerValueMinor: ValuationMoneyMinorSchema,
   totalKnownValueMinor: ValuationMoneyMinorSchema,

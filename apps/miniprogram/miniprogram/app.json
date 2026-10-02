@@ -14,6 +14,9 @@
     "pages/my-league-teams/index",
     "pages/league-team-detail/index",
     "pages/valuation-manage/index",
+    "pages/team-assets/index",
+    "pages/league-transactions/index",
+    "pages/team-finance/index",
     "pages/player-card-detail/index"
   ],
   "window": {

@@ -7,7 +7,7 @@ function harness() {
   const team = {
     id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', teamNumber: 7,
     name: '海港竞技', logoUrl: null, shellValueMinor: 5000,
-    owner: { displayName: '小宣', publicUserNo: '100069' }
+    owner: { displayName: '小宣', publicUserNo: '100069', avatarUrl: null }
   };
   const ownerships = [
     {

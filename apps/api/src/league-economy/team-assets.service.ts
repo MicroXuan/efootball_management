@@ -10,7 +10,7 @@ export class TeamAssetsService {
   async getTeamAssets(userId: string, teamId: string): Promise<TeamAssetOverview> {
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
-      include: { owner: { select: { displayName: true, publicUserNo: true } } }
+      include: { owner: { select: { displayName: true, publicUserNo: true, avatarUrl: true } } }
     });
     if (!team) throw this.error('LEAGUE_TEAM_NOT_FOUND', '球队不存在', 404);
     if (team.ownerUserId !== userId) {
@@ -59,6 +59,7 @@ export class TeamAssetsService {
       teamLogoUrl: team.logoUrl,
       ownerDisplayName: team.owner.displayName,
       ownerPublicUserNo: team.owner.publicUserNo,
+      ownerAvatarUrl: team.owner.avatarUrl,
       shellValueMinor: team.shellValueMinor,
       knownPlayerValueMinor,
       totalKnownValueMinor: team.shellValueMinor + knownPlayerValueMinor,

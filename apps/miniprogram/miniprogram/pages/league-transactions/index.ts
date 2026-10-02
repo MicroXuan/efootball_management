@@ -1,0 +1,4 @@
+import { economyApi } from '../../services/economy'
+import { transactionView } from './league-transactions.viewmodel'
+
+Page({ data: { state: 'loading' as 'loading'|'loaded'|'error', errorMessage: '', leagueId: '', items: [] as ReturnType<typeof transactionView>[], nextCursor: null as string|null }, onLoad(options: { leagueId?: string }) { if (!options.leagueId) this.setData({ state: 'error', errorMessage: '联赛参数缺失' }); else { this.setData({ leagueId: options.leagueId }); void this.loadPage() } }, async loadPage() { this.setData({ state: 'loading' }); try { const result = await economyApi.transactions(this.data.leagueId); this.setData({ state: 'loaded', items: result.items.map(transactionView), nextCursor: result.nextCursor }) } catch { this.setData({ state: 'error', errorMessage: '交易记录加载失败，请稍后重试' }) } } })

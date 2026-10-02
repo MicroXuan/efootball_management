@@ -198,6 +198,7 @@ describe('league economy contracts', () => {
       teamLogoUrl: null,
       ownerDisplayName: '小宣',
       ownerPublicUserNo: '100069',
+      ownerAvatarUrl: null,
       shellValueMinor: 5000,
       knownPlayerValueMinor: 8000,
       totalKnownValueMinor: 13_000,
