@@ -70,6 +70,7 @@ select { font: inherit; }
 .shell-brand strong { font-size: 17px; letter-spacing: .035em; }
 .admin-sider .ant-menu { padding: 18px 12px; color: var(--admin-nav-text); background: transparent; }
 .admin-sider .ant-menu-item { border-radius: 10px; color: var(--admin-nav-text); font-weight: 600; }
+.admin-icon { display: inline-block; flex: none; vertical-align: -3px; }
 .admin-sider .ant-menu-item-group-title { padding-top: 18px; color: var(--admin-nav-muted) !important; font-size: 11px; font-weight: 700; letter-spacing: .1em; }
 .admin-sider .ant-menu-item:hover { color: #ffffff !important; background: #1b252a !important; }
 .admin-sider .ant-menu-item-selected { color: #f4f7f8 !important; background: var(--admin-sidebar-selected) !important; box-shadow: inset 3px 0 0 var(--admin-accent); }
@@ -87,6 +88,8 @@ select { font: inherit; }
 .page-heading { margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--admin-text); }
 .page-heading h1 { margin: 8px 0 0; font-size: clamp(28px, 3vw, 38px); line-height: 1.15; letter-spacing: -.035em; }
 .page-heading p { margin: 8px 0 0; color: var(--admin-text-secondary); }
+.page-heading nav { max-width: 100%; }
+.page-heading .ant-tabs-tab a { display: inline-flex; align-items: center; gap: 7px; color: inherit; }
 .page-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, .8fr); gap: 20px; align-items: start; }
 .page-grid--seasons { align-items: start; }
 .page-stack { display: grid; gap: 20px; }
@@ -152,7 +155,13 @@ select { font: inherit; }
   .login-field { min-height: 34vh; }
   .login-panel { padding: 28px 18px 44px; }
   .login-card { padding: 30px 24px; }
-  .admin-sider.ant-layout-sider { display: none; }
+  .admin-sider.ant-layout-sider { display: block; flex: 0 0 84px !important; width: 84px !important; min-width: 84px !important; max-width: 84px !important; }
+  .shell-brand { justify-content: center; padding-inline: 12px; }
+  .shell-brand strong,
+  .shell-version,
+  .admin-sider .ant-menu-title-content,
+  .admin-sider .ant-menu-item-group-title { display: none; }
+  .admin-sider .ant-menu-item { display: grid; place-items: center; padding-inline: 0 !important; }
   .admin-header.ant-layout-header { padding: 0 18px; }
   .admin-identity > span { display: none; }
   .admin-content { padding: 20px 16px; }
