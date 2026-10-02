@@ -1,143 +1,30 @@
-page {
-  background: #0a0a0a;
-  color: #f7f8f5;
-}
+page { background: #0e1417; color: #f4f7f8; }
 
 .page-shell {
   min-height: 100vh;
-  box-sizing: border-box;
-  padding: 150rpx 56rpx 72rpx;
+  padding: 120rpx 56rpx 72rpx;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: linear-gradient(165deg, #0a0a0a 0%, #10241a 62%, #162019 100%);
+  background: radial-gradient(circle at 50% 12%, rgba(182,241,58,.07), transparent 32%), #0e1417;
 }
 
-.stadium-mark {
-  position: relative;
-  height: 360rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pitch-ring {
-  position: absolute;
-  width: 440rpx;
-  height: 440rpx;
-  border: 2rpx solid rgba(85, 239, 139, 0.28);
-  border-radius: 50%;
-  box-shadow: 0 0 0 72rpx rgba(85, 239, 139, 0.035), 0 0 120rpx rgba(85, 239, 139, 0.08);
-}
-
+.stadium-mark { position: relative; height: 330rpx; display: flex; align-items: center; justify-content: center; }
+.pitch-ring { position: absolute; width: 420rpx; height: 280rpx; border: 2rpx solid #344047; border-radius: 44rpx; box-shadow: 0 0 0 56rpx rgba(52,64,71,.12); }
 .pitch-ring::before,
-.pitch-ring::after {
-  content: '';
-  position: absolute;
-  background: rgba(85, 239, 139, 0.26);
-}
-
-.pitch-ring::before {
-  width: 2rpx;
-  height: 640rpx;
-  left: 50%;
-  top: -100rpx;
-}
-
-.pitch-ring::after {
-  width: 640rpx;
-  height: 2rpx;
-  top: 50%;
-  left: -100rpx;
-}
-
-.ball {
-  position: relative;
-  z-index: 1;
-  font-size: 116rpx;
-  filter: drop-shadow(0 24rpx 32rpx rgba(0, 0, 0, 0.38));
-}
-
-.brand-block {
-  margin-top: 34rpx;
-  display: flex;
-  flex-direction: column;
-}
-
-.eyebrow {
-  color: #d9e342;
-  font-size: 20rpx;
-  letter-spacing: 6rpx;
-}
-
-.title {
-  margin-top: 18rpx;
-  font-family:inherit;
-  font-size: 76rpx;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 4rpx;
-}
-
-.subtitle {
-  margin-top: 28rpx;
-  max-width: 560rpx;
-  color: #9fb4a7;
-  font-size: 28rpx;
-  line-height: 1.7;
-}
-
-.login-panel {
-  margin-top: auto;
-  padding: 32rpx;
-  border: 2rpx solid rgba(85, 239, 139, 0.32);
-  background: rgba(16, 36, 26, 0.88);
-}
-
-.panel-line {
-  display: flex;
-  justify-content: space-between;
-  color: #9fb4a7;
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-}
-
-.panel-code {
-  color: #b0ff00;
-}
-
-.login-button {
-  margin-top: 34rpx;
-  border: 0;
-  border-radius:20rpx;
-  background: #b0ff00;
-  color: #0a0a0a;
-  font-size: 32rpx;
-  font-weight: 700;
-  letter-spacing: 4rpx;
-}
-
-.login-button::after {
-  border: 0;
-}
-
-.login-button[disabled] {
-  background: #315c40;
-  color: #9fb4a7;
-}
-
-.error-copy {
-  display: block;
-  margin-top: 24rpx;
-  color: #ff9c8e;
-  font-size: 24rpx;
-  line-height: 1.5;
-}
-
-.privacy-copy {
-  display: block;
-  margin-top: 24rpx;
-  color: #71877a;
-  font-size: 22rpx;
-  line-height: 1.5;
-}
+.pitch-ring::after { position: absolute; background: #344047; content: ''; }
+.pitch-ring::before { width: 2rpx; height: 280rpx; left: 50%; top: 0; }
+.pitch-ring::after { width: 112rpx; height: 112rpx; top: 82rpx; left: 154rpx; border: 2rpx solid #344047; border-radius: 50%; background: transparent; }
+.ball { position: relative; z-index: 1; font-size: 104rpx; filter: drop-shadow(0 24rpx 32rpx rgba(0,0,0,.38)); }
+.brand-block { margin-top: 30rpx; display: flex; flex-direction: column; }
+.eyebrow { color: #aab5ba; font-size: 20rpx; font-weight: 700; letter-spacing: 6rpx; }
+.title { margin-top: 18rpx; font-size: 72rpx; font-weight: 850; line-height: 1; letter-spacing: 2rpx; }
+.subtitle { margin-top: 26rpx; max-width: 560rpx; color: #aab5ba; font-size: 27rpx; line-height: 1.7; }
+.login-panel { margin-top: auto; padding: 32rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; box-shadow: 0 20rpx 54rpx rgba(0,0,0,.26); }
+.panel-line { display: flex; justify-content: space-between; color: #aab5ba; font-size: 22rpx; letter-spacing: 2rpx; }
+.panel-code { color: #7e8b91; }
+.login-button { min-height: 92rpx; margin-top: 34rpx; border: 0; border-radius: 16rpx; background: #b6f13a; color: #111810; font-size: 30rpx; font-weight: 800; letter-spacing: 3rpx; }
+.login-button::after { border: 0; }
+.login-button[disabled] { background: #263238; color: #7e8b91; }
+.error-copy { display: block; margin-top: 24rpx; color: #ffaaa5; font-size: 23rpx; line-height: 1.5; }
+.privacy-copy { display: block; margin-top: 24rpx; color: #7e8b91; font-size: 21rpx; line-height: 1.55; }

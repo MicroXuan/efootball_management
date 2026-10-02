@@ -1,38 +1,38 @@
-page { background: #0a0a0a; color: #f7f8f5; }
-.page-shell { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 38rpx) 30rpx 96rpx; background: radial-gradient(circle at 82% 8%, rgba(52,126,73,.2), transparent 32%), linear-gradient(165deg,#0a0a0a 0%,#0b1b14 58%,#0d130f 100%); }
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 38rpx) 30rpx 110rpx; background: radial-gradient(circle at 82% 8%, rgba(182,241,58,.06), transparent 32%), #0e1417; }
 .topbar,.identity-card,.section-head,.team-card,.team-name-line { display:flex; align-items:center; }
 .topbar,.section-head { justify-content:space-between; }
-.eyebrow,.section-kicker,.state-code { display:block; color:#d9e342; font-size:18rpx; letter-spacing:5rpx; }
+.eyebrow,.section-kicker,.state-code { display:block; color:#aab5ba; font-size:18rpx; letter-spacing:5rpx; }
 .page-title { display:block; margin-top:8rpx; font-family:inherit; font-size:54rpx; font-weight:700; }
-.record-mark { color:rgba(176,255,0,.46); font-size:20rpx; letter-spacing:3rpx; }
-.identity-card,.state-card { margin-top:42rpx; padding:30rpx; border:2rpx solid rgba(176,255,0,.25); background:rgba(15,34,24,.9); }
-.avatar { width:108rpx; height:108rpx; flex:none; border:2rpx solid rgba(176,255,0,.38); border-radius:50%; }
+.record-mark { color:#7e8b91; font-size:20rpx; letter-spacing:3rpx; }
+.identity-card,.state-card { margin-top:42rpx; padding:30rpx; border:2rpx solid #344047; border-radius:24rpx; background:#151d21; box-shadow:0 16rpx 44rpx rgba(0,0,0,.18); }
+.avatar { width:108rpx; height:108rpx; flex:none; border:2rpx solid #46545b; border-radius:50%; }
 .avatar-fallback { display:flex; align-items:center; justify-content:center; background:#183123; font-size:42rpx; }
 .identity-copy { min-width:0; margin-left:22rpx; display:flex; flex:1; flex-direction:column; }
 .member-name { overflow:hidden; font-size:34rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
-.member-region { margin-top:8rpx; color:#8ea497; font-size:21rpx; }
+.member-region { margin-top:8rpx; color:#aab5ba; font-size:21rpx; }
 .number-block { flex:none; padding-left:18rpx; border-left:2rpx solid rgba(142,164,151,.2); text-align:right; }
-.number-label,.copy-hint { display:block; color:#8ea497; font-size:17rpx; }
-.public-number { display:block; margin:7rpx 0 4rpx; color:#b0ff00; font-family:inherit; font-size:27rpx; font-weight:800; letter-spacing:2rpx; }
+.number-label,.copy-hint { display:block; color:#aab5ba; font-size:17rpx; }
+.public-number { display:block; margin:7rpx 0 4rpx; color:#f4f7f8; font-family:inherit; font-size:27rpx; font-weight:800; letter-spacing:2rpx; }
 .section-head { margin-top:54rpx; }
 .section-title { display:block; margin-top:8rpx; font-size:36rpx; font-weight:800; }
-.team-count { color:#b0ff00; font-size:22rpx; }
+.team-count { color:#aab5ba; font-size:22rpx; }
 .team-list { margin-top:22rpx; }
-.team-card { margin-top:16rpx; padding:24rpx; border-left:4rpx solid #b0ff00; background:rgba(16,36,25,.92); }
+.team-card { margin-top:16rpx; padding:24rpx; border:2rpx solid #344047; border-radius:20rpx; background:#151d21; }
 .team-logo { width:90rpx; height:90rpx; flex:none; border-radius:16rpx; background:#09140e; }
-.logo-fallback { display:flex; align-items:center; justify-content:center; color:#b0ff00; font-size:24rpx; font-weight:800; }
+.logo-fallback { display:flex; align-items:center; justify-content:center; color:#f4f7f8; font-size:24rpx; font-weight:800; }
 .team-copy { min-width:0; margin-left:20rpx; display:flex; flex:1; flex-direction:column; }
 .team-name-line { min-width:0; gap:12rpx; }
-.team-number { color:#d9e342; font-size:21rpx; font-weight:800; }
+.team-number { color:#aab5ba; font-size:21rpx; font-weight:800; }
 .team-name { overflow:hidden; font-size:29rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
 .league-name,.season-name { margin-top:8rpx; overflow:hidden; color:#9caf9f; font-size:20rpx; text-overflow:ellipsis; white-space:nowrap; }
-.season-name { color:#6fd895; }
-.chevron { color:#b0ff00; font-size:44rpx; }
+.season-name { color:#aab5ba; }
+.chevron { color:#b6f13a; font-size:44rpx; }
 .state-card { min-height:280rpx; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; }
 .state-card.compact { min-height:230rpx; }
 .state-title { margin-top:18rpx; font-size:31rpx; font-weight:800; }
-.state-copy { margin-top:14rpx; color:#8ea497; font-size:23rpx; line-height:1.65; }
-.primary-button,.outline-button { margin:28rpx 0 0; border-radius:20rpx; font-weight:800; }
+.state-copy { margin-top:14rpx; color:#aab5ba; font-size:23rpx; line-height:1.65; }
+.primary-button,.outline-button { min-height:88rpx; margin:28rpx 0 0; border-radius: 16rpx; font-weight:800; }
 .primary-button::after,.outline-button::after { border:0; }
-.primary-button { min-width:280rpx; background:#b0ff00; color:#0a0a0a; }
-.outline-button { padding:0 28rpx; border:2rpx solid rgba(176,255,0,.45); background:transparent; color:#b0ff00; font-size:23rpx; }
+.primary-button { min-width:280rpx; background:#b6f13a; color:#111810; }
+.outline-button { padding:0 28rpx; border:2rpx solid #344047; background:#1c262b; color:#f4f7f8; font-size:23rpx; }

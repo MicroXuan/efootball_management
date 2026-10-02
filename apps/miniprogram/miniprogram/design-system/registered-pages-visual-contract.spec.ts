@@ -25,4 +25,28 @@ describe('registered browsing pages visual boundary', () => {
     expect(styles).not.toContain('#b0ff00')
     expect(styles).not.toContain('#d9e342')
   })
+
+  it.each(['competition-manage', 'competition-editor', 'login', 'profile'])(
+    '%s exposes premium form contrast without legacy neon copy',
+    (page) => {
+      const styles = readFileSync(resolve(miniRoot, `pages/${page}/index.wxss`), 'utf8').toLowerCase()
+
+      expect(styles).toContain('#0e1417')
+      expect(styles).toContain('#344047')
+      expect(styles).toContain('#aab5ba')
+      expect(styles).toContain('border-radius: 16rpx')
+      expect(styles).not.toContain('#0a0a0a')
+      expect(styles).not.toContain('#b0ff00')
+      expect(styles).not.toContain('#d9e342')
+    },
+  )
+
+  it('keeps loading feedback stable and neutral on every dark page', () => {
+    const styles = readFileSync(resolve(miniRoot, 'components/loading-state/index.wxss'), 'utf8').toLowerCase()
+
+    expect(styles).toContain('min-height: 420rpx')
+    expect(styles).toContain('#aab5ba')
+    expect(styles).toContain('#344047')
+    expect(styles).not.toContain('rgba(85, 239, 139')
+  })
 })
