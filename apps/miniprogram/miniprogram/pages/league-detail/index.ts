@@ -6,9 +6,12 @@ import { session } from '../../services/session'
 import {
   entryStatusCopy,
   leagueDetailErrorMessage,
+  seasonRailSteps,
   seasonStructureCopy,
   selectSeason,
+  type SeasonRailStep,
 } from './detail.viewmodel'
+import { seasonStatusLabel, seasonStatusTone } from '../leagues/leagues.viewmodel'
 
 type LoadOptions = { id?: string }
 type SeasonPickerEvent = { detail: { value: string } }
@@ -30,6 +33,9 @@ Page({
     profile: null as LeagueTeamSummary | null,
     entry: null as SeasonEntryResponse | null,
     entryStatus: '',
+    seasonRail: [] as SeasonRailStep[],
+    seasonStatusLabel: '',
+    seasonStatusTone: 'muted' as 'accent' | 'info' | 'warning' | 'muted' | 'danger',
   },
 
   onLoad(options: LoadOptions) {
@@ -65,6 +71,9 @@ Page({
         leagueLogoText: league.shortName.slice(0, 2),
         profile,
         entryStatus: entryStatusCopy(loggedIn, Boolean(profile), null),
+        seasonRail: selectedSeason ? seasonRailSteps(selectedSeason.status) : [],
+        seasonStatusLabel: selectedSeason ? seasonStatusLabel(selectedSeason.status) : '',
+        seasonStatusTone: seasonStatusTone(selectedSeason?.status ?? null),
       })
       await this.loadEntry()
     } catch (error) {
@@ -101,8 +110,15 @@ Page({
       registrationCloseDate: selectedSeason.registrationClosesAt.slice(0, 10),
       entry: null,
       entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null),
+      seasonRail: seasonRailSteps(selectedSeason.status),
+      seasonStatusLabel: seasonStatusLabel(selectedSeason.status),
+      seasonStatusTone: seasonStatusTone(selectedSeason.status),
     })
     void this.loadEntry().catch((error: unknown) => this.setData({ errorMessage: this.errorCopy(error) }))
+  },
+
+  enterCurrentSeason() {
+    wx.pageScrollTo({ selector: '#current-season', duration: 180 })
   },
 
   errorCopy(error: unknown): string {

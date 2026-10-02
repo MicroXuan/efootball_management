@@ -1,32 +1,180 @@
-page { background: #0a0a0a; color: #f7f8f5; }
-.page-shell { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 38rpx) 26rpx 170rpx; background: radial-gradient(circle at 88% 8%, rgba(176,255,0,.11), transparent 28%), linear-gradient(165deg,#0a0a0a,#171917 55%,#111710); }
-.masthead,.brand-line,.season-strip { display: flex; align-items: center; }
-.masthead,.season-strip { justify-content: space-between; }
-.eyebrow,.state-code,.season-label { display: block; color: #d9e342; font-size: 17rpx; letter-spacing: 5rpx; }
-.page-title { display: block; margin-top: 7rpx; font-family:inherit; font-size: 56rpx; font-weight: 800; }
-.edition { color: rgba(176,255,0,.44); font-size: 20rpx; font-weight: 800; letter-spacing: 3rpx; }
-.intro { display: block; max-width: 560rpx; margin-top: 24rpx; color: #a0a69d; font-size: 23rpx; line-height: 1.65; }
-.league-tabs { margin-top: 34rpx; display: grid; grid-template-columns: repeat(2, 1fr); border: 2rpx solid rgba(176,255,0,.22); }
-.league-tabs button { margin: 0; border-radius:20rpx; background: transparent; color: #8da095; font-size: 25rpx; font-weight: 800; }
-.league-tabs button::after { border: 0; }
-.league-tabs button.is-active { background: #214c31; color: #b0ff00; }
+page { background: #0e1417; color: #f4f7f8; }
+
+.page-shell {
+  padding: calc(env(safe-area-inset-top) + 38rpx) 28rpx 184rpx;
+  background:
+    radial-gradient(circle at 94% 2%, rgba(182, 241, 58, 0.07), transparent 30%),
+    #0e1417;
+}
+
+.masthead,
+.league-card__identity,
+.league-card__meta-line,
+.season-strip {
+  display: flex;
+  align-items: center;
+}
+
+.masthead,
+.season-strip { justify-content: space-between; }
+
+.eyebrow,
+.state-code,
+.season-label {
+  display: block;
+  color: #aab5ba;
+  font-size: 18rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+}
+
+.page-title {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 58rpx;
+  font-weight: 800;
+  letter-spacing: -2rpx;
+  line-height: 1.08;
+}
+
+.edition {
+  color: #7e8b91;
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 3rpx;
+}
+
+.intro {
+  display: block;
+  max-width: 600rpx;
+  margin-top: 24rpx;
+  color: #aab5ba;
+  font-size: 24rpx;
+  line-height: 1.65;
+}
+
+.league-tabs {
+  margin-top: 36rpx;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8rpx;
+  padding: 8rpx;
+  border: 2rpx solid #2d393f;
+  border-radius: 20rpx;
+  background: #151d21;
+}
+
+.league-tabs button {
+  min-height: 76rpx;
+  margin: 0;
+  border: 0;
+  border-radius: 14rpx;
+  color: #aab5ba;
+  background: transparent;
+  font-size: 24rpx;
+  font-weight: 750;
+}
+
+.league-tabs button.is-active {
+  color: #111810;
+  background: #b6f13a;
+}
+
 .league-list { margin-top: 38rpx; }
-.league-card { margin-top: 20rpx; border: 2rpx solid rgba(176,255,0,.26); background: rgba(11,28,19,.94); overflow: hidden; }
-.brand-line { padding: 28rpx; }
-.league-logo { width: 92rpx; height: 92rpx; flex: none; background: #09140e; }
-.logo-fallback { display: flex; align-items: center; justify-content: center; color: #b0ff00; font-family:inherit; font-size: 27rpx; font-weight: 800; }
-.brand-copy { min-width: 0; margin-left: 22rpx; flex: 1; }
-.league-name,.league-meta,.season-name,.entry-copy,.my-team { display: block; }
-.league-title-line { display: flex; align-items: center; gap: 12rpx; }
-.league-name { overflow: hidden; font-size: 31rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-.edition-badge { flex: none; padding: 4rpx 10rpx; border: 2rpx solid rgba(176,255,0,.34); color: #b0ff00; font-size: 17rpx; }
-.league-meta { margin-top: 8rpx; color: #a0a69d; font-size: 21rpx; }
-.my-team { margin-top: 10rpx; color: #d9e342; font-size: 20rpx; }
-.arrow { color: #b0ff00; font-size: 35rpx; }
-.season-strip { padding: 23rpx 28rpx; border-top: 2rpx solid rgba(176,255,0,.16); background: rgba(29,61,41,.52); }
-.season-name { margin-top: 7rpx; font-size: 25rpx; font-weight: 700; }
-.season-state { text-align: right; color: #b0ff00; font-size: 24rpx; font-weight: 800; }
-.entry-copy { margin-top: 6rpx; color: #82978a; font-size: 18rpx; font-weight: 400; }
-.state-card { min-height: 380rpx; margin-top: 40rpx; padding: 34rpx; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; border: 2rpx solid rgba(176,255,0,.2); background: rgba(11,27,19,.92); }
-.state-title { margin-top: 22rpx; font-size: 33rpx; font-weight: 800; }.state-copy { margin-top: 14rpx; color: #a0a69d; font-size: 23rpx; line-height: 1.65; }
-.outline-button { margin: 28rpx 0 0; padding: 0 28rpx; border: 2rpx solid rgba(176,255,0,.4); border-radius:20rpx; background: transparent; color: #b0ff00; font-size: 24rpx; font-weight: 800; }.outline-button::after { border: 0; }
+
+.league-card {
+  margin-top: 24rpx;
+  overflow: hidden;
+  border: 2rpx solid #344047;
+  border-radius: 24rpx;
+  background: #151d21;
+  box-shadow: 0 16rpx 44rpx rgba(0, 0, 0, 0.2);
+  transition: transform 180ms ease, border-color 180ms ease, opacity 180ms ease;
+}
+
+.league-card:first-child { margin-top: 0; }
+.league-card--pressed { opacity: 0.86; transform: scale(0.988); }
+
+.league-card__identity { min-height: 184rpx; padding: 28rpx; }
+.league-mark { width: 104rpx; flex: none; }
+.league-card__copy { min-width: 0; margin-left: 22rpx; flex: 1; }
+.league-card__meta-line { min-width: 0; gap: 12rpx; }
+
+.edition-badge {
+  flex: none;
+  padding: 6rpx 10rpx;
+  border: 2rpx solid #46545b;
+  border-radius: 8rpx;
+  color: #cbd4d8;
+  font-size: 17rpx;
+  font-weight: 750;
+}
+
+.my-team {
+  min-width: 0;
+  overflow: hidden;
+  color: #aab5ba;
+  font-size: 19rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.league-name,
+.league-meta,
+.season-label,
+.season-name,
+.entry-copy { display: block; }
+
+.league-name {
+  margin-top: 12rpx;
+  overflow: hidden;
+  display: -webkit-box;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 1.24;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.league-meta {
+  margin-top: 8rpx;
+  overflow: hidden;
+  color: #aab5ba;
+  font-size: 21rpx;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arrow {
+  margin-left: 16rpx;
+  color: #b6f13a;
+  font-size: 34rpx;
+  font-weight: 500;
+}
+
+.season-strip {
+  min-height: 132rpx;
+  padding: 22rpx 28rpx;
+  border-top: 2rpx solid #2d393f;
+  background: #1c262b;
+}
+
+.season-copy { min-width: 0; padding-right: 18rpx; }
+.season-label { color: #7e8b91; letter-spacing: 3rpx; }
+.season-name { margin-top: 7rpx; overflow: hidden; font-size: 25rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.entry-copy { margin-top: 5rpx; color: #aab5ba; font-size: 19rpx; }
+
+.state-card {
+  min-height: 380rpx;
+  margin-top: 40rpx;
+  padding: 36rpx;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.state-title { margin-top: 20rpx; font-size: 34rpx; font-weight: 800; }
+.state-copy { margin-top: 14rpx; color: #aab5ba; font-size: 23rpx; line-height: 1.65; }
+.outline-button { min-height: 76rpx; margin: 28rpx 0 0; padding: 0 28rpx; font-size: 23rpx; font-weight: 750; }

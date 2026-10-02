@@ -1,4 +1,36 @@
-import type { LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
+import type { LeagueSeasonStatus, LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
+
+export type SeasonRailStep = {
+  key: 'registration' | 'confirmation' | 'schedule' | 'settlement'
+  label: '报名' | '确认' | '赛程' | '结算'
+  state: 'complete' | 'current' | 'upcoming' | 'cancelled'
+}
+
+const railBase: ReadonlyArray<Pick<SeasonRailStep, 'key' | 'label'>> = [
+  { key: 'registration', label: '报名' },
+  { key: 'confirmation', label: '确认' },
+  { key: 'schedule', label: '赛程' },
+  { key: 'settlement', label: '结算' },
+]
+
+export function seasonRailSteps(status: LeagueSeasonStatus): SeasonRailStep[] {
+  if (status === 'CANCELLED') {
+    return railBase.map((step) => ({ ...step, state: 'cancelled' }))
+  }
+  if (status === 'COMPLETED') {
+    return railBase.map((step) => ({ ...step, state: 'complete' }))
+  }
+
+  const currentIndex = status === 'ALLOCATION_REVIEW'
+    ? 1
+    : status === 'READY' || status === 'IN_PROGRESS'
+      ? 2
+      : 0
+  return railBase.map((step, index) => ({
+    ...step,
+    state: index < currentIndex ? 'complete' : index === currentIndex ? 'current' : 'upcoming',
+  }))
+}
 
 export function selectSeason(
   seasons: readonly LeagueSeasonSummary[],

@@ -11,8 +11,19 @@ export type LeagueCardView = {
   editionLabel: string
   seasonName: string
   seasonState: string
+  seasonTone: 'accent' | 'info' | 'warning' | 'muted' | 'danger'
   entryCopy: string
   teamName: string
+}
+
+export function seasonStatusTone(
+  status: LeagueSeasonStatus | null,
+): LeagueCardView['seasonTone'] {
+  if (!status || status === 'DRAFT' || status === 'COMPLETED') return 'muted'
+  if (status === 'REGISTRATION_OPEN' || status === 'IN_PROGRESS') return 'accent'
+  if (status === 'ALLOCATION_REVIEW') return 'warning'
+  if (status === 'READY') return 'info'
+  return 'danger'
 }
 
 export function seasonStatusLabel(status: LeagueSeasonStatus): string {
@@ -48,6 +59,7 @@ export function leagueCardView(league: LeagueSummary): LeagueCardView {
     editionLabel: editionLabel(league.edition),
     seasonName: season?.displayName || '暂无当前赛季',
     seasonState: season ? seasonStatusLabel(season.status) : '待发布',
+    seasonTone: seasonStatusTone(season?.status ?? null),
     entryCopy: season ? `${season.approvedEntryCount} 支球队参赛` : '等待管理员设置赛季',
     teamName: '',
   }
@@ -64,6 +76,7 @@ export function myLeagueCardView(team: MyLeagueTeamSummary): LeagueCardView {
     editionLabel: editionLabel(team.leagueEdition),
     seasonName: season?.displayName || '暂无当前赛季',
     seasonState: season ? seasonStatusLabel(season.status) : '待发布',
+    seasonTone: seasonStatusTone(season?.status ?? null),
     entryCopy: season ? `${season.approvedEntryCount} 支球队参赛` : '等待管理员设置赛季',
     teamName: team.name.trim() || '未命名球队',
   }

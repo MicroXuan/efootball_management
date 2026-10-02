@@ -1,8 +1,10 @@
 {
   "navigationStyle": "custom",
-  "backgroundColor": "#0A0A0A",
+  "backgroundColor": "#0E1417",
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "loading-state": "/components/loading-state/index"
+    "loading-state": "/components/loading-state/index",
+    "entity-artwork": "/components/entity-artwork/index",
+    "status-badge": "/components/status-badge/index"
   }
 }

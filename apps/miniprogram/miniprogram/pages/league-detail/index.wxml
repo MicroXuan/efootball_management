@@ -1,28 +1,57 @@
-<view class="page-shell">
+<view class="page-shell detail-page">
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取赛季资料" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">赛季读取失败</text><text class="state-title">暂时无法读取联赛</text>
-    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
+    <text class="state-code">赛季读取失败</text>
+    <text class="state-title">暂时无法读取联赛</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="outline-button" bindtap="loadPage">重新加载</button>
   </view>
   <block wx:else>
     <view class="league-hero">
-      <image wx:if="{{league.logoUrl}}" class="league-logo" src="{{league.logoUrl}}" mode="aspectFit" />
-      <view wx:else class="league-logo logo-fallback">{{leagueLogoText}}</view>
-      <text class="hero-kicker">{{league.shortName}} · 联赛中心</text>
+      <view class="league-hero__topline">
+        <view class="league-mark">
+          <entity-artwork src="{{league.logoUrl}}" fallback="{{leagueLogoText}}" shape="square" />
+        </view>
+        <text class="hero-kicker">{{league.shortName}} · 联赛中心</text>
+      </view>
       <text class="hero-title">{{league.name}}</text>
       <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
+      <view wx:if="{{selectedSeason}}" class="hero-season">
+        <view class="hero-season__copy">
+          <text class="hero-season__label">当前赛季</text>
+          <text class="hero-season__name">{{selectedSeason.displayName}}</text>
+        </view>
+        <status-badge label="{{seasonStatusLabel}}" tone="{{seasonStatusTone}}" />
+      </view>
+      <button wx:if="{{selectedSeason}}" class="action-button" bindtap="enterCurrentSeason">进入当前赛季</button>
+    </view>
+
+    <view wx:if="{{selectedSeason}}" class="progress-card">
+      <view class="section-heading">
+        <view>
+          <text class="section-kicker">赛季轨道</text>
+          <text class="section-title">从报名到结算</text>
+        </view>
+        <text class="season-number">S{{selectedSeason.seasonNumber}}</text>
+      </view>
+      <season-rail steps="{{seasonRail}}" />
     </view>
 
     <view wx:if="{{seasons.length}}" class="season-picker-card">
-      <text class="field-label">查看赛季</text>
+      <text class="field-label">切换赛季</text>
       <picker range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="onSeasonChange">
-        <view class="picker-control"><text>{{selectedSeason.displayName}}</text><text>⌄</text></view>
+        <view class="picker-control"><text>{{selectedSeason.displayName}}</text><text class="picker-arrow">⌄</text></view>
       </picker>
     </view>
 
-    <view wx:if="{{selectedSeason}}" class="season-board">
-      <view class="board-head"><text class="board-kicker">赛季概览</text><text class="season-number">S{{selectedSeason.seasonNumber}}</text></view>
-      <text class="board-title">{{selectedSeason.displayName}}</text>
+    <view wx:if="{{selectedSeason}}" id="current-season" class="season-board">
+      <view class="board-head">
+        <view>
+          <text class="board-kicker">当前赛季</text>
+          <text class="board-title">{{selectedSeason.displayName}}</text>
+        </view>
+        <status-badge label="{{seasonStatusLabel}}" tone="{{seasonStatusTone}}" />
+      </view>
       <text class="structure-copy">{{structureCopy}}</text>
       <view class="metric-grid">
         <view><text class="metric-value">{{selectedSeason.approvedEntryCount}}</text><text class="metric-label">已确认球队</text></view>
@@ -33,10 +62,12 @@
     </view>
 
     <view wx:if="{{selectedSeason}}" class="entry-card">
-      <text class="section-kicker">我的资格</text><text class="section-title">我的赛季资格</text>
+      <text class="section-kicker">我的资格</text>
+      <text class="section-title">当前赛季参赛状态</text>
       <view wx:if="{{profile}}" class="team-line">
-        <image wx:if="{{profile.logoUrl}}" class="team-logo" src="{{profile.logoUrl}}" mode="aspectFit" />
-        <view wx:else class="team-logo team-fallback">{{profile.shortName}}</view>
+        <view class="team-mark">
+          <entity-artwork src="{{profile.logoUrl}}" fallback="{{profile.shortName}}" shape="square" />
+        </view>
         <view><text class="team-name">{{profile.name}}</text><text class="entry-status">管理员分配球队</text></view>
       </view>
       <text wx:else class="state-copy">{{entryStatus}}</text>
@@ -44,6 +75,10 @@
       <view class="entry-readonly"><text class="entry-readonly-label">参赛状态</text><text class="entry-readonly-value">{{entryStatus}}</text></view>
     </view>
 
-    <view wx:else class="state-card compact"><text class="state-title">暂无公开赛季</text><text class="state-copy">等待联赛管理员发布新赛季。</text></view>
+    <view wx:else class="state-card compact">
+      <text class="state-code">等待发布</text>
+      <text class="state-title">暂无公开赛季</text>
+      <text class="state-copy">等待联赛管理员发布新赛季。</text>
+    </view>
   </block>
 </view>

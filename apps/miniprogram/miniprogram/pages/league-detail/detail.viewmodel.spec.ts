@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   entryStatusCopy,
   leagueDetailErrorMessage,
+  seasonRailSteps,
   seasonStructureCopy,
   selectSeason,
 } from './detail.viewmodel'
@@ -51,5 +52,20 @@ describe('league detail view model', () => {
 
   it('localizes read failures', () => {
     expect(leagueDetailErrorMessage('VERSION_CONFLICT')).toBe('赛季或报名状态已变更，请刷新后重试')
+  })
+
+  it.each([
+    ['DRAFT', ['current', 'upcoming', 'upcoming', 'upcoming']],
+    ['REGISTRATION_OPEN', ['current', 'upcoming', 'upcoming', 'upcoming']],
+    ['ALLOCATION_REVIEW', ['complete', 'current', 'upcoming', 'upcoming']],
+    ['READY', ['complete', 'complete', 'current', 'upcoming']],
+    ['IN_PROGRESS', ['complete', 'complete', 'current', 'upcoming']],
+    ['COMPLETED', ['complete', 'complete', 'complete', 'complete']],
+    ['CANCELLED', ['cancelled', 'cancelled', 'cancelled', 'cancelled']],
+  ] as const)('maps %s to a four-stage season rail', (status, states) => {
+    const steps = seasonRailSteps(status)
+
+    expect(steps.map((step) => step.label)).toEqual(['报名', '确认', '赛程', '结算'])
+    expect(steps.map((step) => step.state)).toEqual(states)
   })
 })

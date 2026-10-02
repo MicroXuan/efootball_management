@@ -1,6 +1,111 @@
-page { background:#0a0a0a; color:#f7f8f5; }.page-shell{min-height:100vh;box-sizing:border-box;padding:calc(env(safe-area-inset-top) + 26rpx) 28rpx 90rpx;background:linear-gradient(165deg,#0a0a0a,#0d2117 56%,#101611)}
-.league-hero{position:relative;padding:42rpx 30rpx 34rpx;border:2rpx solid rgba(176,255,0,.25);background:radial-gradient(circle at 90% 10%,rgba(176,255,0,.18),transparent 34%),rgba(10,27,18,.95);overflow:hidden}.league-logo{width:112rpx;height:112rpx;background:#0a0a0a}.logo-fallback,.team-fallback{display:flex;align-items:center;justify-content:center;color:#b0ff00;font-family:inherit;font-weight:800}.hero-kicker,.board-kicker,.section-kicker,.state-code{display:block;margin-top:28rpx;color:#d9e342;font-size:17rpx;letter-spacing:4rpx}.hero-title{display:block;margin-top:10rpx;font-family:inherit;font-size:48rpx;font-weight:800}.hero-copy,.structure-copy,.state-copy{display:block;margin-top:15rpx;color:#a0a69d;font-size:22rpx;line-height:1.65}
-.season-picker-card,.season-board,.entry-card,.state-card{margin-top:20rpx;padding:28rpx;border:2rpx solid rgba(176,255,0,.2);background:#171917}.field-label{display:block;margin-bottom:11rpx;color:#82978a;font-size:20rpx}.picker-control,.board-head,.team-line,.timeline{display:flex;align-items:center}.picker-control,.board-head,.timeline{justify-content:space-between}.picker-control{min-height:80rpx;padding:0 21rpx;border-bottom:2rpx solid rgba(176,255,0,.28);background:#0a0a0a;font-size:25rpx}.board-kicker{margin:0}.season-number{color:rgba(176,255,0,.45);font-size:28rpx;font-weight:800}.board-title,.section-title{display:block;margin-top:11rpx;font-size:34rpx;font-weight:800}.metric-grid{margin-top:28rpx;display:grid;grid-template-columns:repeat(3,1fr);gap:10rpx}.metric-grid view{padding:20rpx 12rpx;background:rgba(32,69,46,.65)}.metric-value,.metric-label{display:block}.metric-value{color:#b0ff00;font-family:inherit;font-size:36rpx;font-weight:800}.metric-label{margin-top:6rpx;color:#a0a69d;font-size:18rpx}.timeline{margin-top:18rpx;padding-top:18rpx;border-top:2rpx solid rgba(142,164,151,.14);color:#a0a69d;font-size:20rpx}
-.section-kicker{margin:0}.team-line{margin-top:24rpx}.team-logo{width:82rpx;height:82rpx;margin-right:20rpx;background:#0a0a0a}.team-name,.entry-status{display:block}.team-name{font-size:28rpx;font-weight:800}.entry-status{margin-top:7rpx;color:#a0a69d;font-size:20rpx}.account-select{margin-top:24rpx}.action-button,.outline-button{border-radius:20rpx;font-weight:800}.action-button::after,.outline-button::after{border:0}.action-button{margin-top:26rpx;background:#b0ff00;color:#0a0a0a}.action-button.secondary{border:2rpx solid rgba(217,227,66,.55);background:transparent;color:#d9e342}.action-button.muted,.action-button[disabled]{background:#294536;color:#82978a}.error-copy{display:block;margin-top:20rpx;color:#ff9c8e;font-size:21rpx;line-height:1.5}.state-card{min-height:320rpx;display:flex;flex-direction:column;align-items:flex-start;justify-content:center}.state-card.compact{min-height:220rpx}.state-title{margin-top:18rpx;font-size:31rpx;font-weight:800}.outline-button{margin:25rpx 0 0;padding:0 26rpx;border:2rpx solid rgba(176,255,0,.4);background:transparent;color:#b0ff00;font-size:23rpx}
-.manager-button{margin:24rpx 0 0;padding:0 24rpx;border:2rpx solid rgba(217,227,66,.5);border-radius:20rpx;background:rgba(217,227,66,.1);color:#d9e342;font-size:21rpx;font-weight:800}.manager-button::after{border:0}
-.entry-readonly{display:flex;align-items:center;justify-content:space-between;margin-top:24rpx;padding:20rpx;border:2rpx solid rgba(176,255,0,.2);background:#0a0a0a}.entry-readonly-label{color:#82978a;font-size:20rpx}.entry-readonly-value{color:#b0ff00;font-size:22rpx;font-weight:800}
+page { background: #0e1417; color: #f4f7f8; }
+
+.page-shell {
+  padding: calc(env(safe-area-inset-top) + 26rpx) 28rpx 100rpx;
+  background:
+    radial-gradient(circle at 94% 3%, rgba(182, 241, 58, 0.08), transparent 28%),
+    #0e1417;
+}
+
+.league-hero,
+.progress-card,
+.season-picker-card,
+.season-board,
+.entry-card,
+.state-card {
+  margin-top: 22rpx;
+  padding: 30rpx;
+  border: 2rpx solid #344047;
+  border-radius: 24rpx;
+  background: #151d21;
+  box-shadow: 0 16rpx 44rpx rgba(0, 0, 0, 0.18);
+}
+
+.league-hero {
+  position: relative;
+  margin-top: 0;
+  overflow: hidden;
+  padding: 34rpx;
+  background:
+    linear-gradient(135deg, rgba(182, 241, 58, 0.07), transparent 46%),
+    #151d21;
+}
+
+.league-hero__topline,
+.hero-season,
+.section-heading,
+.picker-control,
+.board-head,
+.team-line,
+.timeline,
+.entry-readonly {
+  display: flex;
+  align-items: center;
+}
+
+.hero-season,
+.section-heading,
+.picker-control,
+.board-head,
+.timeline,
+.entry-readonly { justify-content: space-between; }
+
+.league-mark { width: 112rpx; flex: none; }
+.hero-kicker { margin-left: 22rpx; color: #aab5ba; font-size: 18rpx; font-weight: 750; letter-spacing: 3rpx; }
+.hero-title { display: block; margin-top: 28rpx; font-size: 48rpx; font-weight: 850; letter-spacing: -1rpx; line-height: 1.18; }
+.hero-copy,
+.structure-copy,
+.state-copy { display: block; margin-top: 16rpx; color: #aab5ba; font-size: 22rpx; line-height: 1.65; }
+
+.hero-season {
+  margin-top: 30rpx;
+  padding-top: 24rpx;
+  border-top: 2rpx solid #2d393f;
+}
+
+.hero-season__label { display: block; color: #7e8b91; font-size: 18rpx; font-weight: 700; letter-spacing: 3rpx; }
+.hero-season__name { display: block; margin-top: 8rpx; font-size: 28rpx; font-weight: 800; }
+.action-button { min-height: 88rpx; margin-top: 26rpx; font-size: 25rpx; }
+
+.section-kicker,
+.board-kicker,
+.state-code {
+  display: block;
+  color: #aab5ba;
+  font-size: 18rpx;
+  font-weight: 750;
+  letter-spacing: 4rpx;
+}
+
+.section-title,
+.board-title { display: block; margin-top: 9rpx; font-size: 32rpx; font-weight: 800; }
+.season-number { color: #7e8b91; font-size: 28rpx; font-weight: 800; }
+.progress-card season-rail { margin-top: 34rpx; }
+
+.field-label { display: block; margin-bottom: 12rpx; color: #aab5ba; font-size: 20rpx; font-weight: 700; }
+.picker-control { min-height: 84rpx; padding: 0 22rpx; border: 2rpx solid #344047; border-radius: 16rpx; background: #1c262b; font-size: 25rpx; font-weight: 700; }
+.picker-arrow { color: #b6f13a; font-size: 26rpx; }
+
+.metric-grid { margin-top: 30rpx; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12rpx; }
+.metric-grid view { min-width: 0; padding: 22rpx 14rpx; border: 2rpx solid #2d393f; border-radius: 16rpx; background: #1c262b; }
+.metric-value,
+.metric-label { display: block; }
+.metric-value { font-size: 38rpx; font-weight: 850; }
+.metric-label { margin-top: 7rpx; color: #aab5ba; font-size: 18rpx; line-height: 1.35; }
+.timeline { margin-top: 20rpx; padding-top: 20rpx; border-top: 2rpx solid #2d393f; color: #aab5ba; font-size: 20rpx; }
+
+.team-line { margin-top: 26rpx; }
+.team-mark { width: 82rpx; margin-right: 20rpx; flex: none; }
+.team-name,
+.entry-status { display: block; }
+.team-name { font-size: 28rpx; font-weight: 800; }
+.entry-status { margin-top: 7rpx; color: #aab5ba; font-size: 20rpx; }
+.error-copy { display: block; margin-top: 20rpx; color: #ffaaa5; font-size: 21rpx; line-height: 1.5; }
+.entry-readonly { margin-top: 24rpx; padding: 20rpx; border: 2rpx solid #2d393f; border-radius: 16rpx; background: #1c262b; }
+.entry-readonly-label { color: #aab5ba; font-size: 20rpx; }
+.entry-readonly-value { margin-left: 18rpx; color: #f4f7f8; font-size: 22rpx; font-weight: 800; text-align: right; }
+
+.state-card { min-height: 320rpx; display: flex; align-items: flex-start; justify-content: center; flex-direction: column; }
+.state-card.compact { min-height: 220rpx; }
+.state-title { margin-top: 18rpx; font-size: 32rpx; font-weight: 800; }
+.outline-button { min-height: 76rpx; margin: 26rpx 0 0; padding: 0 26rpx; font-size: 23rpx; font-weight: 750; }
