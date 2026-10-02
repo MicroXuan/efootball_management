@@ -181,6 +181,7 @@ export class RosterTransactionsService {
             data: {
               leagueId: lockedScope.leagueId,
               leagueTeamId: input.targetLeagueTeamId,
+              seasonId: input.seasonId,
               rosterTransactionId: transaction.id,
               direction: 'DEBIT',
               type: 'PLAYER_PURCHASE',
@@ -189,7 +190,7 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, input.targetLeagueTeamId, transaction.id, fee, input.reason, at);
+          await this.writeFeeLedger(tx, input.targetLeagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
           await this.audit.record(tx, {
             actorAdminId: adminId,
             leagueId: lockedScope.leagueId,
@@ -289,6 +290,7 @@ export class RosterTransactionsService {
             data: {
               leagueId: locked.leagueId,
               leagueTeamId: locked.leagueTeamId,
+              seasonId: input.seasonId,
               rosterTransactionId: transaction.id,
               direction: 'CREDIT',
               type: 'PLAYER_SALE',
@@ -297,7 +299,7 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, locked.leagueTeamId, transaction.id, fee, input.reason, at);
+          await this.writeFeeLedger(tx, locked.leagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,
@@ -418,6 +420,7 @@ export class RosterTransactionsService {
               data: {
                 leagueId: locked.leagueId,
                 leagueTeamId: locked.leagueTeamId,
+                seasonId: input.seasonId,
                 rosterTransactionId: transaction.id,
                 direction: 'CREDIT',
                 type: 'PLAYER_TRANSFER',
@@ -430,6 +433,7 @@ export class RosterTransactionsService {
               data: {
                 leagueId: locked.leagueId,
                 leagueTeamId: input.targetLeagueTeamId,
+                seasonId: input.seasonId,
                 rosterTransactionId: transaction.id,
                 direction: 'DEBIT',
                 type: 'PLAYER_TRANSFER',
@@ -439,7 +443,7 @@ export class RosterTransactionsService {
               }
             })
           ]);
-          await this.writeFeeLedger(tx, input.targetLeagueTeamId, transaction.id, fee, input.reason, at);
+          await this.writeFeeLedger(tx, input.targetLeagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,
@@ -561,6 +565,7 @@ export class RosterTransactionsService {
             data: {
               leagueId: locked.leagueId,
               leagueTeamId: locked.leagueTeamId,
+              seasonId: input.seasonId,
               rosterTransactionId: transaction.id,
               direction: 'DEBIT',
               type: 'CARD_UPGRADE',
@@ -569,7 +574,7 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, locked.leagueTeamId, transaction.id, fee, input.reason, at);
+          await this.writeFeeLedger(tx, locked.leagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,
@@ -782,6 +787,7 @@ export class RosterTransactionsService {
   private async writeFeeLedger(
     client: Prisma.TransactionClient,
     leagueTeamId: string,
+    seasonId: string,
     rosterTransactionId: string,
     fee: { transactionFeeMinor: number } | null,
     reason: string,
@@ -792,6 +798,7 @@ export class RosterTransactionsService {
       data: {
         leagueId: (await client.leagueTeam.findUniqueOrThrow({ where: { id: leagueTeamId }, select: { leagueId: true } })).leagueId,
         leagueTeamId,
+        seasonId,
         rosterTransactionId,
         direction: 'DEBIT',
         type: 'TRANSACTION_FEE',

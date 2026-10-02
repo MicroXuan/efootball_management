@@ -3,7 +3,6 @@ import { ResourceIdSchema } from './common.js';
 import {
   FinanceLedgerDirectionSchema,
   FinanceLedgerEntrySchema,
-  FinanceLedgerTypeSchema,
   RosterEntryStatusSchema,
   RosterTransactionTypeSchema
 } from './league-roster.js';
@@ -103,7 +102,10 @@ export const CreateManualFinanceEntryRequestSchema = z.object({
   leagueTeamId: ResourceIdSchema,
   seasonId: ResourceIdSchema.nullable(),
   direction: FinanceLedgerDirectionSchema,
-  type: FinanceLedgerTypeSchema,
+  type: z.enum([
+    'LUXURY_TAX', 'OFFSEASON_FEE', 'UNFINISHED_MATCH_PENALTY', 'AUCTION',
+    'ROOKIE_SELECTION', 'INSTALLMENT_PAYMENT', 'MANUAL_ADJUSTMENT'
+  ]),
   amountMinor: z.number().int().positive().max(4_294_967_295),
   note: z.string().trim().max(512),
   reason: z.string().trim().min(1).max(512)
@@ -118,6 +120,9 @@ export const TransactionFeeRuleVersionSchema = z.object({
   effectiveAt: TimestampSchema,
   createdByAdminId: ResourceIdSchema,
   createdAt: TimestampSchema
+});
+export const TransactionFeeRuleVersionListResponseSchema = z.object({
+  items: z.array(TransactionFeeRuleVersionSchema)
 });
 
 export const CreateTransactionFeeRuleRequestSchema = z.object({
