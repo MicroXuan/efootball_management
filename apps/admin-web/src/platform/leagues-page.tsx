@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Form, Input, InputNumber, Select, Spin, Table, Tag, Upload } from 'antd';
+import { Alert, Button, Card, Empty, Form, Input, InputNumber, Select, Spin, Tag, Upload } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LeagueDetailSchema, LeagueListResponseSchema, type LeagueEdition, type LeagueSummary } from '@efm/contracts';
@@ -64,19 +64,37 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
     } finally { setSubmitting(false); }
   };
   return <div className="page-grid">
-    <Card title="联赛管理" className="data-card">
+    <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>联赛管理</h1><p>创建联赛、确认当前赛季，并进入各赛事工作区。</p></div></header>
+    <Card title="联赛目录" extra={!loading ? `${items.length} 个联赛` : undefined} className="data-card league-directory">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
-      {loading ? <div className="loading-block"><Spin /></div> : items.length ? <Table rowKey="id" pagination={false} dataSource={items} columns={[
-        { title: '联赛', dataIndex: 'name', render: (value, row) => <Link to={`/leagues/${row.id}/teams`}>{value}</Link> },
-        { title: '简称', dataIndex: 'shortName' }, { title: '版本', dataIndex: 'edition', render: (value) => value === 'NATIONAL' ? '国服' : '国际服' },
-        { title: '当前赛季', render: (_, row) => row.currentSeason?.displayName ?? '未设置' },
-        { title: '状态', dataIndex: 'status', render: (value) => <Tag color={value === 'ACTIVE' ? 'green' : 'default'}>{value === 'ACTIVE' ? '启用' : '归档'}</Tag> },
-        { title: '操作', render: (_, row) => <Button type="link" disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(row); setImageFile(null); form.setFieldsValue(row); }}>编辑</Button> }
-      ]} /> : <Empty description="暂无联赛" />}
+      {loading ? <div className="loading-block"><Spin /></div> : items.length ? <div className="league-card-grid">
+        {items.map((item) => <article key={item.id} className="league-card">
+          <div className="league-card__main">
+            {item.logoUrl
+              ? <img className="league-card__logo" src={item.logoUrl} alt={`${item.shortName} 联赛标识`} />
+              : <span className="league-card__logo league-card__logo--fallback" aria-label={`${item.shortName} 联赛标识`}>{item.shortName.slice(0, 2)}</span>}
+            <div className="league-card__identity">
+              <div className="league-card__badges"><Tag>{item.edition === 'NATIONAL' ? '国服' : '国际服'}</Tag><Tag color={item.status === 'ACTIVE' ? 'success' : 'default'}>{item.status === 'ACTIVE' ? '启用' : '归档'}</Tag></div>
+              <h2 title={item.name}><Link to={`/leagues/${item.id}/teams`}>{item.name}</Link></h2>
+              <p>{item.description || `${item.shortName} 赛事运营工作区`}</p>
+            </div>
+          </div>
+          <div className="league-card__season">
+            <span>当前赛季</span>
+            {item.currentSeason ? <strong>{item.currentSeason.displayName}</strong> : <strong>尚未设置当前赛季</strong>}
+            <Link to={`/leagues/${item.id}/seasons`}>{item.currentSeason ? '管理赛季' : '设置首个赛季'}</Link>
+          </div>
+          <div className="league-card__actions">
+            <Button type="primary" href={`/leagues/${item.id}/teams`}>进入联赛</Button>
+            <Button aria-label="编辑" disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(item); setImageFile(null); form.setFieldsValue(item); }}>编辑</Button>
+          </div>
+        </article>)}
+      </div> : <Empty description="暂无联赛" />}
     </Card>
     <Card title={editing ? `编辑联赛 · ${editing.name}` : '新建联赛'} className="form-card"><Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save} initialValues={{ defaultSuperCapacity: 23, defaultChampionCapacity: 18, defaultPromotionCount: 4 }}>
-      <Form.Item label="联赛名称" name="name" rules={[{ required: true }]}><Input /></Form.Item>
-      <Form.Item label="联赛简称" name="shortName" rules={[{ required: true }]}><Input /></Form.Item>
+      <div className="form-section-title"><strong>基础资料</strong><span>用于前台展示与管理员识别</span></div>
+      <Form.Item label="联赛名称" name="name" rules={[{ required: true, message: '请输入联赛名称' }]}><Input /></Form.Item>
+      <Form.Item label="联赛简称" name="shortName" rules={[{ required: true, message: '请输入联赛简称' }]}><Input /></Form.Item>
       <Form.Item label="说明" name="description"><Input.TextArea rows={3} /></Form.Item>
       <Form.Item label="版本" name="edition" rules={[{ required: true, message: '请选择国服或国际服' }]}><Select options={[{ value: 'NATIONAL', label: '国服' }, { value: 'INTERNATIONAL', label: '国际服' }]} /></Form.Item>
       <Form.Item label="联赛图片" extra="支持 JPG、PNG、WebP，图片大小不超过 2MB">
@@ -91,6 +109,7 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
         </Upload>
       </Form.Item>
       {editing ? <Form.Item label="联赛状态" name="status"><Select options={[{ value: 'ACTIVE', label: '启用' }, { value: 'ARCHIVED', label: '归档' }]} /></Form.Item> : null}
+      <div className="form-section-title"><strong>默认竞赛规则</strong><span>新赛季可单独覆盖这些参数</span></div>
       <div className="inline-fields"><Form.Item label="超级组人数" name="defaultSuperCapacity"><InputNumber min={2} max={64} /></Form.Item><Form.Item label="冠军组人数" name="defaultChampionCapacity"><InputNumber min={2} max={64} /></Form.Item><Form.Item label="升级建议数" name="defaultPromotionCount"><InputNumber min={0} max={32} /></Form.Item></div>
       <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>{editing ? '保存联赛' : '创建联赛'}</Button>
       {editing ? <Button disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(null); setImageFile(null); form.resetFields(); }}>取消编辑</Button> : null}

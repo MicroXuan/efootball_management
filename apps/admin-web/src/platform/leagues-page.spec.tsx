@@ -118,3 +118,15 @@ it('reloads the latest league and version after an edit conflict', async () => {
     method: 'PATCH', body: expect.objectContaining({ expectedVersion: 1 })
   }));
 });
+
+it('renders a resilient league card with clear season and primary actions', async () => {
+  const longName = '华东地区实况足球超级冠军联赛二〇二六秋季赛';
+  const request = vi.fn().mockResolvedValue({ items: [league(longName, 1)], nextCursor: null });
+  render(<MemoryRouter><LeaguesPage api={{ request } as unknown as AdminApi} /></MemoryRouter>);
+
+  expect(await screen.findByRole('heading', { name: longName })).toHaveAttribute('title', longName);
+  expect(screen.getByLabelText('CELL 联赛标识')).toBeInTheDocument();
+  expect(screen.getByText('尚未设置当前赛季')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '进入联赛' })).toHaveAttribute('href', '/leagues/22222222-2222-4222-8222-222222222222/teams');
+  expect(screen.getByRole('link', { name: '设置首个赛季' })).toHaveAttribute('href', '/leagues/22222222-2222-4222-8222-222222222222/seasons');
+});

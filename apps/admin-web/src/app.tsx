@@ -1,4 +1,5 @@
 import { Button, ConfigProvider, Layout, Menu, Tag } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AdminSessionProvider, useAdminSession } from './auth/admin-session';
@@ -80,7 +81,7 @@ const deferred = (page: React.ReactNode) => <Suspense fallback={<div className="
 
 export function App() {
   return (
-    <ConfigProvider theme={premiumAdminTheme}>
+    <ConfigProvider locale={zhCN} theme={premiumAdminTheme}>
       <AdminSessionProvider>
         <BrowserRouter><Routes>
           <Route path="/login" element={<LoginPage />} />

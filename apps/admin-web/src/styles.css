@@ -94,6 +94,9 @@ select { font: inherit; }
 .page-grid--seasons { align-items: start; }
 .page-stack { display: grid; gap: 20px; }
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); gap: 20px; align-items: start; }
+.workspace-page-title { grid-column: 1 / -1; min-width: 0; }
+.workspace-page-title h1 { margin: 7px 0 6px; color: var(--admin-text); font-size: clamp(30px, 3vw, 40px); line-height: 1.1; letter-spacing: -.04em; }
+.workspace-page-title p { margin: 0; color: var(--admin-text-secondary); line-height: 1.6; }
 .season-enrollment-card { grid-column: 1 / -1; }
 .current-season-card { grid-column: 1 / -1; overflow: hidden; border: 1px solid #cbd8c0; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #f7faef 100%); box-shadow: var(--admin-shadow-card); }
 .current-season-card--cancelled { border-color: #e1c8c5; background: linear-gradient(135deg, #ffffff 0%, #fbf4f3 100%); }
@@ -152,6 +155,31 @@ select { font: inherit; }
 .modal-primary-action { margin-top: 20px; }
 .season-team-options { margin: 16px 0 22px; display: grid; gap: 12px; }
 .season-team-options .ant-checkbox-wrapper { margin-inline-start: 0; }
+.league-card-grid { display: grid; gap: 16px; }
+.league-card { overflow: hidden; border: 1px solid var(--admin-border); border-radius: 14px; color: var(--admin-text); background: #fff; box-shadow: 0 8px 24px rgba(29,42,48,.055); }
+.league-card__main { padding: 20px; display: flex; align-items: flex-start; gap: 16px; }
+.league-card__logo { width: 66px; height: 66px; flex: none; object-fit: contain; border: 1px solid #dfe6e9; border-radius: 14px; background: #f5f7f8; }
+.league-card__logo--fallback { display: grid; place-items: center; color: #f4f7f8; border-color: #26343a; background: #182126; font-size: 17px; font-weight: 820; letter-spacing: .04em; }
+.league-card__identity { min-width: 0; }
+.league-card__identity h2 { margin: 7px 0 5px; overflow-wrap: anywhere; font-size: 22px; line-height: 1.25; letter-spacing: -.025em; }
+.league-card__identity h2 a { color: var(--admin-text); }
+.league-card__identity p { margin: 0; color: var(--admin-text-secondary); line-height: 1.55; }
+.league-card__badges { display: flex; gap: 6px; }
+.league-card__season { padding: 15px 20px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; border-top: 1px solid #e8edef; border-bottom: 1px solid #e8edef; background: #f7f9fa; }
+.league-card__season > span { color: var(--admin-text-weak); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+.league-card__season strong { min-width: 0; overflow-wrap: anywhere; }
+.league-card__season a { color: #52720f; font-weight: 700; }
+.league-card__actions { padding: 14px 20px 18px; display: grid; grid-template-columns: minmax(140px, 1fr) auto; gap: 10px; }
+.league-card__actions .ant-btn { min-height: 42px; }
+.form-section-title { margin: 6px 0 16px; padding-bottom: 12px; display: grid; gap: 3px; border-bottom: 1px solid #e5eaed; }
+.form-section-title:not(:first-child) { margin-top: 28px; }
+.form-section-title strong { color: var(--admin-text); font-size: 14px; }
+.form-section-title span { color: var(--admin-text-weak); font-size: 12px; }
+.data-card .ant-empty { min-height: 220px; display: grid; place-content: center; }
+.ant-pagination .ant-pagination-item,
+.ant-pagination .ant-pagination-prev,
+.ant-pagination .ant-pagination-next { border-radius: 8px; }
+.ant-pagination .ant-pagination-disabled { opacity: .48; }
 .candidate-group { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e2e8eb; }
 .candidate-title { margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
 .candidate-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -187,6 +215,9 @@ select { font: inherit; }
   .season-rail { gap: 14px; grid-template-columns: 1fr; }
   .season-rail__item { grid-template-columns: 28px 1fr; align-items: center; }
   .season-rail__item:not(:last-child)::after { width: 2px; height: 14px; top: 28px; left: 13px; right: auto; }
+  .league-card__main { padding: 16px; }
+  .league-card__season { padding-inline: 16px; grid-template-columns: 1fr; gap: 5px; }
+  .league-card__actions { padding-inline: 16px; grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

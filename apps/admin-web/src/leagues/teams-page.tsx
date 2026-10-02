@@ -75,9 +75,9 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
           <Space.Compact block><Form.Item name="publicUserNo" noStyle rules={[{ required: true }]}><Input id="public-user-no" maxLength={6} inputMode="numeric" /></Form.Item><Button onClick={() => void lookup()}>查找用户</Button></Space.Compact>
         </Form.Item>
         {owner ? <Alert type="success" showIcon title={owner.displayName} description={`用户编号 ${owner.publicUserNo}`} /> : null}
-        <Form.Item label="球队编号" name="teamNumber" rules={[{ required: true }]}><InputNumber min={0} max={9999} precision={0} /></Form.Item>
-        <Form.Item label="球队名称" name="name" rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
-        <Form.Item label="球队简称" name="shortName" rules={[{ required: true }]}><Input maxLength={24} /></Form.Item>
+        <Form.Item label="球队编号" name="teamNumber" rules={[{ required: true, message: '请输入球队编号' }]}><InputNumber min={0} max={9999} precision={0} /></Form.Item>
+        <Form.Item label="球队名称" name="name" rules={[{ required: true, message: '请输入球队名称' }]}><Input maxLength={64} /></Form.Item>
+        <Form.Item label="球队简称" name="shortName" rules={[{ required: true, message: '请输入球队简称' }]}><Input maxLength={24} /></Form.Item>
         <Button type="primary" htmlType="submit" loading={submitting} disabled={!owner || submitting}>创建球队</Button>
       </Form>
     </Card>
