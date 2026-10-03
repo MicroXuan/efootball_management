@@ -25,6 +25,7 @@ import { RosterLockRepository } from './roster-lock.repository.js';
 import { SalaryRulesService } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
+import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
 
 const MAX_ROSTER_SIZE = 25;
 type AppliedTransactionFee = {
@@ -43,7 +44,8 @@ export class RosterTransactionsService {
     @Inject(SalaryRulesService) private readonly salaryRules: SalaryRulesService,
     @Inject(TransferWindowsService) private readonly transferWindows: TransferWindowsService,
     @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
-    @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService
+    @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService,
+    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService
   ) {}
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
@@ -51,6 +53,7 @@ export class RosterTransactionsService {
     const scope = await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, scope.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
+    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     try {
       return await this.receipts.execute(adminId, 'ROSTER_PLAYER_ACQUIRE', input.idempotencyKey,
@@ -241,6 +244,7 @@ export class RosterTransactionsService {
     }
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
+    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_RELEASE', input.idempotencyKey,
       async (tx) => {
@@ -341,6 +345,7 @@ export class RosterTransactionsService {
     await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
+    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_TRANSFER', input.idempotencyKey,
       async (tx) => {
         await this.locks.lockTeams(tx, [current.leagueTeamId, input.targetLeagueTeamId]);
@@ -488,6 +493,7 @@ export class RosterTransactionsService {
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
+    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_CARD_UPGRADE', input.idempotencyKey,
       async (tx) => {
@@ -612,6 +618,7 @@ export class RosterTransactionsService {
     if (targetTeamId !== current.leagueTeamId) {
       await this.loadScope(input.seasonId, targetTeamId);
     }
+    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_EMERGENCY_CORRECTION', input.idempotencyKey,
       async (tx) => {
@@ -719,10 +726,11 @@ export class RosterTransactionsService {
       }, input);
   }
 
-  async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string) {
+  async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string, at = new Date()) {
     const input = UpdateRosterLifecycleRequestSchema.parse(raw);
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
+    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_LIFECYCLE_UPDATE', input.idempotencyKey,
       async (tx) => {

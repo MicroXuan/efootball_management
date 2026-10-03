@@ -39,9 +39,10 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
     this.timer = null;
   }
 
-  async initializeDueWindows(at = new Date()) {
+  async initializeDueWindows(at = new Date(), seasonId?: string) {
     const due = await this.prisma.valuationWindow.findMany({
       where: {
+        ...(seasonId ? { seasonId } : {}),
         startsAt: { lte: at },
         endsAt: { gt: at },
         closedAt: null,
@@ -51,6 +52,10 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
       orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
     });
     for (const window of due) await this.ensureWindowSnapshot(window.id, at);
+  }
+
+  async initializeDueWindowsForSeason(seasonId: string, at = new Date()) {
+    await this.initializeDueWindows(at, seasonId);
   }
 
   async ensureWindowSnapshot(windowId: string, at = new Date()): Promise<Snapshot[]> {

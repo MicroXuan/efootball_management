@@ -10,9 +10,10 @@ import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 import { LeagueEconomyModule } from '../league-economy/league-economy.module.js';
+import { PlayerValuationsModule } from '../player-valuations/player-valuations.module.js';
 
 @Module({
-  imports: [AdminAuthModule, AdminModule, LeagueEconomyModule],
+  imports: [AdminAuthModule, AdminModule, LeagueEconomyModule, PlayerValuationsModule],
   controllers: [AdminRulesController, AdminRostersController],
   providers: [
     SalaryRulesService,

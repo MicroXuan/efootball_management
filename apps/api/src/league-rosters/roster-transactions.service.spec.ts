@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { jest } from '@jest/globals';
 import { config } from 'dotenv';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
@@ -11,6 +12,7 @@ import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { SalaryRulesService, defaultSalaryTiers } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
+import type { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -26,6 +28,9 @@ describe('RosterTransactionsService', () => {
     new AdminMutationReceiptService(prisma),
     audit
   );
+  const valuationSnapshots = {
+    initializeDueWindowsForSeason: jest.fn(async () => undefined)
+  } as unknown as ValuationSnapshotsService;
   const service = new RosterTransactionsService(
     prisma,
     authorization,
@@ -34,7 +39,8 @@ describe('RosterTransactionsService', () => {
     salaryRules,
     windows,
     new RosterLockRepository(),
-    transactionFees
+    transactionFees,
+    valuationSnapshots
   );
   const recalculation = new SalaryRecalculationService(
     prisma,
@@ -52,6 +58,7 @@ describe('RosterTransactionsService', () => {
   beforeAll(() => prisma.$connect());
 
   afterEach(async () => {
+    jest.mocked(valuationSnapshots.initializeDueWindowsForSeason).mockClear();
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.auditLog.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.financeLedgerEntry.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
@@ -197,7 +204,12 @@ describe('RosterTransactionsService', () => {
     const player = await card(f.source.id, 'Bonucci');
     const input = acquisition(f.season.id, f.teams[0]!.id, player.card.id, 'same-key');
 
-    const first = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    const operationAt = new Date('2026-09-15T00:00:00.000Z');
+    const first = await service.acquire(input, f.admin.id, operationAt);
+    expect(valuationSnapshots.initializeDueWindowsForSeason).toHaveBeenCalledWith(
+      f.season.id,
+      operationAt
+    );
     const replay = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
 
     expect(replay).toEqual(first);
@@ -399,7 +411,8 @@ describe('RosterTransactionsService', () => {
       salaryRules,
       windows,
       new RosterLockRepository(),
-      transactionFees
+      transactionFees,
+      valuationSnapshots
     );
 
     await expect(rollbackService.acquire(
