@@ -53,11 +53,11 @@ export class RosterTransactionsService {
     const scope = await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, scope.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
-    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     try {
       return await this.receipts.execute(adminId, 'ROSTER_PLAYER_ACQUIRE', input.idempotencyKey,
         async (tx) => {
+          await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
           await this.locks.lockTeam(tx, input.targetLeagueTeamId);
           const lockedScope = await this.loadScopeWithClient(
             tx,
@@ -244,10 +244,10 @@ export class RosterTransactionsService {
     }
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
-    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_RELEASE', input.idempotencyKey,
       async (tx) => {
+        await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
         await this.locks.lockTeam(tx, current.leagueTeamId);
         await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
         await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'SELL', at);
@@ -345,9 +345,9 @@ export class RosterTransactionsService {
     await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
-    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_TRANSFER', input.idempotencyKey,
       async (tx) => {
+        await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
         await this.locks.lockTeams(tx, [current.leagueTeamId, input.targetLeagueTeamId]);
         await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
         await this.loadScopeWithClient(tx, input.seasonId, input.targetLeagueTeamId);
@@ -493,10 +493,10 @@ export class RosterTransactionsService {
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
-    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_CARD_UPGRADE', input.idempotencyKey,
       async (tx) => {
+        await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
         await this.locks.lockTeam(tx, current.leagueTeamId);
         await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
         await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'CARD_UPGRADE', at);
@@ -618,10 +618,10 @@ export class RosterTransactionsService {
     if (targetTeamId !== current.leagueTeamId) {
       await this.loadScope(input.seasonId, targetTeamId);
     }
-    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_EMERGENCY_CORRECTION', input.idempotencyKey,
       async (tx) => {
+        await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
         await this.locks.lockTeams(tx, [current.leagueTeamId, targetTeamId]);
         await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
         if (targetTeamId !== current.leagueTeamId) {
@@ -726,14 +726,14 @@ export class RosterTransactionsService {
       }, input);
   }
 
-  async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string, at = new Date()) {
+  async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string) {
     const input = UpdateRosterLifecycleRequestSchema.parse(raw);
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
-    await this.valuationSnapshots.initializeDueWindowsForSeason(input.seasonId, at);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_LIFECYCLE_UPDATE', input.idempotencyKey,
       async (tx) => {
+        await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
         await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
         const locked = await tx.leaguePlayerOwnership.findUniqueOrThrow({
           where: { id: input.ownershipId }

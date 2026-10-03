@@ -35,6 +35,11 @@ function harness() {
   const tx = {
     $queryRaw: jest.fn(async () => [{ id: window.id }]),
     valuationWindow: {
+      findMany: jest.fn(async () => [] as Array<{
+        id: string;
+        seasonId: string;
+        season: { leagueId: string };
+      }>),
       findUniqueOrThrow: jest.fn<() => Promise<{ id: string; snapshotInitializedAt: Date | null }>>(async () => ({ id: window.id, snapshotInitializedAt: null })),
       update: jest.fn(async () => ({ id: window.id, snapshotInitializedAt: at }))
     },
@@ -82,6 +87,28 @@ describe('ValuationSnapshotsService', () => {
     const ensure = jest.spyOn(service, 'ensureWindowSnapshot').mockResolvedValueOnce([]);
     await service.initializeDueWindows(at);
     expect(ensure).toHaveBeenCalledWith('window-1', at);
+  });
+
+  it('locks the season windows before evaluating the opening boundary and mutating a roster', async () => {
+    const { service, tx } = harness();
+    tx.valuationWindow.findMany.mockResolvedValueOnce([{
+      id: 'window-1',
+      seasonId: 'season-1',
+      season: { leagueId: 'league-1' }
+    }]);
+    const boundaryClock = jest.fn(() => {
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      return at;
+    });
+
+    await service.synchronizeSeasonBeforeRosterMutation(tx as never, 'season-1', boundaryClock);
+
+    expect(boundaryClock).toHaveBeenCalledTimes(1);
+    expect(tx.valuationRosterSnapshot.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.valuationWindow.update).toHaveBeenCalledWith({
+      where: { id: 'window-1' },
+      data: { snapshotInitializedAt: at }
+    });
   });
 
   it('remembers an empty snapshot so later signings cannot enter the same window', async () => {

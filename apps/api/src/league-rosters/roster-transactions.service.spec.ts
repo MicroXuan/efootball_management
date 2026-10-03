@@ -12,7 +12,9 @@ import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { SalaryRulesService, defaultSalaryTiers } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
-import type { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { ValuationWindowsService as PlayerValuationWindowsService } from '../player-valuations/valuation-windows.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -29,7 +31,7 @@ describe('RosterTransactionsService', () => {
     audit
   );
   const valuationSnapshots = {
-    initializeDueWindowsForSeason: jest.fn(async () => undefined)
+    synchronizeSeasonBeforeRosterMutation: jest.fn(async () => undefined)
   } as unknown as ValuationSnapshotsService;
   const service = new RosterTransactionsService(
     prisma,
@@ -58,15 +60,29 @@ describe('RosterTransactionsService', () => {
   beforeAll(() => prisma.$connect());
 
   afterEach(async () => {
-    jest.mocked(valuationSnapshots.initializeDueWindowsForSeason).mockClear();
+    jest.mocked(valuationSnapshots.synchronizeSeasonBeforeRosterMutation).mockClear();
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.auditLog.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.financeLedgerEntry.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.rosterTransaction.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
+    await prisma.valuationRosterSnapshot.deleteMany({
+      where: { window: { season: { leagueId: { in: createdLeagueIds } } } }
+    });
+    await prisma.valuationWindow.updateMany({
+      where: { season: { leagueId: { in: createdLeagueIds } } },
+      data: { currentRuleVersionId: null }
+    });
+    await prisma.valuationWindowRuleVersion.deleteMany({
+      where: { window: { season: { leagueId: { in: createdLeagueIds } } } }
+    });
+    await prisma.valuationWindow.deleteMany({
+      where: { season: { leagueId: { in: createdLeagueIds } } }
+    });
     await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.leaguePlayerValuation.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.leagueTransactionFeeRuleVersion.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.transferWindow.deleteMany({ where: { season: { leagueId: { in: createdLeagueIds } } } });
+    await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: createdLeagueIds } } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.adminLeagueRole.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
@@ -206,9 +222,9 @@ describe('RosterTransactionsService', () => {
 
     const operationAt = new Date('2026-09-15T00:00:00.000Z');
     const first = await service.acquire(input, f.admin.id, operationAt);
-    expect(valuationSnapshots.initializeDueWindowsForSeason).toHaveBeenCalledWith(
-      f.season.id,
-      operationAt
+    expect(valuationSnapshots.synchronizeSeasonBeforeRosterMutation).toHaveBeenCalledWith(
+      expect.anything(),
+      f.season.id
     );
     const replay = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
 
@@ -216,6 +232,89 @@ describe('RosterTransactionsService', () => {
     expect(first.summary).toMatchObject({ rosterCount: 1, salaryMinor: 200, salaryCapMinor: 10_000 });
     await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
     await expect(prisma.financeLedgerEntry.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
+  });
+
+  it('snapshots the opening roster before a request blocked across startsAt mutates it', async () => {
+    const f = await fixture();
+    const existing = await card(f.source.id, 'Opening roster');
+    const late = await card(f.source.id, 'Boundary signing');
+    await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, existing.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await prisma.seasonEntry.create({
+      data: {
+        seasonId: f.season.id,
+        leagueTeamId: f.teams[0]!.id,
+        ownerUserId: f.users[0]!.id,
+        source: 'NEW_APPLICATION',
+        status: 'APPROVED',
+        teamNameSnapshot: f.teams[0]!.name,
+        teamShortNameSnapshot: f.teams[0]!.shortName,
+        teamNumberSnapshot: f.teams[0]!.teamNumber
+      }
+    });
+    const startsAt = new Date(Date.now() + 750);
+    const valuationWindow = await prisma.valuationWindow.create({
+      data: {
+        seasonId: f.season.id,
+        name: '边界快照',
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 60_000),
+        createdByAdminId: f.admin.id
+      }
+    });
+    const valuationWindows = new PlayerValuationWindowsService(
+      prisma,
+      authorization,
+      audit,
+      new AdminMutationReceiptService(prisma)
+    );
+    const realSnapshots = new ValuationSnapshotsService(prisma, valuationWindows);
+    const boundaryService = new RosterTransactionsService(
+      prisma,
+      authorization,
+      new AdminMutationReceiptService(prisma),
+      audit,
+      salaryRules,
+      windows,
+      new RosterLockRepository(),
+      transactionFees,
+      realSnapshots
+    );
+
+    let releaseWindowLock: () => void = () => undefined;
+    let reportWindowLocked: () => void = () => undefined;
+    const windowLocked = new Promise<void>((resolve) => { reportWindowLocked = resolve; });
+    const holdWindowLock = new Promise<void>((resolve) => { releaseWindowLock = resolve; });
+    const blocker = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM valuation_windows WHERE id = ${valuationWindow.id} FOR UPDATE
+      `);
+      reportWindowLocked();
+      await holdWindowLock;
+    });
+    await windowLocked;
+
+    const requestedAt = new Date();
+    const acquisitionPromise = boundaryService.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, late.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    expect(requestedAt.getTime()).toBeLessThan(startsAt.getTime());
+    await new Promise((resolve) => setTimeout(resolve, startsAt.getTime() - Date.now() + 100));
+    releaseWindowLock();
+    await blocker;
+    await acquisitionPromise;
+
+    const snapshots = await prisma.valuationRosterSnapshot.findMany({
+      where: { windowId: valuationWindow.id },
+      select: { footballPlayerId: true }
+    });
+    expect(snapshots).toEqual([{ footballPlayerId: existing.player.id }]);
+    expect(snapshots).not.toContainEqual({ footballPlayerId: late.player.id });
   });
 
   it('rejects reuse of an idempotency key for a different request', async () => {

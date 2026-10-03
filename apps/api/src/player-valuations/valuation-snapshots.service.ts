@@ -54,8 +54,45 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
     for (const window of due) await this.ensureWindowSnapshot(window.id, at);
   }
 
-  async initializeDueWindowsForSeason(seasonId: string, at = new Date()) {
-    await this.initializeDueWindows(at, seasonId);
+  async synchronizeSeasonBeforeRosterMutation(
+    tx: Prisma.TransactionClient,
+    seasonId: string,
+    clock: () => Date = () => new Date()
+  ): Promise<void> {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT id
+      FROM valuation_windows
+      WHERE season_id = ${seasonId}
+        AND closed_at IS NULL
+        AND ends_at > CURRENT_TIMESTAMP(3)
+      ORDER BY starts_at ASC, id ASC
+      FOR UPDATE
+    `);
+    const at = clock();
+    const due = await tx.valuationWindow.findMany({
+      where: {
+        seasonId,
+        startsAt: { lte: at },
+        endsAt: { gt: at },
+        closedAt: null,
+        snapshotInitializedAt: null
+      },
+      select: {
+        id: true,
+        seasonId: true,
+        season: { select: { leagueId: true } }
+      },
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
+    });
+    for (const window of due) {
+      await this.createWindowSnapshotWithClient(
+        tx,
+        window.id,
+        window.seasonId,
+        window.season.leagueId,
+        at
+      );
+    }
   }
 
   async ensureWindowSnapshot(windowId: string, at = new Date()): Promise<Snapshot[]> {
@@ -66,66 +103,82 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
 
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM valuation_windows WHERE id = ${windowId} FOR UPDATE`);
-      const locked = await tx.valuationWindow.findUniqueOrThrow({
-        where: { id: windowId },
-        select: { id: true, snapshotInitializedAt: true }
-      });
-      const existing = await tx.valuationRosterSnapshot.findMany({
-        where: { windowId },
-        include: snapshotInclude,
-        orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
-      });
-      if (locked.snapshotInitializedAt || existing.length > 0) return existing;
-
-      const entries = await tx.seasonEntry.findMany({
-        where: { seasonId: effective.window.seasonId, status: 'APPROVED' },
-        select: { leagueTeamId: true }
-      });
-      const teamIds = entries.map((entry) => entry.leagueTeamId);
-      const ownerships = teamIds.length
-        ? await tx.leaguePlayerOwnership.findMany({
-          where: { leagueTeamId: { in: teamIds }, status: 'ACTIVE' },
-          include: {
-            footballPlayer: true,
-            currentPlayerCard: true
-          },
-          orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
-        })
-        : [];
-      const valuations = ownerships.length
-        ? await tx.leaguePlayerValuation.findMany({
-          where: {
-            leagueId: effective.leagueId,
-            footballPlayerId: { in: ownerships.map((ownership) => ownership.footballPlayerId) }
-          },
-          select: { footballPlayerId: true, currentValueMinor: true }
-        })
-        : [];
-      const valueByPlayer = new Map(
-        valuations.map((valuation) => [valuation.footballPlayerId, valuation.currentValueMinor])
+      return this.createWindowSnapshotWithClient(
+        tx,
+        windowId,
+        effective.window.seasonId,
+        effective.leagueId,
+        at
       );
-      if (ownerships.length) {
-        await tx.valuationRosterSnapshot.createMany({
-          data: ownerships.map((ownership) => ({
-            windowId,
-            leagueTeamId: ownership.leagueTeamId,
-            ownershipId: ownership.id,
-            footballPlayerId: ownership.footballPlayerId,
-            baseValueMinor: valueByPlayer.get(ownership.footballPlayerId) ?? null
-          })),
-          skipDuplicates: true
-        });
-      }
-      await tx.valuationWindow.update({
-        where: { id: windowId },
-        data: { snapshotInitializedAt: at }
-      });
-      return tx.valuationRosterSnapshot.findMany({
-        where: { windowId },
-        include: snapshotInclude,
-        orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
-      });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  }
+
+  private async createWindowSnapshotWithClient(
+    tx: Prisma.TransactionClient,
+    windowId: string,
+    seasonId: string,
+    leagueId: string,
+    at: Date
+  ): Promise<Snapshot[]> {
+    const locked = await tx.valuationWindow.findUniqueOrThrow({
+      where: { id: windowId },
+      select: { id: true, snapshotInitializedAt: true }
+    });
+    const existing = await tx.valuationRosterSnapshot.findMany({
+      where: { windowId },
+      include: snapshotInclude,
+      orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
+    });
+    if (locked.snapshotInitializedAt || existing.length > 0) return existing;
+
+    const entries = await tx.seasonEntry.findMany({
+      where: { seasonId, status: 'APPROVED' },
+      select: { leagueTeamId: true }
+    });
+    const teamIds = entries.map((entry) => entry.leagueTeamId);
+    const ownerships = teamIds.length
+      ? await tx.leaguePlayerOwnership.findMany({
+        where: { leagueTeamId: { in: teamIds }, status: 'ACTIVE' },
+        include: {
+          footballPlayer: true,
+          currentPlayerCard: true
+        },
+        orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
+      })
+      : [];
+    const valuations = ownerships.length
+      ? await tx.leaguePlayerValuation.findMany({
+        where: {
+          leagueId,
+          footballPlayerId: { in: ownerships.map((ownership) => ownership.footballPlayerId) }
+        },
+        select: { footballPlayerId: true, currentValueMinor: true }
+      })
+      : [];
+    const valueByPlayer = new Map(
+      valuations.map((valuation) => [valuation.footballPlayerId, valuation.currentValueMinor])
+    );
+    if (ownerships.length) {
+      await tx.valuationRosterSnapshot.createMany({
+        data: ownerships.map((ownership) => ({
+          windowId,
+          leagueTeamId: ownership.leagueTeamId,
+          ownershipId: ownership.id,
+          footballPlayerId: ownership.footballPlayerId,
+          baseValueMinor: valueByPlayer.get(ownership.footballPlayerId) ?? null
+        })),
+        skipDuplicates: true
+      });
+    }
+    await tx.valuationWindow.update({
+      where: { id: windowId },
+      data: { snapshotInitializedAt: at }
+    });
+    return tx.valuationRosterSnapshot.findMany({
+      where: { windowId },
+      include: snapshotInclude,
+      orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
+    });
   }
 
   async getWorkspace(userId: string, teamId: string, at = new Date()): Promise<ValuationWorkspace> {
