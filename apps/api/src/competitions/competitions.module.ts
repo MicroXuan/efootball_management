@@ -17,6 +17,10 @@ import { ResultsService } from './results.service.js';
 import { StandingsService } from './standings.service.js';
 import { MyCompetitionsController } from './my-competitions.controller.js';
 import { MyCompetitionsService } from './my-competitions.service.js';
+import { AdminCupCompetitionsController } from './admin-cup-competitions.controller.js';
+import { CupCompetitionsController } from './cup-competitions.controller.js';
+import { CupCompetitionsService } from './cup-competitions.service.js';
+import { CupGroupsService } from './cup-groups.service.js';
 
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({})],
@@ -27,7 +31,9 @@ import { MyCompetitionsService } from './my-competitions.service.js';
     RegistrationsController,
     SchedulesController,
     ResultsController,
-    MyCompetitionsController
+    MyCompetitionsController,
+    AdminCupCompetitionsController,
+    CupCompetitionsController
   ],
   providers: [
     CompetitionsService,
@@ -37,6 +43,8 @@ import { MyCompetitionsService } from './my-competitions.service.js';
     StandingsService,
     ResultsService,
     MyCompetitionsService,
+    CupCompetitionsService,
+    CupGroupsService,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],
@@ -47,7 +55,9 @@ import { MyCompetitionsService } from './my-competitions.service.js';
     SchedulesService,
     StandingsService,
     ResultsService,
-    MyCompetitionsService
+    MyCompetitionsService,
+    CupCompetitionsService,
+    CupGroupsService
   ]
 })
 export class CompetitionsModule {}

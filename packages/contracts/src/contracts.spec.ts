@@ -21,6 +21,12 @@ import {
   SeasonAllocationProposalRowSchema,
   PublishStageScheduleRequestSchema,
   CreateCompetitionRequestSchema,
+  CreateSeasonCupRequestSchema,
+  RegisterSeasonCupRequestSchema,
+  CupRegistrationResponseSchema,
+  GenerateCupGroupProposalRequestSchema,
+  ConfirmCupGroupProposalRequestSchema,
+  CupGroupProposalSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -1272,5 +1278,133 @@ describe('tiered league contracts', () => {
       expectedSeasonVersion: 4
     }), { expectedStageVersion: 2, expectedSeasonVersion: 4 });
     assert.throws(() => GenerateStageScheduleRequestSchema.parse({ expectedStageVersion: 0 }));
+  });
+});
+
+describe('cup center contracts', () => {
+  const seasonId = '11111111-1111-4111-8111-111111111111';
+  const entryId = '22222222-2222-4222-8222-222222222222';
+  const competitionId = '33333333-3333-4333-8333-333333333333';
+  const userId = '44444444-4444-4444-8444-444444444444';
+  const registrationId = '55555555-5555-4555-8555-555555555555';
+  const registrationOpensAt = '2026-10-03T12:00:00.000Z';
+  const registrationClosesAt = '2026-10-10T12:00:00.000Z';
+  const startsAt = '2026-10-11T12:00:00.000Z';
+  const endsAt = '2026-11-30T12:00:00.000Z';
+
+  it('accepts a group-knockout cup with explicit group rules', () => {
+    const parsed = CreateSeasonCupRequestSchema.parse({
+      seasonId,
+      name: 'S3 足总杯',
+      description: '当前赛季杯赛',
+      competitionType: 'GROUP_KNOCKOUT_CUP',
+      format: 'GROUP_KNOCKOUT',
+      platform: 'MOBILE',
+      serverRegion: '国际服',
+      registrationOpensAt,
+      registrationClosesAt,
+      startsAt,
+      endsAt,
+      participantLimit: 32,
+      targetGroupSize: 4,
+      qualifiersPerGroup: 2
+    });
+
+    assert.equal(parsed.targetGroupSize, 4);
+    assert.equal(parsed.qualifiersPerGroup, 2);
+  });
+
+  it('accepts pure knockout cups and rejects mismatched formats or invalid qualification rules', () => {
+    const knockout = CreateSeasonCupRequestSchema.parse({
+      seasonId,
+      name: '周末趣味杯',
+      description: '',
+      competitionType: 'KNOCKOUT_CUP',
+      format: 'SINGLE_ELIMINATION',
+      platform: 'MOBILE',
+      serverRegion: '国际服',
+      registrationOpensAt,
+      registrationClosesAt,
+      startsAt,
+      endsAt,
+      participantLimit: 16,
+      targetGroupSize: null,
+      qualifiersPerGroup: null
+    });
+    assert.equal(knockout.format, 'SINGLE_ELIMINATION');
+    assert.throws(() => CreateSeasonCupRequestSchema.parse({
+      ...knockout,
+      competitionType: 'GROUP_KNOCKOUT_CUP'
+    }));
+    assert.throws(() => CreateSeasonCupRequestSchema.parse({
+      ...knockout,
+      competitionType: 'GROUP_KNOCKOUT_CUP',
+      format: 'GROUP_KNOCKOUT',
+      targetGroupSize: 4,
+      qualifiersPerGroup: 4
+    }));
+  });
+
+  it('binds a cup registration to a formal season entry without requiring a game account', () => {
+    assert.deepEqual(RegisterSeasonCupRequestSchema.parse({
+      seasonEntryId: entryId,
+      acceptedRuleVersion: 1
+    }), { seasonEntryId: entryId, acceptedRuleVersion: 1 });
+
+    const response = CupRegistrationResponseSchema.parse({
+      id: registrationId,
+      competitionId,
+      seasonEntryId: entryId,
+      applicantId: userId,
+      teamName: '上海海港',
+      status: 'APPROVED',
+      withdrawnAt: null,
+      version: 1,
+      createdAt: registrationOpensAt,
+      updatedAt: registrationOpensAt
+    });
+    assert.equal(response.teamName, '上海海港');
+  });
+
+  it('validates versioned group proposal generation, overrides, and response rows', () => {
+    assert.deepEqual(GenerateCupGroupProposalRequestSchema.parse({
+      expectedCompetitionVersion: 2,
+      randomSeed: 20261003
+    }), { expectedCompetitionVersion: 2, randomSeed: 20261003 });
+    assert.deepEqual(ConfirmCupGroupProposalRequestSchema.parse({
+      proposalId: registrationId,
+      expectedCompetitionVersion: 2,
+      overrides: [{
+        participantId: entryId,
+        targetGroupCode: 'GROUP_B',
+        reason: '平衡小组人数'
+      }]
+    }).overrides[0]?.targetGroupCode, 'GROUP_B');
+    assert.throws(() => ConfirmCupGroupProposalRequestSchema.parse({
+      proposalId: registrationId,
+      expectedCompetitionVersion: 2,
+      overrides: [
+        { participantId: entryId, targetGroupCode: 'GROUP_A', reason: '第一次调整' },
+        { participantId: entryId, targetGroupCode: 'GROUP_B', reason: '重复调整' }
+      ]
+    }));
+    assert.equal(CupGroupProposalSchema.parse({
+      id: registrationId,
+      competitionId,
+      version: 1,
+      status: 'DRAFT',
+      algorithmVersion: 'cup-groups-v1',
+      randomSeed: 20261003,
+      rows: [{
+        id: userId,
+        participantId: entryId,
+        teamName: '上海海港',
+        suggestedGroupCode: 'GROUP_A',
+        finalGroupCode: null,
+        overridden: false,
+        reason: null
+      }],
+      createdAt: registrationOpensAt
+    }).rows[0]?.suggestedGroupCode, 'GROUP_A');
   });
 });

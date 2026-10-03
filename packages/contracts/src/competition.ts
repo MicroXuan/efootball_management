@@ -110,6 +110,80 @@ const CompetitionCoreInputSchema = z.object({
 export const CreateCompetitionRequestSchema = CompetitionCoreInputSchema
   .and(CompetitionTimelineSchema);
 
+export const CupCompetitionTypeSchema = z.enum(['GROUP_KNOCKOUT_CUP', 'KNOCKOUT_CUP']);
+
+export const CreateSeasonCupRequestSchema = z.object({
+  seasonId: ResourceIdSchema,
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(2_000).default(''),
+  competitionType: CupCompetitionTypeSchema,
+  format: z.enum(['GROUP_KNOCKOUT', 'SINGLE_ELIMINATION']),
+  platform: GamePlatformSchema,
+  serverRegion: z.string().trim().min(1).max(32),
+  registrationOpensAt: TimestampSchema,
+  registrationClosesAt: TimestampSchema,
+  startsAt: TimestampSchema,
+  endsAt: TimestampSchema,
+  participantLimit: z.number().int().min(2).max(128),
+  targetGroupSize: z.number().int().min(2).max(16).nullable(),
+  qualifiersPerGroup: z.number().int().min(1).max(15).nullable()
+}).superRefine((value, context) => {
+  const registrationOpensAt = Date.parse(value.registrationOpensAt);
+  const registrationClosesAt = Date.parse(value.registrationClosesAt);
+  const startsAt = Date.parse(value.startsAt);
+  const endsAt = Date.parse(value.endsAt);
+  if (registrationOpensAt >= registrationClosesAt) {
+    context.addIssue({ code: 'custom', path: ['registrationClosesAt'], message: '报名结束时间必须晚于开始时间' });
+  }
+  if (registrationClosesAt > startsAt) {
+    context.addIssue({ code: 'custom', path: ['startsAt'], message: '开赛时间不能早于报名结束时间' });
+  }
+  if (startsAt >= endsAt) {
+    context.addIssue({ code: 'custom', path: ['endsAt'], message: '结束时间必须晚于开赛时间' });
+  }
+
+  if (value.competitionType === 'GROUP_KNOCKOUT_CUP') {
+    if (value.format !== 'GROUP_KNOCKOUT') {
+      context.addIssue({ code: 'custom', path: ['format'], message: '小组淘汰杯必须使用小组加淘汰赛制' });
+    }
+    if (value.targetGroupSize === null) {
+      context.addIssue({ code: 'custom', path: ['targetGroupSize'], message: '小组淘汰杯必须设置目标小组人数' });
+    }
+    if (value.qualifiersPerGroup === null) {
+      context.addIssue({ code: 'custom', path: ['qualifiersPerGroup'], message: '小组淘汰杯必须设置每组出线人数' });
+    }
+    if (value.targetGroupSize !== null && value.qualifiersPerGroup !== null
+      && value.qualifiersPerGroup >= value.targetGroupSize) {
+      context.addIssue({ code: 'custom', path: ['qualifiersPerGroup'], message: '每组出线人数必须小于目标小组人数' });
+    }
+  } else {
+    if (value.format !== 'SINGLE_ELIMINATION') {
+      context.addIssue({ code: 'custom', path: ['format'], message: '纯淘汰杯必须使用单场淘汰赛制' });
+    }
+    if (value.targetGroupSize !== null || value.qualifiersPerGroup !== null) {
+      context.addIssue({ code: 'custom', path: ['targetGroupSize'], message: '纯淘汰杯不能设置小组规则' });
+    }
+  }
+});
+
+export const RegisterSeasonCupRequestSchema = z.object({
+  seasonEntryId: ResourceIdSchema,
+  acceptedRuleVersion: z.number().int().positive()
+});
+
+export const CupRegistrationResponseSchema = z.object({
+  id: ResourceIdSchema,
+  competitionId: ResourceIdSchema,
+  seasonEntryId: ResourceIdSchema,
+  applicantId: ResourceIdSchema,
+  teamName: z.string().trim().min(1).max(64),
+  status: CompetitionRegistrationStatusSchema,
+  withdrawnAt: TimestampSchema.nullable(),
+  version: z.number().int().positive(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema
+});
+
 export const UpdateCompetitionRequestSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   description: z.string().trim().max(2_000).optional(),
@@ -174,6 +248,60 @@ export const GenerateStageScheduleRequestSchema = z.object({
 export const PublishStageScheduleRequestSchema = z.object({
   expectedStageVersion: ExpectedVersionSchema,
   expectedSeasonVersion: ExpectedVersionSchema
+});
+
+export const CupProposalStatusSchema = z.enum(['DRAFT', 'CONFIRMED', 'SUPERSEDED']);
+
+export const GenerateCupGroupProposalRequestSchema = z.object({
+  expectedCompetitionVersion: ExpectedVersionSchema,
+  randomSeed: z.number().int().positive()
+});
+
+export const CupGroupOverrideSchema = z.object({
+  participantId: ResourceIdSchema,
+  targetGroupCode: CompetitionStageCodeSchema.refine((value) => value.startsWith('GROUP_'), {
+    message: 'targetGroupCode must be a cup group code'
+  }),
+  reason: z.string().trim().min(1).max(512)
+});
+
+export const ConfirmCupGroupProposalRequestSchema = z.object({
+  proposalId: ResourceIdSchema,
+  expectedCompetitionVersion: ExpectedVersionSchema,
+  overrides: z.array(CupGroupOverrideSchema).max(128).default([])
+}).superRefine((value, context) => {
+  const participantIds = new Set<string>();
+  value.overrides.forEach((override, index) => {
+    if (participantIds.has(override.participantId)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['overrides', index, 'participantId'],
+        message: 'participantId must not be overridden more than once'
+      });
+    }
+    participantIds.add(override.participantId);
+  });
+});
+
+export const CupGroupProposalRowSchema = z.object({
+  id: ResourceIdSchema,
+  participantId: ResourceIdSchema,
+  teamName: z.string().trim().min(1).max(64),
+  suggestedGroupCode: CompetitionStageCodeSchema,
+  finalGroupCode: CompetitionStageCodeSchema.nullable(),
+  overridden: z.boolean(),
+  reason: z.string().nullable()
+});
+
+export const CupGroupProposalSchema = z.object({
+  id: ResourceIdSchema,
+  competitionId: ResourceIdSchema,
+  version: z.number().int().positive(),
+  status: CupProposalStatusSchema,
+  algorithmVersion: z.string().trim().min(1).max(32),
+  randomSeed: z.number().int().positive(),
+  rows: z.array(CupGroupProposalRowSchema),
+  createdAt: TimestampSchema
 });
 
 export const CancelCompetitionRequestSchema = VersionedMutationRequestSchema.extend({
@@ -401,6 +529,10 @@ export type MatchResultVersionStatus = z.infer<typeof MatchResultVersionStatusSc
 export type CompetitionTieBreaker = z.infer<typeof CompetitionTieBreakerSchema>;
 export type CreateCompetitionRequest = z.input<typeof CreateCompetitionRequestSchema>;
 export type ParsedCreateCompetitionRequest = z.output<typeof CreateCompetitionRequestSchema>;
+export type CreateSeasonCupRequest = z.input<typeof CreateSeasonCupRequestSchema>;
+export type ParsedCreateSeasonCupRequest = z.output<typeof CreateSeasonCupRequestSchema>;
+export type RegisterSeasonCupRequest = z.input<typeof RegisterSeasonCupRequestSchema>;
+export type CupRegistrationResponse = z.infer<typeof CupRegistrationResponseSchema>;
 export type UpdateCompetitionRequest = z.input<typeof UpdateCompetitionRequestSchema>;
 export type UpdateCompetitionRulesRequest = z.input<typeof UpdateCompetitionRulesRequestSchema>;
 export type RegisterCompetitionRequest = z.input<typeof RegisterCompetitionRequestSchema>;
@@ -408,6 +540,9 @@ export type ReviewRegistrationRequest = z.input<typeof ReviewRegistrationRequest
 export type VersionedMutationRequest = z.input<typeof VersionedMutationRequestSchema>;
 export type GenerateStageScheduleRequest = z.infer<typeof GenerateStageScheduleRequestSchema>;
 export type PublishStageScheduleRequest = z.infer<typeof PublishStageScheduleRequestSchema>;
+export type GenerateCupGroupProposalRequest = z.infer<typeof GenerateCupGroupProposalRequestSchema>;
+export type ConfirmCupGroupProposalRequest = z.infer<typeof ConfirmCupGroupProposalRequestSchema>;
+export type CupGroupProposal = z.infer<typeof CupGroupProposalSchema>;
 export type SubmitMatchResultRequest = z.input<typeof SubmitMatchResultRequestSchema>;
 export type RejectMatchResultRequest = z.input<typeof RejectMatchResultRequestSchema>;
 export type ManagerMatchResultRequest = z.input<typeof ManagerMatchResultRequestSchema>;

@@ -4,10 +4,11 @@ import { LeagueWorkspaceService } from './league-workspace.service.js';
 function entry() {
   return {
     id: 'entry-1', leagueTeamId: 'team-1', teamNameSnapshot: '历史海港', teamShortNameSnapshot: '海港', teamLogoUrlSnapshot: null,
-    competitionParticipant: {
+    competitionParticipants: [{
       id: 'participant-1',
+      competition: { competitionType: 'DIVISION_LEAGUE' },
       stageMemberships: [{ stage: { id: 'stage-1', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' } }]
-    }
+    }]
   };
 }
 
@@ -39,13 +40,27 @@ describe('LeagueWorkspaceService', () => {
 
   it('returns explicit empty states when no division data or match exists', async () => {
     const value = entry();
-    value.competitionParticipant.stageMemberships = [];
+    value.competitionParticipants[0]!.stageMemberships = [];
     const service = new LeagueWorkspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => value) } }));
     const result = await service.get('user-1', 'league-1', 'season-1');
     expect(result.division).toBeNull();
     expect(result.currentRank).toBeNull();
     expect(result.nextMatch).toBeNull();
     expect(result.capabilities.canViewStandings).toBe(false);
+  });
+
+  it('uses the division participant when the same season entry also joins a cup', async () => {
+    const value = entry();
+    value.competitionParticipants.unshift({
+      id: 'cup-participant',
+      competition: { competitionType: 'GROUP_KNOCKOUT_CUP' },
+      stageMemberships: [{ stage: { id: 'cup-group', stageCode: 'GROUP_A', displayName: 'A 组' } }]
+    });
+    const service = new LeagueWorkspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => value) } }));
+
+    const result = await service.get('user-1', 'league-1', 'season-1');
+
+    expect(result.division).toEqual({ stageId: 'stage-1', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' });
   });
 
   it('does not expose valuation management when the season has no valuation window', async () => {

@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { config } from 'dotenv';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueTeamsService } from './league-teams.service.js';
+
+config({ path: '../../.env', quiet: true });
 
 describe('LeagueTeamsService', () => {
   const prisma = new PrismaService();

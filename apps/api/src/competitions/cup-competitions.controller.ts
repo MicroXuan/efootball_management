@@ -1,0 +1,30 @@
+import { Body, Controller, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  RegisterSeasonCupRequestSchema,
+  ResourceIdSchema,
+  type RegisterSeasonCupRequest
+} from '@efm/contracts';
+import { CurrentUser, type CurrentUser as AuthenticatedUser } from '../common/auth/current-user.decorator.js';
+import { JwtAuthGuard } from '../common/auth/jwt-auth.guard.js';
+import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
+import { CompetitionError } from './competition.errors.js';
+import { CupCompetitionsService } from './cup-competitions.service.js';
+
+@Controller('cups')
+@UseGuards(JwtAuthGuard)
+export class CupCompetitionsController {
+  constructor(@Inject(CupCompetitionsService) private readonly cups: CupCompetitionsService) {}
+
+  @Post(':competitionId/registration')
+  register(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(RegisterSeasonCupRequestSchema)) body: RegisterSeasonCupRequest
+  ) {
+    if (!key?.trim()) {
+      throw new CompetitionError('IDEMPOTENCY_KEY_REQUIRED', '必须提供 Idempotency-Key 请求头', 400);
+    }
+    return this.cups.register(user.id, competitionId, body, key);
+  }
+}

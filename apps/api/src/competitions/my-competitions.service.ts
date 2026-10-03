@@ -181,6 +181,9 @@ export class MyCompetitionsService {
   }
 
   private registration(value: CompetitionRegistration): CompetitionRegistrationResponse {
+    if (!value.gameAccountId) {
+      throw new Error('Individual competition registration has no game account');
+    }
     return {
       id: value.id,
       competitionId: value.competitionId,

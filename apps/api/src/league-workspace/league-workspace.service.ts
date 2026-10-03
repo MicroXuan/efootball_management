@@ -11,8 +11,11 @@ export class LeagueWorkspaceService {
     const entry = await this.prisma.seasonEntry.findFirst({
       where: { ownerUserId: userId, seasonId, status: 'APPROVED', season: { leagueId } },
       include: {
-        competitionParticipant: {
+        competitionParticipants: {
+          where: { competition: { competitionType: 'DIVISION_LEAGUE' } },
+          take: 1,
           include: {
+            competition: { select: { competitionType: true } },
             stageMemberships: { include: { stage: true }, orderBy: { seed: 'asc' } }
           }
         }
@@ -22,7 +25,9 @@ export class LeagueWorkspaceService {
       throw new LeagueError('LEAGUE_WORKSPACE_FORBIDDEN', '只有当前赛季正式参赛球队可以查看联赛工作台', 403);
     }
 
-    const participant = entry.competitionParticipant;
+    const participant = entry.competitionParticipants.find(
+      ({ competition }) => competition.competitionType === 'DIVISION_LEAGUE'
+    );
     const stage = participant?.stageMemberships[0]?.stage ?? null;
     const [snapshot, matches, valuationWindow] = await Promise.all([
       stage && participant ? this.prisma.standingsSnapshot.findFirst({

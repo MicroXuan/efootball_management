@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { config } from 'dotenv';
 import { PrismaService } from '../database/prisma.service.js';
 import { AdminAuthorizationService } from './admin-authorization.service.js';
+
+config({ path: '../../.env', quiet: true });
 
 describe('AdminAuthorizationService', () => {
   const prisma = new PrismaService();
