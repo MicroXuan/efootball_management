@@ -6,6 +6,7 @@ const miniRoot = resolve(process.cwd(), 'miniprogram')
 const browsingPages = [
   'players',
   'player-card-detail',
+  'favorites',
   'competitions',
   'competition-detail',
   'my-matches',

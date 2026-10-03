@@ -59,6 +59,10 @@ Page({
     if (value) wx.setClipboardData({ data: value })
   },
 
+  openFavorites() {
+    wx.navigateTo({ url: '/pages/favorites/index' })
+  },
+
   openTeam(event: TeamTapEvent) {
     const id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: `/pages/league-team-detail/index?id=${encodeURIComponent(id)}` })

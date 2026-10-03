@@ -31,6 +31,12 @@
         </view>
       </view>
 
+      <view class="favorites-entry" bindtap="openFavorites" role="button">
+        <view class="favorites-icon">★</view>
+        <view class="favorites-copy"><text class="favorites-title">我的收藏</text><text class="favorites-detail">查看球员当前自动加点最高能力卡</text></view>
+        <text class="chevron">›</text>
+      </view>
+
       <view class="section-head">
         <view><text class="section-kicker">已绑定球队</text><text class="section-title">已绑定联赛球队</text></view>
         <text class="team-count">{{profile.teams.length}} 支</text>

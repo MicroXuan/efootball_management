@@ -66,3 +66,15 @@ export function toCardDetailViewModel(detail: PlayerCardDetail): PlayerCardDetai
     })),
   }
 }
+
+export function favoritePlayerId(card: PlayerCardDetailViewModel): string {
+  return card.playerId
+}
+
+export function favoriteMutationState(
+  current: boolean,
+  succeeded: boolean,
+  next: boolean,
+): boolean {
+  return succeeded ? next : current
+}

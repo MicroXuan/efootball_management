@@ -17,6 +17,7 @@
     "pages/team-assets/index",
     "pages/league-transactions/index",
     "pages/team-finance/index",
+    "pages/favorites/index",
     "pages/player-card-detail/index"
   ],
   "window": {

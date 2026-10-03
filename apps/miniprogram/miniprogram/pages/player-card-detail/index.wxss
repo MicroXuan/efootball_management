@@ -9,6 +9,9 @@ page { background: #0e1417; color: #f4f7f8; }
 .hero-rule { width: 64rpx; height: 4rpx; margin: 24rpx 0 12rpx; background: #b6f13a; }
 .hero-meta { margin-top: 7rpx; color: #aab5ba; font-size: 22rpx; }
 .pack-badge { align-self: flex-start; margin-top: 18rpx; padding: 8rpx 12rpx; border: 2rpx solid #6f5730; color: #aab5ba; font-size: 18rpx; }
+.favorite-action { min-height:72rpx; margin:22rpx 0 0; padding:0 20rpx; border:2rpx solid #46545b; border-radius:16rpx; background:#1c262b; color:#f4f7f8; font-size:21rpx; font-weight:800; }
+.favorite-action::after { border:0; }
+.favorite-action.is-active { border-color:#b6f13a; color:#b6f13a; }
 .detail-section { margin-top: 44rpx; padding: 28rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; box-shadow: 0 16rpx 44rpx rgba(0,0,0,.18); }
 .section-head { display: flex; align-items: baseline; }
 .section-index { color: #b6f13a; font-family:inherit; font-size: 20rpx; }

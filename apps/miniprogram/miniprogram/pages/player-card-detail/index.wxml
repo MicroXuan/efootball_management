@@ -26,6 +26,9 @@
         <text class="hero-meta">{{card.nationality || '国籍未记录'}}</text>
         <text class="hero-meta">{{card.club || '俱乐部未记录'}}</text>
         <text wx:if="{{card.packName}}" class="pack-badge">{{card.packName}}</text>
+        <button class="favorite-action {{isFavorite ? 'is-active' : ''}}" loading="{{favoriteBusy}}" bindtap="toggleFavorite">
+          {{isFavorite ? '★ 已收藏' : '☆ 收藏球员'}}
+        </button>
       </view>
     </view>
 

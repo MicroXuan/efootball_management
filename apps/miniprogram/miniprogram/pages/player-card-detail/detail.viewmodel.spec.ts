@@ -1,6 +1,6 @@
 import type { PlayerCardDetail, PlayerCardSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { toCardDetailViewModel } from './detail.viewmodel'
+import { favoriteMutationState, favoritePlayerId, toCardDetailViewModel } from './detail.viewmodel'
 
 const sibling: PlayerCardSummary = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -60,5 +60,12 @@ describe('player card detail view model', () => {
     expect(toCardDetailViewModel(detail({ attributes })).attributes).toEqual([
       expect.objectContaining({ key: 'speed', value: 77 }),
     ])
+  })
+
+  it('targets the player id and preserves favorite state when a mutation fails', () => {
+    const view = toCardDetailViewModel(detail())
+    expect(favoritePlayerId(view)).toBe(sibling.playerId)
+    expect(favoriteMutationState(true, false, false)).toBe(true)
+    expect(favoriteMutationState(true, true, false)).toBe(false)
   })
 })
