@@ -94,6 +94,101 @@ function harness(seasonOverrides: Record<string, unknown> = {}) {
   return { service, transaction, receipts, audit, season };
 }
 
+function confirmationHarness(options: { published?: boolean; seasonVersion?: number } = {}) {
+  const seasonVersion = options.seasonVersion ?? 3;
+  const entries = approvedEntries(2);
+  const season = {
+    id: 'season-1', leagueId: 'league-1', displayName: 'S1',
+    status: options.published ? 'READY' : 'ALLOCATION_REVIEW',
+    version: seasonVersion, registrationOpensAt: new Date('2026-09-01T00:00:00.000Z'),
+    registrationClosesAt: new Date('2026-09-08T00:00:00.000Z'),
+    startsAt: new Date('2026-09-09T00:00:00.000Z'), endsAt: new Date('2026-10-09T00:00:00.000Z'),
+    superCapacity: 23, championCapacity: 18, entries
+  };
+  const proposal = {
+    id: 'proposal-1', seasonId: 'season-1', version: 1, status: 'DRAFT',
+    rows: entries.map((entry, index) => ({
+      id: `row-${index + 1}`,
+      proposalId: 'proposal-1',
+      seasonEntryId: entry.id,
+      teamName: entry.teamNameSnapshot,
+      suggestedStageCode: 'CHAMPION_A'
+    }))
+  };
+  let confirmed = false;
+  const transaction = {
+    $queryRaw: jest.fn(async () => []),
+    leagueSeason: {
+      findUnique: jest.fn(async () => ({ ...season, status: confirmed ? 'READY' : season.status })),
+      updateMany: jest.fn(async () => {
+        if (confirmed) return { count: 0 };
+        confirmed = true;
+        return { count: 1 };
+      })
+    },
+    league: {
+      findUnique: jest.fn(async () => ({
+        id: 'league-1', name: '测试联赛', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL'
+      }))
+    },
+    seasonAllocationProposal: {
+      findUnique: jest.fn(async () => proposal),
+      findFirst: jest.fn(async () => ({ id: 'proposal-1', version: 1 })),
+      updateMany: jest.fn(async () => ({ count: 1 }))
+    },
+    competition: {
+      findFirst: jest.fn(async () => options.published ? {
+        id: 'competition-1', stages: [{ id: 'stage-1', status: 'PUBLISHED' }]
+      } : null),
+      create: jest.fn(async () => ({ id: 'competition-1' })),
+      delete: jest.fn(async () => ({ id: 'competition-1' }))
+    },
+    competitionStage: {
+      create: jest.fn(async ({ data }: { data: { stageCode: string } }) => ({
+        id: `stage-${data.stageCode}`, ...data
+      })),
+      deleteMany: jest.fn(async () => ({ count: 1 }))
+    },
+    competitionParticipant: {
+      create: jest.fn(async ({ data }: { data: { seasonEntryId: string } }) => ({
+        id: `participant-${data.seasonEntryId}`, ...data
+      })),
+      deleteMany: jest.fn(async () => ({ count: 2 }))
+    },
+    stageParticipant: {
+      createMany: jest.fn(async ({ data }: { data: unknown[] }) => ({ count: data.length })),
+      deleteMany: jest.fn(async () => ({ count: 2 }))
+    },
+    seasonAllocationDecision: {
+      createMany: jest.fn(async ({ data }: { data: unknown[] }) => ({ count: data.length }))
+    }
+  };
+  const cache = new Map<string, unknown>();
+  const receipts = {
+    execute: jest.fn(async (
+      actor: string,
+      operation: string,
+      key: string,
+      work: (value: typeof transaction) => Promise<unknown>
+    ) => {
+      const cacheKey = `${actor}:${operation}:${key}`;
+      if (cache.has(cacheKey)) return cache.get(cacheKey);
+      const value = await work(transaction);
+      cache.set(cacheKey, value);
+      return value;
+    })
+  };
+  const authorization = { requireLeagueAccess: jest.fn(async () => ({ id: 'admin-1' })) };
+  const audit = { record: jest.fn(async () => undefined) };
+  const service = new LeagueAllocationService(
+    transaction as never,
+    authorization as never,
+    receipts as never,
+    audit as never
+  );
+  return { service, transaction, proposal, season };
+}
+
 describe('LeagueAllocationService', () => {
   it('uses only approved entries and never creates a super group for the first season', async () => {
     const { service, transaction } = harness();
@@ -167,6 +262,81 @@ describe('LeagueAllocationService', () => {
     }, 'allocation-regular')).rejects.toMatchObject({
       code: 'PREVIOUS_STANDINGS_UNAVAILABLE',
       message: expect.stringContaining('上一赛季')
+    });
+  });
+
+  it('confirms every approved team into one formal competition and complete stage membership', async () => {
+    const { service, transaction } = confirmationHarness();
+
+    const result = await service.confirm('admin-1', 'league-1', 'season-1', {
+      proposalId: 'proposal-1', expectedSeasonVersion: 3, overrides: []
+    }, 'confirm-1');
+
+    expect(result).toMatchObject({
+      seasonId: 'season-1', competitionId: 'competition-1', stageCount: 1,
+      participantCount: 2, status: 'READY', version: 4
+    });
+    expect(transaction.competition.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ competitionType: 'DIVISION_LEAGUE', createdByAdminId: 'admin-1' })
+    }));
+    expect(transaction.competitionParticipant.create).toHaveBeenCalledTimes(2);
+    expect(transaction.stageParticipant.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ stageId: 'stage-CHAMPION_A', participantId: 'participant-entry-1' })
+      ])
+    });
+    expect(transaction.seasonAllocationDecision.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([expect.objectContaining({ overridden: false, reason: null })])
+    });
+  });
+
+  it('requires a reason for a changed stage and rejects proposal teams outside approved entries', async () => {
+    const first = confirmationHarness();
+    await expect(first.service.confirm('admin-1', 'league-1', 'season-1', {
+      proposalId: 'proposal-1', expectedSeasonVersion: 3,
+      overrides: [{ seasonEntryId: 'entry-1', targetStageCode: 'CHAMPION_B', reason: ' ' }]
+    }, 'confirm-empty-reason')).rejects.toMatchObject({ code: 'OVERRIDE_REASON_REQUIRED' });
+
+    const second = confirmationHarness();
+    second.proposal.rows.push({
+      id: 'row-foreign', proposalId: 'proposal-1', seasonEntryId: 'entry-foreign',
+      teamName: '外部球队', suggestedStageCode: 'CHAMPION_A'
+    });
+    await expect(second.service.confirm('admin-1', 'league-1', 'season-1', {
+      proposalId: 'proposal-1', expectedSeasonVersion: 3, overrides: []
+    }, 'confirm-foreign')).rejects.toMatchObject({ code: 'ALLOCATION_PARTICIPANTS_INVALID' });
+  });
+
+  it('rejects stale proposals and season versions', async () => {
+    const staleVersion = confirmationHarness();
+    await expect(staleVersion.service.confirm('admin-1', 'league-1', 'season-1', {
+      proposalId: 'proposal-1', expectedSeasonVersion: 2, overrides: []
+    }, 'confirm-stale-season')).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    const staleProposal = confirmationHarness();
+    staleProposal.transaction.seasonAllocationProposal.findFirst.mockResolvedValue({ id: 'proposal-2', version: 2 });
+    await expect(staleProposal.service.confirm('admin-1', 'league-1', 'season-1', {
+      proposalId: 'proposal-1', expectedSeasonVersion: 3, overrides: []
+    }, 'confirm-stale-proposal')).rejects.toMatchObject({ code: 'ALLOCATION_PROPOSAL_STALE' });
+  });
+
+  it('replays one confirmation but rejects a competing confirmation after the season advances', async () => {
+    const { service, transaction } = confirmationHarness();
+    const input = { proposalId: 'proposal-1', expectedSeasonVersion: 3, overrides: [] };
+    const first = await service.confirm('admin-1', 'league-1', 'season-1', input, 'confirm-replay');
+    await expect(service.confirm('admin-1', 'league-1', 'season-1', input, 'confirm-replay')).resolves.toEqual(first);
+    await expect(service.confirm('admin-2', 'league-1', 'season-1', input, 'confirm-race'))
+      .rejects.toMatchObject({ code: 'SEASON_NOT_IN_ALLOCATION_REVIEW' });
+    expect(transaction.competition.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reopen allocation after any stage schedule is published', async () => {
+    const { service } = confirmationHarness({ published: true });
+    await expect(service.reopen('admin-1', 'league-1', 'season-1', {
+      expectedVersion: 3
+    }, 'reopen-published')).rejects.toMatchObject({
+      code: 'ALLOCATION_REOPEN_FORBIDDEN',
+      message: expect.stringContaining('赛程')
     });
   });
 });

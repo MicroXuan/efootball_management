@@ -467,6 +467,7 @@ model AdminAccount {
   createdTransactionFeeRules   LeagueTransactionFeeRuleVersion[] @relation("TransactionFeeRuleCreator")
   allocationProposals          SeasonAllocationProposal[]        @relation("AllocationProposalCreator")
   allocationDecisions          SeasonAllocationDecision[]        @relation("AllocationDecisionActor")
+  createdCompetitions          Competition[]                     @relation("CompetitionAdminCreator")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -1465,14 +1466,16 @@ model Competition {
   startsAt             DateTime                   @map("starts_at")
   endsAt               DateTime                   @map("ends_at")
   participantLimit     Int                        @map("participant_limit") @db.UnsignedInt
-  createdById          String                     @map("created_by_id") @db.Char(36)
+  createdById          String?                    @map("created_by_id") @db.Char(36)
+  createdByAdminId     String?                    @map("created_by_admin_id") @db.Char(36)
   activeRuleVersion    Int                        @default(1) @map("active_rule_version") @db.UnsignedInt
   boundRuleVersion     Int?                       @map("bound_rule_version") @db.UnsignedInt
   cancellationReason   String?                    @map("cancellation_reason") @db.VarChar(512)
   version              Int                        @default(1) @db.UnsignedInt
   createdAt            DateTime                   @default(now()) @map("created_at")
   updatedAt            DateTime                   @updatedAt @map("updated_at")
-  creator              User                       @relation("CompetitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  creator              User?                      @relation("CompetitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator         AdminAccount?              @relation("CompetitionAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   season               LeagueSeason?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
   ruleVersions         CompetitionRuleVersion[]
   registrations        CompetitionRegistration[]
@@ -1482,6 +1485,7 @@ model Competition {
 
   @@index([status, registrationOpensAt, id], map: "competitions_public_list_idx")
   @@index([createdById], map: "competitions_creator_idx")
+  @@index([createdByAdminId], map: "competitions_admin_creator_idx")
   @@index([seasonId, competitionType], map: "competitions_season_type_idx")
   @@map("competitions")
 }

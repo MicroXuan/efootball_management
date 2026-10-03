@@ -4,8 +4,8 @@ import { LeagueError } from '../league.errors.js';
 const ALLOWED_TRANSITIONS: Readonly<Record<LeagueSeasonStatus, readonly LeagueSeasonStatus[]>> = {
   DRAFT: ['REGISTRATION_OPEN', 'CANCELLED'],
   REGISTRATION_OPEN: ['ALLOCATION_REVIEW', 'CANCELLED'],
-  ALLOCATION_REVIEW: ['CANCELLED'],
-  READY: [],
+  ALLOCATION_REVIEW: ['READY', 'CANCELLED'],
+  READY: ['ALLOCATION_REVIEW'],
   IN_PROGRESS: [],
   COMPLETED: [],
   CANCELLED: []

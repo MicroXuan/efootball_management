@@ -7,7 +7,9 @@ describe('league season state', () => {
     ['DRAFT', 'CANCELLED'],
     ['REGISTRATION_OPEN', 'ALLOCATION_REVIEW'],
     ['REGISTRATION_OPEN', 'CANCELLED'],
-    ['ALLOCATION_REVIEW', 'CANCELLED']
+    ['ALLOCATION_REVIEW', 'READY'],
+    ['ALLOCATION_REVIEW', 'CANCELLED'],
+    ['READY', 'ALLOCATION_REVIEW']
   ] satisfies Array<[LeagueSeasonStatus, LeagueSeasonStatus]>)('allows %s -> %s', (current, target) => {
     expect(() => assertSeasonTransition(current, target)).not.toThrow();
   });
@@ -16,7 +18,7 @@ describe('league season state', () => {
     ['DRAFT', 'READY'],
     ['DRAFT', 'IN_PROGRESS'],
     ['REGISTRATION_OPEN', 'COMPLETED'],
-    ['ALLOCATION_REVIEW', 'READY'],
+    ['READY', 'COMPLETED'],
     ['CANCELLED', 'DRAFT'],
     ['COMPLETED', 'CANCELLED']
   ] satisfies Array<[LeagueSeasonStatus, LeagueSeasonStatus]>)('rejects %s -> %s in phase one', (current, target) => {
