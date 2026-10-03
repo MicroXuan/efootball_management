@@ -10,6 +10,7 @@ import type {
   MyLeagueTeamListResponse,
   LeagueSeasonDetail,
   LeagueSeasonSummary,
+  DivisionStandingsResponse,
   OverrideSeasonEntryRequest,
   ParsedCreateLeagueRequest,
   ParsedCreateLeagueSeasonRequest,
@@ -62,6 +63,11 @@ export const leaguesApi = {
   },
   myEntry(seasonId: string) {
     return api.request<SeasonEntryResponse | null>({ path: `/seasons/${id(seasonId)}/entries/me` })
+  },
+  divisionStandings(leagueId: string, seasonId: string) {
+    return api.request<DivisionStandingsResponse>({
+      path: `/me/leagues/${id(leagueId)}/seasons/${id(seasonId)}/division-standings`,
+    })
   },
   apply(seasonId: string, input: CreateSeasonApplicationRequest) {
     return api.request<SeasonEntryResponse>({

@@ -1,0 +1,35 @@
+<view class="standings-page">
+  <view class="page-head">
+    <text class="kicker">赛季数据中心</text>
+    <text class="title">分组积分榜</text>
+    <text class="subtitle">正式参赛球队专属 · 实时排名</text>
+  </view>
+  <loading-state wx:if="{{loading}}" label="正在读取积分榜" />
+  <view wx:elif="{{errorMessage}}" class="state-card">
+    <text class="state-kicker">读取失败</text><text class="state-title">暂时无法打开积分榜</text>
+    <text class="state-copy">{{errorMessage}}</text><button class="retry" bindtap="retry">重新加载</button>
+  </view>
+  <block wx:else>
+    <scroll-view class="stage-tabs" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="stage-tabs__inner">
+        <view wx:for="{{tabs}}" wx:key="id" data-index="{{index}}" bindtap="selectStage" class="stage-tab {{selectedIndex === index ? 'is-active' : ''}}">
+          <text class="stage-tab__label">{{item.label}}</text><text class="stage-tab__meta">{{item.countLabel}}{{item.isMine ? ' · 我的组' : ''}}</text>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="board-card">
+      <view class="board-head"><view><text class="board-kicker">当前排名</text><text class="board-title">{{selectedLabel}}</text></view><text class="updated">{{updatedLabel}}</text></view>
+      <view wx:if="{{rows.length === 0}}" class="empty"><text>排名尚未产生</text><text>赛程发布后，比赛结果会在这里形成实时积分榜。</text></view>
+      <scroll-view wx:else class="table-scroll" scroll-x enhanced>
+        <view class="standings-table">
+          <view class="table-row table-head"><text class="rank">排名</text><text class="team">球队</text><text>赛</text><text>胜</text><text>平</text><text>负</text><text>进</text><text>失</text><text>净</text><text class="points">积分</text></view>
+          <view wx:for="{{rows}}" wx:key="participantId" class="table-row {{item.isMine ? 'is-mine' : ''}}">
+            <text class="rank">{{item.rankLabel}}</text><view class="team"><text>{{item.displayName}}</text><text wx:if="{{item.tieLabel}}" class="tie">{{item.tieLabel}}</text></view>
+            <text>{{item.played}}</text><text>{{item.wins}}</text><text>{{item.draws}}</text><text>{{item.losses}}</text><text>{{item.goalsFor}}</text><text>{{item.goalsAgainst}}</text><text>{{item.goalDifference}}</text><text class="points">{{item.totalPoints}}</text>
+          </view>
+        </view>
+      </scroll-view>
+      <text wx:if="{{rows.length}}" class="legend">* 同分球队最终顺序待管理员确认</text>
+    </view>
+  </block>
+</view>

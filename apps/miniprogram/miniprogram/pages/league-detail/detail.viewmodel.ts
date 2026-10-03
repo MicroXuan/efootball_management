@@ -63,6 +63,17 @@ export function entryStatusCopy(
   return labels[entry.status]
 }
 
+export function standingsAccess(entry: SeasonEntryResponse | null): {
+  enabled: boolean
+  label: string
+  hint: string
+} {
+  if (entry?.status === 'APPROVED') {
+    return { enabled: true, label: '查看分组积分榜', hint: '查看各组实时排名与比赛数据' }
+  }
+  return { enabled: false, label: '报名后开放', hint: '仅当前赛季正式参赛球队可查看' }
+}
+
 export function leagueDetailErrorMessage(code: string): string {
   const messages: Record<string, string> = {
     VERSION_CONFLICT: '赛季或报名状态已变更，请刷新后重试',

@@ -75,6 +75,15 @@
       <view class="entry-readonly"><text class="entry-readonly-label">参赛状态</text><text class="entry-readonly-value">{{entryStatus}}</text></view>
     </view>
 
+    <view wx:if="{{selectedSeason}}" class="standings-entry {{standingsEnabled ? '' : 'is-locked'}}" bindtap="openStandings">
+      <view>
+        <text class="section-kicker">赛季数据</text>
+        <text class="standings-entry__title">{{standingsLabel}}</text>
+        <text class="standings-entry__hint">{{standingsHint}}</text>
+      </view>
+      <text class="standings-entry__arrow">{{standingsEnabled ? '→' : '锁定'}}</text>
+    </view>
+
     <view wx:else class="state-card compact">
       <text class="state-code">等待发布</text>
       <text class="state-title">暂无公开赛季</text>

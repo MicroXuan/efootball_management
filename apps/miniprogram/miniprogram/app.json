@@ -4,6 +4,7 @@
     "pages/competitions/index",
     "pages/leagues/index",
     "pages/league-detail/index",
+    "pages/season-standings/index",
     "pages/competition-detail/index",
     "pages/my-matches/index",
     "pages/match-result/index",

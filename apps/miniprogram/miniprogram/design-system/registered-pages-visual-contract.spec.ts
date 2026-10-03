@@ -13,6 +13,7 @@ const browsingPages = [
   'match-result',
   'my-league-teams',
   'league-team-detail',
+  'season-standings',
 ]
 
 describe('registered browsing pages visual boundary', () => {

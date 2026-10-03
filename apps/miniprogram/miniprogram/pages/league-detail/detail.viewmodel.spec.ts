@@ -6,6 +6,7 @@ import {
   seasonRailSteps,
   seasonStructureCopy,
   selectSeason,
+  standingsAccess,
 } from './detail.viewmodel'
 
 const season = (overrides: Partial<LeagueSeasonSummary> = {}): LeagueSeasonSummary => ({
@@ -52,6 +53,20 @@ describe('league detail view model', () => {
 
   it('localizes read failures', () => {
     expect(leagueDetailErrorMessage('VERSION_CONFLICT')).toBe('赛季或报名状态已变更，请刷新后重试')
+  })
+
+  it('opens private standings only to an approved season entry', () => {
+    expect(standingsAccess(entry('APPROVED'))).toEqual({
+      enabled: true,
+      label: '查看分组积分榜',
+      hint: '查看各组实时排名与比赛数据',
+    })
+    expect(standingsAccess(entry('PENDING'))).toEqual({
+      enabled: false,
+      label: '报名后开放',
+      hint: '仅当前赛季正式参赛球队可查看',
+    })
+    expect(standingsAccess(null).enabled).toBe(false)
   })
 
   it.each([

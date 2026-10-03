@@ -9,6 +9,7 @@ import {
   seasonRailSteps,
   seasonStructureCopy,
   selectSeason,
+  standingsAccess,
   type SeasonRailStep,
 } from './detail.viewmodel'
 import { seasonStatusLabel, seasonStatusTone } from '../leagues/leagues.viewmodel'
@@ -36,6 +37,9 @@ Page({
     seasonRail: [] as SeasonRailStep[],
     seasonStatusLabel: '',
     seasonStatusTone: 'muted' as 'accent' | 'info' | 'warning' | 'muted' | 'danger',
+    standingsEnabled: false,
+    standingsLabel: '报名后开放',
+    standingsHint: '仅当前赛季正式参赛球队可查看',
   },
 
   onLoad(options: LoadOptions) {
@@ -88,15 +92,28 @@ Page({
   async loadEntry() {
     const season = this.data.selectedSeason
     if (!season) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null) })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), ...this.standingsData(null) })
       return
     }
     if (!this.data.loggedIn) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null) })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), ...this.standingsData(null) })
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
-    this.setData({ entry, entryStatus: entryStatusCopy(true, Boolean(this.data.profile), entry) })
+    this.setData({ entry, entryStatus: entryStatusCopy(true, Boolean(this.data.profile), entry), ...this.standingsData(entry) })
+  },
+
+  standingsData(entry: SeasonEntryResponse | null) {
+    const access = standingsAccess(entry)
+    return { standingsEnabled: access.enabled, standingsLabel: access.label, standingsHint: access.hint }
+  },
+
+  openStandings() {
+    if (!this.data.standingsEnabled || !this.data.selectedSeason) return
+    const teamName = this.data.profile?.name ?? ''
+    wx.navigateTo({
+      url: `/pages/season-standings/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(this.data.selectedSeason.id)}&teamName=${encodeURIComponent(teamName)}`,
+    })
   },
 
   onSeasonChange(event: SeasonPickerEvent) {
@@ -110,6 +127,7 @@ Page({
       registrationCloseDate: selectedSeason.registrationClosesAt.slice(0, 10),
       entry: null,
       entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null),
+      ...this.standingsData(null),
       seasonRail: seasonRailSteps(selectedSeason.status),
       seasonStatusLabel: seasonStatusLabel(selectedSeason.status),
       seasonStatusTone: seasonStatusTone(selectedSeason.status),
