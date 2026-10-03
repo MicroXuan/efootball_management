@@ -1,4 +1,4 @@
-import type { LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
+import type { LeagueSeasonSummary, LeagueWorkspaceResponse, SeasonEntryResponse } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   entryStatusCopy,
@@ -7,6 +7,7 @@ import {
   seasonStructureCopy,
   selectSeason,
   standingsAccess,
+  workspaceSummary,
 } from './detail.viewmodel'
 
 const season = (overrides: Partial<LeagueSeasonSummary> = {}): LeagueSeasonSummary => ({
@@ -67,6 +68,18 @@ describe('league detail view model', () => {
       hint: '仅当前赛季正式参赛球队可查看',
     })
     expect(standingsAccess(null).enabled).toBe(false)
+  })
+
+  it('presents enrolled workspace data and stable empty states', () => {
+    const workspace: LeagueWorkspaceResponse = {
+      leagueId: 'league-1', seasonId: 'season-1', team: { leagueTeamId: 'team-1', name: '海港', shortName: '海港', logoUrl: null },
+      division: { stageId: 'stage-a', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
+      currentRank: { rank: 2, points: 13, played: 6, tiePending: true },
+      nextMatch: { id: 'match-1', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
+      capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true },
+    }
+    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2*', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
+    expect(workspaceSummary({ ...workspace, division: null, currentRank: null, nextMatch: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', nextMatch: '暂无待进行比赛' })
   })
 
   it.each([

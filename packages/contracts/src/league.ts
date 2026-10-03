@@ -390,6 +390,41 @@ export const DivisionStandingsResponseSchema = z.object({
   }))
 });
 
+export const LeagueWorkspaceResponseSchema = z.object({
+  leagueId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  team: z.object({
+    leagueTeamId: ResourceIdSchema,
+    name: z.string().trim().min(1).max(64),
+    shortName: z.string().trim().min(1).max(24),
+    logoUrl: z.string().url().nullable()
+  }),
+  division: z.object({
+    stageId: ResourceIdSchema,
+    stageCode: CompetitionStageCodeSchema,
+    displayName: z.string().trim().min(1).max(64)
+  }).nullable(),
+  currentRank: z.object({
+    rank: z.number().int().positive(),
+    points: z.number().int(),
+    played: z.number().int().nonnegative(),
+    tiePending: z.boolean()
+  }).nullable(),
+  nextMatch: z.object({
+    id: ResourceIdSchema,
+    roundNumber: z.number().int().positive(),
+    plannedAt: TimestampSchema.nullable(),
+    opponentName: z.string().trim().min(1).max(64),
+    side: z.enum(['HOME', 'AWAY'])
+  }).nullable(),
+  capabilities: z.object({
+    canViewStandings: z.boolean(),
+    canViewAssets: z.boolean(),
+    canViewFinance: z.boolean(),
+    canManageValuations: z.boolean()
+  })
+});
+
 export type LeagueStatus = z.infer<typeof LeagueStatusSchema>;
 export type LeagueEdition = z.infer<typeof LeagueEditionSchema>;
 export type TeamProfileStatus = z.infer<typeof TeamProfileStatusSchema>;
@@ -436,3 +471,4 @@ export type SeasonAllocationProposalRow = z.infer<typeof SeasonAllocationProposa
 export type SeasonAllocationProposal = z.infer<typeof SeasonAllocationProposalSchema>;
 export type SeasonAllocationDecision = z.infer<typeof SeasonAllocationDecisionSchema>;
 export type DivisionStandingsResponse = z.infer<typeof DivisionStandingsResponseSchema>;
+export type LeagueWorkspaceResponse = z.infer<typeof LeagueWorkspaceResponseSchema>;

@@ -84,6 +84,23 @@
       <text class="standings-entry__arrow">{{standingsEnabled ? '→' : '锁定'}}</text>
     </view>
 
+    <view wx:if="{{workspace && workspaceView}}" class="workspace-card">
+      <view class="workspace-head">
+        <view><text class="section-kicker">我的联赛工作台</text><text class="workspace-title">{{workspaceView.teamName}}</text></view>
+        <text class="workspace-division">{{workspaceView.divisionName}}</text>
+      </view>
+      <view class="workspace-metrics">
+        <view><text class="workspace-metric__label">当前排名</text><text class="workspace-rank">{{workspaceView.rank}}</text><text class="workspace-metric__meta">{{workspaceView.rankMeta}}</text></view>
+        <view><text class="workspace-metric__label">下一场</text><text class="workspace-next">{{workspaceView.nextMatch}}</text><text class="workspace-metric__meta">{{workspaceView.nextMatchTime}}</text></view>
+      </view>
+      <view class="module-grid">
+        <view wx:if="{{workspace.capabilities.canViewStandings}}" bindtap="openStandings"><text>积分榜</text><text>排名与数据 →</text></view>
+        <view wx:if="{{workspace.capabilities.canViewAssets}}" bindtap="openAssets"><text>球队资产</text><text>阵容与价值 →</text></view>
+        <view wx:if="{{workspace.capabilities.canViewFinance}}" bindtap="openFinance"><text>球队财务</text><text>流水与余额 →</text></view>
+        <view wx:if="{{workspace.capabilities.canManageValuations}}" bindtap="openValuations"><text>身价管理</text><text>窗口内填报 →</text></view>
+      </view>
+    </view>
+
     <view wx:else class="state-card compact">
       <text class="state-code">等待发布</text>
       <text class="state-title">暂无公开赛季</text>

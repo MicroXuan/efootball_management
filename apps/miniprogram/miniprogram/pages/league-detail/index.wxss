@@ -13,6 +13,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .season-board,
 .entry-card,
 .standings-entry,
+.workspace-card,
 .state-card {
   margin-top: 22rpx;
   padding: 30rpx;
@@ -116,3 +117,4 @@ page { background: #0e1417; color: #f4f7f8; }
 .standings-entry__arrow { color:#b6f13a;font-size:30rpx;font-weight:850; }
 .standings-entry.is-locked { opacity:.72; }
 .standings-entry.is-locked .standings-entry__arrow { color:#7e8b91;font-size:18rpx;letter-spacing:2rpx; }
+.workspace-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx}.workspace-title{display:block;margin-top:9rpx;font-size:34rpx;font-weight:850}.workspace-division{padding:10rpx 15rpx;border:2rpx solid #546b37;border-radius:18rpx;background:#202c25;color:#d9efac;font-size:18rpx;font-weight:800}.workspace-metrics{display:grid;grid-template-columns:180rpx minmax(0,1fr);gap:14rpx;margin-top:26rpx}.workspace-metrics>view{min-width:0;padding:22rpx;border:2rpx solid #2d393f;border-radius:18rpx;background:#1c262b}.workspace-metric__label,.workspace-metric__meta{display:block;color:#aab5ba;font-size:17rpx}.workspace-rank{display:block;margin-top:8rpx;color:#b6f13a;font-size:48rpx;font-weight:900}.workspace-next{display:block;margin-top:10rpx;font-size:22rpx;font-weight:850;line-height:1.35}.workspace-metric__meta{margin-top:8rpx}.module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14rpx;margin-top:16rpx}.module-grid view{padding:21rpx;border:2rpx solid #344047;border-radius:16rpx;background:#151d21}.module-grid text{display:block;font-size:21rpx;font-weight:800}.module-grid text+text{margin-top:7rpx;color:#aab5ba;font-size:17rpx;font-weight:600}

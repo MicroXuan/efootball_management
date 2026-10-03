@@ -13,6 +13,7 @@ import {
   CompetitionTypeSchema,
   ConfirmSeasonAllocationRequestSchema,
   DivisionStandingsResponseSchema,
+  LeagueWorkspaceResponseSchema,
   GenerateSeasonAllocationRequestSchema,
   GenerateStageScheduleRequestSchema,
   SeasonAllocationDecisionSchema,
@@ -1226,6 +1227,20 @@ describe('tiered league contracts', () => {
         }
       }]
     }).groups[0]?.standings.rows[0]?.rank, 1);
+  });
+
+  it('parses an enrolled league workspace summary', () => {
+    const workspace = LeagueWorkspaceResponseSchema.parse({
+      leagueId: '11111111-1111-4111-8111-111111111111', seasonId: '22222222-2222-4222-8222-222222222222',
+      team: { leagueTeamId: '33333333-3333-4333-8333-333333333333', name: '上海海港', shortName: '海港', logoUrl: null },
+      division: { stageId: '44444444-4444-4444-8444-444444444444', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
+      currentRank: { rank: 2, points: 13, played: 6, tiePending: false },
+      nextMatch: { id: '55555555-5555-4555-8555-555555555555', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
+      capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true }
+    });
+
+    assert.equal(workspace.currentRank?.rank, 2);
+    assert.equal(workspace.nextMatch?.opponentName, '申花');
   });
 
   it('rejects invalid stage codes, seeds, duplicate overrides, and empty reasons', () => {

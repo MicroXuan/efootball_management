@@ -11,6 +11,7 @@ import type {
   LeagueSeasonDetail,
   LeagueSeasonSummary,
   DivisionStandingsResponse,
+  LeagueWorkspaceResponse,
   OverrideSeasonEntryRequest,
   ParsedCreateLeagueRequest,
   ParsedCreateLeagueSeasonRequest,
@@ -67,6 +68,11 @@ export const leaguesApi = {
   divisionStandings(leagueId: string, seasonId: string) {
     return api.request<DivisionStandingsResponse>({
       path: `/me/leagues/${id(leagueId)}/seasons/${id(seasonId)}/division-standings`,
+    })
+  },
+  workspace(leagueId: string, seasonId: string) {
+    return api.request<LeagueWorkspaceResponse>({
+      path: query(`/me/leagues/${id(leagueId)}/workspace`, { seasonId }),
     })
   },
   apply(seasonId: string, input: CreateSeasonApplicationRequest) {

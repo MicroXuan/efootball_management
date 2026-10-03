@@ -1,4 +1,4 @@
-import type { LeagueSeasonStatus, LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
+import type { LeagueSeasonStatus, LeagueSeasonSummary, LeagueWorkspaceResponse, SeasonEntryResponse } from '@efm/contracts'
 
 export type SeasonRailStep = {
   key: 'registration' | 'confirmation' | 'schedule' | 'settlement'
@@ -72,6 +72,24 @@ export function standingsAccess(entry: SeasonEntryResponse | null): {
     return { enabled: true, label: '查看分组积分榜', hint: '查看各组实时排名与比赛数据' }
   }
   return { enabled: false, label: '报名后开放', hint: '仅当前赛季正式参赛球队可查看' }
+}
+
+export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
+  const rank = workspace.currentRank
+    ? `${workspace.currentRank.rank}${workspace.currentRank.tiePending ? '*' : ''}`
+    : '—'
+  const nextMatch = workspace.nextMatch
+    ? `第 ${workspace.nextMatch.roundNumber} 轮 · 对阵 ${workspace.nextMatch.opponentName}`
+    : '暂无待进行比赛'
+  return {
+    teamName: workspace.team.name,
+    teamShortName: workspace.team.shortName,
+    divisionName: workspace.division?.displayName ?? '等待正式分组',
+    rank,
+    rankMeta: workspace.currentRank ? `${workspace.currentRank.played} 场 · ${workspace.currentRank.points} 分` : '排名尚未产生',
+    nextMatch,
+    nextMatchTime: workspace.nextMatch?.plannedAt?.slice(0, 16).replace('T', ' ') ?? '时间待定',
+  }
 }
 
 export function leagueDetailErrorMessage(code: string): string {
