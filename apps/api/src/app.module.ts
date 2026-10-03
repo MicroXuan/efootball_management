@@ -12,6 +12,7 @@ import { LeaguesModule } from './leagues/leagues.module.js';
 import { LeagueTeamsModule } from './league-teams/league-teams.module.js';
 import { LeagueRostersModule } from './league-rosters/league-rosters.module.js';
 import { LeagueEconomyModule } from './league-economy/league-economy.module.js';
+import { LeagueAllocationModule } from './league-allocation/league-allocation.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerFavoritesModule } from './player-favorites/player-favorites.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
@@ -39,6 +40,7 @@ import { StorageModule } from './storage/storage.module.js';
     LeagueTeamsModule,
     LeagueRostersModule,
     LeagueEconomyModule,
+    LeagueAllocationModule,
     PlayerCatalogModule,
     PlayerFavoritesModule,
     PlayerBuildsModule,
