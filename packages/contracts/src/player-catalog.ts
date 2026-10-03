@@ -109,6 +109,37 @@ export const CardPackDetailSchema = CardPackSummarySchema.extend({
   cards: z.array(PlayerCardSummarySchema)
 });
 
+export const CreatePlayerFavoriteRequestSchema = z.object({
+  playerId: ResourceIdSchema
+});
+
+export const PlayerFavoriteListQuerySchema = z.object({
+  keyword: z.string().trim().min(1).max(80).optional(),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20)
+});
+
+export const PlayerFavoriteStatusQuerySchema = z.object({
+  playerIds: z.string().trim().min(1)
+    .transform((value) => [...new Set(value.split(',').map((id) => id.trim()).filter(Boolean))])
+    .pipe(z.array(ResourceIdSchema).min(1).max(100))
+});
+
+export const PlayerFavoriteItemSchema = z.object({
+  playerId: ResourceIdSchema,
+  favoritedAt: z.iso.datetime(),
+  card: PlayerCardSummarySchema
+});
+
+export const PlayerFavoriteListResponseSchema = z.object({
+  items: z.array(PlayerFavoriteItemSchema),
+  nextCursor: z.string().nullable()
+});
+
+export const PlayerFavoriteStatusResponseSchema = z.object({
+  favoritePlayerIds: z.array(ResourceIdSchema)
+});
+
 export type PlayerPosition = z.infer<typeof PlayerPositionSchema>;
 export type PlayerCardType = z.infer<typeof PlayerCardTypeSchema>;
 export type PlayerCardStatus = z.infer<typeof PlayerCardStatusSchema>;
@@ -120,3 +151,9 @@ export type PlayerCardDetail = z.infer<typeof PlayerCardDetailSchema>;
 export type CardPackSummary = z.infer<typeof CardPackSummarySchema>;
 export type CardPackListResponse = z.infer<typeof CardPackListResponseSchema>;
 export type CardPackDetail = z.infer<typeof CardPackDetailSchema>;
+export type CreatePlayerFavoriteRequest = z.infer<typeof CreatePlayerFavoriteRequestSchema>;
+export type PlayerFavoriteListQuery = z.output<typeof PlayerFavoriteListQuerySchema>;
+export type PlayerFavoriteStatusQuery = z.output<typeof PlayerFavoriteStatusQuerySchema>;
+export type PlayerFavoriteItem = z.infer<typeof PlayerFavoriteItemSchema>;
+export type PlayerFavoriteListResponse = z.infer<typeof PlayerFavoriteListResponseSchema>;
+export type PlayerFavoriteStatusResponse = z.infer<typeof PlayerFavoriteStatusResponseSchema>;

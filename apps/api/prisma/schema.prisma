@@ -313,6 +313,7 @@ model User {
   leagueSeasonHistoryActions       LeagueSeasonStatusHistory[]            @relation("LeagueSeasonStatusActor")
   valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
   auditLogs                        AuditLog[]                             @relation("AuditUserActor")
+  playerFavorites                 UserPlayerFavorite[]
 
   @@map("users")
 }
@@ -1080,11 +1081,27 @@ model FootballPlayer {
   leagueValuations             LeaguePlayerValuation[]
   valuationHistory             PlayerValuationHistory[]
   importRecords                ImportRecord[]
+  favoritedBy                  UserPlayerFavorite[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
   @@index([normalizedNameEn], map: "football_players_name_en_idx")
   @@index([publishedAt], map: "football_players_published_at_idx")
   @@map("football_players")
+}
+
+model UserPlayerFavorite {
+  id               String         @id @default(uuid()) @db.Char(36)
+  userId           String         @map("user_id") @db.Char(36)
+  footballPlayerId String         @map("football_player_id") @db.Char(36)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  footballPlayer   FootballPlayer @relation(fields: [footballPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, footballPlayerId], map: "user_player_favorites_user_player_unique")
+  @@index([userId, createdAt, id], map: "user_player_favorites_user_created_idx")
+  @@index([footballPlayerId], map: "user_player_favorites_player_idx")
+  @@map("user_player_favorites")
 }
 
 model FootballPlayerSource {

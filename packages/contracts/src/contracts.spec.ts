@@ -9,6 +9,7 @@ import {
   CompetitionFormatSchema,
   CompetitionParticipantTypeSchema,
   CreateCompetitionRequestSchema,
+  CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
   CreateLeagueTeamRequestSchema,
@@ -22,6 +23,8 @@ import {
   NormalizedPlayerCardRecordSchema,
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
+  PlayerFavoriteListQuerySchema,
+  PlayerFavoriteStatusQuerySchema,
   PublicUserLookupSchema,
   PublicUserNumberSchema,
   RecalculateLeagueSalaryRequestSchema,
@@ -524,6 +527,31 @@ describe('shared API contracts', () => {
 
     assert.deepEqual(query, { keyword: '亚马尔', minOverall: 90, limit: 20 });
     assert.throws(() => PlayerSearchQuerySchema.parse({ limit: 101 }));
+  });
+
+  it('validates player favorite requests and bounded list queries', () => {
+    const playerId = '11111111-1111-4111-8111-111111111111';
+    assert.equal(CreatePlayerFavoriteRequestSchema.parse({ playerId }).playerId, playerId);
+    assert.throws(() => CreatePlayerFavoriteRequestSchema.parse({ playerId: 'player-1' }));
+
+    const query = PlayerFavoriteListQuerySchema.parse({ keyword: '  梅西  ' });
+    assert.equal(query.keyword, '梅西');
+    assert.equal(query.limit, 20);
+    assert.equal(PlayerFavoriteListQuerySchema.parse({ limit: 100 }).limit, 100);
+    assert.throws(() => PlayerFavoriteListQuerySchema.parse({ limit: 101 }));
+  });
+
+  it('rejects oversized favorite status queries', () => {
+    const first = '11111111-1111-4111-8111-111111111111';
+    const second = '22222222-2222-4222-8222-222222222222';
+    assert.deepEqual(
+      PlayerFavoriteStatusQuerySchema.parse({ playerIds: `${first},${first},${second}` }).playerIds,
+      [first, second]
+    );
+    const tooMany = Array.from({ length: 101 }, (_, index) => (
+      `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+    )).join(',');
+    assert.throws(() => PlayerFavoriteStatusQuerySchema.parse({ playerIds: tooMany }));
   });
 
   it('rejects an import record without either player name', () => {
