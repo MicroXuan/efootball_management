@@ -76,3 +76,43 @@ it('confirms an adjusted group with its reason and shows formal stage counts', a
   ));
   expect(await screen.findByText('1 支球队')).toBeInTheDocument();
 });
+
+it('restores confirmed stages after reload and advances the season version only on first publish', async () => {
+  const stageA = '77777777-7777-4777-8777-777777777777';
+  const stageB = '88888888-8888-4888-8888-888888888888';
+  const confirmedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId: '66666666-6666-4666-8666-666666666666', seasonVersion: 4, seasonStatus: 'READY' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_B' as const, reason: '平衡组别人数' }],
+      stages: [
+        { id: stageA, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组', participantCount: 10, matchCount: 45, status: 'DRAFT' as const, version: 2 },
+        { id: stageB, stageCode: 'CHAMPION_B' as const, displayName: '冠军 B 组', participantCount: 9, matchCount: 36, status: 'DRAFT' as const, version: 2 },
+      ],
+    },
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: Record<string, number> }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return confirmedProposal;
+    if (path.endsWith('/schedule/publish') && options?.method === 'POST') return {
+      id: path.includes(stageA) ? stageA : stageB,
+      competitionId: confirmedProposal.confirmedAllocation.competitionId,
+      status: 'PUBLISHED', version: 3, roundCount: 9, matchCount: path.includes(stageA) ? 45 : 36, matches: [],
+    };
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  expect(await screen.findByText('10 支球队')).toBeInTheDocument();
+  expect(screen.getByLabelText('上海海港调整原因')).toHaveValue('平衡组别人数');
+  const publishButtons = screen.getAllByRole('button', { name: '发布赛程' });
+  await userEvent.click(publishButtons[0]!);
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    expect.stringContaining(stageA), expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: 4 } })
+  ));
+  await userEvent.click(screen.getAllByRole('button', { name: '发布赛程' })[1]!);
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    expect.stringContaining(stageB), expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: 5 } })
+  ));
+});

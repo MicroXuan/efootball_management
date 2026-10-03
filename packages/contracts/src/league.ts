@@ -359,7 +359,26 @@ export const SeasonAllocationProposalSchema = z.object({
   algorithmVersion: z.string().trim().min(1).max(32),
   randomSeed: z.number().int().positive(),
   rows: z.array(SeasonAllocationProposalRowSchema),
-  createdAt: TimestampSchema
+  createdAt: TimestampSchema,
+  confirmedAllocation: z.object({
+    competitionId: ResourceIdSchema,
+    seasonVersion: z.number().int().positive(),
+    seasonStatus: LeagueSeasonStatusSchema,
+    stages: z.array(z.object({
+      id: ResourceIdSchema,
+      stageCode: CompetitionStageCodeSchema,
+      displayName: z.string().trim().min(1).max(64),
+      participantCount: z.number().int().nonnegative(),
+      matchCount: z.number().int().nonnegative(),
+      status: z.enum(['DRAFT', 'PUBLISHED']),
+      version: z.number().int().positive()
+    })),
+    decisions: z.array(z.object({
+      seasonEntryId: ResourceIdSchema,
+      finalStageCode: CompetitionStageCodeSchema,
+      reason: z.string().nullable()
+    }))
+  }).nullable().optional()
 });
 
 export const SeasonAllocationDecisionSchema = z.object({

@@ -24,22 +24,24 @@ export class LeagueWorkspaceService {
 
     const participant = entry.competitionParticipant;
     const stage = participant?.stageMemberships[0]?.stage ?? null;
-    const snapshot = stage && participant ? await this.prisma.standingsSnapshot.findFirst({
-      where: { stageId: stage.id },
-      orderBy: { version: 'desc' },
-      include: { rows: { where: { participantId: participant.id }, take: 1 } }
-    }) : null;
+    const [snapshot, matches, valuationWindow] = await Promise.all([
+      stage && participant ? this.prisma.standingsSnapshot.findFirst({
+        where: { stageId: stage.id },
+        orderBy: { version: 'desc' },
+        include: { rows: { where: { participantId: participant.id }, take: 1 } }
+      }) : Promise.resolve(null),
+      stage && participant ? this.prisma.competitionMatch.findMany({
+        where: {
+          stageId: stage.id,
+          officialResultVersionId: null,
+          status: { notIn: ['CONFIRMED', 'ADMIN_DECIDED'] },
+          OR: [{ homeParticipantId: participant.id }, { awayParticipantId: participant.id }]
+        },
+        include: { homeParticipant: true, awayParticipant: true }
+      }) : Promise.resolve([]),
+      this.prisma.valuationWindow.findFirst({ where: { seasonId }, select: { id: true } })
+    ]);
     const rank = snapshot?.rows[0] ?? null;
-
-    const matches = stage && participant ? await this.prisma.competitionMatch.findMany({
-      where: {
-        stageId: stage.id,
-        officialResultVersionId: null,
-        status: { notIn: ['CONFIRMED', 'ADMIN_DECIDED'] },
-        OR: [{ homeParticipantId: participant.id }, { awayParticipantId: participant.id }]
-      },
-      include: { homeParticipant: true, awayParticipant: true }
-    }) : [];
     matches.sort((left, right) => {
       const leftTime = left.plannedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const rightTime = right.plannedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
@@ -76,10 +78,10 @@ export class LeagueWorkspaceService {
         side: isHome ? 'HOME' : 'AWAY'
       } : null,
       capabilities: {
-        canViewStandings: true,
+        canViewStandings: Boolean(stage),
         canViewAssets: true,
         canViewFinance: true,
-        canManageValuations: true
+        canManageValuations: Boolean(valuationWindow)
       }
     };
   }

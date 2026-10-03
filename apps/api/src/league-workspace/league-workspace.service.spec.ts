@@ -16,6 +16,7 @@ function prisma(overrides: Record<string, unknown> = {}) {
     seasonEntry: { findFirst: jest.fn(async () => entry()) },
     standingsSnapshot: { findFirst: jest.fn(async () => ({ rows: [{ rank: 2, totalPoints: 13, played: 6, tiePending: false }] })) },
     competitionMatch: { findMany: jest.fn(async () => []) },
+    valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
     ...overrides
   } as never;
 }
@@ -44,6 +45,13 @@ describe('LeagueWorkspaceService', () => {
     expect(result.division).toBeNull();
     expect(result.currentRank).toBeNull();
     expect(result.nextMatch).toBeNull();
+    expect(result.capabilities.canViewStandings).toBe(false);
+  });
+
+  it('does not expose valuation management when the season has no valuation window', async () => {
+    const service = new LeagueWorkspaceService(prisma({ valuationWindow: { findFirst: jest.fn(async () => null) } }));
+    const result = await service.get('user-1', 'league-1', 'season-1');
+    expect(result.capabilities.canManageValuations).toBe(false);
   });
 
   it('selects the earliest planned unfinished match then round and returns the opponent', async () => {

@@ -157,7 +157,7 @@ export class LeagueAllocationService {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     const season = await this.prisma.leagueSeason.findUnique({
       where: { id: seasonId },
-      select: { leagueId: true }
+      select: { leagueId: true, version: true, status: true }
     });
     if (!season || season.leagueId !== leagueId) {
       throw new LeagueAllocationError('SEASON_NOT_IN_LEAGUE', '赛季不属于当前联赛', 404);
@@ -170,7 +170,42 @@ export class LeagueAllocationService {
     if (!proposal) {
       throw new LeagueAllocationError('ALLOCATION_PROPOSAL_NOT_FOUND', '当前赛季尚未生成分组建议', 404);
     }
-    return this.response(proposal);
+    if (proposal.status !== 'CONFIRMED') return this.response(proposal);
+    const [competition, decisions] = await Promise.all([
+      this.prisma.competition.findFirst({
+        where: { seasonId, competitionType: 'DIVISION_LEAGUE' },
+        include: {
+          stages: {
+            where: { stageCode: { not: null } },
+            include: { _count: { select: { participants: true, matches: true } } },
+            orderBy: [{ sequence: 'asc' }, { id: 'asc' }]
+          }
+        }
+      }),
+      this.prisma.seasonAllocationDecision.findMany({ where: { proposalId: proposal.id } })
+    ]);
+    return {
+      ...this.response(proposal),
+      confirmedAllocation: competition ? {
+        competitionId: competition.id,
+        seasonVersion: season.version,
+        seasonStatus: season.status,
+        stages: competition.stages.map((stage) => ({
+          id: stage.id,
+          stageCode: stage.stageCode!,
+          displayName: stage.displayName!,
+          participantCount: stage._count.participants,
+          matchCount: stage._count.matches,
+          status: stage.status,
+          version: stage.version
+        })),
+        decisions: decisions.map((decision) => ({
+          seasonEntryId: decision.seasonEntryId,
+          finalStageCode: decision.finalStageCode,
+          reason: decision.reason
+        }))
+      } : null
+    };
   }
 
   async confirm(

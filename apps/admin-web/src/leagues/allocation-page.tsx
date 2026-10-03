@@ -14,8 +14,11 @@ import { useMutationKey } from '../lib/mutation-key';
 const SeasonListSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
 const ConfirmedSchema = z.object({
   seasonId: z.string(), competitionId: z.string(), stageCount: z.number(), participantCount: z.number(),
-  status: z.literal('READY'), version: z.number(),
-  stages: z.array(z.object({ id: z.string(), stageCode: z.string(), displayName: z.string(), participantCount: z.number() }))
+  status: z.enum(['READY', 'IN_PROGRESS']), version: z.number(),
+  stages: z.array(z.object({
+    id: z.string(), stageCode: z.string(), displayName: z.string(), participantCount: z.number(),
+    matchCount: z.number().default(0), status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'), version: z.number().default(1)
+  }))
 });
 const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
@@ -48,8 +51,20 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
         { schema: SeasonAllocationProposalSchema }
       );
       setProposal(result);
-      setTargets(Object.fromEntries(result.rows.map((row) => [row.seasonEntryId, row.suggestedStageCode])));
-      setReasons({});
+      const decisions = new Map(result.confirmedAllocation?.decisions.map((decision) => [decision.seasonEntryId, decision]));
+      setTargets(Object.fromEntries(result.rows.map((row) => [row.seasonEntryId, decisions.get(row.seasonEntryId)?.finalStageCode ?? row.suggestedStageCode])));
+      setReasons(Object.fromEntries(result.confirmedAllocation?.decisions.map((decision) => [decision.seasonEntryId, decision.reason ?? '']) ?? []));
+      if (result.confirmedAllocation) {
+        setConfirmed(ConfirmedSchema.parse({
+          seasonId: targetSeasonId,
+          competitionId: result.confirmedAllocation.competitionId,
+          stageCount: result.confirmedAllocation.stages.length,
+          participantCount: result.confirmedAllocation.stages.reduce((total, stage) => total + stage.participantCount, 0),
+          status: result.confirmedAllocation.seasonStatus === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'READY',
+          version: result.confirmedAllocation.seasonVersion,
+          stages: result.confirmedAllocation.stages
+        }));
+      } else setConfirmed(null);
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 404) setProposal(null);
       else setError('分组建议加载失败，请重试');
@@ -109,7 +124,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
         method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: ConfirmedSchema,
         body: { proposalId: proposal.id, expectedSeasonVersion: season.version, overrides }
       });
-      mutationKey.reset(); setConfirmed(result);
+      mutationKey.reset(); setConfirmed(ConfirmedSchema.parse(result));
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 409) {
         setError('数据已被其他管理员更新，已为你刷新'); await load();
@@ -118,21 +133,38 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   };
 
   const generateSchedule = async (stageId: string) => {
-    const version = scheduleVersions[stageId] ?? 1;
+    const version = confirmed?.stages.find((stage) => stage.id === stageId)?.version ?? scheduleVersions[stageId] ?? 1;
     const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/generate`, {
       method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
       body: { expectedStageVersion: version }
     });
-    mutationKey.reset(); setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+    mutationKey.reset();
+    setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+    setConfirmed((current) => current ? {
+      ...current,
+      stages: current.stages.map((stage) => stage.id === stageId
+        ? { ...stage, version: preview.version, matchCount: preview.matchCount }
+        : stage)
+    } : current);
   };
 
   const publishSchedule = async (stageId: string) => {
     if (!confirmed) return;
+    const stageVersion = confirmed.stages.find((stage) => stage.id === stageId)?.version ?? scheduleVersions[stageId] ?? 1;
     const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/publish`, {
       method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
-      body: { expectedStageVersion: scheduleVersions[stageId] ?? 1, expectedSeasonVersion: confirmed.version }
+      body: { expectedStageVersion: stageVersion, expectedSeasonVersion: confirmed.version }
     });
-    mutationKey.reset(); setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+    mutationKey.reset();
+    setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+    setConfirmed((current) => current ? {
+      ...current,
+      status: 'IN_PROGRESS',
+      version: current.status === 'READY' ? current.version + 1 : current.version,
+      stages: current.stages.map((stage) => stage.id === stageId
+        ? { ...stage, version: preview.version, status: 'PUBLISHED' }
+        : stage)
+    } : current);
   };
 
   if (loading) return <div className="loading-block"><Spin /></div>;
@@ -154,6 +186,6 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
       ]} />
       <Button type="primary" disabled={Boolean(confirmed)} loading={submitting} onClick={() => void confirm()}>确认正式分组</Button>
     </Card>}
-    {confirmed ? <Card title="正式组别与赛程" className="data-card"><div className="allocation-stage-grid">{confirmed.stages.map((stage) => <article key={stage.id} className="allocation-stage-card"><div><Tag color="green">{stage.displayName}</Tag><strong>{stage.participantCount} 支球队</strong></div><Space><Button onClick={() => void generateSchedule(stage.id)}>生成预览</Button><Button type="primary" disabled={!scheduleVersions[stage.id]} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button></Space></article>)}</div></Card> : null}
+    {confirmed ? <Card title="正式组别与赛程" className="data-card"><div className="allocation-stage-grid">{confirmed.stages.map((stage) => <article key={stage.id} className="allocation-stage-card"><div><Tag color={stage.status === 'PUBLISHED' ? 'green' : 'gold'}>{stage.displayName}</Tag><strong>{stage.participantCount} 支球队</strong><span className="muted-copy">{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? `${stage.matchCount} 场待发布` : '尚未生成赛程'}</span></div><Space><Button disabled={stage.status === 'PUBLISHED'} onClick={() => void generateSchedule(stage.id)}>生成预览</Button><Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button></Space></article>)}</div></Card> : null}
   </div>;
 }
