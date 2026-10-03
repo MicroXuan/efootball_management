@@ -14,6 +14,7 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
 
 type TeamWithOwner = LeagueTeam & { owner: User; _count: { seasonEntries: number } };
 type TeamRosterMetrics = { activePlayerCount: number; salaryTotalMinor: number; salaryCapMinor: number };
@@ -46,6 +47,7 @@ export class LeagueTeamsService {
       const owner = await transaction.user.findUnique({ where: { id: input.ownerUserId } });
       if (!owner?.publicUserNo) throw this.notFound('PUBLIC_USER_NOT_FOUND', 'User was not found');
       await this.assertAvailable(transaction, leagueId, owner.id, input.teamNumber);
+      await synchronizeSeasonValuationSnapshots(transaction, league.currentSeasonId);
 
       try {
         const team = await transaction.leagueTeam.create({
