@@ -3,9 +3,13 @@ import {
   CreateSeasonCupRequestSchema,
   ConfirmCupGroupProposalRequestSchema,
   GenerateCupGroupProposalRequestSchema,
+  ConfirmCupBracketProposalRequestSchema,
+  GenerateCupBracketProposalRequestSchema,
   ResourceIdSchema,
   type ConfirmCupGroupProposalRequest,
   type GenerateCupGroupProposalRequest,
+  type ConfirmCupBracketProposalRequest,
+  type GenerateCupBracketProposalRequest,
   type ParsedCreateSeasonCupRequest
 } from '@efm/contracts';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard.js';
@@ -15,13 +19,15 @@ import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { CompetitionError } from './competition.errors.js';
 import { CupCompetitionsService } from './cup-competitions.service.js';
 import { CupGroupsService } from './cup-groups.service.js';
+import { CupBracketsService } from './cup-brackets.service.js';
 
 @Controller('admin/leagues/:leagueId/seasons/:seasonId/cups')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
 export class AdminCupCompetitionsController {
   constructor(
     @Inject(CupCompetitionsService) private readonly cups: CupCompetitionsService,
-    @Inject(CupGroupsService) private readonly groups: CupGroupsService
+    @Inject(CupGroupsService) private readonly groups: CupGroupsService,
+    @Inject(CupBracketsService) private readonly brackets: CupBracketsService
   ) {}
 
   @Post()
@@ -58,6 +64,28 @@ export class AdminCupCompetitionsController {
     @Body(new ZodValidationPipe(ConfirmCupGroupProposalRequestSchema)) body: ConfirmCupGroupProposalRequest
   ) {
     return this.groups.confirm(admin.id, leagueId, competitionId, body, this.key(key));
+  }
+
+  @Post(':competitionId/bracket-proposals')
+  generateBracket(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(GenerateCupBracketProposalRequestSchema)) body: GenerateCupBracketProposalRequest
+  ) {
+    return this.brackets.generate(admin.id, leagueId, competitionId, body, this.key(key));
+  }
+
+  @Post(':competitionId/bracket-decisions')
+  confirmBracket(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(ConfirmCupBracketProposalRequestSchema)) body: ConfirmCupBracketProposalRequest
+  ) {
+    return this.brackets.confirm(admin.id, leagueId, competitionId, body, this.key(key));
   }
 
   private key(value: string | undefined): string {

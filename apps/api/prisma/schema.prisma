@@ -476,6 +476,7 @@ model AdminAccount {
   createdCompetitions          Competition[]                     @relation("CompetitionAdminCreator")
   createdCompetitionRules      CompetitionRuleVersion[]          @relation("CompetitionRuleAdminCreator")
   cupGroupProposals            CupGroupProposal[]                @relation("CupGroupProposalCreator")
+  cupBracketProposals          CupBracketProposal[]              @relation("CupBracketProposalCreator")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -1493,6 +1494,7 @@ model Competition {
   standingsSnapshots   StandingsSnapshot[]
   cupConfig            CupCompetitionConfig?
   cupGroupProposals    CupGroupProposal[]
+  cupBracketProposals  CupBracketProposal[]
 
   @@index([status, registrationOpensAt, id], map: "competitions_public_list_idx")
   @@index([createdById], map: "competitions_creator_idx")
@@ -1590,6 +1592,10 @@ model CompetitionParticipant {
   standingsRows        StandingsRow[]
   stageMemberships     StageParticipant[]
   cupGroupProposalRows CupGroupProposalRow[]
+  bracketHomeSlots     CupBracketPairing[]      @relation("CupBracketHomeParticipant")
+  bracketAwaySlots     CupBracketPairing[]      @relation("CupBracketAwayParticipant")
+  bracketByes          CupBracketPairing[]      @relation("CupBracketByeParticipant")
+  bracketWins          CupBracketPairing[]      @relation("CupBracketWinnerParticipant")
 
   @@unique([competitionId, admissionSequence], map: "competition_participants_sequence_unique")
   @@unique([competitionId, individualUserId], map: "competition_participants_user_unique")
@@ -1649,6 +1655,77 @@ model CupGroupProposalRow {
   @@unique([proposalId, participantId], map: "cup_group_proposal_rows_participant_unique")
   @@index([participantId], map: "cup_group_proposal_rows_participant_idx")
   @@map("cup_group_proposal_rows")
+}
+
+model CupBracketProposal {
+  id               String            @id @default(uuid()) @db.Char(36)
+  competitionId    String            @map("competition_id") @db.Char(36)
+  version          Int               @db.UnsignedInt
+  status           CupProposalStatus @default(DRAFT)
+  algorithmVersion String            @map("algorithm_version") @db.VarChar(32)
+  randomSeed       Int               @map("random_seed") @db.UnsignedInt
+  bracketSize      Int               @map("bracket_size") @db.UnsignedSmallInt
+  inputSummary     Json?             @map("input_summary")
+  createdByAdminId String            @map("created_by_admin_id") @db.Char(36)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  competition      Competition       @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount      @relation("CupBracketProposalCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  rounds           CupBracketRound[]
+
+  @@unique([competitionId, version], map: "cup_bracket_proposals_version_unique")
+  @@index([competitionId, status], map: "cup_bracket_proposals_status_idx")
+  @@index([createdByAdminId], map: "cup_bracket_proposals_creator_idx")
+  @@map("cup_bracket_proposals")
+}
+
+model CupBracketRound {
+  id            String              @id @default(uuid()) @db.Char(36)
+  proposalId    String              @map("proposal_id") @db.Char(36)
+  roundNumber   Int                 @map("round_number") @db.UnsignedSmallInt
+  stageCode     String              @map("stage_code") @db.VarChar(32)
+  displayName   String              @map("display_name") @db.VarChar(64)
+  createdAt     DateTime            @default(now()) @map("created_at")
+  proposal      CupBracketProposal  @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  pairings      CupBracketPairing[]
+
+  @@unique([proposalId, roundNumber], map: "cup_bracket_rounds_number_unique")
+  @@unique([proposalId, stageCode], map: "cup_bracket_rounds_stage_unique")
+  @@map("cup_bracket_rounds")
+}
+
+model CupBracketPairing {
+  id                    String                  @id @default(uuid()) @db.Char(36)
+  roundId               String                  @map("round_id") @db.Char(36)
+  pairingNumber         Int                     @map("pairing_number") @db.UnsignedSmallInt
+  homeParticipantId     String?                 @map("home_participant_id") @db.Char(36)
+  awayParticipantId     String?                 @map("away_participant_id") @db.Char(36)
+  homeSourcePairingId   String?                 @map("home_source_pairing_id") @db.Char(36)
+  awaySourcePairingId   String?                 @map("away_source_pairing_id") @db.Char(36)
+  byeParticipantId      String?                 @map("bye_participant_id") @db.Char(36)
+  matchId               String?                 @unique @map("match_id") @db.Char(36)
+  winnerParticipantId   String?                 @map("winner_participant_id") @db.Char(36)
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  round                 CupBracketRound         @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  homeParticipant       CompetitionParticipant? @relation("CupBracketHomeParticipant", fields: [homeParticipantId], references: [id], onDelete: Restrict)
+  awayParticipant       CompetitionParticipant? @relation("CupBracketAwayParticipant", fields: [awayParticipantId], references: [id], onDelete: Restrict)
+  byeParticipant        CompetitionParticipant? @relation("CupBracketByeParticipant", fields: [byeParticipantId], references: [id], onDelete: Restrict)
+  winnerParticipant     CompetitionParticipant? @relation("CupBracketWinnerParticipant", fields: [winnerParticipantId], references: [id], onDelete: Restrict)
+  match                 CompetitionMatch?       @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  homeSourcePairing     CupBracketPairing?       @relation("CupBracketHomeSource", fields: [homeSourcePairingId], references: [id], onDelete: Restrict)
+  homeTargetPairings    CupBracketPairing[]      @relation("CupBracketHomeSource")
+  awaySourcePairing     CupBracketPairing?       @relation("CupBracketAwaySource", fields: [awaySourcePairingId], references: [id], onDelete: Restrict)
+  awayTargetPairings    CupBracketPairing[]      @relation("CupBracketAwaySource")
+
+  @@unique([roundId, pairingNumber], map: "cup_bracket_pairings_number_unique")
+  @@index([homeParticipantId], map: "cup_bracket_pairings_home_idx")
+  @@index([awayParticipantId], map: "cup_bracket_pairings_away_idx")
+  @@index([homeSourcePairingId], map: "cup_bracket_pairings_home_source_idx")
+  @@index([awaySourcePairingId], map: "cup_bracket_pairings_away_source_idx")
+  @@index([byeParticipantId], map: "cup_bracket_pairings_bye_idx")
+  @@index([winnerParticipantId], map: "cup_bracket_pairings_winner_idx")
+  @@map("cup_bracket_pairings")
 }
 
 model CompetitionStage {
@@ -1772,6 +1849,7 @@ model CompetitionMatch {
   awayParticipant         CompetitionParticipant @relation("CompetitionMatchAway", fields: [awayParticipantId], references: [id], onDelete: Restrict)
   resultVersions          MatchResultVersion[]   @relation("MatchResultHistory")
   officialResultVersion   MatchResultVersion?    @relation("OfficialMatchResult", fields: [officialResultVersionId], references: [id], onDelete: Restrict)
+  bracketPairing          CupBracketPairing?
 
   @@unique([stageId, pairingKey], map: "competition_matches_pair_unique")
   @@unique([stageId, matchNumber], map: "competition_matches_number_unique")

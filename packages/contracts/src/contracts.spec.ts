@@ -27,6 +27,9 @@ import {
   GenerateCupGroupProposalRequestSchema,
   ConfirmCupGroupProposalRequestSchema,
   CupGroupProposalSchema,
+  GenerateCupBracketProposalRequestSchema,
+  ConfirmCupBracketProposalRequestSchema,
+  CupBracketProposalSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -1406,5 +1409,61 @@ describe('cup center contracts', () => {
       }],
       createdAt: registrationOpensAt
     }).rows[0]?.suggestedGroupCode, 'GROUP_A');
+  });
+
+  it('validates a versioned knockout bracket with explicit byes and future-round sources', () => {
+    assert.equal(CompetitionStageCodeSchema.parse('ROUND_OF_128'), 'ROUND_OF_128');
+    assert.deepEqual(GenerateCupBracketProposalRequestSchema.parse({
+      expectedCompetitionVersion: 3,
+      randomSeed: 20261003
+    }), { expectedCompetitionVersion: 3, randomSeed: 20261003 });
+    assert.deepEqual(ConfirmCupBracketProposalRequestSchema.parse({
+      proposalId: registrationId,
+      expectedCompetitionVersion: 3
+    }), { proposalId: registrationId, expectedCompetitionVersion: 3 });
+
+    const proposal = CupBracketProposalSchema.parse({
+      id: registrationId,
+      competitionId,
+      version: 1,
+      status: 'DRAFT',
+      algorithmVersion: 'cup-bracket-v1',
+      randomSeed: 20261003,
+      bracketSize: 4,
+      rounds: [{
+        roundNumber: 1,
+        stageCode: 'SEMI_FINAL',
+        displayName: '半决赛',
+        pairings: [{
+          id: userId,
+          pairingNumber: 1,
+          homeParticipantId: entryId,
+          awayParticipantId: null,
+          homeSourcePairingId: null,
+          awaySourcePairingId: null,
+          byeParticipantId: entryId,
+          matchId: null,
+          winnerParticipantId: null
+        }]
+      }, {
+        roundNumber: 2,
+        stageCode: 'FINAL',
+        displayName: '决赛',
+        pairings: [{
+          id: competitionId,
+          pairingNumber: 1,
+          homeParticipantId: null,
+          awayParticipantId: null,
+          homeSourcePairingId: userId,
+          awaySourcePairingId: registrationId,
+          byeParticipantId: null,
+          matchId: null,
+          winnerParticipantId: null
+        }]
+      }],
+      createdAt: registrationOpensAt
+    });
+    assert.equal(proposal.rounds[0]?.pairings[0]?.byeParticipantId, entryId);
+    assert.equal(proposal.rounds[1]?.pairings[0]?.homeSourcePairingId, userId);
   });
 });

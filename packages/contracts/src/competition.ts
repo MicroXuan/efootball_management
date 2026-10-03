@@ -54,7 +54,7 @@ export const CompetitionTieBreakerSchema = z.enum([
   'WINS'
 ]);
 export const CompetitionStageCodeSchema = z.string().regex(
-  /^(SUPER|CHAMPION_[A-Z]+|GROUP_[A-Z]+|ROUND_OF_(?:16|32|64)|QUARTER_FINAL|SEMI_FINAL|FINAL)$/,
+  /^(SUPER|CHAMPION_[A-Z]+|GROUP_[A-Z]+|ROUND_OF_(?:16|32|64|128)|QUARTER_FINAL|SEMI_FINAL|FINAL)$/,
   'invalid competition stage code'
 );
 
@@ -304,6 +304,49 @@ export const CupGroupProposalSchema = z.object({
   createdAt: TimestampSchema
 });
 
+export const GenerateCupBracketProposalRequestSchema = z.object({
+  expectedCompetitionVersion: ExpectedVersionSchema,
+  randomSeed: z.number().int().positive()
+});
+
+export const ConfirmCupBracketProposalRequestSchema = z.object({
+  proposalId: ResourceIdSchema,
+  expectedCompetitionVersion: ExpectedVersionSchema
+});
+
+export const CupBracketPairingSchema = z.object({
+  id: ResourceIdSchema,
+  pairingNumber: z.number().int().positive(),
+  homeParticipantId: ResourceIdSchema.nullable(),
+  awayParticipantId: ResourceIdSchema.nullable(),
+  homeSourcePairingId: ResourceIdSchema.nullable(),
+  awaySourcePairingId: ResourceIdSchema.nullable(),
+  byeParticipantId: ResourceIdSchema.nullable(),
+  matchId: ResourceIdSchema.nullable(),
+  winnerParticipantId: ResourceIdSchema.nullable()
+});
+
+export const CupBracketRoundSchema = z.object({
+  roundNumber: z.number().int().positive(),
+  stageCode: CompetitionStageCodeSchema.refine((value) => !value.startsWith('GROUP_'), {
+    message: 'stageCode must be a knockout round code'
+  }),
+  displayName: z.string().trim().min(1).max(64),
+  pairings: z.array(CupBracketPairingSchema).min(1)
+});
+
+export const CupBracketProposalSchema = z.object({
+  id: ResourceIdSchema,
+  competitionId: ResourceIdSchema,
+  version: z.number().int().positive(),
+  status: CupProposalStatusSchema,
+  algorithmVersion: z.string().trim().min(1).max(32),
+  randomSeed: z.number().int().positive(),
+  bracketSize: z.number().int().min(2).max(128),
+  rounds: z.array(CupBracketRoundSchema).min(1),
+  createdAt: TimestampSchema
+});
+
 export const CancelCompetitionRequestSchema = VersionedMutationRequestSchema.extend({
   reason: z.string().trim().min(1).max(512)
 });
@@ -543,6 +586,9 @@ export type PublishStageScheduleRequest = z.infer<typeof PublishStageScheduleReq
 export type GenerateCupGroupProposalRequest = z.infer<typeof GenerateCupGroupProposalRequestSchema>;
 export type ConfirmCupGroupProposalRequest = z.infer<typeof ConfirmCupGroupProposalRequestSchema>;
 export type CupGroupProposal = z.infer<typeof CupGroupProposalSchema>;
+export type GenerateCupBracketProposalRequest = z.infer<typeof GenerateCupBracketProposalRequestSchema>;
+export type ConfirmCupBracketProposalRequest = z.infer<typeof ConfirmCupBracketProposalRequestSchema>;
+export type CupBracketProposal = z.infer<typeof CupBracketProposalSchema>;
 export type SubmitMatchResultRequest = z.input<typeof SubmitMatchResultRequestSchema>;
 export type RejectMatchResultRequest = z.input<typeof RejectMatchResultRequestSchema>;
 export type ManagerMatchResultRequest = z.input<typeof ManagerMatchResultRequestSchema>;

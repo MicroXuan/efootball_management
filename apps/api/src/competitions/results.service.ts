@@ -12,6 +12,7 @@ import { CompetitionError, assertExpectedVersion } from './competition.errors.js
 import type { CompetitionTransaction } from './competition.types.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { StandingsService } from './standings.service.js';
+import { CupProgressionService } from './cup-progression.service.js';
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
@@ -27,7 +28,8 @@ export class ResultsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
-    @Inject(StandingsService) private readonly standings: StandingsService
+    @Inject(StandingsService) private readonly standings: StandingsService,
+    @Inject(CupProgressionService) private readonly cupProgression: CupProgressionService
   ) {}
 
   submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
@@ -36,6 +38,7 @@ export class ResultsService {
       const match = await this.playerMatch(transaction, userId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+      this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
       const submissionSide = this.side(match, userId);
       const created = await transaction.matchResultVersion.create({
         data: {
@@ -66,6 +69,7 @@ export class ResultsService {
         where: { matchId_version: { matchId, version: resultVersion } }
       });
       if (!proposal || proposal.status !== 'PROPOSED') throw this.resultNotFound();
+      this.assertDecisiveKnockoutResult(match, proposal.homeScore, proposal.awayScore);
       if (proposal.submittedById === userId) {
         throw new CompetitionError('RESULT_SELF_CONFIRMATION_FORBIDDEN', 'Submitter cannot confirm their own result', 409);
       }
@@ -77,12 +81,7 @@ export class ResultsService {
         data: { officialResultVersionId: official.id, status: 'CONFIRMED', version: { increment: 1 } }
       });
       if (updated.count !== 1) throw this.versionConflict();
-      await this.standings.recalculate(
-        transaction,
-        match.stage.competitionId,
-        official.id,
-        match.stage.competition.competitionType === 'DIVISION_LEAGUE' ? match.stageId : undefined
-      );
+      await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore);
       return this.response(official, userId);
     });
   }
@@ -127,6 +126,7 @@ export class ResultsService {
       const match = await this.managerMatch(transaction, competitionId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+      this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
       if (match.officialResultVersion && !input.reason?.trim()) {
         throw new CompetitionError('RESULT_CORRECTION_REASON_REQUIRED', 'Correction reason is required', 400);
       }
@@ -152,12 +152,7 @@ export class ResultsService {
         data: { officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 } }
       });
       if (updated.count !== 1) throw this.versionConflict();
-      await this.standings.recalculate(
-        transaction,
-        competitionId,
-        official.id,
-        match.stage.competition.competitionType === 'DIVISION_LEAGUE' ? match.stageId : undefined
-      );
+      await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore);
       return this.response(official, actorId);
     });
   }
@@ -196,6 +191,34 @@ export class ResultsService {
     if (match.stage.status !== 'PUBLISHED' || match.stage.competition.status !== 'IN_PROGRESS') {
       throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Results are accepted only during competition play', 409);
     }
+  }
+
+  private assertDecisiveKnockoutResult(match: MatchRecord, homeScore: number, awayScore: number): void {
+    if (match.stage.format === 'SINGLE_ELIMINATION' && homeScore === awayScore) {
+      throw new CompetitionError('KNOCKOUT_DRAW_NOT_ALLOWED', '淘汰赛比分不能为平局', 409);
+    }
+  }
+
+  private async afterOfficialResult(
+    transaction: CompetitionTransaction,
+    match: MatchRecord,
+    resultVersionId: string,
+    homeScore: number,
+    awayScore: number
+  ): Promise<void> {
+    if (match.stage.format === 'SINGLE_ELIMINATION') {
+      await this.cupProgression.recordWinner(transaction, match.id, homeScore, awayScore);
+      return;
+    }
+    const scopedToStage = ['DIVISION_LEAGUE', 'GROUP_KNOCKOUT_CUP'].includes(
+      match.stage.competition.competitionType
+    );
+    await this.standings.recalculate(
+      transaction,
+      match.stage.competitionId,
+      resultVersionId,
+      scopedToStage ? match.stageId : undefined
+    );
   }
 
   private side(match: MatchRecord, userId: string): MatchResultSubmissionSide {
