@@ -97,7 +97,7 @@ describe('ValuationSnapshotsService', () => {
       season: { leagueId: 'league-1' }
     }]);
     const boundaryClock = jest.fn(() => {
-      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
       return at;
     });
 

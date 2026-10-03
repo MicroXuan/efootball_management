@@ -18,6 +18,7 @@ function harness(overrides: Record<string, unknown> = {}) {
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     leagueTeam: { findMany: jest.fn<() => Promise<unknown[]>>(async () => []) },
+    valuationWindow: { findMany: jest.fn(async () => []) },
     seasonEntry: {
       createMany: jest.fn(async () => ({ count: 0 })),
       count: jest.fn(async () => 0)

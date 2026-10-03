@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { jest } from '@jest/globals';
 import { config } from 'dotenv';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AdminLeagueSeasonsService } from '../admin/admin-league-seasons.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
@@ -315,6 +316,70 @@ describe('RosterTransactionsService', () => {
     });
     expect(snapshots).toEqual([{ footballPlayerId: existing.player.id }]);
     expect(snapshots).not.toContainEqual({ footballPlayerId: late.player.id });
+  });
+
+  it('freezes approved teams before an enrollment blocked across startsAt completes', async () => {
+    const f = await fixture();
+    const existing = await card(f.source.id, 'Late enrolled roster');
+    await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, existing.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    const startsAt = new Date(Date.now() + 750);
+    const valuationWindow = await prisma.valuationWindow.create({
+      data: {
+        seasonId: f.season.id,
+        name: '报名边界快照',
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 60_000),
+        createdByAdminId: f.admin.id
+      }
+    });
+    const enrollmentService = new AdminLeagueSeasonsService(
+      prisma,
+      authorization,
+      new AdminMutationReceiptService(prisma),
+      audit
+    );
+
+    let releaseWindowLock: () => void = () => undefined;
+    let reportWindowLocked: () => void = () => undefined;
+    const windowLocked = new Promise<void>((resolve) => { reportWindowLocked = resolve; });
+    const holdWindowLock = new Promise<void>((resolve) => { releaseWindowLock = resolve; });
+    const blocker = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM valuation_windows WHERE id = ${valuationWindow.id} FOR UPDATE
+      `);
+      reportWindowLocked();
+      await holdWindowLock;
+    });
+    await windowLocked;
+
+    const requestedAt = new Date();
+    const enrollment = enrollmentService.enrollTeams(
+      f.admin.id,
+      f.league.id,
+      f.season.id,
+      { leagueTeamIds: [f.teams[0]!.id], expectedSeasonVersion: f.season.version },
+      randomUUID()
+    );
+    expect(requestedAt.getTime()).toBeLessThan(startsAt.getTime());
+    await new Promise((resolve) => setTimeout(resolve, startsAt.getTime() - Date.now() + 100));
+    releaseWindowLock();
+    await blocker;
+    await enrollment;
+
+    await expect(prisma.valuationRosterSnapshot.count({
+      where: { windowId: valuationWindow.id }
+    })).resolves.toBe(0);
+    await expect(prisma.seasonEntry.count({
+      where: { seasonId: f.season.id, leagueTeamId: f.teams[0]!.id, status: 'APPROVED' }
+    })).resolves.toBe(1);
+    await expect(prisma.valuationWindow.findUniqueOrThrow({
+      where: { id: valuationWindow.id },
+      select: { snapshotInitializedAt: true }
+    })).resolves.toEqual({ snapshotInitializedAt: expect.any(Date) });
   });
 
   it('rejects reuse of an idempotency key for a different request', async () => {

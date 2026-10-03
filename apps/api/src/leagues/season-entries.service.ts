@@ -14,6 +14,7 @@ import { MutationReceiptService } from '../competitions/mutation-receipt.service
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError, assertLeagueExpectedVersion } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
+import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
 
 type SeasonWithLeague = LeagueSeason & { league: League };
 
@@ -82,6 +83,7 @@ export class SeasonEntriesService {
       }
       const identity = await this.identity(transaction, userId, input.gameAccountId, season.league);
       if (identity.team.id !== entry.leagueTeamId) throw this.notFound();
+      await synchronizeSeasonValuationSnapshots(transaction, seasonId);
       const now = new Date();
       const updated = await transaction.seasonEntry.updateMany({
         where: { id: entry.id, version: input.expectedVersion },
@@ -117,6 +119,7 @@ export class SeasonEntriesService {
       if (!['INVITED', 'PENDING', 'APPROVED'].includes(entry.status)) {
         throw new LeagueError('SEASON_ENTRY_STATE_INVALID', 'Season entry cannot be withdrawn', 409);
       }
+      await synchronizeSeasonValuationSnapshots(transaction, seasonId);
       const updated = await transaction.seasonEntry.updateMany({
         where: { id: entry.id, version: input.expectedVersion },
         data: { status: 'WITHDRAWN', withdrawnAt: new Date(), version: { increment: 1 } }
@@ -206,6 +209,7 @@ export class SeasonEntriesService {
     actorId: string,
     reason: string | null
   ): Promise<SeasonEntryResponse> {
+    await synchronizeSeasonValuationSnapshots(transaction, entry.seasonId);
     const now = new Date();
     const updated = await transaction.seasonEntry.updateMany({
       where: { id: entry.id, version: entry.version },
