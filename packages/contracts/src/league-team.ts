@@ -41,6 +41,7 @@ export const LeagueTeamSummarySchema = z.object({
   leagueId: ResourceIdSchema,
   ownerUserId: ResourceIdSchema,
   ownerPublicUserNo: PublicUserNumberSchema,
+  ownerDisplayName: z.string().min(1).optional(),
   teamNumber: TeamNumberSchema.nullable(),
   name: z.string().min(1),
   shortName: z.string().min(1),

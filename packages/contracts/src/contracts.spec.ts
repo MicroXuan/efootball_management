@@ -1014,6 +1014,7 @@ describe('league team administration contracts', () => {
       leagueId: ids.league,
       ownerUserId: ids.user,
       ownerPublicUserNo: '100069',
+      ownerDisplayName: '小宣',
       teamNumber: 0,
       name: '巴西红牛',
       shortName: '红牛',
@@ -1028,7 +1029,7 @@ describe('league team administration contracts', () => {
       createdAt,
       updatedAt: createdAt
     };
-    assert.equal(LeagueTeamSummarySchema.parse(team).teamNumber, 0);
+    assert.equal(LeagueTeamSummarySchema.parse(team).ownerDisplayName, '小宣');
     assert.equal(LeagueTeamDetailSchema.parse({
       ...team,
       ownerDisplayName: '小宣',

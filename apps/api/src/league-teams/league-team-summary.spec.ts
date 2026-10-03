@@ -33,6 +33,7 @@ describe('LeagueTeamsService roster summary', () => {
     const result = await service.listForLeague(team.leagueId);
 
     expect(result.items[0]).toMatchObject({
+      ownerDisplayName: '用户一',
       activePlayerCount: 3,
       salaryTotalMinor: 1_200,
       salaryCapMinor: 2_000

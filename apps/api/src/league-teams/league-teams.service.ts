@@ -416,6 +416,7 @@ export class LeagueTeamsService {
       leagueId: team.leagueId,
       ownerUserId: team.ownerUserId,
       ownerPublicUserNo: team.owner.publicUserNo,
+      ownerDisplayName: team.owner.displayName,
       teamNumber: team.teamNumber,
       name: team.name,
       shortName: team.shortName,
