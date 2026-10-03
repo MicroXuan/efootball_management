@@ -179,6 +179,14 @@ select { font: inherit; }
 .form-section-title strong { color: var(--admin-text); font-size: 14px; }
 .form-section-title span { color: var(--admin-text-weak); font-size: 12px; }
 .data-card .ant-empty { min-height: 220px; display: grid; place-content: center; }
+.allocation-workspace { display: grid; gap: 20px; }
+.allocation-toolbar { border-radius: 20px; }
+.allocation-toolbar .ant-card-body { display: grid; gap: 10px; }
+.allocation-toolbar p { margin: 0; color: var(--admin-text-secondary); }
+.allocation-stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.allocation-stage-card { display: grid; gap: 18px; padding: 18px; border: 1px solid var(--admin-border); border-radius: 16px; background: var(--admin-surface-subtle); }
+.allocation-stage-card > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.muted-copy { color: var(--admin-text-secondary); }
 .ant-pagination .ant-pagination-item,
 .ant-pagination .ant-pagination-prev,
 .ant-pagination .ant-pagination-next { border-radius: 8px; }

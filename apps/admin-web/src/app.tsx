@@ -16,6 +16,7 @@ const LeagueShell = lazy(() => import('./leagues/league-shell').then((module) =>
 const TeamDetailPage = lazy(() => import('./leagues/team-detail-page').then((module) => ({ default: module.TeamDetailPage })));
 const TeamsPage = lazy(() => import('./leagues/teams-page').then((module) => ({ default: module.TeamsPage })));
 const SeasonsPage = lazy(() => import('./leagues/seasons-page').then((module) => ({ default: module.SeasonsPage })));
+const AllocationPage = lazy(() => import('./leagues/allocation-page').then((module) => ({ default: module.AllocationPage })));
 const SalaryRulesPage = lazy(() => import('./leagues/salary-rules-page').then((module) => ({ default: module.SalaryRulesPage })));
 const TransferWindowsPage = lazy(() => import('./leagues/transfer-windows-page').then((module) => ({ default: module.TransferWindowsPage })));
 const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => ({ default: module.RosterPage })));
@@ -97,6 +98,7 @@ export function App() {
             <Route path="leagues/:leagueId" element={deferred(<LeagueShell />)}>
               <Route path="teams" element={deferred(<TeamsPage api={adminApi} />)} />
               <Route path="seasons" element={deferred(<SeasonsPage api={adminApi} />)} />
+              <Route path="allocation" element={deferred(<AllocationPage api={adminApi} />)} />
               <Route path="teams/:teamId" element={deferred(<TeamDetailPage api={adminApi} />)} />
               <Route path="teams/:teamId/roster" element={deferred(<RosterPage api={adminApi} />)} />
               <Route path="salary-rules" element={deferred(<SalaryRulesPage api={adminApi} />)} />

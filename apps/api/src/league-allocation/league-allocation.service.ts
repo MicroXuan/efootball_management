@@ -384,6 +384,12 @@ export class LeagueAllocationService {
           competitionId: competition.id,
           stageCount: orderedStageCodes.length,
           participantCount: finalRows.length,
+          stages: orderedStageCodes.map((stageCode) => ({
+            id: stageByCode.get(stageCode)!.id,
+            stageCode,
+            displayName: this.stageName(stageCode),
+            participantCount: stageCounts.get(stageCode)!
+          })),
           status: 'READY',
           version: input.expectedSeasonVersion + 1
         };
