@@ -1746,7 +1746,7 @@ model StandingsSnapshot {
   triggeringResultVersion   MatchResultVersion? @relation(fields: [triggeringResultVersionId], references: [id], onDelete: Restrict)
   rows                      StandingsRow[]
 
-  @@unique([competitionId, version], map: "standings_snapshots_version_unique")
+  @@unique([competitionId, stageId, version], map: "standings_snapshots_scope_version_unique")
   @@index([triggeringResultVersionId], map: "standings_snapshots_trigger_idx")
   @@index([stageId, version], map: "standings_snapshots_stage_version_idx")
   @@map("standings_snapshots")

@@ -6,7 +6,7 @@ import { AuthorizationModule } from '../authorization/authorization.module.js';
 import { AdminCompetitionsController } from './admin-competitions.controller.js';
 import { CompetitionsService } from './competitions.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
-import { PublicCompetitionsController } from './public-competitions.controller.js';
+import { MyDivisionStandingsController, PublicCompetitionsController } from './public-competitions.controller.js';
 import { RegistrationsController } from './registrations.controller.js';
 import { COMPETITION_CLOCK, RegistrationsService, SystemCompetitionClock } from './registrations.service.js';
 import { SchedulesController } from './schedules.controller.js';
@@ -22,6 +22,7 @@ import { MyCompetitionsService } from './my-competitions.service.js';
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({})],
   controllers: [
     PublicCompetitionsController,
+    MyDivisionStandingsController,
     AdminCompetitionsController,
     RegistrationsController,
     SchedulesController,

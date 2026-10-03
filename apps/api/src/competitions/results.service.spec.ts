@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { ResultsService } from './results.service.js';
@@ -139,5 +140,59 @@ describe('ResultsService', () => {
     });
     await expect(prisma.matchResultVersion.count({ where: { matchId: match.id, status: 'OFFICIAL' } })).resolves.toBe(1);
     await expect(prisma.standingsSnapshot.count({ where: { competitionId: competition.id } })).resolves.toBe(1);
+  });
+});
+
+describe('team match ownership', () => {
+  function teamHarness() {
+    const match = {
+      id: 'match-1', stageId: 'stage-1', version: 1, status: 'AWAITING_RESULT',
+      officialResultVersion: null,
+      stage: { status: 'PUBLISHED', competitionId: 'competition-1', competition: {
+        id: 'competition-1', status: 'IN_PROGRESS', competitionType: 'DIVISION_LEAGUE'
+      } },
+      homeParticipant: {
+        id: 'home', individualUserId: null, seasonEntry: { ownerUserId: 'owner-home' }
+      },
+      awayParticipant: {
+        id: 'away', individualUserId: null, seasonEntry: { ownerUserId: 'owner-away' }
+      }
+    };
+    const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: {
+        findUnique: jest.fn(async () => match),
+        updateMany: jest.fn(async () => ({ count: 1 }))
+      },
+      matchResultVersion: {
+        aggregate: jest.fn(async () => ({ _max: { version: null } })),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: 'result-1', ...data, status: 'PROPOSED', reason: null, createdAt: new Date('2026-10-03')
+        }))
+      }
+    };
+    const receipts = { execute: jest.fn(async (
+      _actor: string, _operation: string, _key: string,
+      work: (client: typeof transaction) => Promise<unknown>
+    ) => work(transaction)) };
+    const service = new ResultsService(transaction as never, receipts as never, {} as never);
+    return { service };
+  }
+
+  it('allows either team owner to act and hides the match from outsiders', async () => {
+    const home = teamHarness().service;
+    await expect(home.submit('owner-home', 'match-1', {
+      homeScore: 2, awayScore: 1, expectedVersion: 1
+    }, 'home-submit')).resolves.toMatchObject({ submissionSide: 'HOME' });
+
+    const away = teamHarness().service;
+    await expect(away.submit('owner-away', 'match-1', {
+      homeScore: 1, awayScore: 1, expectedVersion: 1
+    }, 'away-submit')).resolves.toMatchObject({ submissionSide: 'AWAY' });
+
+    const outsider = teamHarness().service;
+    await expect(outsider.submit('outsider', 'match-1', {
+      homeScore: 0, awayScore: 0, expectedVersion: 1
+    }, 'outsider-submit')).rejects.toMatchObject({ response: { code: 'MATCH_NOT_FOUND' } });
   });
 });

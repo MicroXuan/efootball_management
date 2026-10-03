@@ -16,8 +16,8 @@ import { StandingsService } from './standings.service.js';
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: true } };
-    homeParticipant: true;
-    awayParticipant: true;
+    homeParticipant: { include: { seasonEntry: true } };
+    awayParticipant: { include: { seasonEntry: true } };
     officialResultVersion: true;
   };
 }>;
@@ -77,7 +77,12 @@ export class ResultsService {
         data: { officialResultVersionId: official.id, status: 'CONFIRMED', version: { increment: 1 } }
       });
       if (updated.count !== 1) throw this.versionConflict();
-      await this.standings.recalculate(transaction, match.stage.competitionId, official.id);
+      await this.standings.recalculate(
+        transaction,
+        match.stage.competitionId,
+        official.id,
+        match.stage.competition.competitionType === 'DIVISION_LEAGUE' ? match.stageId : undefined
+      );
       return this.response(official, userId);
     });
   }
@@ -147,14 +152,19 @@ export class ResultsService {
         data: { officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 } }
       });
       if (updated.count !== 1) throw this.versionConflict();
-      await this.standings.recalculate(transaction, competitionId, official.id);
+      await this.standings.recalculate(
+        transaction,
+        competitionId,
+        official.id,
+        match.stage.competition.competitionType === 'DIVISION_LEAGUE' ? match.stageId : undefined
+      );
       return this.response(official, actorId);
     });
   }
 
   private async playerMatch(transaction: CompetitionTransaction, userId: string, matchId: string): Promise<MatchRecord> {
     const match = await this.match(transaction, matchId);
-    if (match.homeParticipant.individualUserId !== userId && match.awayParticipant.individualUserId !== userId) {
+    if (!this.owns(match.homeParticipant, userId) && !this.owns(match.awayParticipant, userId)) {
       throw new CompetitionError('MATCH_NOT_FOUND', 'Match was not found', 404);
     }
     return match;
@@ -173,8 +183,8 @@ export class ResultsService {
       where: { id: matchId },
       include: {
         stage: { include: { competition: true } },
-        homeParticipant: true,
-        awayParticipant: true,
+        homeParticipant: { include: { seasonEntry: true } },
+        awayParticipant: { include: { seasonEntry: true } },
         officialResultVersion: true
       }
     });
@@ -189,7 +199,14 @@ export class ResultsService {
   }
 
   private side(match: MatchRecord, userId: string): MatchResultSubmissionSide {
-    return match.homeParticipant.individualUserId === userId ? 'HOME' : 'AWAY';
+    return this.owns(match.homeParticipant, userId) ? 'HOME' : 'AWAY';
+  }
+
+  private owns(
+    participant: MatchRecord['homeParticipant'] | MatchRecord['awayParticipant'],
+    userId: string
+  ): boolean {
+    return participant.individualUserId === userId || participant.seasonEntry?.ownerUserId === userId;
   }
 
   private async nextVersion(transaction: CompetitionTransaction, matchId: string): Promise<number> {

@@ -140,7 +140,7 @@ export class SchedulesService {
       }
       await transaction.competition.updateMany({
         where: { id: stage.competitionId },
-        data: { status: 'SCHEDULED', version: { increment: 1 } }
+        data: { status: 'IN_PROGRESS', version: { increment: 1 } }
       });
       if (season.status === 'READY') {
         const seasonUpdate = await transaction.leagueSeason.updateMany({
