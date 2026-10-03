@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import {
   CreateSeasonCupRequestSchema,
   ConfirmCupGroupProposalRequestSchema,
@@ -20,6 +20,7 @@ import { CompetitionError } from './competition.errors.js';
 import { CupCompetitionsService } from './cup-competitions.service.js';
 import { CupGroupsService } from './cup-groups.service.js';
 import { CupBracketsService } from './cup-brackets.service.js';
+import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
 
 @Controller('admin/leagues/:leagueId/seasons/:seasonId/cups')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
@@ -27,7 +28,8 @@ export class AdminCupCompetitionsController {
   constructor(
     @Inject(CupCompetitionsService) private readonly cups: CupCompetitionsService,
     @Inject(CupGroupsService) private readonly groups: CupGroupsService,
-    @Inject(CupBracketsService) private readonly brackets: CupBracketsService
+    @Inject(CupBracketsService) private readonly brackets: CupBracketsService,
+    @Inject(CupBracketQueriesService) private readonly bracketQueries: CupBracketQueriesService
   ) {}
 
   @Post()
@@ -75,6 +77,15 @@ export class AdminCupCompetitionsController {
     @Body(new ZodValidationPipe(GenerateCupBracketProposalRequestSchema)) body: GenerateCupBracketProposalRequest
   ) {
     return this.brackets.generate(admin.id, leagueId, competitionId, body, this.key(key));
+  }
+
+  @Get(':competitionId/bracket')
+  getBracket(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
+  ) {
+    return this.bracketQueries.getAdmin(admin.id, leagueId, competitionId);
   }
 
   @Post(':competitionId/bracket-decisions')

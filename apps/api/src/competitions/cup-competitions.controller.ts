@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import {
   RegisterSeasonCupRequestSchema,
   ResourceIdSchema,
@@ -9,11 +9,22 @@ import { JwtAuthGuard } from '../common/auth/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { CompetitionError } from './competition.errors.js';
 import { CupCompetitionsService } from './cup-competitions.service.js';
+import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
 
 @Controller('cups')
 @UseGuards(JwtAuthGuard)
 export class CupCompetitionsController {
-  constructor(@Inject(CupCompetitionsService) private readonly cups: CupCompetitionsService) {}
+  constructor(
+    @Inject(CupCompetitionsService) private readonly cups: CupCompetitionsService,
+    @Inject(CupBracketQueriesService) private readonly bracketQueries: CupBracketQueriesService
+  ) {}
+
+  @Get(':competitionId/bracket')
+  getBracket(
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
+  ) {
+    return this.bracketQueries.getPublished(competitionId);
+  }
 
   @Post(':competitionId/registration')
   register(

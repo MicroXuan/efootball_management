@@ -347,6 +347,44 @@ export const CupBracketProposalSchema = z.object({
   createdAt: TimestampSchema
 });
 
+export const CupBracketParticipantSchema = z.object({
+  id: ResourceIdSchema,
+  displayName: z.string().trim().min(1).max(64)
+});
+
+export const CupBracketMatchSummarySchema = z.object({
+  id: ResourceIdSchema,
+  status: CompetitionMatchStatusSchema,
+  homeScore: ScoreSchema.nullable(),
+  awayScore: ScoreSchema.nullable()
+});
+
+export const CupBracketViewPairingSchema = z.object({
+  id: ResourceIdSchema,
+  pairingNumber: z.number().int().positive(),
+  homeParticipant: CupBracketParticipantSchema.nullable(),
+  awayParticipant: CupBracketParticipantSchema.nullable(),
+  winnerParticipant: CupBracketParticipantSchema.nullable(),
+  isBye: z.boolean(),
+  match: CupBracketMatchSummarySchema.nullable()
+});
+
+export const CupBracketViewSchema = z.object({
+  competitionId: ResourceIdSchema,
+  proposalId: ResourceIdSchema,
+  proposalVersion: z.number().int().positive(),
+  bracketSize: z.number().int().min(2).max(128),
+  currentRoundNumber: z.number().int().positive().nullable(),
+  rounds: z.array(z.object({
+    stageId: ResourceIdSchema.nullable(),
+    roundNumber: z.number().int().positive(),
+    stageCode: CompetitionStageCodeSchema,
+    displayName: z.string().trim().min(1).max(64),
+    status: z.enum(['DRAFT', 'PUBLISHED']),
+    pairings: z.array(CupBracketViewPairingSchema).min(1)
+  })).min(1)
+});
+
 export const CancelCompetitionRequestSchema = VersionedMutationRequestSchema.extend({
   reason: z.string().trim().min(1).max(512)
 });
@@ -589,6 +627,7 @@ export type CupGroupProposal = z.infer<typeof CupGroupProposalSchema>;
 export type GenerateCupBracketProposalRequest = z.infer<typeof GenerateCupBracketProposalRequestSchema>;
 export type ConfirmCupBracketProposalRequest = z.infer<typeof ConfirmCupBracketProposalRequestSchema>;
 export type CupBracketProposal = z.infer<typeof CupBracketProposalSchema>;
+export type CupBracketView = z.infer<typeof CupBracketViewSchema>;
 export type SubmitMatchResultRequest = z.input<typeof SubmitMatchResultRequestSchema>;
 export type RejectMatchResultRequest = z.input<typeof RejectMatchResultRequestSchema>;
 export type ManagerMatchResultRequest = z.input<typeof ManagerMatchResultRequestSchema>;

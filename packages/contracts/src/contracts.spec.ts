@@ -30,6 +30,7 @@ import {
   GenerateCupBracketProposalRequestSchema,
   ConfirmCupBracketProposalRequestSchema,
   CupBracketProposalSchema,
+  CupBracketViewSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -1465,5 +1466,37 @@ describe('cup center contracts', () => {
     });
     assert.equal(proposal.rounds[0]?.pairings[0]?.byeParticipantId, entryId);
     assert.equal(proposal.rounds[1]?.pairings[0]?.homeSourcePairingId, userId);
+  });
+
+  it('exposes a Chinese-ready bracket read model with current round and official score', () => {
+    const view = CupBracketViewSchema.parse({
+      competitionId,
+      proposalId: registrationId,
+      proposalVersion: 2,
+      bracketSize: 4,
+      currentRoundNumber: 1,
+      rounds: [{
+        stageId: userId,
+        roundNumber: 1,
+        stageCode: 'SEMI_FINAL',
+        displayName: '半决赛',
+        status: 'PUBLISHED',
+        pairings: [{
+          id: entryId,
+          pairingNumber: 1,
+          homeParticipant: { id: userId, displayName: '上海海港' },
+          awayParticipant: { id: registrationId, displayName: '北京国安' },
+          winnerParticipant: { id: userId, displayName: '上海海港' },
+          isBye: false,
+          match: {
+            id: competitionId,
+            status: 'CONFIRMED',
+            homeScore: 2,
+            awayScore: 1
+          }
+        }]
+      }]
+    });
+    assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.displayName, '上海海港');
   });
 });
