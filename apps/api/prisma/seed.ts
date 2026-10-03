@@ -45,9 +45,13 @@ const leaguePermissions = [
 const localAdminUsername = process.env.LOCAL_ADMIN_USERNAME?.trim();
 const localAdminPasswordHash = process.env.LOCAL_ADMIN_PASSWORD_HASH?.trim();
 const seedEconomyDemo = process.env.SEED_ECONOMY_DEMO?.trim().toLowerCase() === 'true';
+const seedTieredLeagueDemo = process.env.SEED_TIERED_LEAGUE_DEMO?.trim().toLowerCase() === 'true';
 
 if (Boolean(localAdminUsername) !== Boolean(localAdminPasswordHash)) {
   throw new Error('LOCAL_ADMIN_USERNAME and LOCAL_ADMIN_PASSWORD_HASH must be provided together');
+}
+if (seedTieredLeagueDemo && !localAdminUsername) {
+  throw new Error('SEED_TIERED_LEAGUE_DEMO requires LOCAL_ADMIN_USERNAME and LOCAL_ADMIN_PASSWORD_HASH');
 }
 
 await prisma.$transaction(async (transaction) => {
@@ -536,6 +540,63 @@ await prisma.$transaction(async (transaction) => {
           leagueId: ids.league,
           leagueTeamId: ids.completeTeam,
           seasonId: ids.season
+        }
+      });
+    }
+  }
+
+  if (localAdminUsername && seedTieredLeagueDemo) {
+    const demoAdmin = await transaction.adminAccount.findUniqueOrThrow({ where: { username: localAdminUsername } });
+    const leagueId = '20000000-0000-4000-8000-000000000001';
+    const seasonId = '20000000-0000-4000-8000-000000000002';
+    const now = Date.now();
+    await transaction.league.upsert({
+      where: { id: leagueId },
+      update: { name: '本地分级联赛演示', shortName: '分级演示', createdByAdminId: demoAdmin.id },
+      create: {
+        id: leagueId, name: '本地分级联赛演示', shortName: '分级演示',
+        description: '19 支球队的首赛季双冠军组分配与赛程验收数据',
+        defaultPlatform: 'MOBILE', defaultServerRegion: 'CN', createdByAdminId: demoAdmin.id
+      }
+    });
+    await transaction.leagueSeason.upsert({
+      where: { id: seasonId },
+      update: { displayName: 'S1 分级演示', createdByAdminId: demoAdmin.id },
+      create: {
+        id: seasonId, leagueId, seasonNumber: 1, displayName: 'S1 分级演示', isFirstSeason: true,
+        registrationOpensAt: new Date(now - 14 * 86_400_000),
+        registrationClosesAt: new Date(now - 7 * 86_400_000),
+        startsAt: new Date(now + 86_400_000), endsAt: new Date(now + 90 * 86_400_000),
+        superCapacity: 23, championCapacity: 18, promotionCount: 4,
+        status: 'ALLOCATION_REVIEW', createdByAdminId: demoAdmin.id
+      }
+    });
+    await transaction.league.update({ where: { id: leagueId }, data: { currentSeasonId: seasonId } });
+    for (let index = 1; index <= 19; index += 1) {
+      const suffix = String(index).padStart(12, '0');
+      const user = await transaction.user.upsert({
+        where: { wechatOpenId: `test-openid-tiered-demo-${index}` },
+        update: { displayName: `分级演示老板 ${index}` },
+        create: { wechatOpenId: `test-openid-tiered-demo-${index}`, displayName: `分级演示老板 ${index}` }
+      });
+      const teamId = `20000000-0000-4000-8001-${suffix}`;
+      const entryId = `20000000-0000-4000-8002-${suffix}`;
+      await transaction.leagueTeam.upsert({
+        where: { id: teamId },
+        update: { ownerUserId: user.id, teamNumber: index, name: `分级演示球队 ${index}`, shortName: `演示${index}` },
+        create: {
+          id: teamId, leagueId, ownerUserId: user.id, teamNumber: index,
+          name: `分级演示球队 ${index}`, shortName: `演示${index}`
+        }
+      });
+      await transaction.seasonEntry.upsert({
+        where: { id: entryId },
+        update: {},
+        create: {
+          id: entryId, seasonId, leagueTeamId: teamId, ownerUserId: user.id,
+          source: 'NEW_APPLICATION', status: 'APPROVED', teamNameSnapshot: `分级演示球队 ${index}`,
+          teamShortNameSnapshot: `演示${index}`, teamNumberSnapshot: index,
+          leagueEditionSnapshot: 'INTERNATIONAL'
         }
       });
     }

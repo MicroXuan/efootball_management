@@ -111,6 +111,20 @@ test-code-economy-demo-review
 
 需要验收个人赛事的报名、赛程、比分确认与积分榜闭环时，按 [个人赛事闭环本地验收指南](./competition-loop.md)创建幂等的四人演示赛事。
 
+### 分级联赛演示数据
+
+需要验收首赛季分组时，在 `.env` 增加 `SEED_TIERED_LEAGUE_DEMO=true`，同时配置本地管理员账号，再重复执行种子命令：
+
+```bash
+export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+set -a; source .env; set +a
+pnpm --filter @efm/api exec prisma db seed
+```
+
+种子会幂等准备“本地分级联赛演示”、一个处于“分组审核”阶段的首赛季和 19 支已审核球队。重复执行不会创建重复球队、正式分组或比赛，也不会把已确认赛季退回审核状态。管理员在后台进入“联赛管理 → 分组与赛程”，依次执行：生成方案、必要时调整并填写原因、确认分组、为每个冠军组生成并发布赛程。
+
+小程序使用 `test-code-tiered-demo-1` 至 `test-code-tiered-demo-19` 登录对应球队老板。打开“联赛 → 本地分级联赛演示”后，可查看“我的联赛工作台”；分组确认后显示所在组和积分榜，赛程发布后显示下一场比赛。未报名账号不会看到私有数据。
+
 ## 6. 导入微信小程序
 
 1. 在微信开发者工具选择“导入项目”。
@@ -130,6 +144,13 @@ test-code-economy-demo-review
 3. 打开一支联赛球队，核对只读阵容、工资帽、财务流水和当前转会窗口，不应出现购买、转会或升级按钮。
 4. 小程序不应出现个人资料保存、游戏账号维护、自助创建联赛或自助编辑球队入口。
 5. 关闭 API 后刷新资料页，应显示错误态和“重新加载”；恢复 API 后可重试成功。
+6. 分级演示联赛首赛季不得出现超级组；19 队应形成冠军 A/B 两组，发布赛程后两组边界清晰且积分独立更新。
+
+自动验证分级联赛完整闭环：
+
+```bash
+pnpm --filter @efm/api test:e2e -- tiered-league.e2e-spec.ts --runInBand
+```
 
 旧 `/me/game-accounts` 与 `/me/team-profile` 的读取能力仅用于历史数据兼容；写接口会返回 `Deprecation: true` 响应头。新小程序流程不再调用这些写接口。
 
