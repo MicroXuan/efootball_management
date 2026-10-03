@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
+import { AdminModule } from '../admin/admin.module.js';
 import { AuthorizationModule } from '../authorization/authorization.module.js';
 import { AdminCompetitionsController } from './admin-competitions.controller.js';
 import { CompetitionsService } from './competitions.service.js';
@@ -17,7 +19,7 @@ import { MyCompetitionsController } from './my-competitions.controller.js';
 import { MyCompetitionsService } from './my-competitions.service.js';
 
 @Module({
-  imports: [AuthorizationModule, JwtModule.register({})],
+  imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({})],
   controllers: [
     PublicCompetitionsController,
     AdminCompetitionsController,

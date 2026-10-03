@@ -14,9 +14,11 @@ import {
   ConfirmSeasonAllocationRequestSchema,
   DivisionStandingsResponseSchema,
   GenerateSeasonAllocationRequestSchema,
+  GenerateStageScheduleRequestSchema,
   SeasonAllocationDecisionSchema,
   SeasonAllocationProposalSchema,
   SeasonAllocationProposalRowSchema,
+  PublishStageScheduleRequestSchema,
   CreateCompetitionRequestSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
@@ -1244,5 +1246,16 @@ describe('tiered league contracts', () => {
       expectedSeasonVersion: 2,
       overrides: [{ ...override, reason: ' ' }]
     }));
+  });
+
+  it('requires optimistic versions for stage schedule generation and publication', () => {
+    assert.deepEqual(GenerateStageScheduleRequestSchema.parse({ expectedStageVersion: 2 }), {
+      expectedStageVersion: 2
+    });
+    assert.deepEqual(PublishStageScheduleRequestSchema.parse({
+      expectedStageVersion: 2,
+      expectedSeasonVersion: 4
+    }), { expectedStageVersion: 2, expectedSeasonVersion: 4 });
+    assert.throws(() => GenerateStageScheduleRequestSchema.parse({ expectedStageVersion: 0 }));
   });
 });

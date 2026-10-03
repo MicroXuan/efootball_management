@@ -167,6 +167,15 @@ export const VersionedMutationRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema
 });
 
+export const GenerateStageScheduleRequestSchema = z.object({
+  expectedStageVersion: ExpectedVersionSchema
+});
+
+export const PublishStageScheduleRequestSchema = z.object({
+  expectedStageVersion: ExpectedVersionSchema,
+  expectedSeasonVersion: ExpectedVersionSchema
+});
+
 export const CancelCompetitionRequestSchema = VersionedMutationRequestSchema.extend({
   reason: z.string().trim().min(1).max(512)
 });
@@ -397,6 +406,8 @@ export type UpdateCompetitionRulesRequest = z.input<typeof UpdateCompetitionRule
 export type RegisterCompetitionRequest = z.input<typeof RegisterCompetitionRequestSchema>;
 export type ReviewRegistrationRequest = z.input<typeof ReviewRegistrationRequestSchema>;
 export type VersionedMutationRequest = z.input<typeof VersionedMutationRequestSchema>;
+export type GenerateStageScheduleRequest = z.infer<typeof GenerateStageScheduleRequestSchema>;
+export type PublishStageScheduleRequest = z.infer<typeof PublishStageScheduleRequestSchema>;
 export type SubmitMatchResultRequest = z.input<typeof SubmitMatchResultRequestSchema>;
 export type RejectMatchResultRequest = z.input<typeof RejectMatchResultRequestSchema>;
 export type ManagerMatchResultRequest = z.input<typeof ManagerMatchResultRequestSchema>;

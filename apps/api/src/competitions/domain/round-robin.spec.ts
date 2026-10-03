@@ -11,6 +11,19 @@ function groupByRound<T extends { roundNumber: number }>(items: T[]): T[][] {
 }
 
 describe('round-robin generation', () => {
+  it.each([
+    [0, 0, 0],
+    [1, 0, 0],
+    [2, 1, 1],
+    [3, 3, 3],
+    [18, 153, 17],
+    [23, 253, 23]
+  ])('creates %i-player schedule with %i matches over %i rounds', (size, matches, rounds) => {
+    const schedule = generateRoundRobin(Array.from({ length: size }, (_, index) => `p-${index + 1}`));
+    expect(schedule).toHaveLength(matches);
+    expect(Math.max(0, ...schedule.map((match) => match.roundNumber))).toBe(rounds);
+  });
+
   it.each([2, 3, 4, 5, 6, 7, 8, 9])('creates every pairing once for %i participants', (size) => {
     const ids = Array.from({ length: size }, (_, index) => `participant-${index + 1}`);
     const schedule = generateRoundRobin(ids);
@@ -41,6 +54,17 @@ describe('round-robin generation', () => {
       expect(appearances).toHaveLength(size - 1);
       expect(appearances).not.toContain('__BYE__');
     }
+  });
+
+  it('gives every participant exactly one bye in a 23-player group', () => {
+    const ids = Array.from({ length: 23 }, (_, index) => `participant-${index + 1}`);
+    const rounds = groupByRound(generateRoundRobin(ids));
+    const byes = new Map(ids.map((id) => [id, 0]));
+    for (const round of rounds) {
+      const playing = new Set(round.flatMap((match) => [match.homeParticipantId, match.awayParticipantId]));
+      for (const id of ids) if (!playing.has(id)) byes.set(id, byes.get(id)! + 1);
+    }
+    expect([...byes.values()]).toEqual(Array.from({ length: 23 }, () => 1));
   });
 
   it('sorts a copy before assigning stable match numbers and pairing keys', () => {
