@@ -7,6 +7,14 @@
     <view class="head-mark">球员档案 · 01</view>
   </view>
 
+  <picker mode="selector" range="{{packOptions}}" range-key="label" value="{{packIndex}}" bindchange="onPackChange">
+    <view class="pack-selector">
+      <view><text class="pack-label">球员包</text><text class="pack-value">{{packOptions[packIndex].label}}</text></view>
+      <text class="pack-chevron">⌄</text>
+    </view>
+  </picker>
+  <text wx:if="{{packErrorMessage}}" class="pack-error">{{packErrorMessage}}</text>
+
   <view class="search-box">
     <text class="search-icon">⌕</text>
     <input
@@ -59,13 +67,20 @@
         <text class="group-count">{{item.cards.length}} 张卡片</text>
       </view>
       <view class="card-grid">
-        <player-card
+        <view
           wx:for="{{item.cards}}"
           wx:for-item="card"
           wx:key="id"
-          card="{{card}}"
-          bind:cardtap="onCardTap"
-        />
+          class="card-cell"
+        >
+          <player-card card="{{card}}" bind:cardtap="onCardTap" />
+          <button
+            class="favorite-button {{card.isFavorite ? 'is-active' : ''}}"
+            data-player-id="{{card.playerId}}"
+            catchtap="onFavoriteTap"
+            aria-label="{{card.isFavorite ? '取消收藏' : '收藏球员'}}"
+          >{{card.isFavorite ? '★' : '☆'}}</button>
+        </view>
       </view>
     </view>
     <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}} · 点击重试</text>

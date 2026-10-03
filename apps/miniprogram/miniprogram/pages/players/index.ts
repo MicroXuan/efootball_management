@@ -1,8 +1,14 @@
 import type { PlayerCardType, PlayerPosition, PlayerSearchResponse } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { catalogApi } from '../../services/catalog'
+import { favoritesApi } from '../../services/favorites'
+import { session } from '../../services/session'
 import {
+  favoriteLookup,
+  groupCardsByPack,
+  isLatestPlayerRequest,
   nextPlayerPageState,
+  toPackOptions,
   type PlayerCardGroup,
   type PlayerPageState,
   type PlayerQueryInput,
@@ -11,6 +17,8 @@ import {
 type InputEvent = { detail: { value: string } }
 type FilterTapEvent = { currentTarget: { dataset: { value?: string } } }
 type CardTapEvent = { detail: { id?: string } }
+type PickerEvent = { detail: { value: string } }
+type FavoriteTapEvent = { currentTarget: { dataset: { playerId?: string } } }
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let requestToken = 0
@@ -29,6 +37,11 @@ Page({
     keyword: '',
     position: '' as '' | PlayerPosition,
     cardType: '' as '' | PlayerCardType,
+    cardPackId: '',
+    packIndex: 0,
+    packOptions: [{ value: '', label: '全部球员包' }],
+    packErrorMessage: '',
+    favoritePlayerIds: {} as Record<string, boolean>,
     minOverall: '' as '' | number,
     cards: [] as PlayerPageState['cards'],
     groups: [] as PlayerCardGroup[],
@@ -59,11 +72,13 @@ Page({
 
   onLoad() {
     unloaded = false
+    void this.loadPacks()
     void this.loadCards('refresh')
   },
 
   onShow() {
     this.getTabBar?.()?.setData({ selected: 0 })
+    if (this.data.cards.length) void this.loadFavoriteStatuses(this.data.cards)
   },
 
   onUnload() {
@@ -102,6 +117,35 @@ Page({
     void this.loadCards('refresh')
   },
 
+  onPackChange(event: PickerEvent) {
+    const packIndex = Number(event.detail.value)
+    const option = this.data.packOptions[packIndex] ?? this.data.packOptions[0]
+    this.setData({ packIndex, cardPackId: option?.value ?? '' })
+    void this.loadCards('refresh')
+  },
+
+  async onFavoriteTap(event: FavoriteTapEvent) {
+    const playerId = event.currentTarget.dataset.playerId
+    if (!playerId) return
+    if (!session.getAccessToken()) {
+      wx.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    const wasFavorite = this.data.favoritePlayerIds[playerId] === true
+    try {
+      if (wasFavorite) await favoritesApi.unfavorite(playerId)
+      else await favoritesApi.favorite(playerId)
+      const favoritePlayerIds = { ...this.data.favoritePlayerIds, [playerId]: !wasFavorite }
+      this.setData({
+        favoritePlayerIds,
+        groups: groupCardsByPack(this.data.cards, favoritePlayerIds),
+      })
+      wx.showToast({ title: wasFavorite ? '已取消收藏' : '已加入收藏', icon: 'success' })
+    } catch (error) {
+      wx.showToast({ title: errorMessage(error), icon: 'none' })
+    }
+  },
+
   retry() {
     void this.loadCards('refresh')
   },
@@ -120,13 +164,14 @@ Page({
       keyword: this.data.keyword.trim() || undefined,
       position: this.data.position || undefined,
       cardType: this.data.cardType || undefined,
+      cardPackId: this.data.cardPackId || undefined,
       minOverall: this.data.minOverall || undefined,
       cursor: mode === 'append' ? this.data.nextCursor ?? undefined : undefined,
       limit: 20,
     }
     try {
       const response: PlayerSearchResponse = await catalogApi.searchPlayers(query)
-      if (unloaded || token !== requestToken) return
+      if (!isLatestPlayerRequest(requestToken, token, unloaded)) return
       const next = nextPlayerPageState({
         cards: this.data.cards,
         groups: this.data.groups,
@@ -137,16 +182,43 @@ Page({
       }, response, mode)
       this.setData({
         cards: next.cards,
-        groups: next.groups,
+        groups: groupCardsByPack(next.cards, this.data.favoritePlayerIds),
         nextCursor: next.nextCursor,
         hasMore: next.hasMore,
         errorMessage: '',
       })
+      void this.loadFavoriteStatuses(next.cards)
     } catch (error) {
-      if (unloaded || token !== requestToken) return
+      if (!isLatestPlayerRequest(requestToken, token, unloaded)) return
       this.setData({ errorMessage: errorMessage(error) })
     } finally {
-      if (!unloaded && token === requestToken) this.setData({ loading: false, loadingMore: false })
+      if (isLatestPlayerRequest(requestToken, token, unloaded)) this.setData({ loading: false, loadingMore: false })
+    }
+  },
+
+  async loadPacks() {
+    try {
+      const response = await catalogApi.listCardPacks({ limit: 100 })
+      if (unloaded) return
+      this.setData({ packOptions: toPackOptions(response.items), packErrorMessage: '' })
+    } catch {
+      if (!unloaded) this.setData({ packErrorMessage: '球员包加载失败，可稍后重试' })
+    }
+  },
+
+  async loadFavoriteStatuses(cards: PlayerPageState['cards']) {
+    if (!session.getAccessToken() || cards.length === 0) return
+    const playerIds = [...new Set(cards.map(({ playerId }) => playerId))].slice(0, 100)
+    try {
+      const response = await favoritesApi.statuses(playerIds)
+      if (unloaded) return
+      const favoritePlayerIds = favoriteLookup(cards, response.favoritePlayerIds)
+      this.setData({
+        favoritePlayerIds,
+        groups: groupCardsByPack(this.data.cards, favoritePlayerIds),
+      })
+    } catch {
+      // 收藏状态不影响公共球员目录浏览。
     }
   },
 })
