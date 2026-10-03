@@ -71,10 +71,16 @@ export class ValuationWindowsService {
             createdByAdminId: adminId
           }
         });
-        await this.initializeRosterSnapshot(tx, created.id, seasonId, season.leagueId, at);
+        const isOpen = new Date(input.startsAt) <= at;
+        if (isOpen) {
+          await this.initializeRosterSnapshot(tx, created.id, seasonId, season.leagueId, at);
+        }
         const window = await tx.valuationWindow.update({
           where: { id: created.id },
-          data: { currentRuleVersionId: rule.id, snapshotInitializedAt: at },
+          data: {
+            currentRuleVersionId: rule.id,
+            ...(isOpen ? { snapshotInitializedAt: at } : {})
+          },
           include: { currentRuleVersion: true }
         });
         await this.audit.record(tx, {

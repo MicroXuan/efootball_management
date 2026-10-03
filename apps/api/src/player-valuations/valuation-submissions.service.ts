@@ -156,8 +156,10 @@ export class ValuationSubmissionsService {
             422
           );
         }
-        if (proposedValueMinor < context.rule.minimumValueMinor
-          || proposedValueMinor > context.rule.maximumValueMinor) {
+        const unchanged = snapshot.baseValueMinor !== null
+          && proposedValueMinor === snapshot.baseValueMinor;
+        if (!unchanged && (proposedValueMinor < context.rule.minimumValueMinor
+          || proposedValueMinor > context.rule.maximumValueMinor)) {
           throw new LeagueError(
             'VALUATION_GLOBAL_RANGE_EXCEEDED',
             `身价必须在 ${context.rule.minimumValueMinor} 至 ${context.rule.maximumValueMinor} 之间`,
@@ -171,7 +173,8 @@ export class ValuationSubmissionsService {
           proposedValueMinor,
           minimumAllowedMinor: range.minimum,
           maximumAllowedMinor: range.maximum,
-          exceedsRange: proposedValueMinor < range.minimum || proposedValueMinor > range.maximum
+          exceedsRange: !unchanged
+            && (proposedValueMinor < range.minimum || proposedValueMinor > range.maximum)
         };
       });
       for (const item of prepared) {

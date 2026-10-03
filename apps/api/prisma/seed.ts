@@ -212,6 +212,8 @@ await prisma.$transaction(async (transaction) => {
       financeCredit: '10000000-0000-4000-8000-000000000022',
       financeDebit: '10000000-0000-4000-8000-000000000023'
     } as const;
+    const existingDemo = await transaction.league.findUnique({ where: { id: ids.league } });
+    if (existingDemo) return;
     const completeOwner = await transaction.user.upsert({
       where: { wechatOpenId: 'test-openid-economy-demo-complete' },
       update: { displayName: '完整资产球队老板', publicUserNo: '990001' },

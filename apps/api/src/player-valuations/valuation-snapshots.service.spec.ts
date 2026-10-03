@@ -50,7 +50,10 @@ function harness() {
     $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx)),
     leagueTeam: { findUnique: jest.fn<() => Promise<{ id: string; name: string; ownerUserId: string; leagueId: string } | null>>(async () => ({ id: 'team-1', name: '海港竞技', ownerUserId: 'user-1', leagueId: 'league-1' })) },
     seasonEntry: { findFirst: jest.fn<() => Promise<{ id: string; status: string } | null>>(async () => ({ id: 'entry-1', status: 'APPROVED' })) },
-    valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
+    valuationWindow: {
+      findFirst: jest.fn(async () => ({ id: 'window-1' })),
+      findMany: jest.fn(async () => [] as Array<{ id: string }>)
+    },
     valuationSubmission: { findFirst: jest.fn(async () => null) },
     leaguePlayerValuation: { findMany: jest.fn(async () => [{ footballPlayerId: 'player-1', currentValueMinor: 1200 }]) }
   };
@@ -71,6 +74,14 @@ describe('ValuationSnapshotsService', () => {
       })],
       skipDuplicates: true
     });
+  });
+
+  it('initializes scheduled windows when server time reaches their opening', async () => {
+    const { service, prisma } = harness();
+    prisma.valuationWindow.findMany.mockResolvedValueOnce([{ id: 'window-1' }]);
+    const ensure = jest.spyOn(service, 'ensureWindowSnapshot').mockResolvedValueOnce([]);
+    await service.initializeDueWindows(at);
+    expect(ensure).toHaveBeenCalledWith('window-1', at);
   });
 
   it('remembers an empty snapshot so later signings cannot enter the same window', async () => {

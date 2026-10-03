@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import type { ValuationWorkspace } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -18,11 +18,40 @@ const snapshotInclude = {
 type Snapshot = Prisma.ValuationRosterSnapshotGetPayload<{ include: typeof snapshotInclude }>;
 
 @Injectable()
-export class ValuationSnapshotsService {
+export class ValuationSnapshotsService implements OnApplicationBootstrap, OnApplicationShutdown {
+  private timer: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ValuationWindowsService) private readonly windows: ValuationWindowsService
   ) {}
+
+  onApplicationBootstrap() {
+    void this.initializeDueWindows().catch(() => undefined);
+    this.timer = setInterval(() => {
+      void this.initializeDueWindows().catch(() => undefined);
+    }, 1_000);
+    this.timer.unref();
+  }
+
+  onApplicationShutdown() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  async initializeDueWindows(at = new Date()) {
+    const due = await this.prisma.valuationWindow.findMany({
+      where: {
+        startsAt: { lte: at },
+        endsAt: { gt: at },
+        closedAt: null,
+        snapshotInitializedAt: null
+      },
+      select: { id: true },
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
+    });
+    for (const window of due) await this.ensureWindowSnapshot(window.id, at);
+  }
 
   async ensureWindowSnapshot(windowId: string, at = new Date()): Promise<Snapshot[]> {
     const effective = await this.windows.getEffectiveRule(windowId, at);

@@ -98,6 +98,25 @@ describe('ValuationWindowsService', () => {
     }, 'bad-bps', at)).rejects.toBeDefined();
   });
 
+  it('leaves a scheduled window uninitialized until its opening time', async () => {
+    const { service, tx } = harness();
+    await service.create('admin-1', 'season-1', {
+      name: '预约窗口',
+      startsAt: new Date('2026-10-03T00:00:00.000Z').toISOString(),
+      endsAt: endsAt.toISOString(),
+      rule: {
+        minimumValueMinor: 100,
+        maximumValueMinor: 10_000,
+        maximumIncreaseBps: 2000,
+        maximumDecreaseBps: 1500
+      }
+    }, 'create-scheduled-window', at);
+    expect(tx.valuationRosterSnapshot.createMany).not.toHaveBeenCalled();
+    expect(tx.valuationWindow.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { currentRuleVersionId: 'rule-1' }
+    }));
+  });
+
   it('updates the active rule by creating version 2 without mutating submissions on version 1', async () => {
     const { service, tx, window } = harness();
     const nextRule = {

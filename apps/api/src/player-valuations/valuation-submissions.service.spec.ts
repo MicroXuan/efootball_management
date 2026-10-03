@@ -93,6 +93,16 @@ describe('ValuationSubmissionsService', () => {
     expect(tx.playerValuationHistory.create).not.toHaveBeenCalled();
   });
 
+  it('allows an unchanged official value to carry forward after the global minimum rises', async () => {
+    const { service, tx, effective } = harness(1000);
+    effective.rule.minimumValueMinor = 1200;
+    const result = await service.publish('user-1', 'team-1', {
+      windowId, expectedVersion: 1
+    }, 'publish-unchanged', at);
+    expect(result.status).toBe('PUBLISHED');
+    expect(tx.playerValuationHistory.create).not.toHaveBeenCalled();
+  });
+
   it('rechecks the locked batch so concurrent publishes cannot create duplicate history', async () => {
     const { service, tx, submission } = harness(1100);
     tx.valuationSubmission.findUniqueOrThrow.mockResolvedValueOnce({
