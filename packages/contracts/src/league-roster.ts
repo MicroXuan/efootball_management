@@ -3,6 +3,7 @@ import { ResourceIdSchema } from './common.js';
 import { ExpectedVersionSchema, IdempotencyKeySchema } from './competition.js';
 import { CurrentSeasonSummarySchema, LeagueEditionSchema } from './league.js';
 import { LeagueTeamDetailSchema, LeagueTeamSummarySchema } from './league-team.js';
+import { PlayerCardTypeSchema, PlayerPositionSchema } from './player-catalog.js';
 
 const TimestampSchema = z.iso.datetime();
 const MAX_UNSIGNED_INT = 4_294_967_295;
@@ -308,6 +309,12 @@ export const RosterPlayerCandidateSchema = z.object({
 export const RosterPlayerCandidateListResponseSchema = z.object({
   items: z.array(RosterPlayerCandidateSchema)
 });
+export const RosterPlayerCandidateQuerySchema = z.object({
+  keyword: z.string().trim().min(1).max(80),
+  position: PlayerPositionSchema.optional(),
+  cardType: PlayerCardTypeSchema.optional(),
+  cardPackId: ResourceIdSchema.optional()
+});
 
 export const MyLeagueTeamSummarySchema = LeagueTeamSummarySchema.extend({
   leagueName: z.string().min(1),
@@ -408,6 +415,7 @@ export type FinanceLedgerListResponse = z.infer<typeof FinanceLedgerListResponse
 export type TeamRosterView = z.infer<typeof TeamRosterViewSchema>;
 export type RosterPlayerCandidate = z.infer<typeof RosterPlayerCandidateSchema>;
 export type RosterPlayerCandidateListResponse = z.infer<typeof RosterPlayerCandidateListResponseSchema>;
+export type RosterPlayerCandidateQuery = z.infer<typeof RosterPlayerCandidateQuerySchema>;
 export type MyLeagueTeamSummary = z.infer<typeof MyLeagueTeamSummarySchema>;
 export type MyLeagueTeamListResponse = z.infer<typeof MyLeagueTeamListResponseSchema>;
 export type MyLeagueTeamOverview = z.infer<typeof MyLeagueTeamOverviewSchema>;

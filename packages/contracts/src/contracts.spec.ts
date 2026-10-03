@@ -32,6 +32,7 @@ import {
   RosterEntrySchema,
   RosterEntryStatusSchema,
   RosterMutationResponseSchema,
+  RosterPlayerCandidateQuerySchema,
   RosterTransactionSchema,
   SalaryRecalculationResponseSchema,
   SalaryRuleVersionSchema,
@@ -788,6 +789,15 @@ describe('shared API contracts', () => {
 });
 
 describe('league team administration contracts', () => {
+  it('validates combined administrator player candidate filters', () => {
+    const packId = '11111111-1111-4111-8111-111111111111';
+    assert.deepEqual(RosterPlayerCandidateQuerySchema.parse({
+      keyword: '  梅西  ', position: 'AMF', cardType: 'EPIC', cardPackId: packId
+    }), { keyword: '梅西', position: 'AMF', cardType: 'EPIC', cardPackId: packId });
+    assert.throws(() => RosterPlayerCandidateQuerySchema.parse({ keyword: ' ' }));
+    assert.throws(() => RosterPlayerCandidateQuerySchema.parse({ keyword: '梅西', position: 'ST' }));
+  });
+
   it('accepts non-active asset lifecycle states and league economy ledger types', () => {
     assert.equal(RosterEntryStatusSchema.parse('DISAPPEARED'), 'DISAPPEARED');
     assert.equal(RosterEntryStatusSchema.parse('RETIRED'), 'RETIRED');
