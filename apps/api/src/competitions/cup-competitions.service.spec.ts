@@ -43,7 +43,11 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
     leagueSeason: { findUnique: jest.fn(async () => ({ id: 'season-1', leagueId: 'league-1', status: 'IN_PROGRESS' })) },
     competition: {
       create: jest.fn(async (...args: unknown[]) => { void args; return competition; }),
-      findUnique: jest.fn(async () => competition)
+      findUnique: jest.fn(async () => competition),
+      findMany: jest.fn(async (input: unknown) => {
+        void input;
+        return [{ ...competition, _count: { participants: 12 } }];
+      })
     },
     competitionRuleVersion: {
       create: jest.fn(async (...args: unknown[]) => { void args; return { id: 'rule-1' }; })
@@ -83,6 +87,20 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
 }
 
 describe('CupCompetitionsService', () => {
+  it('lists every cup in a league season with participant counts', async () => {
+    const { service, transaction, authorization } = harness();
+
+    const result = await service.listAdmin('admin-1', 'league-1', 'season-1');
+
+    expect(authorization.requireLeagueAccess).toHaveBeenCalledWith('admin-1', 'league-1');
+    expect(transaction.competition.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ seasonId: 'season-1' })
+    }));
+    expect(result.items).toEqual([expect.objectContaining({
+      id: 'cup-1', participantCount: 12, targetGroupSize: 4
+    })]);
+  });
+
   it('creates a season-bound cup with group rules and an auditable default scoring rule', async () => {
     const { service, transaction, authorization, audit } = harness();
 

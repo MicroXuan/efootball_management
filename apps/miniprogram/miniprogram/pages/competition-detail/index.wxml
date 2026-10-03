@@ -15,10 +15,11 @@
       </view>
     </view>
 
-    <view class="tabs">
+    <view class="tabs {{showBracket ? 'tabs--four' : ''}}">
       <button class="tab {{activeTab === 'overview' ? 'is-active' : ''}}" data-tab="overview" bindtap="switchTab">概览</button>
       <button class="tab {{activeTab === 'schedule' ? 'is-active' : ''}}" data-tab="schedule" bindtap="switchTab">赛程</button>
       <button class="tab {{activeTab === 'standings' ? 'is-active' : ''}}" data-tab="standings" bindtap="switchTab">积分榜</button>
+      <button wx:if="{{showBracket}}" class="tab {{activeTab === 'bracket' ? 'is-active' : ''}}" data-tab="bracket" bindtap="switchTab">淘汰签表</button>
     </view>
 
     <view wx:if="{{activeTab === 'overview'}}" class="section-stack">
@@ -54,12 +55,35 @@
       </view>
     </view>
 
-    <view wx:else class="section-stack">
+    <view wx:elif="{{activeTab === 'standings'}}" class="section-stack">
       <view wx:if="{{standingsIsEmpty}}" class="empty-panel">第一场官方比分产生后，积分榜会自动生成。</view>
       <view wx:else class="standing-table">
         <view class="standing-row standing-head"><text>#</text><text>球员</text><text>赛</text><text>净胜</text><text>积分</text></view>
         <view wx:for="{{standings.rows}}" wx:key="participantId" class="standing-row"><text>{{item.rank}}</text><text>{{item.displayName}}</text><text>{{item.played}}</text><text>{{item.goalDifference}}</text><text class="points">{{item.totalPoints}}</text></view>
       </view>
+    </view>
+
+    <view wx:else class="section-stack">
+      <view wx:if="{{!bracket}}" class="empty-panel">签表确认后会在这里显示完整晋级路径。</view>
+      <block wx:else>
+        <view class="bracket-summary">
+          <view><text class="panel-kicker">淘汰轨道</text><text class="panel-title">通往决赛</text></view>
+          <text class="bracket-current">{{bracket.currentRoundNumber ? '第 ' + bracket.currentRoundNumber + ' 轮' : '已决出冠军'}}</text>
+        </view>
+        <scroll-view class="bracket-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+          <view class="bracket-track">
+            <view wx:for="{{bracket.rounds}}" wx:key="roundNumber" class="bracket-round {{item.roundNumber === bracket.currentRoundNumber ? 'is-current' : ''}}">
+              <view class="bracket-round-head"><text>{{item.displayName}}</text><text>{{item.status === 'PUBLISHED' ? '进行中' : '待开始'}}</text></view>
+              <view class="bracket-pairings">
+                <view wx:for="{{item.pairings}}" wx:for-item="pairing" wx:key="id" class="bracket-pairing">
+                  <view class="bracket-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text></view>
+                  <view class="bracket-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text></view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+      </block>
     </view>
   </block>
 </view>

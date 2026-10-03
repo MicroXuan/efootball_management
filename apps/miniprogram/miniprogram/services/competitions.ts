@@ -1,5 +1,6 @@
 import type {
   CompetitionDetail,
+  CupBracketView,
   CompetitionListResponse,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
@@ -66,6 +67,11 @@ export const competitionsApi = {
   standings(competitionId: string) {
     return api.request<StandingsSnapshotResponse>({
       path: `/competitions/${encodeURIComponent(competitionId)}/standings`, skipAuth: true,
+    })
+  },
+  bracket(competitionId: string) {
+    return api.request<CupBracketView>({
+      path: `/cups/${encodeURIComponent(competitionId)}/bracket`, skipAuth: true,
     })
   },
   submitResult(matchId: string, input: SubmitMatchResultRequest) {

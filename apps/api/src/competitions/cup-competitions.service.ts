@@ -2,7 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   CupRegistrationResponse,
   ParsedCreateSeasonCupRequest,
-  RegisterSeasonCupRequest
+  RegisterSeasonCupRequest,
+  SeasonCupListResponse,
+  SeasonCupSummary
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
@@ -34,6 +36,29 @@ export class CupCompetitionsService {
     @Inject(AuditLogService) private readonly audit: AuditLogService,
     @Inject(COMPETITION_CLOCK) private readonly clock: CompetitionClock
   ) {}
+
+  async listAdmin(
+    actorAdminId: string,
+    leagueId: string,
+    seasonId: string
+  ): Promise<SeasonCupListResponse> {
+    await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
+    const competitions = await this.prisma.competition.findMany({
+      where: {
+        seasonId,
+        season: { leagueId },
+        competitionType: { in: ['GROUP_KNOCKOUT_CUP', 'KNOCKOUT_CUP'] }
+      },
+      include: { cupConfig: true, _count: { select: { participants: true } } },
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
+    });
+    return {
+      items: competitions.map((competition) => this.summary(
+        competition,
+        competition._count.participants
+      ))
+    };
+  }
 
   async create(
     actorAdminId: string,
@@ -216,21 +241,22 @@ export class CupCompetitionsService {
     };
   }
 
-  private summary(value: CupRecord) {
+  private summary(value: CupRecord, participantCount = 0): SeasonCupSummary {
     if (!value.cupConfig || !value.seasonId) throw new Error('Cup competition is missing its season configuration');
     return {
       id: value.id,
       seasonId: value.seasonId,
       name: value.name,
       description: value.description,
-      competitionType: value.competitionType,
-      format: value.format,
+      competitionType: value.competitionType as SeasonCupSummary['competitionType'],
+      format: value.format as SeasonCupSummary['format'],
       status: value.status,
       registrationOpensAt: value.registrationOpensAt.toISOString(),
       registrationClosesAt: value.registrationClosesAt.toISOString(),
       startsAt: value.startsAt.toISOString(),
       endsAt: value.endsAt.toISOString(),
       participantLimit: value.participantLimit,
+      participantCount,
       targetGroupSize: value.cupConfig.targetGroupSize,
       qualifiersPerGroup: value.cupConfig.qualifiersPerGroup,
       version: value.version

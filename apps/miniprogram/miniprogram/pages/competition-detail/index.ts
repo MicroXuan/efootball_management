@@ -1,5 +1,6 @@
 import type {
   CompetitionDetail,
+  CupBracketView,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
   GameAccountResponse,
@@ -9,9 +10,9 @@ import { ApiError, api } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
 import { session } from '../../services/session'
 import { competitionErrorMessage, formatLocalDate, lifecycleLabel } from '../competitions/competitions.viewmodel'
-import { eligibleAccounts, registrationAvailability, standingsEmpty, type EligibleAccount } from './detail.viewmodel'
+import { eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type EligibleAccount } from './detail.viewmodel'
 
-type DetailTab = 'overview' | 'schedule' | 'standings'
+type DetailTab = 'overview' | 'schedule' | 'standings' | 'bracket'
 
 Page({
   data: {
@@ -20,6 +21,8 @@ Page({
     lifecycleName: '', registrationWindow: '', startLabel: '',
     matches: [] as CompetitionMatchResponse[],
     standings: null as StandingsSnapshotResponse | null,
+    bracket: null as CupBracketView | null,
+    showBracket: false,
     standingsIsEmpty: true,
     accounts: [] as EligibleAccount[],
     selectedAccountId: '',
@@ -51,8 +54,12 @@ Page({
     if (!this.data.id) return
     this.setData({ loading: true, errorMessage: '' })
     try {
-      const [publicDetail, matches, standings] = await Promise.all([
-        competitionsApi.detail(this.data.id), competitionsApi.matches(this.data.id), competitionsApi.standings(this.data.id),
+      const publicDetail = await competitionsApi.detail(this.data.id)
+      const showBracket = isCupCompetition(publicDetail)
+      const [matches, standings, bracket] = await Promise.all([
+        competitionsApi.matches(this.data.id),
+        competitionsApi.standings(this.data.id),
+        showBracket ? competitionsApi.bracket(this.data.id).catch(() => null) : Promise.resolve(null),
       ])
       const detail = session.getAccessToken()
         ? await competitionsApi.managerDetail(this.data.id).catch(() => publicDetail)
@@ -76,6 +83,8 @@ Page({
         startLabel: formatLocalDate(detail.startsAt),
         matches,
         standings,
+        bracket,
+        showBracket,
         standingsIsEmpty: standingsEmpty(standings),
         accounts: displayAccounts,
         selectedAccountId: displayAccounts.find(({ eligible }) => eligible)?.id ?? '',

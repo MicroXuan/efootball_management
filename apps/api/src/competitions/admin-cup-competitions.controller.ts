@@ -32,6 +32,15 @@ export class AdminCupCompetitionsController {
     @Inject(CupBracketQueriesService) private readonly bracketQueries: CupBracketQueriesService
   ) {}
 
+  @Get()
+  list(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string
+  ) {
+    return this.cups.listAdmin(admin.id, leagueId, seasonId);
+  }
+
   @Post()
   create(
     @CurrentAdmin() admin: CurrentAdminIdentity,

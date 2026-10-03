@@ -31,6 +31,7 @@ import {
   ConfirmCupBracketProposalRequestSchema,
   CupBracketProposalSchema,
   CupBracketViewSchema,
+  SeasonCupSummarySchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -1498,5 +1499,27 @@ describe('cup center contracts', () => {
       }]
     });
     assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.displayName, '上海海港');
+  });
+
+  it('exposes a season cup card with format and group configuration', () => {
+    const cup = SeasonCupSummarySchema.parse({
+      id: competitionId,
+      seasonId: entryId,
+      name: 'S3 足总杯',
+      description: '赛季杯赛',
+      competitionType: 'GROUP_KNOCKOUT_CUP',
+      format: 'GROUP_KNOCKOUT',
+      status: 'REGISTRATION_OPEN',
+      registrationOpensAt,
+      registrationClosesAt,
+      startsAt,
+      endsAt,
+      participantLimit: 32,
+      participantCount: 12,
+      targetGroupSize: 4,
+      qualifiersPerGroup: 2,
+      version: 1
+    });
+    assert.equal(cup.participantCount, 12);
   });
 });

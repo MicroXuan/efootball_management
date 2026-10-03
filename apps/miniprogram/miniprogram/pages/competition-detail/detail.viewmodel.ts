@@ -30,3 +30,8 @@ export function registrationAvailability(competition: CompetitionDetail, eligibl
 export function standingsEmpty(standings: StandingsSnapshotResponse): boolean {
   return standings.version === 0 || standings.rows.length === 0
 }
+
+export function isCupCompetition(competition: Pick<CompetitionDetail, 'competitionType'>): boolean {
+  return competition.competitionType === 'GROUP_KNOCKOUT_CUP'
+    || competition.competitionType === 'KNOCKOUT_CUP'
+}

@@ -12,6 +12,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .score-label { color: #7e8b91; font-size: 17rpx; }
 .score-value { margin-top: 7rpx; color: #aab5ba; font-size: 22rpx; }
 .tabs { margin: 26rpx 0; display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 2rpx solid #344047; }
+.tabs.tabs--four { grid-template-columns: repeat(4, 1fr); }
 .tab { margin: 0; padding: 20rpx 0; border: 0; border-radius:20rpx; background: transparent; color: #7e8b91; font-size: 23rpx; }
 .tab::after { border: 0; }
 .tab.is-active { border-bottom: 4rpx solid #b6f13a; color: #eaffE8; }
@@ -37,6 +38,23 @@ page { background: #0e1417; color: #f4f7f8; }
 .standing-row { display: grid; grid-template-columns: 45rpx 1fr 60rpx 70rpx 70rpx; gap: 8rpx; padding: 17rpx 0; border-top: 1rpx solid #2d393f; color: #c6d1cb; font-size: 21rpx; }
 .standing-head { border-top: 0; color: #7e8b91; font-size: 17rpx; }.points { color: #b6f13a; font-weight: 800; }
 .empty-panel { min-height: 180rpx; display: flex; align-items: center; color: #aab5ba; font-size: 23rpx; line-height: 1.6; }
+.bracket-summary { padding: 24rpx 26rpx; display: flex; align-items: center; justify-content: space-between; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
+.bracket-summary .panel-title { margin-bottom: 0; }
+.bracket-current { padding: 10rpx 16rpx; border: 1rpx solid #52652c; border-radius: 40rpx; color: #b6f13a; font-size: 18rpx; }
+.bracket-scroll { width: 100%; }
+.bracket-track { padding-bottom: 18rpx; display: inline-flex; gap: 22rpx; }
+.bracket-round { width: 490rpx; padding: 22rpx; flex: none; border: 2rpx solid #344047; border-radius: 22rpx; background: #151d21; opacity: .7; }
+.bracket-round.is-current { border-color: #60782d; opacity: 1; box-shadow: inset 6rpx 0 0 #b6f13a; }
+.bracket-round-head { margin-bottom: 18rpx; display: flex; align-items: center; justify-content: space-between; }
+.bracket-round-head text:first-child { color: #f4f7f8; font-size: 24rpx; font-weight: 800; }
+.bracket-round-head text:last-child { color: #7e8b91; font-size: 18rpx; }
+.bracket-round.is-current .bracket-round-head text:last-child { color: #b6f13a; }
+.bracket-pairings { display: flex; flex-direction: column; gap: 18rpx; }
+.bracket-pairing { overflow: hidden; border: 1rpx solid #3c494f; border-radius: 16rpx; background: #1c262b; }
+.bracket-team { min-height: 64rpx; padding: 0 18rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; border-bottom: 1rpx solid #344047; color: #aab5ba; font-size: 21rpx; }
+.bracket-team:last-child { border-bottom: 0; }
+.bracket-team.is-winner { color: #f4f7f8; background: rgba(182,241,58,.08); }
+.bracket-team.is-winner text:last-child { color: #b6f13a; font-weight: 800; }
 .inline-error, .state-copy { color: #aab5ba; font-size: 22rpx; line-height: 1.6; }
 .state-panel { min-height: 600rpx; display: flex; flex-direction: column; justify-content: center; }.state-code { color: #aab5ba; font-size: 17rpx; letter-spacing: 4rpx; }.state-title { margin-top: 18rpx; font-size: 34rpx; font-weight: 800; }
 .outline-button { width: 240rpx; margin: 28rpx 0 0; border: 2rpx solid #b6f13a; background: transparent; color: #b6f13a; }

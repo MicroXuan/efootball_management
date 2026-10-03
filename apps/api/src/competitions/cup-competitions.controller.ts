@@ -12,7 +12,6 @@ import { CupCompetitionsService } from './cup-competitions.service.js';
 import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
 
 @Controller('cups')
-@UseGuards(JwtAuthGuard)
 export class CupCompetitionsController {
   constructor(
     @Inject(CupCompetitionsService) private readonly cups: CupCompetitionsService,
@@ -27,6 +26,7 @@ export class CupCompetitionsController {
   }
 
   @Post(':competitionId/registration')
+  @UseGuards(JwtAuthGuard)
   register(
     @CurrentUser() user: AuthenticatedUser,
     @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,

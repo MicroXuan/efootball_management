@@ -203,6 +203,7 @@ export class MyCompetitionsService {
   private summary(value: Competition, participantCount: number): CompetitionSummary {
     return {
       id: value.id,
+      competitionType: value.competitionType,
       name: value.name,
       description: value.description,
       platform: value.platform,

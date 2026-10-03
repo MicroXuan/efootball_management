@@ -184,6 +184,29 @@ export const CupRegistrationResponseSchema = z.object({
   updatedAt: TimestampSchema
 });
 
+export const SeasonCupSummarySchema = z.object({
+  id: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  name: z.string().trim().min(2).max(80),
+  description: z.string().max(2_000),
+  competitionType: CupCompetitionTypeSchema,
+  format: z.enum(['GROUP_KNOCKOUT', 'SINGLE_ELIMINATION']),
+  status: CompetitionStatusSchema,
+  registrationOpensAt: TimestampSchema,
+  registrationClosesAt: TimestampSchema,
+  startsAt: TimestampSchema,
+  endsAt: TimestampSchema,
+  participantLimit: z.number().int().min(2).max(128),
+  participantCount: z.number().int().nonnegative(),
+  targetGroupSize: z.number().int().min(2).max(16).nullable(),
+  qualifiersPerGroup: z.number().int().min(1).max(15).nullable(),
+  version: z.number().int().positive()
+});
+
+export const SeasonCupListResponseSchema = z.object({
+  items: z.array(SeasonCupSummarySchema)
+});
+
 export const UpdateCompetitionRequestSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   description: z.string().trim().max(2_000).optional(),
@@ -438,6 +461,7 @@ export const CompetitionRegistrationResponseSchema = z.object({
 
 export const CompetitionSummarySchema = z.object({
   id: ResourceIdSchema,
+  competitionType: CompetitionTypeSchema.optional(),
   name: z.string(),
   description: z.string(),
   platform: GamePlatformSchema,
@@ -614,6 +638,8 @@ export type CreateSeasonCupRequest = z.input<typeof CreateSeasonCupRequestSchema
 export type ParsedCreateSeasonCupRequest = z.output<typeof CreateSeasonCupRequestSchema>;
 export type RegisterSeasonCupRequest = z.input<typeof RegisterSeasonCupRequestSchema>;
 export type CupRegistrationResponse = z.infer<typeof CupRegistrationResponseSchema>;
+export type SeasonCupSummary = z.infer<typeof SeasonCupSummarySchema>;
+export type SeasonCupListResponse = z.infer<typeof SeasonCupListResponseSchema>;
 export type UpdateCompetitionRequest = z.input<typeof UpdateCompetitionRequestSchema>;
 export type UpdateCompetitionRulesRequest = z.input<typeof UpdateCompetitionRulesRequestSchema>;
 export type RegisterCompetitionRequest = z.input<typeof RegisterCompetitionRequestSchema>;

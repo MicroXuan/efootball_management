@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CompetitionDetail, GameAccountResponse, StandingsSnapshotResponse } from '@efm/contracts'
-import { eligibleAccounts, registrationAvailability, standingsEmpty } from './detail.viewmodel'
+import { eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty } from './detail.viewmodel'
 
 const detail = {
   id: 'competition-1', platform: 'MOBILE', serverRegion: 'GLOBAL', status: 'REGISTRATION_OPEN',
@@ -35,5 +35,11 @@ describe('competition detail view model', () => {
   it('recognizes a version-zero standings empty state', () => {
     expect(standingsEmpty({ version: 0, rows: [] } as unknown as StandingsSnapshotResponse)).toBe(true)
     expect(standingsEmpty({ version: 1, rows: [{ participantId: 'x' }] } as unknown as StandingsSnapshotResponse)).toBe(false)
+  })
+
+  it('shows the bracket only for season cups', () => {
+    expect(isCupCompetition({ ...detail, competitionType: 'KNOCKOUT_CUP' })).toBe(true)
+    expect(isCupCompetition({ ...detail, competitionType: 'GROUP_KNOCKOUT_CUP' })).toBe(true)
+    expect(isCupCompetition({ ...detail, competitionType: 'OPEN_EVENT' })).toBe(false)
   })
 })
