@@ -115,7 +115,11 @@ export class TransactionFeesService {
     return { items: rules.map((rule) => this.presentRule(rule)) };
   }
 
-  async listTransactions(leagueId: string): Promise<LeagueTransactionListResponse> {
+  async listTransactions(
+    leagueId: string,
+    cursor?: string,
+    limit = 30
+  ): Promise<LeagueTransactionListResponse> {
     const rows = await this.prisma.rosterTransaction.findMany({
       where: { leagueId },
       include: {
@@ -124,10 +128,12 @@ export class TransactionFeesService {
         targetLeagueTeam: { select: { name: true } }
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 100
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: limit + 1
     });
+    const page = rows.slice(0, limit);
     return {
-      items: rows.map((row) => ({
+      items: page.map((row) => ({
         id: row.id,
         leagueId: row.leagueId,
         seasonId: row.seasonId,
@@ -146,16 +152,16 @@ export class TransactionFeesService {
         createdByAdminId: row.createdByAdminId,
         createdAt: row.createdAt.toISOString()
       })),
-      nextCursor: null
+      nextCursor: rows.length > limit ? page.at(-1)?.id ?? null : null
     };
   }
 
-  async listTransactionsForParticipant(userId: string, leagueId: string) {
+  async listTransactionsForParticipant(userId: string, leagueId: string, cursor?: string, limit = 30) {
     const entry = await this.prisma.seasonEntry.findFirst({
       where: { ownerUserId: userId, status: 'APPROVED', season: { leagueId } }, select: { id: true }
     });
     if (!entry) throw this.error('LEAGUE_PARTICIPANT_REQUIRED', '只有联赛参赛用户可以查看交易记录', 403);
-    return this.listTransactions(leagueId);
+    return this.listTransactions(leagueId, cursor, limit);
   }
 
   private presentRule(rule: {

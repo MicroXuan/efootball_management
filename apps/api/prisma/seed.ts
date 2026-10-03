@@ -44,6 +44,7 @@ const leaguePermissions = [
 
 const localAdminUsername = process.env.LOCAL_ADMIN_USERNAME?.trim();
 const localAdminPasswordHash = process.env.LOCAL_ADMIN_PASSWORD_HASH?.trim();
+const seedEconomyDemo = process.env.SEED_ECONOMY_DEMO?.trim().toLowerCase() === 'true';
 
 if (Boolean(localAdminUsername) !== Boolean(localAdminPasswordHash)) {
   throw new Error('LOCAL_ADMIN_USERNAME and LOCAL_ADMIN_PASSWORD_HASH must be provided together');
@@ -181,7 +182,7 @@ await prisma.$transaction(async (transaction) => {
     create: { code: 'pesdata', name: 'PESDATA authorized sync', type: 'API' }
   });
 
-  if (localAdminUsername) {
+  if (localAdminUsername && seedEconomyDemo) {
     const demoAdmin = await transaction.adminAccount.findUniqueOrThrow({
       where: { username: localAdminUsername }
     });
@@ -393,7 +394,7 @@ await prisma.$transaction(async (transaction) => {
     for (const ownership of ownerships) {
       await transaction.leaguePlayerOwnership.upsert({
         where: { id: ownership.id },
-        update: { leagueTeamId: ownership.teamId, status: 'ACTIVE' },
+        update: {},
         create: {
           id: ownership.id,
           leagueId: ids.league,
@@ -412,7 +413,7 @@ await prisma.$transaction(async (transaction) => {
             footballPlayerId: ownership.player.id
           }
         },
-        update: { currentValueMinor: 20_000, effectiveAt: new Date(now - 86_400_000) },
+        update: {},
         create: {
           leagueId: ids.league,
           footballPlayerId: ownership.player.id,
@@ -482,7 +483,7 @@ await prisma.$transaction(async (transaction) => {
     }
     await transaction.valuationSubmission.upsert({
       where: { id: ids.reviewSubmission },
-      update: { status: 'DRAFT', version: 1 },
+      update: {},
       create: {
         id: ids.reviewSubmission,
         windowId: ids.valuationWindow,
@@ -495,7 +496,7 @@ await prisma.$transaction(async (transaction) => {
     });
     await transaction.valuationSubmissionItem.upsert({
       where: { id: ids.reviewItem },
-      update: { proposedValueMinor: 30_000, exceedsRange: true },
+      update: {},
       create: {
         id: ids.reviewItem,
         submissionId: ids.reviewSubmission,
@@ -527,7 +528,7 @@ await prisma.$transaction(async (transaction) => {
     for (const entry of financeEntries) {
       await transaction.financeLedgerEntry.upsert({
         where: { id: entry.id },
-        update: entry,
+        update: {},
         create: {
           ...entry,
           leagueId: ids.league,

@@ -39,7 +39,7 @@ export class TeamAssetsService {
     const valuations = await this.prisma.leaguePlayerValuation.findMany({
       where: {
         leagueId: team.leagueId,
-        footballPlayerId: { in: active.map(({ footballPlayerId }) => footballPlayerId) }
+        footballPlayerId: { in: ownerships.map(({ footballPlayerId }) => footballPlayerId) }
       }
     });
     const valuationByPlayer = new Map(valuations.map((valuation) => [valuation.footballPlayerId, valuation]));
@@ -69,9 +69,7 @@ export class TeamAssetsService {
       activeSalaryMinor: active.reduce((total, ownership) => total + ownership.salaryMinor, 0),
       players: ownerships.map((ownership) => {
         const attributes = this.attributes(ownership.currentPlayerCard.attributes?.attributesJson);
-        const valuation = ownership.status === 'ACTIVE'
-          ? valuationByPlayer.get(ownership.footballPlayerId)
-          : undefined;
+        const valuation = valuationByPlayer.get(ownership.footballPlayerId);
         return {
           playerId: ownership.footballPlayerId,
           playerName: ownership.footballPlayer.nameZh

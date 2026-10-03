@@ -259,9 +259,10 @@ describe('league economy end-to-end flow', () => {
     });
 
     const finance = await request(app.getHttpServer())
-      .get(`/v1/me/league-teams/${teamIds[1]}/finance?seasonId=${seasonId}`)
+      .get(`/v1/me/league-teams/${teamIds[1]}/finance`)
       .set(userAuth(1)).expect(200);
     expect(finance.body).toMatchObject({
+      seasonId,
       creditTotalMinor: 2_000,
       debitTotalMinor: 31_000,
       balanceMinor: -29_000

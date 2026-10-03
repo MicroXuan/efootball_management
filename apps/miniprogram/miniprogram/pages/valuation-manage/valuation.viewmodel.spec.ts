@@ -1,6 +1,6 @@
 import type { ValuationSubmissionStatus, ValuationWorkspace } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { countdownCopy, submissionStateCopy, validateValuationInput, valuationPlayerView, valuationSummary } from './valuation.viewmodel'
+import { countdownCopy, submissionStateCopy, validateValuationInput, valuationInputState, valuationPlayerView, valuationSummary } from './valuation.viewmodel'
 
 const workspace = (status: ValuationSubmissionStatus | null = 'DRAFT'): ValuationWorkspace => ({
   window: { id: 'window-1', name: '季前申报', state: 'OPEN', startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-10-04T12:00:00.000Z', rule: { id: 'rule-1', version: 1, minimumValueMinor: 100, maximumValueMinor: 10000, maximumIncreaseBps: 2000, maximumDecreaseBps: 1000 } },
@@ -19,11 +19,12 @@ describe('valuation management view model', () => {
     expect(valuationSummary(players)).toMatchObject({ changedCount: 1, missingCount: 1, complete: false })
   })
 
-  it('validates integers against the global or change range before submission', () => {
+  it('allows percentage-limit exceptions to enter review while rejecting invalid numbers', () => {
     const player = workspace().players[0]!
-    expect(validateValuationInput('1000.5', player)).toBe('请输入非负整数身价')
-    expect(validateValuationInput('1300', player)).toContain('允许范围')
-    expect(validateValuationInput('1100', player)).toBeNull()
+    expect(validateValuationInput('1000.5')).toBe('请输入非负整数身价')
+    expect(validateValuationInput('1300')).toBeNull()
+    expect(valuationInputState('1300', player)).toBe('超出范围')
+    expect(validateValuationInput('1100')).toBeNull()
   })
 
   it('presents pending, rejected retry, and closed read-only states in Chinese', () => {

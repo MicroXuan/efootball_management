@@ -48,7 +48,7 @@ function harness() {
   };
   const prisma = {
     $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx)),
-    leagueTeam: { findUnique: jest.fn<() => Promise<{ id: string; name: string; ownerUserId: string } | null>>(async () => ({ id: 'team-1', name: '海港竞技', ownerUserId: 'user-1' })) },
+    leagueTeam: { findUnique: jest.fn<() => Promise<{ id: string; name: string; ownerUserId: string; leagueId: string } | null>>(async () => ({ id: 'team-1', name: '海港竞技', ownerUserId: 'user-1', leagueId: 'league-1' })) },
     seasonEntry: { findFirst: jest.fn<() => Promise<{ id: string; status: string } | null>>(async () => ({ id: 'entry-1', status: 'APPROVED' })) },
     valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
     valuationSubmission: { findFirst: jest.fn(async () => null) },
@@ -107,7 +107,7 @@ describe('ValuationSnapshotsService', () => {
     await expect(service.getWorkspace('other-user', 'team-1', at)).rejects.toMatchObject({
       code: 'VALUATION_TEAM_OWNER_REQUIRED'
     });
-    prisma.leagueTeam.findUnique.mockResolvedValueOnce({ id: 'team-1', name: '海港竞技', ownerUserId: 'user-1' });
+    prisma.leagueTeam.findUnique.mockResolvedValueOnce({ id: 'team-1', name: '海港竞技', ownerUserId: 'user-1', leagueId: 'league-1' });
     prisma.seasonEntry.findFirst.mockResolvedValueOnce(null);
     await expect(service.getWorkspace('user-1', 'team-1', at)).rejects.toMatchObject({
       code: 'VALUATION_SEASON_ENTRY_REQUIRED'
@@ -115,9 +115,12 @@ describe('ValuationSnapshotsService', () => {
   });
 
   it('returns the snapshot roster while keeping the players current league valuation', async () => {
-    const { service, snapshot } = harness();
+    const { service, snapshot, prisma } = harness();
     jest.spyOn(service, 'ensureWindowSnapshot').mockResolvedValueOnce([snapshot] as never);
     const workspace = await service.getWorkspace('user-1', 'team-1', at);
+    expect(prisma.valuationWindow.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ season: { leagueId: 'league-1' } })
+    }));
     expect(workspace.players).toEqual([expect.objectContaining({
       playerId: 'player-1',
       baseValueMinor: 1000,

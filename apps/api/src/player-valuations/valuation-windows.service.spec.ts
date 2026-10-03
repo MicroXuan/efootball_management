@@ -25,7 +25,11 @@ function harness() {
       update: jest.fn(async () => window),
       findUniqueOrThrow: jest.fn(async () => window)
     },
-    valuationWindowRuleVersion: { create: jest.fn(async () => rule) }
+    valuationWindowRuleVersion: { create: jest.fn(async () => rule) },
+    seasonEntry: { findMany: jest.fn(async () => [{ leagueTeamId: 'team-1' }]) },
+    leaguePlayerOwnership: { findMany: jest.fn(async () => [{ id: 'ownership-1', leagueTeamId: 'team-1', footballPlayerId: 'player-1' }]) },
+    leaguePlayerValuation: { findMany: jest.fn(async () => [{ footballPlayerId: 'player-1', currentValueMinor: 1200 }]) },
+    valuationRosterSnapshot: { createMany: jest.fn(async () => ({ count: 1 })) }
   };
   const prisma = {
     leagueSeason: { findUniqueOrThrow: jest.fn(async () => season) },
@@ -71,6 +75,10 @@ describe('ValuationWindowsService', () => {
     expect(authorization.requireLeagueManager).toHaveBeenCalledWith('admin-1', 'league-1');
     expect(tx.valuationWindowRuleVersion.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ windowId: 'window-1', version: 1 })
+    });
+    expect(tx.valuationRosterSnapshot.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ ownershipId: 'ownership-1', baseValueMinor: 1200 })],
+      skipDuplicates: true
     });
     expect(audit.record).toHaveBeenCalledWith(tx, expect.objectContaining({
       action: 'VALUATION_WINDOW_CREATED'

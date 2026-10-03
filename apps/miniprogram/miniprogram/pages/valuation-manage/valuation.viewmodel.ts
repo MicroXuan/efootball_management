@@ -39,12 +39,20 @@ export function valuationSummary(players: ValuationPlayerView[]) {
   }
 }
 
-export function validateValuationInput(value: string, player: ValuationWorkspacePlayer): string | null {
+export function validateValuationInput(value: string): string | null {
   if (!/^\d+$/.test(value)) return '请输入非负整数身价'
   const parsed = Number(value)
   if (!Number.isSafeInteger(parsed)) return '身价数值过大'
-  if (parsed < player.minimumAllowedMinor || parsed > player.maximumAllowedMinor) return `允许范围为 ${player.minimumAllowedMinor} — ${player.maximumAllowedMinor}`
   return null
+}
+
+export function valuationInputState(value: string, player: ValuationWorkspacePlayer): ValuationPlayerView['changeState'] {
+  if (value === '' && player.baseValueMinor === null) return '首次必填'
+  if (!/^\d+$/.test(value)) return '已修改'
+  const parsed = Number(value)
+  if (parsed < player.minimumAllowedMinor || parsed > player.maximumAllowedMinor) return '超出范围'
+  if (player.currentValueMinor !== null && parsed === player.currentValueMinor) return '沿用'
+  return '已修改'
 }
 
 export function submissionStateCopy(workspace: ValuationWorkspace): string {

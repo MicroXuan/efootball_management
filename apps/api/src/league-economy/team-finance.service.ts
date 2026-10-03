@@ -73,7 +73,10 @@ export class TeamFinanceService {
     teamId: string,
     seasonId: string | null
   ): Promise<TeamFinanceSummary> {
-    const team = await this.prisma.leagueTeam.findUnique({ where: { id: teamId } });
+    const team = await this.prisma.leagueTeam.findUnique({
+      where: { id: teamId },
+      include: { league: { select: { currentSeasonId: true } } }
+    });
     if (!team) throw this.error('LEAGUE_TEAM_NOT_FOUND', '球队不存在', 404);
     if (team.ownerUserId !== userId) {
       throw this.error('TEAM_FINANCE_OWNER_REQUIRED', '只有球队拥有者可以查看球队财务', 403);
@@ -82,14 +85,15 @@ export class TeamFinanceService {
       where: { leagueTeamId: teamId, ownerUserId: userId, status: 'APPROVED' }, select: { id: true }
     });
     if (!participation) throw this.error('TEAM_FINANCE_SEASON_ENTRY_REQUIRED', '球队尚未获得联赛参赛资格', 403);
-    if (seasonId) {
+    const resolvedSeasonId = seasonId ?? team.league.currentSeasonId;
+    if (resolvedSeasonId) {
       const season = await this.prisma.leagueSeason.findFirst({
-        where: { id: seasonId, leagueId: team.leagueId }, select: { id: true }
+        where: { id: resolvedSeasonId, leagueId: team.leagueId }, select: { id: true }
       });
       if (!season) throw this.error('LEAGUE_SEASON_NOT_FOUND', '赛季不存在或不属于当前联赛', 404);
     }
     const entries = await this.prisma.financeLedgerEntry.findMany({
-      where: { leagueTeamId: teamId, seasonId },
+      where: { leagueTeamId: teamId, seasonId: resolvedSeasonId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
     });
     const creditTotalMinor = entries
@@ -101,11 +105,11 @@ export class TeamFinanceService {
     return {
       leagueId: team.leagueId,
       teamId,
-      seasonId,
+      seasonId: resolvedSeasonId,
       creditTotalMinor,
       debitTotalMinor,
       balanceMinor: creditTotalMinor - debitTotalMinor,
-      uncategorizedEntryCount: seasonId === null ? entries.length : 0,
+      uncategorizedEntryCount: resolvedSeasonId === null ? entries.length : 0,
       entries: entries.map((entry) => this.present(entry))
     };
   }

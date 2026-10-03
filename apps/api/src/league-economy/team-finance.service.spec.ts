@@ -4,7 +4,7 @@ import { TeamFinanceService } from './team-finance.service.js';
 const at = new Date('2026-10-02T12:00:00.000Z');
 
 function harness() {
-  const team = { id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1' };
+  const team = { id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', league: { currentSeasonId: 'season-1' as string | null } };
   const season = { id: 'season-1', leagueId: 'league-1' };
   const entries = [
     { id: 'credit-1', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: 'season-1', rosterTransactionId: null, direction: 'CREDIT', type: 'AUCTION', amountMinor: 2000, note: '拍卖收入', createdAt: at },
@@ -26,7 +26,7 @@ function harness() {
   const audit = { record: jest.fn(async () => undefined) };
   return {
     service: new TeamFinanceService(prisma as never, authorization as never, receipts as never, audit as never),
-    prisma, tx, authorization, receipts, audit
+    prisma, tx, authorization, receipts, audit, team
   };
 }
 
@@ -48,7 +48,7 @@ describe('TeamFinanceService', () => {
   });
 
   it('summarizes credits and debits in real time and keeps seasonless history separate', async () => {
-    const { service, prisma } = harness();
+    const { service, prisma, team } = harness();
     await expect(service.getSeasonSummary('user-1', 'team-1', 'season-1')).resolves.toMatchObject({
       seasonId: 'season-1', creditTotalMinor: 2000, debitTotalMinor: 600, balanceMinor: 1400,
       uncategorizedEntryCount: 0
@@ -56,6 +56,10 @@ describe('TeamFinanceService', () => {
     expect(prisma.financeLedgerEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { leagueTeamId: 'team-1', seasonId: 'season-1' }
     }));
+    await expect(service.getSeasonSummary('user-1', 'team-1', null)).resolves.toMatchObject({
+      seasonId: 'season-1', creditTotalMinor: 2000, debitTotalMinor: 600
+    });
+    prisma.leagueTeam.findUnique.mockResolvedValueOnce({ ...team, league: { currentSeasonId: null } });
     prisma.financeLedgerEntry.findMany.mockResolvedValueOnce([{
       id: 'legacy', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: null,
       rosterTransactionId: null, direction: 'DEBIT', type: 'MANUAL_ADJUSTMENT',
@@ -67,8 +71,8 @@ describe('TeamFinanceService', () => {
   });
 
   it('rejects unauthorized owners and administrators', async () => {
-    const { service, prisma, authorization } = harness();
-    prisma.leagueTeam.findUnique.mockResolvedValueOnce({ id: 'team-1', leagueId: 'league-1', ownerUserId: 'another-user' });
+    const { service, prisma, authorization, team } = harness();
+    prisma.leagueTeam.findUnique.mockResolvedValueOnce({ ...team, ownerUserId: 'another-user' });
     await expect(service.getSeasonSummary('user-1', 'team-1', 'season-1'))
       .rejects.toMatchObject({ code: 'TEAM_FINANCE_OWNER_REQUIRED' });
     authorization.requireLeagueManager.mockRejectedValueOnce({ code: 'ADMIN_LEAGUE_ACCESS_DENIED' });

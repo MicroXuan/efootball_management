@@ -97,14 +97,19 @@ export class ValuationSnapshotsService {
   async getWorkspace(userId: string, teamId: string, at = new Date()): Promise<ValuationWorkspace> {
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
-      select: { id: true, name: true, ownerUserId: true }
+      select: { id: true, name: true, ownerUserId: true, leagueId: true }
     });
     if (!team) throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
     if (team.ownerUserId !== userId) {
       throw new LeagueError('VALUATION_TEAM_OWNER_REQUIRED', '只有球队拥有者可以管理本队身价', 403);
     }
     const activeWindow = await this.prisma.valuationWindow.findFirst({
-      where: { startsAt: { lte: at }, endsAt: { gt: at }, closedAt: null },
+      where: {
+        startsAt: { lte: at },
+        endsAt: { gt: at },
+        closedAt: null,
+        season: { leagueId: team.leagueId }
+      },
       orderBy: [{ startsAt: 'desc' }, { id: 'asc' }],
       select: { id: true, seasonId: true }
     });

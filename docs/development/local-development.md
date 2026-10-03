@@ -86,8 +86,9 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 
 ## 5. 经营闭环演示数据与入口账号
 
-执行种子命令时，如果 `.env` 已配置 `LOCAL_ADMIN_USERNAME` 和有效的
-`LOCAL_ADMIN_PASSWORD_HASH`，系统会幂等创建“本地经营演示联赛”，包括：
+需要演示数据时，在本地 `.env` 设置 `SEED_ECONOMY_DEMO=true`，并确保已配置
+`LOCAL_ADMIN_USERNAME` 和有效的 `LOCAL_ADMIN_PASSWORD_HASH`，再执行种子命令。系统会幂等创建
+“本地经营演示联赛”；重复执行不会把已经审核、转会或调整过的演示记录重置。演示内容包括：
 
 - 正在开放的身价窗口和转会窗口；
 - 一支身价完整的球队，以及一支含超限身价草稿的待审核球队；

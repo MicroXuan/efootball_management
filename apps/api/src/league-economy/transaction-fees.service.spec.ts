@@ -74,4 +74,36 @@ describe('TransactionFeesService', () => {
     await expect(service.listTransactionsForParticipant('outsider', 'league-1'))
       .rejects.toMatchObject({ code: 'LEAGUE_PARTICIPANT_REQUIRED' });
   });
+
+  it('returns an opaque next cursor and resumes after it', async () => {
+    const { service, prisma } = harness();
+    const row = (id: string) => ({
+      id,
+      leagueId: 'league-1',
+      seasonId: 'season-1',
+      type: 'TRANSFER',
+      footballPlayerId: 'player-1',
+      sourceLeagueTeamId: 'team-1',
+      targetLeagueTeamId: 'team-2',
+      amountMinor: 1000,
+      valuationSnapshotMinor: 2000,
+      transactionFeeMinor: 100,
+      transactionFeeRuleVersionId: 'rule-1',
+      reason: '分页测试',
+      createdByAdminId: 'admin-1',
+      createdAt: at,
+      footballPlayer: { nameZh: '分页球员', nameEn: null, shortName: null },
+      sourceLeagueTeam: { name: '甲队' },
+      targetLeagueTeam: { name: '乙队' }
+    });
+    prisma.rosterTransaction.findMany.mockResolvedValueOnce([row('tx-1'), row('tx-2')] as never);
+    await expect(service.listTransactions('league-1', undefined, 1)).resolves.toMatchObject({
+      items: [{ id: 'tx-1' }], nextCursor: 'tx-1'
+    });
+    prisma.rosterTransaction.findMany.mockResolvedValueOnce([]);
+    await service.listTransactions('league-1', 'tx-1', 1);
+    expect(prisma.rosterTransaction.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      cursor: { id: 'tx-1' }, skip: 1, take: 2
+    }));
+  });
 });

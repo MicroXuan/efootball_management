@@ -156,6 +156,14 @@ export class ValuationSubmissionsService {
             422
           );
         }
+        if (proposedValueMinor < context.rule.minimumValueMinor
+          || proposedValueMinor > context.rule.maximumValueMinor) {
+          throw new LeagueError(
+            'VALUATION_GLOBAL_RANGE_EXCEEDED',
+            `身价必须在 ${context.rule.minimumValueMinor} 至 ${context.rule.maximumValueMinor} 之间`,
+            422
+          );
+        }
         return {
           snapshotId: snapshot.id,
           footballPlayerId: snapshot.footballPlayerId,

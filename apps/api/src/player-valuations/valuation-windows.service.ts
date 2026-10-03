@@ -71,9 +71,10 @@ export class ValuationWindowsService {
             createdByAdminId: adminId
           }
         });
+        await this.initializeRosterSnapshot(tx, created.id, seasonId, season.leagueId, at);
         const window = await tx.valuationWindow.update({
           where: { id: created.id },
-          data: { currentRuleVersionId: rule.id },
+          data: { currentRuleVersionId: rule.id, snapshotInitializedAt: at },
           include: { currentRuleVersion: true }
         });
         await this.audit.record(tx, {
@@ -229,5 +230,46 @@ export class ValuationWindowsService {
     if (window.closedAt || at >= window.endsAt) return 'CLOSED';
     if (at < window.startsAt) return 'SCHEDULED';
     return 'OPEN';
+  }
+
+  private async initializeRosterSnapshot(
+    tx: Prisma.TransactionClient,
+    windowId: string,
+    seasonId: string,
+    leagueId: string,
+    at: Date
+  ) {
+    const entries = await tx.seasonEntry.findMany({
+      where: { seasonId, status: 'APPROVED' },
+      select: { leagueTeamId: true }
+    });
+    const teamIds = entries.map(({ leagueTeamId }) => leagueTeamId);
+    if (teamIds.length === 0) return;
+    const ownerships = await tx.leaguePlayerOwnership.findMany({
+      where: { leagueTeamId: { in: teamIds }, status: 'ACTIVE', acquiredAt: { lte: at } },
+      select: { id: true, leagueTeamId: true, footballPlayerId: true }
+    });
+    if (ownerships.length === 0) return;
+    const valuations = await tx.leaguePlayerValuation.findMany({
+      where: {
+        leagueId,
+        footballPlayerId: { in: ownerships.map(({ footballPlayerId }) => footballPlayerId) },
+        effectiveAt: { lte: at }
+      },
+      select: { footballPlayerId: true, currentValueMinor: true }
+    });
+    const valueByPlayer = new Map(
+      valuations.map(({ footballPlayerId, currentValueMinor }) => [footballPlayerId, currentValueMinor])
+    );
+    await tx.valuationRosterSnapshot.createMany({
+      data: ownerships.map((ownership) => ({
+        windowId,
+        leagueTeamId: ownership.leagueTeamId,
+        ownershipId: ownership.id,
+        footballPlayerId: ownership.footballPlayerId,
+        baseValueMinor: valueByPlayer.get(ownership.footballPlayerId) ?? null
+      })),
+      skipDuplicates: true
+    });
   }
 }

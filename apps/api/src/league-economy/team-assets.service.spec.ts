@@ -65,7 +65,7 @@ describe('TeamAssetsService', () => {
       position: 'CF', nationality: '中国', club: '上海海港', age: 22, heightCm: 180,
       atRating: 91, salaryMinor: 800, currentValueMinor: 8000
     });
-    expect(result.players[2]?.currentValueMinor).toBeNull();
+    expect(result.players[2]?.currentValueMinor).toBe(9999);
   });
 
   it('rejects a non-owner even when the team exists', async () => {
