@@ -234,6 +234,29 @@ enum CompetitionStatus {
   CANCELLED
 }
 
+enum CompetitionType {
+  OPEN_EVENT
+  DIVISION_LEAGUE
+  GROUP_KNOCKOUT_CUP
+  KNOCKOUT_CUP
+}
+
+enum SeasonAllocationProposalStatus {
+  DRAFT
+  CONFIRMED
+  SUPERSEDED
+}
+
+enum SeasonAllocationSource {
+  FIRST_SEASON
+  RETAINED
+  PROMOTED
+  RELEGATED
+  REPLACEMENT
+  CHAMPION_POOL
+  NEW_ENTRY
+}
+
 enum CompetitionParticipantType {
   INDIVIDUAL
   TEAM
@@ -313,7 +336,7 @@ model User {
   leagueSeasonHistoryActions       LeagueSeasonStatusHistory[]            @relation("LeagueSeasonStatusActor")
   valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
   auditLogs                        AuditLog[]                             @relation("AuditUserActor")
-  playerFavorites                 UserPlayerFavorite[]
+  playerFavorites                  UserPlayerFavorite[]
 
   @@map("users")
 }
@@ -442,6 +465,8 @@ model AdminAccount {
   createdValuationRules        ValuationWindowRuleVersion[]      @relation("ValuationRuleCreator")
   reviewedValuationSubmissions ValuationSubmission[]             @relation("ValuationSubmissionReviewer")
   createdTransactionFeeRules   LeagueTransactionFeeRuleVersion[] @relation("TransactionFeeRuleCreator")
+  allocationProposals          SeasonAllocationProposal[]        @relation("AllocationProposalCreator")
+  allocationDecisions          SeasonAllocationDecision[]        @relation("AllocationDecisionActor")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -611,6 +636,8 @@ model LeagueSeason {
   rosterTransactions   RosterTransaction[]
   valuationWindows     ValuationWindow[]
   financeLedgerEntries FinanceLedgerEntry[]
+  competitions         Competition[]
+  allocationProposals  SeasonAllocationProposal[]
 
   @@unique([leagueId, seasonNumber], map: "league_seasons_number_unique")
   @@index([leagueId, status], map: "league_seasons_status_idx")
@@ -959,41 +986,44 @@ model LeagueSeasonStatusHistory {
 }
 
 model SeasonEntry {
-  id                    String                     @id @default(uuid()) @db.Char(36)
-  seasonId              String                     @map("season_id") @db.Char(36)
-  teamProfileId         String?                    @map("team_profile_id") @db.Char(36)
-  leagueTeamId          String                     @map("league_team_id") @db.Char(36)
-  ownerUserId           String                     @map("owner_user_id") @db.Char(36)
-  gameAccountId         String?                    @map("game_account_id") @db.Char(36)
-  source                SeasonEntrySource
-  status                SeasonEntryStatus          @default(PENDING)
-  previousSeasonEntryId String?                    @unique @map("previous_season_entry_id") @db.Char(36)
-  teamNameSnapshot      String                     @map("team_name_snapshot") @db.VarChar(64)
-  teamShortNameSnapshot String                     @map("team_short_name_snapshot") @db.VarChar(24)
-  teamNumberSnapshot    Int?                       @map("team_number_snapshot") @db.UnsignedSmallInt
-  teamLogoUrlSnapshot   String?                    @map("team_logo_url_snapshot") @db.VarChar(2048)
-  gamePlatformSnapshot  GamePlatform?              @map("game_platform_snapshot")
-  serverRegionSnapshot  String?                    @map("server_region_snapshot") @db.VarChar(32)
-  gamerTagSnapshot      String?                    @map("gamer_tag_snapshot") @db.VarChar(64)
-  gameUidSnapshot       String?                    @map("game_uid_snapshot") @db.VarChar(64)
-  leagueEditionSnapshot LeagueEdition              @default(INTERNATIONAL) @map("league_edition_snapshot")
-  reviewedById          String?                    @map("reviewed_by_id") @db.Char(36)
-  reviewedAt            DateTime?                  @map("reviewed_at")
-  decisionReason        String?                    @map("decision_reason") @db.VarChar(512)
-  confirmedAt           DateTime?                  @map("confirmed_at")
-  withdrawnAt           DateTime?                  @map("withdrawn_at")
-  version               Int                        @default(1) @db.UnsignedInt
-  createdAt             DateTime                   @default(now()) @map("created_at")
-  updatedAt             DateTime                   @updatedAt @map("updated_at")
-  season                LeagueSeason               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  teamProfile           TeamProfile?               @relation(fields: [teamProfileId], references: [id], onDelete: Restrict)
-  leagueTeam            LeagueTeam                 @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
-  owner                 User                       @relation("SeasonEntryOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  gameAccount           GameAccount?               @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
-  previousSeasonEntry   SeasonEntry?               @relation("SeasonEntryPredecessor", fields: [previousSeasonEntryId], references: [id], onDelete: Restrict)
-  nextSeasonEntry       SeasonEntry?               @relation("SeasonEntryPredecessor")
-  reviewer              User?                      @relation("SeasonEntryReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
-  statusHistory         SeasonEntryStatusHistory[]
+  id                     String                        @id @default(uuid()) @db.Char(36)
+  seasonId               String                        @map("season_id") @db.Char(36)
+  teamProfileId          String?                       @map("team_profile_id") @db.Char(36)
+  leagueTeamId           String                        @map("league_team_id") @db.Char(36)
+  ownerUserId            String                        @map("owner_user_id") @db.Char(36)
+  gameAccountId          String?                       @map("game_account_id") @db.Char(36)
+  source                 SeasonEntrySource
+  status                 SeasonEntryStatus             @default(PENDING)
+  previousSeasonEntryId  String?                       @unique @map("previous_season_entry_id") @db.Char(36)
+  teamNameSnapshot       String                        @map("team_name_snapshot") @db.VarChar(64)
+  teamShortNameSnapshot  String                        @map("team_short_name_snapshot") @db.VarChar(24)
+  teamNumberSnapshot     Int?                          @map("team_number_snapshot") @db.UnsignedSmallInt
+  teamLogoUrlSnapshot    String?                       @map("team_logo_url_snapshot") @db.VarChar(2048)
+  gamePlatformSnapshot   GamePlatform?                 @map("game_platform_snapshot")
+  serverRegionSnapshot   String?                       @map("server_region_snapshot") @db.VarChar(32)
+  gamerTagSnapshot       String?                       @map("gamer_tag_snapshot") @db.VarChar(64)
+  gameUidSnapshot        String?                       @map("game_uid_snapshot") @db.VarChar(64)
+  leagueEditionSnapshot  LeagueEdition                 @default(INTERNATIONAL) @map("league_edition_snapshot")
+  reviewedById           String?                       @map("reviewed_by_id") @db.Char(36)
+  reviewedAt             DateTime?                     @map("reviewed_at")
+  decisionReason         String?                       @map("decision_reason") @db.VarChar(512)
+  confirmedAt            DateTime?                     @map("confirmed_at")
+  withdrawnAt            DateTime?                     @map("withdrawn_at")
+  version                Int                           @default(1) @db.UnsignedInt
+  createdAt              DateTime                      @default(now()) @map("created_at")
+  updatedAt              DateTime                      @updatedAt @map("updated_at")
+  season                 LeagueSeason                  @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  teamProfile            TeamProfile?                  @relation(fields: [teamProfileId], references: [id], onDelete: Restrict)
+  leagueTeam             LeagueTeam                    @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  owner                  User                          @relation("SeasonEntryOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  gameAccount            GameAccount?                  @relation(fields: [gameAccountId], references: [id], onDelete: Restrict)
+  previousSeasonEntry    SeasonEntry?                  @relation("SeasonEntryPredecessor", fields: [previousSeasonEntryId], references: [id], onDelete: Restrict)
+  nextSeasonEntry        SeasonEntry?                  @relation("SeasonEntryPredecessor")
+  reviewer               User?                         @relation("SeasonEntryReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  statusHistory          SeasonEntryStatusHistory[]
+  competitionParticipant CompetitionParticipant?
+  allocationProposalRows SeasonAllocationProposalRow[]
+  allocationDecisions    SeasonAllocationDecision[]
 
   @@unique([seasonId, leagueTeamId], map: "season_entries_league_team_unique")
   @@index([seasonId, status, source, createdAt], map: "season_entries_review_idx")
@@ -1421,6 +1451,8 @@ model PlayerCardVersion {
 
 model Competition {
   id                   String                     @id @default(uuid()) @db.Char(36)
+  seasonId             String?                    @map("season_id") @db.Char(36)
+  competitionType      CompetitionType            @default(OPEN_EVENT) @map("competition_type")
   name                 String                     @db.VarChar(80)
   description          String                     @db.Text
   platform             GamePlatform
@@ -1441,6 +1473,7 @@ model Competition {
   createdAt            DateTime                   @default(now()) @map("created_at")
   updatedAt            DateTime                   @updatedAt @map("updated_at")
   creator              User                       @relation("CompetitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  season               LeagueSeason?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
   ruleVersions         CompetitionRuleVersion[]
   registrations        CompetitionRegistration[]
   participants         CompetitionParticipant[]
@@ -1449,6 +1482,7 @@ model Competition {
 
   @@index([status, registrationOpensAt, id], map: "competitions_public_list_idx")
   @@index([createdById], map: "competitions_creator_idx")
+  @@index([seasonId, competitionType], map: "competitions_season_type_idx")
   @@map("competitions")
 }
 
@@ -1518,41 +1552,129 @@ model CompetitionParticipant {
   id                  String                     @id @default(uuid()) @db.Char(36)
   competitionId       String                     @map("competition_id") @db.Char(36)
   participantType     CompetitionParticipantType @default(INDIVIDUAL) @map("participant_type")
-  registrationId      String                     @unique @map("registration_id") @db.Char(36)
+  registrationId      String?                    @unique @map("registration_id") @db.Char(36)
+  seasonEntryId       String?                    @unique @map("season_entry_id") @db.Char(36)
   individualUserId    String?                    @map("individual_user_id") @db.Char(36)
   teamId              String?                    @map("team_id") @db.Char(36)
   admissionSequence   Int                        @map("admission_sequence") @db.UnsignedInt
   displayNameSnapshot String                     @map("display_name_snapshot") @db.VarChar(64)
   createdAt           DateTime                   @default(now()) @map("created_at")
   competition         Competition                @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  registration        CompetitionRegistration    @relation(fields: [registrationId], references: [id], onDelete: Restrict)
+  registration        CompetitionRegistration?   @relation(fields: [registrationId], references: [id], onDelete: Restrict)
+  seasonEntry         SeasonEntry?               @relation(fields: [seasonEntryId], references: [id], onDelete: Restrict)
   individualUser      User?                      @relation("CompetitionIndividualParticipant", fields: [individualUserId], references: [id], onDelete: Restrict)
   homeMatches         CompetitionMatch[]         @relation("CompetitionMatchHome")
   awayMatches         CompetitionMatch[]         @relation("CompetitionMatchAway")
   standingsRows       StandingsRow[]
+  stageMemberships    StageParticipant[]
 
   @@unique([competitionId, admissionSequence], map: "competition_participants_sequence_unique")
   @@unique([competitionId, individualUserId], map: "competition_participants_user_unique")
   @@index([individualUserId], map: "competition_participants_user_idx")
+  @@index([seasonEntryId], map: "competition_participants_season_entry_idx")
   @@map("competition_participants")
 }
 
 model CompetitionStage {
-  id            String                 @id @default(uuid()) @db.Char(36)
-  competitionId String                 @map("competition_id") @db.Char(36)
-  sequence      Int                    @db.UnsignedInt
-  format        CompetitionFormat      @default(ROUND_ROBIN)
-  status        CompetitionStageStatus @default(DRAFT)
-  version       Int                    @default(1) @db.UnsignedInt
-  publishedAt   DateTime?              @map("published_at")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
-  competition   Competition            @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  matches       CompetitionMatch[]
+  id                 String                 @id @default(uuid()) @db.Char(36)
+  competitionId      String                 @map("competition_id") @db.Char(36)
+  stageCode          String?                @map("stage_code") @db.VarChar(32)
+  displayName        String?                @map("display_name") @db.VarChar(64)
+  capacity           Int?                   @db.UnsignedSmallInt
+  sequence           Int                    @db.UnsignedInt
+  format             CompetitionFormat      @default(ROUND_ROBIN)
+  status             CompetitionStageStatus @default(DRAFT)
+  version            Int                    @default(1) @db.UnsignedInt
+  publishedAt        DateTime?              @map("published_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  competition        Competition            @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  matches            CompetitionMatch[]
+  participants       StageParticipant[]
+  standingsSnapshots StandingsSnapshot[]
 
   @@unique([competitionId, sequence], map: "competition_stages_sequence_unique")
+  @@unique([competitionId, stageCode], map: "competition_stages_code_unique")
   @@index([competitionId, status], map: "competition_stages_status_idx")
   @@map("competition_stages")
+}
+
+model StageParticipant {
+  id            String                 @id @default(uuid()) @db.Char(36)
+  stageId       String                 @map("stage_id") @db.Char(36)
+  participantId String                 @map("participant_id") @db.Char(36)
+  seed          Int                    @db.UnsignedInt
+  createdAt     DateTime               @default(now()) @map("created_at")
+  stage         CompetitionStage       @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  participant   CompetitionParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+
+  @@unique([stageId, participantId], map: "stage_participants_member_unique")
+  @@unique([stageId, seed], map: "stage_participants_seed_unique")
+  @@index([participantId], map: "stage_participants_participant_idx")
+  @@map("stage_participants")
+}
+
+model SeasonAllocationProposal {
+  id               String                         @id @default(uuid()) @db.Char(36)
+  seasonId         String                         @map("season_id") @db.Char(36)
+  version          Int                            @db.UnsignedInt
+  status           SeasonAllocationProposalStatus @default(DRAFT)
+  algorithmVersion String                         @map("algorithm_version") @db.VarChar(32)
+  randomSeed       Int                            @map("random_seed") @db.UnsignedInt
+  inputSummary     Json?                          @map("input_summary")
+  createdByAdminId String                         @map("created_by_admin_id") @db.Char(36)
+  createdAt        DateTime                       @default(now()) @map("created_at")
+  updatedAt        DateTime                       @updatedAt @map("updated_at")
+  season           LeagueSeason                   @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount                   @relation("AllocationProposalCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  rows             SeasonAllocationProposalRow[]
+  decisions        SeasonAllocationDecision[]
+
+  @@unique([seasonId, version], map: "season_allocation_proposals_version_unique")
+  @@index([seasonId, status], map: "season_allocation_proposals_status_idx")
+  @@index([createdByAdminId], map: "season_allocation_proposals_creator_idx")
+  @@map("season_allocation_proposals")
+}
+
+model SeasonAllocationProposalRow {
+  id                     String                   @id @default(uuid()) @db.Char(36)
+  proposalId             String                   @map("proposal_id") @db.Char(36)
+  seasonEntryId          String                   @map("season_entry_id") @db.Char(36)
+  teamName               String                   @map("team_name") @db.VarChar(64)
+  suggestedStageCode     String                   @map("suggested_stage_code") @db.VarChar(32)
+  source                 SeasonAllocationSource
+  previousRank           Int?                     @map("previous_rank") @db.UnsignedInt
+  pointsPerMatch         Float?                   @map("points_per_match")
+  goalDifferencePerMatch Float?                   @map("goal_difference_per_match")
+  goalsForPerMatch       Float?                   @map("goals_for_per_match")
+  tiePending             Boolean                  @default(false) @map("tie_pending")
+  reason                 String                   @db.VarChar(512)
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  proposal               SeasonAllocationProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  seasonEntry            SeasonEntry              @relation(fields: [seasonEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([proposalId, seasonEntryId], map: "season_allocation_rows_entry_unique")
+  @@index([seasonEntryId], map: "season_allocation_rows_season_entry_idx")
+  @@map("season_allocation_proposal_rows")
+}
+
+model SeasonAllocationDecision {
+  id               String                   @id @default(uuid()) @db.Char(36)
+  proposalId       String                   @map("proposal_id") @db.Char(36)
+  seasonEntryId    String                   @map("season_entry_id") @db.Char(36)
+  finalStageCode   String                   @map("final_stage_code") @db.VarChar(32)
+  overridden       Boolean                  @default(false)
+  reason           String?                  @db.VarChar(512)
+  decidedByAdminId String                   @map("decided_by_admin_id") @db.Char(36)
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  proposal         SeasonAllocationProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  seasonEntry      SeasonEntry              @relation(fields: [seasonEntryId], references: [id], onDelete: Restrict)
+  decidedByAdmin   AdminAccount             @relation("AllocationDecisionActor", fields: [decidedByAdminId], references: [id], onDelete: Restrict)
+
+  @@unique([proposalId, seasonEntryId], map: "season_allocation_decisions_entry_unique")
+  @@index([seasonEntryId], map: "season_allocation_decisions_season_entry_idx")
+  @@index([decidedByAdminId], map: "season_allocation_decisions_admin_idx")
+  @@map("season_allocation_decisions")
 }
 
 model CompetitionMatch {
@@ -1610,16 +1732,19 @@ model MatchResultVersion {
 model StandingsSnapshot {
   id                        String              @id @default(uuid()) @db.Char(36)
   competitionId             String              @map("competition_id") @db.Char(36)
+  stageId                   String?             @map("stage_id") @db.Char(36)
   version                   Int                 @db.UnsignedInt
   triggeringResultVersionId String?             @map("triggering_result_version_id") @db.Char(36)
   ruleVersion               Int                 @map("rule_version") @db.UnsignedInt
   generatedAt               DateTime            @default(now()) @map("generated_at")
   competition               Competition         @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  stage                     CompetitionStage?   @relation(fields: [stageId], references: [id], onDelete: Restrict)
   triggeringResultVersion   MatchResultVersion? @relation(fields: [triggeringResultVersionId], references: [id], onDelete: Restrict)
   rows                      StandingsRow[]
 
   @@unique([competitionId, version], map: "standings_snapshots_version_unique")
   @@index([triggeringResultVersionId], map: "standings_snapshots_trigger_idx")
+  @@index([stageId, version], map: "standings_snapshots_stage_version_idx")
   @@map("standings_snapshots")
 }
 

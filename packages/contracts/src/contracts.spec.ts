@@ -8,6 +8,15 @@ import {
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionParticipantTypeSchema,
+  CompetitionStageCodeSchema,
+  CompetitionStageSummarySchema,
+  CompetitionTypeSchema,
+  ConfirmSeasonAllocationRequestSchema,
+  DivisionStandingsResponseSchema,
+  GenerateSeasonAllocationRequestSchema,
+  SeasonAllocationDecisionSchema,
+  SeasonAllocationProposalSchema,
+  SeasonAllocationProposalRowSchema,
   CreateCompetitionRequestSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
@@ -1117,5 +1126,123 @@ describe('league team administration contracts', () => {
       createdAt
     });
     assert.equal(ledger.direction, 'DEBIT');
+  });
+});
+
+describe('tiered league contracts', () => {
+  const ids = {
+    league: '11111111-1111-4111-8111-111111111111',
+    season: '22222222-2222-4222-8222-222222222222',
+    competition: '33333333-3333-4333-8333-333333333333',
+    stage: '44444444-4444-4444-8444-444444444444',
+    proposal: '55555555-5555-4555-8555-555555555555',
+    row: '66666666-6666-4666-8666-666666666666',
+    entry: '77777777-7777-4777-8777-777777777777',
+    participant: '88888888-8888-4888-8888-888888888888'
+  };
+  const createdAt = '2026-10-03T00:00:00.000Z';
+
+  it('parses tiered competition types, stages, proposals, and grouped standings', () => {
+    assert.equal(CompetitionTypeSchema.parse('DIVISION_LEAGUE'), 'DIVISION_LEAGUE');
+    assert.equal(CompetitionStageCodeSchema.parse('CHAMPION_A'), 'CHAMPION_A');
+
+    const stage = CompetitionStageSummarySchema.parse({
+      id: ids.stage,
+      competitionId: ids.competition,
+      stageCode: 'CHAMPION_A',
+      displayName: '冠军 A 组',
+      sequence: 1,
+      capacity: 18,
+      format: 'ROUND_ROBIN',
+      status: 'DRAFT',
+      participantCount: 1,
+      version: 1
+    });
+    const row = SeasonAllocationProposalRowSchema.parse({
+      id: ids.row,
+      proposalId: ids.proposal,
+      seasonEntryId: ids.entry,
+      teamName: '上海海港',
+      suggestedStageCode: stage.stageCode,
+      source: 'FIRST_SEASON',
+      previousRank: null,
+      pointsPerMatch: null,
+      goalDifferencePerMatch: null,
+      goalsForPerMatch: null,
+      tiePending: false,
+      reason: '首赛季均分'
+    });
+    assert.equal(SeasonAllocationProposalSchema.parse({
+      id: ids.proposal,
+      seasonId: ids.season,
+      version: 1,
+      status: 'DRAFT',
+      algorithmVersion: 'tiered-v1',
+      randomSeed: 20261003,
+      rows: [row],
+      createdAt
+    }).rows[0]?.suggestedStageCode, 'CHAMPION_A');
+    assert.equal(SeasonAllocationDecisionSchema.parse({
+      id: ids.row,
+      proposalId: ids.proposal,
+      seasonEntryId: ids.entry,
+      finalStageCode: 'CHAMPION_A',
+      overridden: false,
+      reason: null,
+      createdAt
+    }).overridden, false);
+    assert.equal(DivisionStandingsResponseSchema.parse({
+      seasonId: ids.season,
+      competitionId: ids.competition,
+      myStageId: ids.stage,
+      groups: [{
+        stage: { ...stage, status: 'PUBLISHED' },
+        standings: {
+          competitionId: ids.competition,
+          stageId: ids.stage,
+          version: 1,
+          ruleVersion: 1,
+          triggeringResultVersionId: null,
+          generatedAt: createdAt,
+          rows: [{
+            participantId: ids.participant,
+            displayName: '上海海港',
+            played: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            goalsFor: 0,
+            goalsAgainst: 0,
+            goalDifference: 0,
+            basePoints: 0,
+            adjustmentPoints: 0,
+            totalPoints: 0,
+            rank: 1,
+            tiePending: false,
+            tieBreakValues: {}
+          }]
+        }
+      }]
+    }).groups[0]?.standings.rows[0]?.rank, 1);
+  });
+
+  it('rejects invalid stage codes, seeds, duplicate overrides, and empty reasons', () => {
+    assert.throws(() => CompetitionStageCodeSchema.parse('UNKNOWN_STAGE'));
+    assert.throws(() => GenerateSeasonAllocationRequestSchema.parse({ expectedSeasonVersion: 1, randomSeed: 0 }));
+    const override = {
+      seasonEntryId: ids.entry,
+      targetStageCode: 'CHAMPION_B',
+      reason: '平衡组别人数'
+    };
+    assert.throws(() => ConfirmSeasonAllocationRequestSchema.parse({
+      proposalId: ids.proposal,
+      expectedSeasonVersion: 2,
+      overrides: [override, override]
+    }));
+    assert.throws(() => ConfirmSeasonAllocationRequestSchema.parse({
+      proposalId: ids.proposal,
+      expectedSeasonVersion: 2,
+      overrides: [{ ...override, reason: ' ' }]
+    }));
   });
 });

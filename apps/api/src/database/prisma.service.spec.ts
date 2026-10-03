@@ -50,11 +50,77 @@ describe('PrismaService', () => {
     expect(prisma.competitionRegistrationStatusHistory).toBeDefined();
     expect(prisma.competitionParticipant).toBeDefined();
     expect(prisma.competitionStage).toBeDefined();
+    expect(prisma.stageParticipant).toBeDefined();
+    expect(prisma.seasonAllocationProposal).toBeDefined();
+    expect(prisma.seasonAllocationProposalRow).toBeDefined();
+    expect(prisma.seasonAllocationDecision).toBeDefined();
     expect(prisma.competitionMatch).toBeDefined();
     expect(prisma.matchResultVersion).toBeDefined();
     expect(prisma.standingsSnapshot).toBeDefined();
     expect(prisma.standingsRow).toBeDefined();
     expect(prisma.mutationReceipt).toBeDefined();
+  });
+
+  it('preserves legacy competitions while allowing a season-linked division league', async () => {
+    const suffix = randomUUID();
+    const creator = await prisma.user.create({
+      data: { wechatOpenId: `tiered-league-${suffix}`, displayName: '分级联赛测试' }
+    });
+    const league = await prisma.league.create({
+      data: {
+        name: `分级联赛-${suffix}`,
+        shortName: '分级联赛',
+        defaultPlatform: 'MOBILE',
+        defaultServerRegion: 'GLOBAL',
+        createdById: creator.id
+      }
+    });
+    const season = await prisma.leagueSeason.create({
+      data: {
+        leagueId: league.id,
+        seasonNumber: 1,
+        displayName: 'S1',
+        isFirstSeason: true,
+        registrationOpensAt: new Date('2026-01-01T00:00:00.000Z'),
+        registrationClosesAt: new Date('2026-01-02T00:00:00.000Z'),
+        startsAt: new Date('2026-01-03T00:00:00.000Z'),
+        endsAt: new Date('2026-02-03T00:00:00.000Z'),
+        superCapacity: 23,
+        championCapacity: 18,
+        promotionCount: 4,
+        createdById: creator.id
+      }
+    });
+    const timeline = {
+      description: '',
+      platform: 'MOBILE' as const,
+      serverRegion: 'GLOBAL',
+      participantType: 'TEAM' as const,
+      format: 'ROUND_ROBIN' as const,
+      status: 'DRAFT' as const,
+      registrationOpensAt: new Date('2026-01-01T00:00:00.000Z'),
+      registrationClosesAt: new Date('2026-01-02T00:00:00.000Z'),
+      startsAt: new Date('2026-01-03T00:00:00.000Z'),
+      endsAt: new Date('2026-02-03T00:00:00.000Z'),
+      participantLimit: 64,
+      createdById: creator.id
+    };
+
+    try {
+      const legacy = await prisma.competition.create({ data: { ...timeline, name: `旧赛事-${suffix}`, participantType: 'INDIVIDUAL' } });
+      const division = await prisma.competition.create({
+        data: { ...timeline, name: `分级赛事-${suffix}`, seasonId: season.id, competitionType: 'DIVISION_LEAGUE' }
+      });
+      await expect(prisma.competition.findUniqueOrThrow({ where: { id: legacy.id } }))
+        .resolves.toMatchObject({ seasonId: null, competitionType: 'OPEN_EVENT' });
+      await expect(prisma.competition.findUniqueOrThrow({ where: { id: division.id } }))
+        .resolves.toMatchObject({ seasonId: season.id, competitionType: 'DIVISION_LEAGUE' });
+    } finally {
+      await prisma.competition.deleteMany({ where: { createdById: creator.id } });
+      await prisma.leagueSeason.delete({ where: { id: season.id } });
+      await prisma.league.delete({ where: { id: league.id } });
+      await prisma.user.delete({ where: { id: creator.id } });
+    }
   });
 
   it('exposes administrator, league-team, audit, and public-number delegates', () => {

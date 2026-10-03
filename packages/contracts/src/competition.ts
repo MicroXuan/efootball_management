@@ -13,6 +13,12 @@ export const CompetitionStatusSchema = z.enum([
 ]);
 
 export const CompetitionParticipantTypeSchema = z.enum(['INDIVIDUAL', 'TEAM']);
+export const CompetitionTypeSchema = z.enum([
+  'OPEN_EVENT',
+  'DIVISION_LEAGUE',
+  'GROUP_KNOCKOUT_CUP',
+  'KNOCKOUT_CUP'
+]);
 export const CompetitionFormatSchema = z.enum([
   'ROUND_ROBIN',
   'DOUBLE_ROUND_ROBIN',
@@ -47,6 +53,10 @@ export const CompetitionTieBreakerSchema = z.enum([
   'TOTAL_GOALS',
   'WINS'
 ]);
+export const CompetitionStageCodeSchema = z.string().regex(
+  /^(SUPER|CHAMPION_[A-Z]+|GROUP_[A-Z]+|ROUND_OF_(?:16|32|64)|QUARTER_FINAL|SEMI_FINAL|FINAL)$/,
+  'invalid competition stage code'
+);
 
 export const IdempotencyKeySchema = z.string().trim().min(1).max(128);
 export const ExpectedVersionSchema = z.number().int().positive();
@@ -257,6 +267,19 @@ export const CompetitionParticipantSummarySchema = z.object({
   participantType: CompetitionParticipantTypeSchema
 });
 
+export const CompetitionStageSummarySchema = z.object({
+  id: ResourceIdSchema,
+  competitionId: ResourceIdSchema,
+  stageCode: CompetitionStageCodeSchema,
+  displayName: z.string().trim().min(1).max(64),
+  sequence: z.number().int().positive(),
+  capacity: z.number().int().positive(),
+  format: CompetitionFormatSchema,
+  status: z.enum(['DRAFT', 'PUBLISHED']),
+  participantCount: z.number().int().nonnegative(),
+  version: z.number().int().positive()
+});
+
 export const MatchResultVersionResponseSchema = z.object({
   id: ResourceIdSchema,
   matchId: ResourceIdSchema,
@@ -315,6 +338,7 @@ export const StandingsRowResponseSchema = z.object({
 
 export const StandingsSnapshotResponseSchema = z.object({
   competitionId: ResourceIdSchema,
+  stageId: ResourceIdSchema.nullable().optional(),
   version: z.number().int().nonnegative(),
   ruleVersion: z.number().int().positive(),
   triggeringResultVersionId: ResourceIdSchema.nullable(),
@@ -359,7 +383,9 @@ export const MyMatchListResponseSchema = z.object({
 
 export type CompetitionStatus = z.infer<typeof CompetitionStatusSchema>;
 export type CompetitionParticipantType = z.infer<typeof CompetitionParticipantTypeSchema>;
+export type CompetitionType = z.infer<typeof CompetitionTypeSchema>;
 export type CompetitionFormat = z.infer<typeof CompetitionFormatSchema>;
+export type CompetitionStageCode = z.infer<typeof CompetitionStageCodeSchema>;
 export type CompetitionRegistrationStatus = z.infer<typeof CompetitionRegistrationStatusSchema>;
 export type CompetitionMatchStatus = z.infer<typeof CompetitionMatchStatusSchema>;
 export type MatchResultVersionStatus = z.infer<typeof MatchResultVersionStatusSchema>;
@@ -383,6 +409,7 @@ export type CompetitionDetail = z.infer<typeof CompetitionDetailSchema>;
 export type CompetitionListResponse = z.infer<typeof CompetitionListResponseSchema>;
 export type CompetitionMatchListResponse = z.infer<typeof CompetitionMatchListResponseSchema>;
 export type CompetitionRegistrationResponse = z.infer<typeof CompetitionRegistrationResponseSchema>;
+export type CompetitionStageSummary = z.infer<typeof CompetitionStageSummarySchema>;
 export type CompetitionMatchResponse = z.infer<typeof CompetitionMatchResponseSchema>;
 export type MatchResultVersionResponse = z.infer<typeof MatchResultVersionResponseSchema>;
 export type StandingsSnapshotResponse = z.infer<typeof StandingsSnapshotResponseSchema>;
