@@ -178,6 +178,7 @@ describe('player catalog lifecycle', () => {
   });
 
   it('returns 409 for invalid publication and never exposes it', async () => {
+    const unpublishedKeyword = `Never Published ${suffix}`;
     const created = await request(app.getHttpServer())
       .post('/v1/admin/player-imports')
       .set('Authorization', editorAuthorization)
@@ -185,7 +186,10 @@ describe('player catalog lifecycle', () => {
         sourceCode,
         fileName: 'invalid.json',
         format: 'JSON',
-        content: JSON.stringify([record('bad'), record('bad')])
+        content: JSON.stringify([
+          record('bad', { playerNameEn: unpublishedKeyword }),
+          record('bad', { playerNameEn: unpublishedKeyword })
+        ])
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -193,7 +197,9 @@ describe('player catalog lifecycle', () => {
       .set('Authorization', editorAuthorization)
       .expect(409)
       .expect(({ body }) => expect(body.error.code).toBe('IMPORT_BATCH_NOT_READY'));
-    await request(app.getHttpServer()).get('/v1/players?keyword=bad').expect(200)
+    await request(app.getHttpServer())
+      .get(`/v1/players?keyword=${encodeURIComponent(unpublishedKeyword)}`)
+      .expect(200)
       .expect(({ body }) => expect(body.items).toHaveLength(0));
   });
 
