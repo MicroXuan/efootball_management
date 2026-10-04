@@ -10,6 +10,8 @@ import type {
   MyLeagueTeamListResponse,
   LeagueSeasonDetail,
   LeagueSeasonSummary,
+  DivisionStandingsResponse,
+  LeagueWorkspaceResponse,
   OverrideSeasonEntryRequest,
   ParsedCreateLeagueRequest,
   ParsedCreateLeagueSeasonRequest,
@@ -62,6 +64,16 @@ export const leaguesApi = {
   },
   myEntry(seasonId: string) {
     return api.request<SeasonEntryResponse | null>({ path: `/seasons/${id(seasonId)}/entries/me` })
+  },
+  divisionStandings(leagueId: string, seasonId: string) {
+    return api.request<DivisionStandingsResponse>({
+      path: `/me/leagues/${id(leagueId)}/seasons/${id(seasonId)}/division-standings`,
+    })
+  },
+  workspace(leagueId: string, seasonId: string) {
+    return api.request<LeagueWorkspaceResponse>({
+      path: query(`/me/leagues/${id(leagueId)}/workspace`, { seasonId }),
+    })
   },
   apply(seasonId: string, input: CreateSeasonApplicationRequest) {
     return api.request<SeasonEntryResponse>({

@@ -6,12 +6,16 @@ import {
   ReleasePlayerRequestSchema,
   TransferPlayerRequestSchema,
   UpgradePlayerCardRequestSchema,
+  UpdateRosterLifecycleRequestSchema,
   ResourceIdSchema,
+  RosterPlayerCandidateQuerySchema,
   type AcquirePlayerRequest,
   type EmergencyCorrectRosterRequest,
   type RecalculateLeagueSalaryRequest,
+  type RosterPlayerCandidateQuery,
   type ReleasePlayerRequest,
   type TransferPlayerRequest,
+  type UpdateRosterLifecycleRequest,
   type UpgradePlayerCardRequest
 } from '@efm/contracts';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard.js';
@@ -25,7 +29,6 @@ import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 import { z } from 'zod';
 
 const RosterQuerySchema = z.object({ seasonId: ResourceIdSchema });
-const CandidateQuerySchema = z.object({ keyword: z.string().trim().min(1).max(80) });
 const LedgerQuerySchema = z.object({ teamId: ResourceIdSchema.optional() });
 
 @Controller('admin/roster')
@@ -51,9 +54,9 @@ export class AdminRostersController {
   @Get('leagues/:leagueId/player-candidates')
   candidates(
     @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
-    @Query(new ZodValidationPipe(CandidateQuerySchema)) query: z.output<typeof CandidateQuerySchema>
+    @Query(new ZodValidationPipe(RosterPlayerCandidateQuerySchema)) query: RosterPlayerCandidateQuery
   ) {
-    return this.queries.candidates(leagueId, query.keyword);
+    return this.queries.candidates(leagueId, query);
   }
 
   @Get('leagues/:leagueId/ledger')
@@ -103,6 +106,15 @@ export class AdminRostersController {
     body: RecalculateLeagueSalaryRequest
   ) {
     return this.salaryRecalculation.recalculateLeague(body, admin.id);
+  }
+
+  @Post('lifecycle-status')
+  updateLifecycleStatus(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Body(new ZodValidationPipe(UpdateRosterLifecycleRequestSchema))
+    body: UpdateRosterLifecycleRequest
+  ) {
+    return this.rosterTransactions.updateLifecycleStatus(body, admin.id);
   }
 
   @Post('emergency-corrections')

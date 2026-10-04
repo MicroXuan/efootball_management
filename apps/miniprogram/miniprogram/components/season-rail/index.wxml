@@ -1,0 +1,13 @@
+<view class="season-rail" aria-label="赛季进度">
+  <view
+    wx:for="{{steps}}"
+    wx:key="key"
+    class="season-rail__step season-rail__step--{{item.state}}"
+    aria-current="{{item.state === 'current' ? 'step' : ''}}"
+  >
+    <view class="season-rail__marker">
+      <text>{{item.state === 'complete' ? '✓' : index + 1}}</text>
+    </view>
+    <text class="season-rail__label">{{item.label}}</text>
+  </view>
+</view>

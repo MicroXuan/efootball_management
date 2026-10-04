@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { SchedulesService } from './schedules.service.js';
@@ -183,5 +184,107 @@ describe('SchedulesService', () => {
     const restored = await service.preview(event.id);
     expect(restored.id).toBe(original.id);
     expect(restored.matches.map(({ id }) => id)).toEqual(original.matches.map(({ id }) => id));
+  });
+});
+
+describe('tiered stage schedules', () => {
+  function stageHarness(participantCount = 3) {
+    const now = new Date('2026-10-03T00:00:00.000Z');
+    const participants = Array.from({ length: participantCount }, (_, index) => ({
+      id: `participant-${index + 1}`,
+      competitionId: 'competition-1',
+      participantType: 'TEAM',
+      displayNameSnapshot: `球队 ${index + 1}`
+    }));
+    let matchData: Array<Record<string, unknown>> = [];
+    const stage = {
+      id: 'stage-1', competitionId: 'competition-1', stageCode: 'CHAMPION_A', displayName: '冠军 A 组',
+      sequence: 1, capacity: 18, format: 'ROUND_ROBIN', status: 'DRAFT', version: 1,
+      createdAt: now, updatedAt: now,
+      competition: {
+        id: 'competition-1', seasonId: 'season-1', competitionType: 'DIVISION_LEAGUE', status: 'DRAFT',
+        season: { id: 'season-1', leagueId: 'league-1', status: 'READY', version: 4 }
+      },
+      participants: participants.map((participant, index) => ({
+        seed: index + 1, participant
+      }))
+    };
+    const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionStage: {
+        findUnique: jest.fn(async () => stage),
+        updateMany: jest.fn(async () => ({ count: 1 }))
+      },
+      competitionMatch: {
+        deleteMany: jest.fn(async () => ({ count: matchData.length })),
+        createMany: jest.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          matchData = data;
+          return { count: data.length };
+        }),
+        findMany: jest.fn(async () => matchData.map((match, index) => {
+          const home = participants.find((participant) => participant.id === match.homeParticipantId)!;
+          const away = participants.find((participant) => participant.id === match.awayParticipantId)!;
+          return {
+            id: `match-${index + 1}`, ...match, plannedAt: null, status: 'SCHEDULED', version: 1,
+            createdAt: now, updatedAt: now, homeParticipant: home, awayParticipant: away,
+            officialResultVersion: null
+          };
+        }))
+      },
+      leagueSeason: {
+        findFirst: jest.fn(async () => null),
+        updateMany: jest.fn(async () => ({ count: 1 }))
+      },
+      competition: { updateMany: jest.fn(async () => ({ count: 1 })) }
+    };
+    const adminReceipts = {
+      execute: jest.fn(async (
+        _actor: string, _operation: string, _key: string,
+        work: (client: typeof transaction) => Promise<unknown>
+      ) => work(transaction))
+    };
+    const audit = { record: jest.fn(async () => undefined) };
+    const service = new SchedulesService(
+      transaction as never,
+      {} as never,
+      generateRoundRobin,
+      adminReceipts as never,
+      audit as never
+    );
+    return { service, transaction, stage };
+  }
+
+  it('generates matches from only the selected stage members, including odd-sized groups', async () => {
+    const { service, transaction } = stageHarness(3);
+    const preview = await service.generateStage('admin-1', 'league-1', 'stage-1', {
+      expectedStageVersion: 1
+    }, 'stage-generate');
+
+    expect(preview).toMatchObject({ id: 'stage-1', competitionId: 'competition-1', roundCount: 3, matchCount: 3 });
+    expect(transaction.competitionMatch.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([expect.objectContaining({ stageId: 'stage-1' })])
+    });
+    expect(preview.matches.every((match) => ['participant-1', 'participant-2', 'participant-3']
+      .includes(match.homeParticipant.id) && ['participant-1', 'participant-2', 'participant-3']
+      .includes(match.awayParticipant.id))).toBe(true);
+  });
+
+  it('allows an empty single-team schedule and advances the season on first publication', async () => {
+    const { service, transaction, stage } = stageHarness(1);
+    const draft = await service.generateStage('admin-1', 'league-1', 'stage-1', {
+      expectedStageVersion: 1
+    }, 'single-generate');
+    expect(draft).toMatchObject({ matchCount: 0, roundCount: 0 });
+    stage.version = draft.version;
+
+    const published = await service.publishStage('admin-1', 'league-1', 'stage-1', {
+      expectedStageVersion: draft.version,
+      expectedSeasonVersion: 4
+    }, 'single-publish');
+    expect(published.status).toBe('PUBLISHED');
+    expect(transaction.leagueSeason.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'season-1', status: 'READY', version: 4 },
+      data: { status: 'IN_PROGRESS', version: { increment: 1 } }
+    }));
   });
 });

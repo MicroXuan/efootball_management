@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "我的收藏",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#0E1417",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index",
+    "player-card": "/components/player-card/index"
+  }
+}

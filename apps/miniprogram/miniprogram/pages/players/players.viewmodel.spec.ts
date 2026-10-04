@@ -2,9 +2,12 @@ import type { PlayerCardSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   buildPlayerQuery,
+  favoriteLookup,
   groupCardsByPack,
+  isLatestPlayerRequest,
   mergeUniqueCards,
   nextPlayerPageState,
+  toPackOptions,
   toCardViewModel,
 } from './players.viewmodel'
 
@@ -35,6 +38,42 @@ describe('player list view model', () => {
   it('drops the old cursor when a filter changes', () => {
     expect(buildPlayerQuery({ position: 'CF', cursor: 'old-cursor', limit: 20 }, { resetCursor: true }))
       .toBe('/players?position=CF&limit=20')
+  })
+
+  it('adds and clears the selected player pack in the public catalog query', () => {
+    const packId = '44444444-4444-4444-8444-444444444444'
+    expect(buildPlayerQuery({ cardPackId: packId, limit: 20 }))
+      .toBe(`/players?cardPackId=${packId}&limit=20`)
+    expect(buildPlayerQuery({ cardPackId: undefined, limit: 20 }))
+      .toBe('/players?limit=20')
+  })
+
+  it('creates a Chinese pack picker with an explicit clear option', () => {
+    expect(toPackOptions([{
+      id: '44444444-4444-4444-8444-444444444444',
+      nameZh: '每周精选',
+      nameEn: 'POTW',
+      season: '2026',
+      releaseDate: null,
+      coverUrl: null,
+      cardCount: 11,
+    }])).toEqual([
+      { value: '', label: '全部球员包' },
+      { value: '44444444-4444-4444-8444-444444444444', label: '每周精选 · 11 张' },
+    ])
+  })
+
+  it('maps favorite status by player id instead of card id', () => {
+    const samePlayerCard = card({ id: '99999999-9999-4999-8999-999999999999' })
+    const lookup = favoriteLookup([samePlayerCard], [samePlayerCard.playerId])
+    expect(lookup[samePlayerCard.playerId]).toBe(true)
+    expect(lookup[samePlayerCard.id]).toBeUndefined()
+  })
+
+  it('accepts only the latest outstanding player request', () => {
+    expect(isLatestPlayerRequest(8, 8, false)).toBe(true)
+    expect(isLatestPlayerRequest(8, 7, false)).toBe(false)
+    expect(isLatestPlayerRequest(8, 8, true)).toBe(false)
   })
 
   it('deduplicates repeated cards across pages while preserving first-seen order', () => {

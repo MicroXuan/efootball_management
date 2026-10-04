@@ -2,7 +2,7 @@
   <view class="topbar">
     <button class="back-button" bindtap="goBack">‹</button>
     <view class="heading">
-      <text class="eyebrow">GAME IDENTITY</text>
+      <text class="eyebrow">游戏身份</text>
       <text class="page-title">{{editing ? '编辑账号' : '添加账号'}}</text>
     </view>
   </view>

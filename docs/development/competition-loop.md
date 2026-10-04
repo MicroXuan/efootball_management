@@ -2,6 +2,8 @@
 
 本文用于在本地一次性准备四名演示球员，并验证“登录 → 赛事 → 比赛 → 比分确认 → 积分榜”完整流程。演示命令只允许在非生产环境运行，重复执行不会创建重复赛事、用户、账号或赛程。
 
+> 本文保留的是旧个人公开赛事 `OPEN_EVENT` 回归流程。联赛赛季使用独立的 `DIVISION_LEAGUE`、正式组别和参赛球队私有积分榜，两套流程不可混用。分级联赛本地数据与入口见 [本地开发指南](./local-development.md#分级联赛演示数据)。
+
 ## 1. 前置条件
 
 - Node.js 24、pnpm 11.23.0。
@@ -183,3 +185,15 @@ SQL
 - `COMPETITION_DEMO_ACTOR_NOT_ADMIN`：该用户没有有效的平台级管理员绑定。
 - `COMPETITION_DEMO_DISABLED`：当前 `NODE_ENV=production`，演示命令按设计拒绝运行。
 - 小程序仍登录成新用户：确认 `.env` 使用 fake 网关、`DEV_WECHAT_OPEN_ID` 拼写正确，并重启 API。
+
+## 10. 新旧赛事兼容回归
+
+发布前同时运行个人赛事与分级联赛用例：
+
+```bash
+export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+set -a; source .env; set +a
+pnpm --filter @efm/api test:e2e -- competitions.e2e-spec.ts tiered-league.e2e-spec.ts --runInBand
+```
+
+个人赛事仍应保持单循环比赛数、正式比分和公开积分榜；分级联赛应只更新发生比赛的对应组积分榜，未报名用户访问私有榜单返回 403。

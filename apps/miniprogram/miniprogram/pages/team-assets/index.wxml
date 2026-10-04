@@ -1,0 +1,88 @@
+<view class="page-shell">
+  <loading-state wx:if="{{state === 'loading'}}" label="正在加载球队资产" />
+
+  <view wx:elif="{{state === 'error'}}" class="panel error-panel">
+    <text>{{errorMessage}}</text>
+    <button bindtap="loadPage">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="hero">
+      <image wx:if="{{assets.badgeUrl}}" class="team-badge" src="{{assets.badgeUrl}}" mode="aspectFit" />
+      <view wx:else class="team-badge badge-placeholder">{{assets.badgeText}}</view>
+      <view class="hero-copy">
+        <text class="kicker">球队资产 · TEAM ASSETS</text>
+        <text class="title">{{assets.teamName}}</text>
+        <text class="identity">{{assets.teamNumberCopy}} · {{assets.divisionCopy}}</text>
+        <text class="owner-name">{{assets.ownerDisplayName}}</text>
+        <text class="owner-number">微信用户编号 {{assets.ownerPublicUserNo}}</text>
+      </view>
+    </view>
+
+    <view class="metrics">
+      <view class="metric metric-primary"><text>{{assets.totalDisplayCopy}}</text><label>球队总资产</label></view>
+      <view class="metric"><text>{{assets.activePlayerCount}}<text class="metric-suffix">/25</text></text><label>一线人数</label></view>
+      <view class="metric"><text>{{assets.shellCopy}}</text><label>队壳价值</label></view>
+      <view class="metric"><text>{{assets.salaryCopy}}</text><label>当前工资</label></view>
+    </view>
+
+    <view class="valuation-status {{assets.valuationCompleteness === 'COMPLETE' ? 'is-complete' : ''}}">
+      <view class="status-mark"></view>
+      <view>
+        <text class="status-title">{{assets.completenessCopy}}</text>
+        <text class="status-copy">总资产由队壳与一线球员正式身价组成</text>
+      </view>
+    </view>
+
+    <view class="roster-head">
+      <view>
+        <text class="section-index">01 / 球员资产</text>
+        <text class="section-title">阵容档案</text>
+      </view>
+      <text class="roster-count">{{rosterPlayers.length}} 人</text>
+    </view>
+
+    <view class="roster-tabs">
+      <button
+        wx:for="{{assets.tabs}}"
+        wx:key="key"
+        class="roster-tab {{selectedStatus === item.key ? 'is-active' : ''}}"
+        data-status="{{item.key}}"
+        bindtap="switchRoster"
+      >{{item.label}} <text>{{item.count}}</text></button>
+    </view>
+
+    <view wx:if="{{!rosterPlayers.length}}" class="panel empty-panel">
+      <text class="empty-title">当前分类暂无球员</text>
+      <text class="muted">球员状态发生变化后会自动归入对应档案。</text>
+    </view>
+
+    <view wx:else class="player-list">
+      <view class="player-card" wx:for="{{rosterPlayers}}" wx:key="playerId">
+        <view class="player-main">
+          <image wx:if="{{item.cardImageUrl}}" class="player-image" src="{{item.cardImageUrl}}" mode="aspectFit" />
+          <view wx:else class="player-image image-placeholder">{{item.position || '—'}}</view>
+          <view class="player-copy">
+            <text class="player-name">{{item.playerName}}</text>
+            <text class="card-copy">{{item.cardCopy}}</text>
+            <text class="origin-copy">{{item.originCopy}}</text>
+          </view>
+          <view class="value-block">
+            <text class="value-label">身价</text>
+            <text class="value-number">{{item.valueCopy}}</text>
+            <text class="value-time">{{item.valuationCopy}}</text>
+          </view>
+        </view>
+
+        <view class="player-facts">
+          <view><label>加入</label><text>{{item.joinedCopy}}</text></view>
+          <view><label>年龄</label><text>{{item.ageCopy}}</text></view>
+          <view><label>身高</label><text>{{item.heightCopy}}</text></view>
+          <view><label>惯用脚</label><text>{{item.footCopy}}</text></view>
+          <view><label>AT</label><text>{{item.atCopy}}</text></view>
+          <view><label>工资</label><text>{{item.salaryCopy}}</text></view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

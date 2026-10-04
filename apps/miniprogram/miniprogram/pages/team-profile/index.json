@@ -1,6 +1,6 @@
 {
   "navigationStyle": "custom",
-  "backgroundColor": "#07110d",
+  "backgroundColor": "#0A0A0A",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "loading-state": "/components/loading-state/index"

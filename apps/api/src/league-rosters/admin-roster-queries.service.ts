@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   FinanceLedgerListResponse,
+  RosterPlayerCandidateQuery,
   RosterPlayerCandidateListResponse,
   SalaryRuleVersionListResponse,
   TeamRosterView,
@@ -70,7 +71,7 @@ export class AdminRosterQueriesService {
     const team = await this.prisma.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
     if (!team) throw new LeagueRosterError('LEAGUE_TEAM_NOT_FOUND', 'League team was not found', 404);
     const entries = await this.prisma.leaguePlayerOwnership.findMany({
-      where: { leagueTeamId: teamId, status: 'ACTIVE' },
+      where: { leagueTeamId: teamId, status: { in: ['ACTIVE', 'DISAPPEARED', 'RETIRED'] } },
       include: { footballPlayer: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } },
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
@@ -103,8 +104,10 @@ export class AdminRosterQueriesService {
         version: entry.version
       })),
       summary: {
-        rosterCount: entries.length,
-        salaryMinor: entries.reduce((total, entry) => total + entry.salaryMinor, 0),
+        rosterCount: entries.filter((entry) => entry.status === 'ACTIVE').length,
+        salaryMinor: entries
+          .filter((entry) => entry.status === 'ACTIVE')
+          .reduce((total, entry) => total + entry.salaryMinor, 0),
         salaryCapMinor: salaryRule?.salaryCapMinor ?? 0
       },
       operations: {
@@ -117,24 +120,32 @@ export class AdminRosterQueriesService {
     };
   }
 
-  async candidates(leagueId: string, keyword: string): Promise<RosterPlayerCandidateListResponse> {
+  async candidates(leagueId: string, query: RosterPlayerCandidateQuery): Promise<RosterPlayerCandidateListResponse> {
     const salaryRule = await this.prisma.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
       include: { tiers: { orderBy: { minDtRating: 'asc' } } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
     });
+    const cardFilters = {
+      status: 'ACTIVE' as const,
+      ...(query.position ? { position: query.position } : {}),
+      ...(query.cardType ? { cardType: query.cardType } : {}),
+      ...(query.cardPackId ? { cardPackId: query.cardPackId } : {})
+    };
     const players = await this.prisma.footballPlayer.findMany({
       where: {
+        cards: { some: cardFilters },
         OR: [
-          { nameZh: { contains: keyword } },
-          { nameEn: { contains: keyword } },
-          { shortName: { contains: keyword } }
+          { nameZh: { contains: query.keyword } },
+          { nameEn: { contains: query.keyword } },
+          { shortName: { contains: query.keyword } },
+          { cards: { some: { ...cardFilters, cardName: { contains: query.keyword } } } }
         ]
       },
       include: {
         bestCard: true,
         cards: {
-          where: { status: 'ACTIVE' },
+          where: cardFilters,
           include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } },
           orderBy: [{ overallRating: 'desc' }, { id: 'asc' }]
         },
@@ -148,7 +159,9 @@ export class AdminRosterQueriesService {
         playerId: player.id,
         playerName: player.nameZh ?? player.nameEn ?? player.shortName ?? '未命名球员',
         ownedByTeamId: player.leagueOwnerships[0]?.leagueTeamId ?? null,
-        recommendedPlayerCardId: player.bestCard?.playerCardId ?? null,
+        recommendedPlayerCardId: player.cards.some((card) => card.id === player.bestCard?.playerCardId)
+          ? player.bestCard!.playerCardId
+          : player.cards[0]?.id ?? null,
         cards: player.cards.map((card) => {
           const build = card.autoBuilds[0];
           return {
@@ -163,6 +176,7 @@ export class AdminRosterQueriesService {
               ? null
               : salaryRule?.tiers.find((tier) => build.dtRating! >= tier.minDtRating && build.dtRating! <= tier.maxDtRating)?.salaryMinor ?? null,
             recommended: player.bestCard?.playerCardId === card.id
+              || (!player.cards.some((candidate) => candidate.id === player.bestCard?.playerCardId) && player.cards[0]?.id === card.id)
           };
         })
       }))
@@ -181,6 +195,7 @@ export class AdminRosterQueriesService {
         id: entry.id,
         leagueId: entry.leagueId,
         leagueTeamId: entry.leagueTeamId,
+        seasonId: entry.seasonId,
         teamName: entry.leagueTeam.name,
         rosterTransactionId: entry.rosterTransactionId,
         direction: entry.direction,

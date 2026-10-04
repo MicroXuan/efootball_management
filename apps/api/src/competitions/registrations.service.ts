@@ -201,7 +201,7 @@ export class RegistrationsService {
     return registrations.map((registration) => ({
       ...this.response(registration),
       applicantDisplayName: registration.applicant.displayName,
-      gameAccountGamerTag: registration.gameAccount.gamerTag
+      gameAccountGamerTag: registration.gameAccount?.gamerTag
     }));
   }
 
@@ -230,6 +230,9 @@ export class RegistrationsService {
   }
 
   private response(registration: CompetitionRegistration): CompetitionRegistrationResponse {
+    if (!registration.gameAccountId) {
+      throw new CompetitionError('GAME_ACCOUNT_NOT_FOUND', 'Individual competition registration has no game account', 409);
+    }
     return {
       id: registration.id,
       competitionId: registration.competitionId,

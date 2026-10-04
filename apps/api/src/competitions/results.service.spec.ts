@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { ResultsService } from './results.service.js';
 import { StandingsService } from './standings.service.js';
+import { CupProgressionService } from './cup-progression.service.js';
 
 config({ path: '../../.env', quiet: true });
 
 describe('ResultsService', () => {
   const prisma = new PrismaService();
   const standings = new StandingsService(prisma);
-  const service = new ResultsService(prisma, new MutationReceiptService(prisma), standings);
+  const service = new ResultsService(prisma, new MutationReceiptService(prisma), standings, new CupProgressionService());
   const users = [randomUUID(), randomUUID(), randomUUID(), randomUUID()] as const;
   const competitionIds: string[] = [];
 
@@ -139,5 +141,130 @@ describe('ResultsService', () => {
     });
     await expect(prisma.matchResultVersion.count({ where: { matchId: match.id, status: 'OFFICIAL' } })).resolves.toBe(1);
     await expect(prisma.standingsSnapshot.count({ where: { competitionId: competition.id } })).resolves.toBe(1);
+  });
+});
+
+describe('team match ownership', () => {
+  function teamHarness() {
+    const match = {
+      id: 'match-1', stageId: 'stage-1', version: 1, status: 'AWAITING_RESULT',
+      officialResultVersion: null,
+      stage: { status: 'PUBLISHED', competitionId: 'competition-1', competition: {
+        id: 'competition-1', status: 'IN_PROGRESS', competitionType: 'DIVISION_LEAGUE'
+      } },
+      homeParticipant: {
+        id: 'home', individualUserId: null, seasonEntry: { ownerUserId: 'owner-home' }
+      },
+      awayParticipant: {
+        id: 'away', individualUserId: null, seasonEntry: { ownerUserId: 'owner-away' }
+      }
+    };
+    const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: {
+        findUnique: jest.fn(async () => match),
+        updateMany: jest.fn(async () => ({ count: 1 }))
+      },
+      matchResultVersion: {
+        aggregate: jest.fn(async () => ({ _max: { version: null } })),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: 'result-1', ...data, status: 'PROPOSED', reason: null, createdAt: new Date('2026-10-03')
+        }))
+      }
+    };
+    const receipts = { execute: jest.fn(async (
+      _actor: string, _operation: string, _key: string,
+      work: (client: typeof transaction) => Promise<unknown>
+    ) => work(transaction)) };
+    const service = new ResultsService(transaction as never, receipts as never, {} as never, {} as never);
+    return { service };
+  }
+
+  it('allows either team owner to act and hides the match from outsiders', async () => {
+    const home = teamHarness().service;
+    await expect(home.submit('owner-home', 'match-1', {
+      homeScore: 2, awayScore: 1, expectedVersion: 1
+    }, 'home-submit')).resolves.toMatchObject({ submissionSide: 'HOME' });
+
+    const away = teamHarness().service;
+    await expect(away.submit('owner-away', 'match-1', {
+      homeScore: 1, awayScore: 1, expectedVersion: 1
+    }, 'away-submit')).resolves.toMatchObject({ submissionSide: 'AWAY' });
+
+    const outsider = teamHarness().service;
+    await expect(outsider.submit('outsider', 'match-1', {
+      homeScore: 0, awayScore: 0, expectedVersion: 1
+    }, 'outsider-submit')).rejects.toMatchObject({ response: { code: 'MATCH_NOT_FOUND' } });
+  });
+});
+
+describe('cup match results', () => {
+  function managerHarness(format: 'ROUND_ROBIN' | 'SINGLE_ELIMINATION') {
+    const match = {
+      id: 'match-1', stageId: 'stage-1', version: 1, status: 'AWAITING_RESULT',
+      officialResultVersion: null,
+      stage: {
+        id: 'stage-1', status: 'PUBLISHED', format, competitionId: 'cup-1',
+        competition: { id: 'cup-1', status: 'IN_PROGRESS', competitionType: 'GROUP_KNOCKOUT_CUP' }
+      },
+      homeParticipant: { id: 'home', individualUserId: null, seasonEntry: { ownerUserId: 'home-owner' } },
+      awayParticipant: { id: 'away', individualUserId: null, seasonEntry: { ownerUserId: 'away-owner' } }
+    };
+    const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: {
+        findUnique: jest.fn(async () => match),
+        updateMany: jest.fn(async () => ({ count: 1 }))
+      },
+      matchResultVersion: {
+        aggregate: jest.fn(async () => ({ _max: { version: null } })),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: 'result-1', status: 'OFFICIAL', reason: null, createdAt: new Date('2026-10-03'), ...data
+        }))
+      }
+    };
+    const receipts = { execute: jest.fn(async (
+      _actor: string, _operation: string, _key: string,
+      work: (client: typeof transaction) => Promise<unknown>
+    ) => work(transaction)) };
+    const standings = { recalculate: jest.fn(async () => ({})) };
+    const progression = { recordWinner: jest.fn(async () => undefined) };
+    return {
+      service: new ResultsService(
+        transaction as never, receipts as never, standings as never, progression as never
+      ),
+      transaction,
+      standings,
+      progression
+    };
+  }
+
+  it('rejects a draw before writing an official knockout result', async () => {
+    const { service, transaction } = managerHarness('SINGLE_ELIMINATION');
+
+    await expect(service.recordByManager('admin-1', 'cup-1', 'match-1', {
+      homeScore: 2, awayScore: 2, expectedVersion: 1
+    }, 'draw')).rejects.toMatchObject({ response: { code: 'KNOCKOUT_DRAW_NOT_ALLOWED' } });
+    expect(transaction.matchResultVersion.create).not.toHaveBeenCalled();
+  });
+
+  it('recalculates group standings by stage and advances an official knockout winner', async () => {
+    const group = managerHarness('ROUND_ROBIN');
+    await group.service.recordByManager('admin-1', 'cup-1', 'match-1', {
+      homeScore: 1, awayScore: 1, expectedVersion: 1
+    }, 'group-result');
+    expect(group.standings.recalculate).toHaveBeenCalledWith(
+      group.transaction, 'cup-1', 'result-1', 'stage-1'
+    );
+    expect(group.progression.recordWinner).not.toHaveBeenCalled();
+
+    const knockout = managerHarness('SINGLE_ELIMINATION');
+    await knockout.service.recordByManager('admin-1', 'cup-1', 'match-1', {
+      homeScore: 3, awayScore: 1, expectedVersion: 1
+    }, 'knockout-result');
+    expect(knockout.standings.recalculate).not.toHaveBeenCalled();
+    expect(knockout.progression.recordWinner).toHaveBeenCalledWith(
+      knockout.transaction, 'match-1', 3, 1
+    );
   });
 });

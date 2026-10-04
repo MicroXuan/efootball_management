@@ -1,5 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { CompetitionMatchResponse } from '@efm/contracts';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type {
+  CompetitionMatchResponse,
+  GenerateStageScheduleRequest,
+  PublishStageScheduleRequest
+} from '@efm/contracts';
+import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 import type { CompetitionParticipant, CompetitionStage, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
@@ -40,8 +46,129 @@ export class SchedulesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
-    @Inject(SCHEDULE_GENERATOR) private readonly generator: ScheduleGenerator
+    @Inject(SCHEDULE_GENERATOR) private readonly generator: ScheduleGenerator,
+    @Optional() @Inject(AdminMutationReceiptService) private readonly adminReceipts?: AdminMutationReceiptService,
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
   ) {}
+
+  generateStage(
+    actorAdminId: string,
+    leagueId: string,
+    stageId: string,
+    input: GenerateStageScheduleRequest,
+    key: string
+  ): Promise<SchedulePreview> {
+    const receipts = this.requireAdminReceipts();
+    return receipts.execute(actorAdminId, `competition-stage.schedule.generate:${stageId}`, key, async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competition_stages WHERE id = ${stageId} FOR UPDATE`;
+      const stage = await transaction.competitionStage.findUnique({
+        where: { id: stageId },
+        include: {
+          competition: { include: { season: true } },
+          participants: {
+            orderBy: [{ seed: 'asc' }, { id: 'asc' }],
+            include: { participant: true }
+          }
+        }
+      });
+      this.assertManagedStage(stage, leagueId);
+      if (stage.status !== 'DRAFT') {
+        throw new CompetitionError('SCHEDULE_ALREADY_PUBLISHED', '赛程已发布，不能重新生成', 409);
+      }
+      assertExpectedVersion(stage.version, input.expectedStageVersion, 'Stage');
+      const participantIds = stage.participants.map((membership) => membership.participant.id);
+      const pairings = this.generator(participantIds);
+      await transaction.competitionMatch.deleteMany({ where: { stageId } });
+      if (pairings.length > 0) {
+        await transaction.competitionMatch.createMany({
+          data: pairings.map((pairing) => ({ stageId, ...pairing }))
+        });
+      }
+      const updated = await transaction.competitionStage.updateMany({
+        where: { id: stageId, status: 'DRAFT', version: input.expectedStageVersion },
+        data: { version: { increment: 1 } }
+      });
+      if (updated.count !== 1) {
+        throw new CompetitionError('VERSION_CONFLICT', '组别已被其他管理员修改，请刷新后重试', 409);
+      }
+      const preview = await this.readStagePreview(transaction, stageId);
+      return { ...preview, version: input.expectedStageVersion + 1 };
+    }, input);
+  }
+
+  publishStage(
+    actorAdminId: string,
+    leagueId: string,
+    stageId: string,
+    input: PublishStageScheduleRequest,
+    key: string
+  ): Promise<SchedulePreview> {
+    const receipts = this.requireAdminReceipts();
+    return receipts.execute(actorAdminId, `competition-stage.schedule.publish:${stageId}`, key, async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competition_stages WHERE id = ${stageId} FOR UPDATE`;
+      const stage = await transaction.competitionStage.findUnique({
+        where: { id: stageId },
+        include: { competition: { include: { season: true } } }
+      });
+      this.assertManagedStage(stage, leagueId);
+      if (stage.status !== 'DRAFT') {
+        throw new CompetitionError('SCHEDULE_ALREADY_PUBLISHED', '赛程已经发布', 409);
+      }
+      assertExpectedVersion(stage.version, input.expectedStageVersion, 'Stage');
+      const season = stage.competition.season!;
+      if (season.version !== input.expectedSeasonVersion) {
+        throw new CompetitionError('VERSION_CONFLICT', '赛季已被其他管理员修改，请刷新后重试', 409);
+      }
+      if (season.status !== 'READY' && season.status !== 'IN_PROGRESS') {
+        throw new CompetitionError('SCHEDULE_PUBLISH_NOT_ALLOWED', '当前赛季状态不能发布赛程', 409);
+      }
+      if (season.status === 'READY') {
+        const sibling = await transaction.leagueSeason.findFirst({
+          where: { leagueId, status: 'IN_PROGRESS', id: { not: season.id } },
+          select: { id: true }
+        });
+        if (sibling) {
+          throw new CompetitionError('LEAGUE_SEASON_ALREADY_IN_PROGRESS', '该联赛已有进行中的赛季', 409);
+        }
+      }
+      const stageUpdate = await transaction.competitionStage.updateMany({
+        where: { id: stageId, status: 'DRAFT', version: input.expectedStageVersion },
+        data: { status: 'PUBLISHED', publishedAt: new Date(), version: { increment: 1 } }
+      });
+      if (stageUpdate.count !== 1) {
+        throw new CompetitionError('VERSION_CONFLICT', '组别已被其他管理员修改，请刷新后重试', 409);
+      }
+      await transaction.competition.updateMany({
+        where: { id: stage.competitionId },
+        data: { status: 'IN_PROGRESS', version: { increment: 1 } }
+      });
+      if (season.status === 'READY') {
+        const seasonUpdate = await transaction.leagueSeason.updateMany({
+          where: { id: season.id, status: 'READY', version: input.expectedSeasonVersion },
+          data: { status: 'IN_PROGRESS', version: { increment: 1 } }
+        });
+        if (seasonUpdate.count !== 1) {
+          throw new CompetitionError('VERSION_CONFLICT', '赛季已被其他管理员修改，请刷新后重试', 409);
+        }
+      }
+      if (this.audit) {
+        await this.audit.record(transaction, {
+          actorAdminId,
+          leagueId,
+          action: 'admin.competition-stage.schedule.publish',
+          resourceType: 'CompetitionStage',
+          resourceId: stageId,
+          metadata: { competitionId: stage.competitionId, seasonId: season.id }
+        });
+      }
+      const preview = await this.readStagePreview(transaction, stageId);
+      return { ...preview, status: 'PUBLISHED', version: input.expectedStageVersion + 1 };
+    }, input);
+  }
+
+  previewStage(stageId: string): Promise<SchedulePreview> {
+    return this.readStagePreview(this.prisma, stageId);
+  }
 
   generate(actorId: string, competitionId: string, key: string): Promise<SchedulePreview> {
     return this.receipts.execute(actorId, `competition.schedule.generate:${competitionId}`, key, async (transaction) => {
@@ -137,6 +264,34 @@ export class SchedulesService {
     return matches.map((match) => this.matchResponse(match));
   }
 
+  async listStagePublic(stageId: string): Promise<ScheduleMatch[]> {
+    const stage = await this.prisma.competitionStage.findUnique({
+      where: { id: stageId },
+      select: { id: true, status: true }
+    });
+    if (!stage || stage.status !== 'PUBLISHED') return [];
+    const matches = await this.matches(this.prisma, stageId);
+    return matches.map((match) => this.matchResponse(match));
+  }
+
+  private async readStagePreview(
+    client: CompetitionTransaction | PrismaService,
+    stageId: string
+  ): Promise<SchedulePreview> {
+    const stage = await client.competitionStage.findUnique({ where: { id: stageId } });
+    if (!stage) throw new CompetitionError('SCHEDULE_NOT_FOUND', '未找到组别赛程', 404);
+    const matches = await this.matches(client, stageId);
+    return {
+      id: stage.id,
+      competitionId: stage.competitionId,
+      status: stage.status,
+      version: stage.version,
+      roundCount: Math.max(0, ...matches.map((match) => match.roundNumber)),
+      matchCount: matches.length,
+      matches: matches.map((match) => this.matchResponse(match))
+    };
+  }
+
   private async readPreview(
     client: CompetitionTransaction | PrismaService,
     competitionId: string,
@@ -208,5 +363,30 @@ export class SchedulesService {
 
   private notFound(): CompetitionError {
     return new CompetitionError('COMPETITION_NOT_FOUND', 'Competition was not found', 404);
+  }
+
+  private requireAdminReceipts(): AdminMutationReceiptService {
+    if (!this.adminReceipts) throw new Error('Admin schedule receipts are not configured');
+    return this.adminReceipts;
+  }
+
+  private assertManagedStage(
+    stage: null | {
+      status: CompetitionStage['status'];
+      version: number;
+      competitionId: string;
+      competition: {
+        competitionType: string;
+        season: null | { id: string; leagueId: string; status: string; version: number };
+      };
+    },
+    leagueId: string
+  ): asserts stage is NonNullable<typeof stage> {
+    if (!stage) throw new CompetitionError('COMPETITION_STAGE_NOT_FOUND', '未找到联赛组别', 404);
+    if (stage.competition.competitionType !== 'DIVISION_LEAGUE'
+      || !stage.competition.season
+      || stage.competition.season.leagueId !== leagueId) {
+      throw new CompetitionError('COMPETITION_STAGE_NOT_IN_LEAGUE', '组别不属于当前联赛', 404);
+    }
   }
 }

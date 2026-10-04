@@ -11,6 +11,7 @@ const detail = (name: string, version: number) => ({
   id: teamId, leagueId, ownerUserId: '44444444-4444-4444-8444-444444444444', ownerPublicUserNo: '000123',
   ownerDisplayName: '小宣', teamNumber: 0, name, shortName: '巴萨', logoUrl: null, status: 'ACTIVE' as const,
   rosterStatus: 'COMPLIANT' as const, activePlayerCount: 0, salaryTotalMinor: 0, salaryCapMinor: 0,
+  shellValueMinor: 25000,
   defaultGameAccountId: null, participatingSeasonCount: 0, version,
   createdAt: '2026-09-29T00:00:00.000Z', updatedAt: '2026-09-29T00:00:00.000Z'
 });

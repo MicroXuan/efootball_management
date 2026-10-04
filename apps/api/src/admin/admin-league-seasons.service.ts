@@ -11,6 +11,7 @@ import { AdminAuthorizationService } from './admin-authorization.service.js';
 import { AdminError } from './admin.errors.js';
 import { AdminMutationReceiptService } from './admin-mutation-receipt.service.js';
 import { AuditLogService } from './audit-log.service.js';
+import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
 
 const SEASON_INCLUDE = {
   _count: { select: { entries: true } },
@@ -206,6 +207,7 @@ export class AdminLeagueSeasonsService {
             409
           );
         }
+        await synchronizeSeasonValuationSnapshots(transaction, seasonId);
         const versionResult = await transaction.leagueSeason.updateMany({
           where: { id: seasonId, leagueId, version: input.expectedSeasonVersion },
           data: { version: { increment: 1 } }

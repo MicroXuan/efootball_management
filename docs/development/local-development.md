@@ -38,6 +38,7 @@ pnpm dev:db
 docker compose ps
 pnpm db:migrate
 pnpm db:status
+pnpm --filter @efm/api exec prisma db seed
 ```
 
 本机 MySQL 方案：先确保 `.env` 的 `DATABASE_URL` 指向已有数据库，再执行：
@@ -57,10 +58,16 @@ pnpm db:status
 pnpm verify
 ```
 
-开发启动：
+API 开发启动：
 
 ```bash
 pnpm start:api
+```
+
+另开一个终端启动管理后台：
+
+```bash
+pnpm --filter @efm/admin-web dev
 ```
 
 后台管理前端的启动、账号权限和完整验收见 [后台管理系统本地开发与验收](./admin-web-local-development.zh-CN.md)。联赛图片、赛季、球队绑定与小程序联动见 [联赛展示与管理员绑定验收手册](./league-presentation-verification.zh-CN.md)。联赛球队发布前必须按 [联赛球队迁移与回滚手册](./league-team-migration.zh-CN.md)完成干跑检查。
@@ -77,11 +84,48 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 
 第二个请求会返回 access token 与 refresh token。不要把 token 提交到仓库或发到群聊。
 
+## 5. 经营闭环演示数据与入口账号
+
+需要演示数据时，在本地 `.env` 设置 `SEED_ECONOMY_DEMO=true`，并确保已配置
+`LOCAL_ADMIN_USERNAME` 和有效的 `LOCAL_ADMIN_PASSWORD_HASH`，再执行种子命令。系统会幂等创建
+“本地经营演示联赛”；重复执行不会把已经审核、转会或调整过的演示记录重置。演示内容包括：
+
+- 正在开放的身价窗口和转会窗口；
+- 一支身价完整的球队，以及一支含超限身价草稿的待审核球队；
+- 正式球员身价、5% 交易手续费规则和最低手续费；
+- 球队壳价值、工资、运营补贴与奢侈税财务明细。
+
+后台入口为 `http://127.0.0.1:4173/login`。用户名取自
+`LOCAL_ADMIN_USERNAME`，密码使用生成该 bcrypt 哈希时对应的本地明文；仓库不保存明文密码。
+
+小程序使用假微信网关时，可分别用以下测试 code 登录两个演示球队老板：
+
+```text
+test-code-economy-demo-complete
+test-code-economy-demo-review
+```
+
+进入“联赛 → 我的联赛 → 球队工作台”后，可打开“身价管理”“球队资产”“交易记录”和“球队财务”。完整队用于查看已生效身价和资产汇总；待审队用于查看超限草稿并在后台完成审核。
+
 需要同步已获授权的 PESDATA 球员数据时，先完成基础迁移与种子数据，再按 [PESDATA 授权同步操作指南](./pesdata-sync.md)执行 2 条干跑和 100 条样本验收。同步签名材料只写入本地 `.env` 或部署平台密钥，不能放入小程序。
 
 需要验收个人赛事的报名、赛程、比分确认与积分榜闭环时，按 [个人赛事闭环本地验收指南](./competition-loop.md)创建幂等的四人演示赛事。
 
-## 5. 导入微信小程序
+### 分级联赛演示数据
+
+需要验收首赛季分组时，在 `.env` 增加 `SEED_TIERED_LEAGUE_DEMO=true`，同时配置本地管理员账号，再重复执行种子命令：
+
+```bash
+export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+set -a; source .env; set +a
+pnpm --filter @efm/api exec prisma db seed
+```
+
+种子会幂等准备“本地分级联赛演示”、一个处于“分组审核”阶段的首赛季和 19 支已审核球队。重复执行不会创建重复球队、正式分组或比赛，也不会把已确认赛季退回审核状态。管理员在后台进入“联赛管理 → 分组与赛程”，依次执行：生成方案、必要时调整并填写原因、确认分组、为每个冠军组生成并发布赛程。
+
+小程序使用 `test-code-tiered-demo-1` 至 `test-code-tiered-demo-19` 登录对应球队老板。打开“联赛 → 本地分级联赛演示”后，可查看“我的联赛工作台”；分组确认后显示所在组和积分榜，赛程发布后显示下一场比赛。未报名账号不会看到私有数据。
+
+## 6. 导入微信小程序
 
 1. 在微信开发者工具选择“导入项目”。
 2. 目录选择仓库中的 `apps/miniprogram`，AppID 选择已注册的小程序。
@@ -91,7 +135,7 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 
 真机无法把 `127.0.0.1` 解释为 Mac。真机联调应改成同一局域网可访问的 Mac 地址，或直接填写已部署的 HTTPS API 域名，然后重新编译。正式发布前还需要在微信公众平台把该 HTTPS 域名加入 `request` 合法域名。
 
-## 6. 手工验收路径
+## 7. 手工验收路径
 
 按顺序验证：
 
@@ -100,10 +144,17 @@ curl -sS http://127.0.0.1:3000/v1/auth/wechat \
 3. 打开一支联赛球队，核对只读阵容、工资帽、财务流水和当前转会窗口，不应出现购买、转会或升级按钮。
 4. 小程序不应出现个人资料保存、游戏账号维护、自助创建联赛或自助编辑球队入口。
 5. 关闭 API 后刷新资料页，应显示错误态和“重新加载”；恢复 API 后可重试成功。
+6. 分级演示联赛首赛季不得出现超级组；19 队应形成冠军 A/B 两组，发布赛程后两组边界清晰且积分独立更新。
+
+自动验证分级联赛完整闭环：
+
+```bash
+pnpm --filter @efm/api test:e2e -- tiered-league.e2e-spec.ts --runInBand
+```
 
 旧 `/me/game-accounts` 与 `/me/team-profile` 的读取能力仅用于历史数据兼容；写接口会返回 `Deprecation: true` 响应头。新小程序流程不再调用这些写接口。
 
-## 7. 常见问题
+## 8. 常见问题
 
 - `ECONNREFUSED 127.0.0.1:3307`：MySQL 未启动或端口与 `.env` 不一致。
 - `Environment validation failed`：`.env` 缺少必填项，或密钥长度不足 32 个字符。

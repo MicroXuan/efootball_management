@@ -24,6 +24,28 @@ const candidate = {
 };
 
 describe('acquire player drawer', () => {
+  it('sends position, card type, and pack filters and shows an explicit empty result', async () => {
+    const request = vi.fn(async (path: string) => path === '/v1/card-packs?limit=100'
+      ? { items: [{ id: '77777777-7777-4777-8777-777777777777', nameZh: '每周精选', nameEn: null, season: null, releaseDate: null, coverUrl: null, cardCount: 11 }], nextCursor: null, releaseSequence: 1 }
+      : { items: [] });
+    render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request as unknown as AdminApi['request'])} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText('搜索球员'), '梅西');
+    await userEvent.click(screen.getByRole('combobox', { name: '位置' }));
+    await userEvent.click(await screen.findByText('前腰'));
+    await userEvent.click(screen.getByRole('combobox', { name: '卡种' }));
+    await userEvent.click(await screen.findByText('史诗'));
+    await userEvent.click(screen.getByRole('combobox', { name: '球员包' }));
+    await userEvent.click(await screen.findByText('每周精选'));
+    await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      `/v1/admin/roster/leagues/${leagueId}/player-candidates?keyword=%E6%A2%85%E8%A5%BF&position=AMF&cardType=EPIC&cardPackId=77777777-7777-4777-8777-777777777777`,
+      expect.anything(),
+    ));
+    expect(await screen.findByText('没有符合筛选条件的球员')).toBeInTheDocument();
+  });
+
   it('selects the recommended best card but lets the manager inspect all cards', async () => {
     const request = vi.fn().mockResolvedValue({ items: [candidate] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
@@ -44,7 +66,10 @@ describe('acquire player drawer', () => {
   });
 
   it('shows current roster and salary limits for business failures', async () => {
-    const request = vi.fn().mockResolvedValueOnce({ items: [candidate] }).mockRejectedValueOnce(new ApiError({ status: 409, code: 'TEAM_ROSTER_FULL' }));
+    const request = vi.fn()
+      .mockResolvedValueOnce({ items: [], nextCursor: null, releaseSequence: 1 })
+      .mockResolvedValueOnce({ items: [candidate] })
+      .mockRejectedValueOnce(new ApiError({ status: 409, code: 'TEAM_ROSTER_FULL' }));
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 25, salaryMinor: 1900, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
     await userEvent.click(screen.getByRole('button', { name: '搜索' }));
@@ -56,7 +81,11 @@ describe('acquire player drawer', () => {
   });
 
   it('reuses the idempotency key when an unchanged submission is retried', async () => {
-    const request = vi.fn().mockResolvedValueOnce({ items: [candidate] }).mockRejectedValueOnce(new Error('timeout')).mockRejectedValueOnce(new Error('timeout'));
+    const request = vi.fn()
+      .mockResolvedValueOnce({ items: [], nextCursor: null, releaseSequence: 1 })
+      .mockResolvedValueOnce({ items: [candidate] })
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new Error('timeout'));
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
     await userEvent.click(screen.getByRole('button', { name: '搜索' }));
@@ -65,7 +94,7 @@ describe('acquire player drawer', () => {
     await userEvent.click(screen.getByRole('button', { name: '确认购买' }));
     await screen.findByRole('alert');
     await userEvent.click(screen.getByRole('button', { name: '确认购买' }));
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
-    expect(request.mock.calls[1]?.[1]?.body.idempotencyKey).toBe(request.mock.calls[2]?.[1]?.body.idempotencyKey);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(4));
+    expect(request.mock.calls[2]?.[1]?.body.idempotencyKey).toBe(request.mock.calls[3]?.[1]?.body.idempotencyKey);
   });
 });

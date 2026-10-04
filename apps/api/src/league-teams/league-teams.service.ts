@@ -14,6 +14,7 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
 
 type TeamWithOwner = LeagueTeam & { owner: User; _count: { seasonEntries: number } };
 type TeamRosterMetrics = { activePlayerCount: number; salaryTotalMinor: number; salaryCapMinor: number };
@@ -46,6 +47,7 @@ export class LeagueTeamsService {
       const owner = await transaction.user.findUnique({ where: { id: input.ownerUserId } });
       if (!owner?.publicUserNo) throw this.notFound('PUBLIC_USER_NOT_FOUND', 'User was not found');
       await this.assertAvailable(transaction, leagueId, owner.id, input.teamNumber);
+      await synchronizeSeasonValuationSnapshots(transaction, league.currentSeasonId);
 
       try {
         const team = await transaction.leagueTeam.create({
@@ -161,6 +163,7 @@ export class LeagueTeamsService {
           ...(input.shortName !== undefined ? { shortName: input.shortName } : {}),
           ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.shellValueMinor !== undefined ? { shellValueMinor: input.shellValueMinor } : {}),
           version: { increment: 1 }
         }
       });
@@ -169,7 +172,9 @@ export class LeagueTeamsService {
       await this.audit.record(transaction, {
         actorAdminId,
         leagueId,
-        action: 'league-team.update',
+        action: input.shellValueMinor !== undefined
+          ? 'LEAGUE_TEAM_SHELL_VALUE_UPDATED'
+          : 'league-team.update',
         resourceType: 'LeagueTeam',
         resourceId: teamId,
         metadata: Object.fromEntries(
@@ -279,6 +284,7 @@ export class LeagueTeamsService {
         id: entry.id,
         leagueId: entry.leagueId,
         leagueTeamId: entry.leagueTeamId,
+        seasonId: entry.seasonId,
         teamName: entry.leagueTeam.name,
         rosterTransactionId: entry.rosterTransactionId,
         direction: entry.direction,
@@ -410,6 +416,7 @@ export class LeagueTeamsService {
       leagueId: team.leagueId,
       ownerUserId: team.ownerUserId,
       ownerPublicUserNo: team.owner.publicUserNo,
+      ownerDisplayName: team.owner.displayName,
       teamNumber: team.teamNumber,
       name: team.name,
       shortName: team.shortName,
@@ -419,6 +426,7 @@ export class LeagueTeamsService {
       activePlayerCount: metrics?.activePlayerCount ?? 0,
       salaryTotalMinor: metrics?.salaryTotalMinor ?? 0,
       salaryCapMinor: metrics?.salaryCapMinor ?? 0,
+      shellValueMinor: team.shellValueMinor,
       version: team.version,
       createdAt: team.createdAt.toISOString(),
       updatedAt: team.updatedAt.toISOString()

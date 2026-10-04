@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { jest } from '@jest/globals';
 import { config } from 'dotenv';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AdminLeagueSeasonsService } from '../admin/admin-league-seasons.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
@@ -10,6 +12,10 @@ import { RosterTransactionsService } from './roster-transactions.service.js';
 import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { SalaryRulesService, defaultSalaryTiers } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
+import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { ValuationWindowsService as PlayerValuationWindowsService } from '../player-valuations/valuation-windows.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -19,6 +25,15 @@ describe('RosterTransactionsService', () => {
   const audit = new AuditLogService(prisma);
   const salaryRules = new SalaryRulesService(prisma, authorization, audit);
   const windows = new TransferWindowsService(prisma, authorization, audit);
+  const transactionFees = new TransactionFeesService(
+    prisma,
+    authorization,
+    new AdminMutationReceiptService(prisma),
+    audit
+  );
+  const valuationSnapshots = {
+    synchronizeSeasonBeforeRosterMutation: jest.fn(async () => undefined)
+  } as unknown as ValuationSnapshotsService;
   const service = new RosterTransactionsService(
     prisma,
     authorization,
@@ -26,7 +41,9 @@ describe('RosterTransactionsService', () => {
     audit,
     salaryRules,
     windows,
-    new RosterLockRepository()
+    new RosterLockRepository(),
+    transactionFees,
+    valuationSnapshots
   );
   const recalculation = new SalaryRecalculationService(
     prisma,
@@ -44,12 +61,29 @@ describe('RosterTransactionsService', () => {
   beforeAll(() => prisma.$connect());
 
   afterEach(async () => {
+    jest.mocked(valuationSnapshots.synchronizeSeasonBeforeRosterMutation).mockClear();
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.auditLog.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.financeLedgerEntry.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.rosterTransaction.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
+    await prisma.valuationRosterSnapshot.deleteMany({
+      where: { window: { season: { leagueId: { in: createdLeagueIds } } } }
+    });
+    await prisma.valuationWindow.updateMany({
+      where: { season: { leagueId: { in: createdLeagueIds } } },
+      data: { currentRuleVersionId: null }
+    });
+    await prisma.valuationWindowRuleVersion.deleteMany({
+      where: { window: { season: { leagueId: { in: createdLeagueIds } } } }
+    });
+    await prisma.valuationWindow.deleteMany({
+      where: { season: { leagueId: { in: createdLeagueIds } } }
+    });
     await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
+    await prisma.leaguePlayerValuation.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
+    await prisma.leagueTransactionFeeRuleVersion.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.transferWindow.deleteMany({ where: { season: { leagueId: { in: createdLeagueIds } } } });
+    await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: createdLeagueIds } } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.adminLeagueRole.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
@@ -187,13 +221,165 @@ describe('RosterTransactionsService', () => {
     const player = await card(f.source.id, 'Bonucci');
     const input = acquisition(f.season.id, f.teams[0]!.id, player.card.id, 'same-key');
 
-    const first = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    const operationAt = new Date('2026-09-15T00:00:00.000Z');
+    const first = await service.acquire(input, f.admin.id, operationAt);
+    expect(valuationSnapshots.synchronizeSeasonBeforeRosterMutation).toHaveBeenCalledWith(
+      expect.anything(),
+      f.season.id
+    );
     const replay = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
 
     expect(replay).toEqual(first);
     expect(first.summary).toMatchObject({ rosterCount: 1, salaryMinor: 200, salaryCapMinor: 10_000 });
     await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
     await expect(prisma.financeLedgerEntry.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
+  });
+
+  it('snapshots the opening roster before a request blocked across startsAt mutates it', async () => {
+    const f = await fixture();
+    const existing = await card(f.source.id, 'Opening roster');
+    const late = await card(f.source.id, 'Boundary signing');
+    await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, existing.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await prisma.seasonEntry.create({
+      data: {
+        seasonId: f.season.id,
+        leagueTeamId: f.teams[0]!.id,
+        ownerUserId: f.users[0]!.id,
+        source: 'NEW_APPLICATION',
+        status: 'APPROVED',
+        teamNameSnapshot: f.teams[0]!.name,
+        teamShortNameSnapshot: f.teams[0]!.shortName,
+        teamNumberSnapshot: f.teams[0]!.teamNumber
+      }
+    });
+    const startsAt = new Date(Date.now() + 750);
+    const valuationWindow = await prisma.valuationWindow.create({
+      data: {
+        seasonId: f.season.id,
+        name: '边界快照',
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 60_000),
+        createdByAdminId: f.admin.id
+      }
+    });
+    const valuationWindows = new PlayerValuationWindowsService(
+      prisma,
+      authorization,
+      audit,
+      new AdminMutationReceiptService(prisma)
+    );
+    const realSnapshots = new ValuationSnapshotsService(prisma, valuationWindows);
+    const boundaryService = new RosterTransactionsService(
+      prisma,
+      authorization,
+      new AdminMutationReceiptService(prisma),
+      audit,
+      salaryRules,
+      windows,
+      new RosterLockRepository(),
+      transactionFees,
+      realSnapshots
+    );
+
+    let releaseWindowLock: () => void = () => undefined;
+    let reportWindowLocked: () => void = () => undefined;
+    const windowLocked = new Promise<void>((resolve) => { reportWindowLocked = resolve; });
+    const holdWindowLock = new Promise<void>((resolve) => { releaseWindowLock = resolve; });
+    const blocker = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM valuation_windows WHERE id = ${valuationWindow.id} FOR UPDATE
+      `);
+      reportWindowLocked();
+      await holdWindowLock;
+    });
+    await windowLocked;
+
+    const requestedAt = new Date();
+    const acquisitionPromise = boundaryService.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, late.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    expect(requestedAt.getTime()).toBeLessThan(startsAt.getTime());
+    await new Promise((resolve) => setTimeout(resolve, startsAt.getTime() - Date.now() + 100));
+    releaseWindowLock();
+    await blocker;
+    await acquisitionPromise;
+
+    const snapshots = await prisma.valuationRosterSnapshot.findMany({
+      where: { windowId: valuationWindow.id },
+      select: { footballPlayerId: true }
+    });
+    expect(snapshots).toEqual([{ footballPlayerId: existing.player.id }]);
+    expect(snapshots).not.toContainEqual({ footballPlayerId: late.player.id });
+  });
+
+  it('freezes approved teams before an enrollment blocked across startsAt completes', async () => {
+    const f = await fixture();
+    const existing = await card(f.source.id, 'Late enrolled roster');
+    await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, existing.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    const startsAt = new Date(Date.now() + 750);
+    const valuationWindow = await prisma.valuationWindow.create({
+      data: {
+        seasonId: f.season.id,
+        name: '报名边界快照',
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 60_000),
+        createdByAdminId: f.admin.id
+      }
+    });
+    const enrollmentService = new AdminLeagueSeasonsService(
+      prisma,
+      authorization,
+      new AdminMutationReceiptService(prisma),
+      audit
+    );
+
+    let releaseWindowLock: () => void = () => undefined;
+    let reportWindowLocked: () => void = () => undefined;
+    const windowLocked = new Promise<void>((resolve) => { reportWindowLocked = resolve; });
+    const holdWindowLock = new Promise<void>((resolve) => { releaseWindowLock = resolve; });
+    const blocker = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM valuation_windows WHERE id = ${valuationWindow.id} FOR UPDATE
+      `);
+      reportWindowLocked();
+      await holdWindowLock;
+    });
+    await windowLocked;
+
+    const requestedAt = new Date();
+    const enrollment = enrollmentService.enrollTeams(
+      f.admin.id,
+      f.league.id,
+      f.season.id,
+      { leagueTeamIds: [f.teams[0]!.id], expectedSeasonVersion: f.season.version },
+      randomUUID()
+    );
+    expect(requestedAt.getTime()).toBeLessThan(startsAt.getTime());
+    await new Promise((resolve) => setTimeout(resolve, startsAt.getTime() - Date.now() + 100));
+    releaseWindowLock();
+    await blocker;
+    await enrollment;
+
+    await expect(prisma.valuationRosterSnapshot.count({
+      where: { windowId: valuationWindow.id }
+    })).resolves.toBe(0);
+    await expect(prisma.seasonEntry.count({
+      where: { seasonId: f.season.id, leagueTeamId: f.teams[0]!.id, status: 'APPROVED' }
+    })).resolves.toBe(1);
+    await expect(prisma.valuationWindow.findUniqueOrThrow({
+      where: { id: valuationWindow.id },
+      select: { snapshotInitializedAt: true }
+    })).resolves.toEqual({ snapshotInitializedAt: expect.any(Date) });
   });
 
   it('rejects reuse of an idempotency key for a different request', async () => {
@@ -388,7 +574,9 @@ describe('RosterTransactionsService', () => {
       failingAudit,
       salaryRules,
       windows,
-      new RosterLockRepository()
+      new RosterLockRepository(),
+      transactionFees,
+      valuationSnapshots
     );
 
     await expect(rollbackService.acquire(
@@ -833,6 +1021,170 @@ describe('RosterTransactionsService', () => {
     })).resolves.toBe(1);
     await expect(prisma.rosterTransaction.count({
       where: { leagueId: f.league.id, type: 'EMERGENCY_CORRECTION' }
+    })).resolves.toBe(1);
+  });
+
+  it('marks a player disappeared or retired and restores active without deleting history', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Lifecycle');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+
+    const disappeared = await service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'DISAPPEARED',
+      reason: '游戏数据库暂时移除',
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id);
+    const retired = await service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'RETIRED',
+      reason: '确认退役',
+      expectedVersion: disappeared.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id);
+    const active = await service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'ACTIVE',
+      reason: '重新加入游戏数据库',
+      expectedVersion: retired.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id);
+
+    expect([disappeared.status, retired.status, active.status])
+      .toEqual(['DISAPPEARED', 'RETIRED', 'ACTIVE']);
+    await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
+    await expect(prisma.auditLog.count({
+      where: { leagueId: f.league.id, action: 'ROSTER_PLAYER_LIFECYCLE_UPDATED' }
+    })).resolves.toBe(3);
+  });
+
+  it('does not restore a released roster record through lifecycle maintenance', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Released lifecycle');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    const released = await service.release({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      amountMinor: null,
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID(),
+      reason: '正常解约'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+
+    await expect(service.updateLifecycleStatus({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      status: 'ACTIVE',
+      reason: '错误恢复',
+      expectedVersion: released.ownership.version,
+      idempotencyKey: randomUUID()
+    }, f.admin.id)).rejects.toMatchObject({ code: 'ROSTER_LIFECYCLE_CHANGE_NOT_ALLOWED' });
+  });
+
+  it('snapshots official valuation and automatic fee without changing history later', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Fee snapshot');
+    const salaryRule = await prisma.leagueSalaryRuleVersion.findFirstOrThrow({ where: { leagueId: f.league.id } });
+    const ownership = await prisma.leaguePlayerOwnership.create({
+      data: {
+        leagueId: f.league.id, leagueTeamId: f.teams[0]!.id, footballPlayerId: player.player.id,
+        currentPlayerCardId: player.card.id, dtRatingSnapshot: 93, salaryRuleVersionId: salaryRule.id,
+        salaryMinor: 200
+      }
+    });
+    const feeRule = await prisma.leagueTransactionFeeRuleVersion.create({
+      data: {
+        leagueId: f.league.id, version: 1, rateBps: 250, minimumFeeMinor: 300,
+        effectiveAt: new Date('2026-09-01T00:00:00.000Z'), createdByAdminId: f.admin.id
+      }
+    });
+    const valuation = await prisma.leaguePlayerValuation.create({
+      data: {
+        leagueId: f.league.id, footballPlayerId: player.player.id, currentValueMinor: 20_000,
+        effectiveAt: new Date('2026-09-01T00:00:00.000Z')
+      }
+    });
+
+    const result = await service.transfer({
+      seasonId: f.season.id, ownershipId: ownership.id, targetLeagueTeamId: f.teams[1]!.id,
+      amountMinor: 5000, expectedVersion: 1, idempotencyKey: randomUUID(), reason: '含自动手续费的转会'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+
+    expect(result.transaction).toMatchObject({
+      valuationSnapshotMinor: 20_000, transactionFeeMinor: 500,
+      transactionFeeRuleVersionId: feeRule.id
+    });
+    await expect(prisma.financeLedgerEntry.findFirstOrThrow({
+      where: { rosterTransactionId: result.transaction.id, type: 'TRANSACTION_FEE' }
+    })).resolves.toMatchObject({
+      leagueTeamId: f.teams[1]!.id, direction: 'DEBIT', amountMinor: 500
+    });
+    await prisma.leaguePlayerValuation.update({
+      where: { id: valuation.id }, data: { currentValueMinor: 99_000 }
+    });
+    await expect(prisma.rosterTransaction.findUniqueOrThrow({ where: { id: result.transaction.id } }))
+      .resolves.toMatchObject({ valuationSnapshotMinor: 20_000, transactionFeeMinor: 500 });
+    await expect(prisma.leaguePlayerValuation.findUniqueOrThrow({ where: { id: valuation.id } }))
+      .resolves.toMatchObject({ footballPlayerId: player.player.id });
+  });
+
+  it('blocks automatic transaction fees when the official valuation is missing', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'No valuation fee');
+    await prisma.leagueTransactionFeeRuleVersion.create({
+      data: {
+        leagueId: f.league.id, version: 1, rateBps: 250, minimumFeeMinor: 300,
+        effectiveAt: new Date('2026-09-01T00:00:00.000Z'), createdByAdminId: f.admin.id
+      }
+    });
+
+    await expect(service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    )).rejects.toMatchObject({ code: 'PLAYER_VALUATION_REQUIRED_FOR_FEE' });
+    await expect(prisma.leaguePlayerOwnership.count({ where: { leagueId: f.league.id } })).resolves.toBe(0);
+  });
+
+  it('allows only platform administrators to set a reasoned manual transaction fee', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Manual fee');
+    const manager = await prisma.adminAccount.create({
+      data: {
+        username: `fee-manager-${randomUUID()}`, displayName: '手续费管理员',
+        passwordHash: 'test', platformRole: 'LEAGUE_MANAGER'
+      }
+    });
+    createdAdminIds.push(manager.id);
+    await prisma.adminLeagueRole.create({
+      data: { adminId: manager.id, leagueId: f.league.id, grantedById: f.admin.id }
+    });
+    const input = {
+      ...acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      manualTransactionFeeMinor: 123,
+      reason: '平台管理员人工手续费'
+    };
+
+    await expect(service.acquire(input, manager.id, new Date('2026-09-15T00:00:00.000Z')))
+      .rejects.toMatchObject({ code: 'ADMIN_PLATFORM_ACCESS_DENIED' });
+    const result = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    expect(result.transaction).toMatchObject({
+      valuationSnapshotMinor: null, transactionFeeMinor: 123, transactionFeeRuleVersionId: null
+    });
+    await expect(prisma.financeLedgerEntry.count({
+      where: { rosterTransactionId: result.transaction.id, type: 'TRANSACTION_FEE', amountMinor: 123 }
     })).resolves.toBe(1);
   });
 });

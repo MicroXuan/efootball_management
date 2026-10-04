@@ -1,0 +1,35 @@
+<view class="favorites-page">
+  <view class="page-head">
+    <view><text class="head-kicker">个人球探簿</text><text class="head-title">我的收藏</text></view>
+    <text class="head-mark">BEST · 11</text>
+  </view>
+
+  <view class="search-box">
+    <text class="search-icon">⌕</text>
+    <input value="{{keyword}}" placeholder="搜索收藏球员或卡片" placeholder-class="search-placeholder" bindinput="onKeywordInput" />
+  </view>
+
+  <loading-state wx:if="{{state === 'loading' && cards.length === 0}}" label="正在整理收藏球员" />
+
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-code">收藏读取失败</text>
+    <text class="state-title">{{errorCopy.title}}</text>
+    <text class="state-copy">{{errorMessage || errorCopy.detail}}</text>
+    <button class="outline-button" bindtap="retry">重新加载</button>
+  </view>
+
+  <view wx:elif="{{cards.length === 0}}" class="state-card">
+    <text class="state-code">暂无收藏</text>
+    <text class="state-title">{{emptyCopy.title}}</text>
+    <text class="state-copy">{{emptyCopy.detail}}</text>
+  </view>
+
+  <view wx:else class="favorite-grid">
+    <view wx:for="{{cards}}" wx:key="playerId" class="favorite-cell">
+      <player-card card="{{item}}" bind:cardtap="onCardTap" />
+      <button class="remove-button" data-player-id="{{item.playerId}}" catchtap="onRemoveFavorite" aria-label="取消收藏">★</button>
+    </view>
+    <loading-state wx:if="{{loadingMore}}" label="继续加载收藏" />
+    <text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部收藏 —</text>
+  </view>
+</view>

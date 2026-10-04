@@ -3,6 +3,7 @@ import { ResourceIdSchema } from './common.js';
 import { ExpectedVersionSchema, IdempotencyKeySchema } from './competition.js';
 import { CurrentSeasonSummarySchema, LeagueEditionSchema } from './league.js';
 import { LeagueTeamDetailSchema, LeagueTeamSummarySchema } from './league-team.js';
+import { PlayerCardTypeSchema, PlayerPositionSchema } from './player-catalog.js';
 
 const TimestampSchema = z.iso.datetime();
 const MAX_UNSIGNED_INT = 4_294_967_295;
@@ -137,7 +138,13 @@ export const TransferWindowSchema = TransferWindowFieldsSchema.and(z.object({
 }));
 export const TransferWindowListResponseSchema = z.object({ items: z.array(TransferWindowSchema) });
 
-export const RosterEntryStatusSchema = z.enum(['ACTIVE', 'RELEASED', 'TRANSFERRED']);
+export const RosterEntryStatusSchema = z.enum([
+  'ACTIVE',
+  'RELEASED',
+  'TRANSFERRED',
+  'DISAPPEARED',
+  'RETIRED'
+]);
 export const RosterEntrySchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
@@ -177,6 +184,9 @@ export const RosterTransactionSchema = z.object({
   oldSalaryMinor: NonNegativeMoneyMinorSchema.nullable(),
   newSalaryMinor: NonNegativeMoneyMinorSchema.nullable(),
   amountMinor: NullablePositiveMoneyMinorSchema,
+  valuationSnapshotMinor: NonNegativeMoneyMinorSchema.nullable().default(null),
+  transactionFeeMinor: NonNegativeMoneyMinorSchema.nullable().default(null),
+  transactionFeeRuleVersionId: ResourceIdSchema.nullable().default(null),
   reason: z.string().min(1).max(512),
   createdByAdminId: ResourceIdSchema,
   createdAt: TimestampSchema
@@ -228,12 +238,20 @@ export const FinanceLedgerTypeSchema = z.enum([
   'PLAYER_SALE',
   'PLAYER_TRANSFER',
   'CARD_UPGRADE',
+  'TRANSACTION_FEE',
+  'LUXURY_TAX',
+  'OFFSEASON_FEE',
+  'UNFINISHED_MATCH_PENALTY',
+  'AUCTION',
+  'ROOKIE_SELECTION',
+  'INSTALLMENT_PAYMENT',
   'MANUAL_ADJUSTMENT'
 ]);
 export const FinanceLedgerEntrySchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
   leagueTeamId: ResourceIdSchema,
+  seasonId: ResourceIdSchema.nullable().default(null),
   rosterTransactionId: ResourceIdSchema.nullable(),
   direction: FinanceLedgerDirectionSchema,
   type: FinanceLedgerTypeSchema,
@@ -291,6 +309,12 @@ export const RosterPlayerCandidateSchema = z.object({
 export const RosterPlayerCandidateListResponseSchema = z.object({
   items: z.array(RosterPlayerCandidateSchema)
 });
+export const RosterPlayerCandidateQuerySchema = z.object({
+  keyword: z.string().trim().min(1).max(80),
+  position: PlayerPositionSchema.optional(),
+  cardType: PlayerCardTypeSchema.optional(),
+  cardPackId: ResourceIdSchema.optional()
+});
 
 export const MyLeagueTeamSummarySchema = LeagueTeamSummarySchema.extend({
   leagueName: z.string().min(1),
@@ -318,7 +342,8 @@ export const MyLeagueTeamOverviewSchema = z.object({
 const RosterMutationBaseSchema = z.object({
   seasonId: ResourceIdSchema,
   idempotencyKey: IdempotencyKeySchema,
-  reason: z.string().trim().min(1).max(512)
+  reason: z.string().trim().min(1).max(512),
+  manualTransactionFeeMinor: NonNegativeMoneyMinorSchema.optional()
 });
 
 export const AcquirePlayerRequestSchema = RosterMutationBaseSchema.extend({
@@ -362,6 +387,12 @@ export const EmergencyCorrectRosterRequestSchema = RosterMutationBaseSchema.exte
     });
   }
 });
+export const UpdateRosterLifecycleRequestSchema = RosterMutationBaseSchema.extend({
+  ownershipId: ResourceIdSchema,
+  status: z.enum(['ACTIVE', 'DISAPPEARED', 'RETIRED']),
+  expectedVersion: ExpectedVersionSchema
+});
+export const RosterLifecycleUpdateResponseSchema = RosterMutationOwnershipSchema;
 
 export type SalaryRuleVersion = z.infer<typeof SalaryRuleVersionSchema>;
 export type SalaryRuleVersionListResponse = z.infer<typeof SalaryRuleVersionListResponseSchema>;
@@ -384,6 +415,7 @@ export type FinanceLedgerListResponse = z.infer<typeof FinanceLedgerListResponse
 export type TeamRosterView = z.infer<typeof TeamRosterViewSchema>;
 export type RosterPlayerCandidate = z.infer<typeof RosterPlayerCandidateSchema>;
 export type RosterPlayerCandidateListResponse = z.infer<typeof RosterPlayerCandidateListResponseSchema>;
+export type RosterPlayerCandidateQuery = z.infer<typeof RosterPlayerCandidateQuerySchema>;
 export type MyLeagueTeamSummary = z.infer<typeof MyLeagueTeamSummarySchema>;
 export type MyLeagueTeamListResponse = z.infer<typeof MyLeagueTeamListResponseSchema>;
 export type MyLeagueTeamOverview = z.infer<typeof MyLeagueTeamOverviewSchema>;
@@ -394,3 +426,5 @@ export type TransferPlayerRequest = z.infer<typeof TransferPlayerRequestSchema>;
 export type UpgradePlayerCardRequest = z.infer<typeof UpgradePlayerCardRequestSchema>;
 export type RecalculateLeagueSalaryRequest = z.infer<typeof RecalculateLeagueSalaryRequestSchema>;
 export type EmergencyCorrectRosterRequest = z.infer<typeof EmergencyCorrectRosterRequestSchema>;
+export type UpdateRosterLifecycleRequest = z.infer<typeof UpdateRosterLifecycleRequestSchema>;
+export type RosterLifecycleUpdateResponse = z.infer<typeof RosterLifecycleUpdateResponseSchema>;

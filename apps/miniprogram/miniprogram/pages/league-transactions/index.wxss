@@ -1,0 +1,52 @@
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { min-height: 100vh; padding: 42rpx 28rpx 120rpx; background: #0e1417; }
+.hero { position: relative; overflow: hidden; padding: 32rpx; border: 2rpx solid #344047; border-radius: 28rpx; background: #151d21; box-shadow: 0 18rpx 50rpx rgba(0, 0, 0, .2); }
+.hero::after { position: absolute; right: -52rpx; bottom: -72rpx; width: 190rpx; height: 190rpx; border: 2rpx solid rgba(182, 241, 58, .12); border-radius: 50%; content: ''; }
+.kicker { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 12rpx; font-size: 44rpx; font-weight: 900; line-height: 1.18; }
+.hero-copy { display: block; width: 78%; margin-top: 14rpx; color: #9eaaaf; font-size: 21rpx; line-height: 1.6; }
+.hero-stat { margin-top: 28rpx; padding-top: 22rpx; border-top: 2rpx solid #2d393f; }
+.hero-stat text { display: block; color: #f4f7f8; font-size: 36rpx; font-weight: 900; }
+.hero-stat label { display: block; margin-top: 5rpx; color: #7e8b91; font-size: 18rpx; }
+.filter-panel { margin-top: 16rpx; padding: 24rpx; border: 2rpx solid #2d393f; border-radius: 24rpx; background: #11181c; }
+.filter-label { display: block; color: #8f9ca2; font-size: 19rpx; font-weight: 700; }
+.second-label { margin-top: 22rpx; }
+.filter-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9rpx; margin-top: 11rpx; }
+.filter-button { min-height: 66rpx; margin: 0; padding: 0 8rpx; border: 2rpx solid #344047; border-radius: 15rpx; color: #9eaaaf; background: #1a2328; font-size: 20rpx; font-weight: 750; line-height: 62rpx; }
+.filter-button::after { border: 0; }
+.filter-button.is-active { border-color: #b6f13a; color: #111810; background: #b6f13a; }
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 50rpx; }
+.section-index { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
+.section-title { display: block; margin-top: 8rpx; font-size: 34rpx; font-weight: 850; }
+.result-count { padding-bottom: 4rpx; color: #8f9ca2; font-size: 21rpx; }
+.transaction-list { margin-top: 16rpx; }
+.transaction { margin-top: 14rpx; padding: 25rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; box-shadow: 0 14rpx 34rpx rgba(0, 0, 0, .16); }
+.transaction-head { display: flex; align-items: center; justify-content: space-between; }
+.type-label { padding: 8rpx 14rpx; border: 2rpx solid rgba(182, 241, 58, .32); border-radius: 12rpx; color: #b6f13a; background: rgba(182, 241, 58, .06); font-size: 18rpx; font-weight: 800; }
+.type-label.is-admin { border-color: rgba(232, 189, 101, .35); color: #e8bd65; background: rgba(232, 189, 101, .07); }
+.status-label { color: #8fcf93; font-size: 18rpx; font-weight: 750; }
+.player-name { display: block; margin-top: 21rpx; font-size: 31rpx; font-weight: 900; }
+.team-route { display: flex; align-items: center; margin-top: 22rpx; padding: 18rpx 0; border-top: 2rpx solid #2d393f; border-bottom: 2rpx solid #2d393f; }
+.team-route view { min-width: 0; flex: 1; }
+.team-route .buyer { text-align: right; }
+.team-route label { display: block; color: #647177; font-size: 16rpx; }
+.team-route view text { display: block; margin-top: 6rpx; overflow: hidden; color: #dce4e7; font-size: 21rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.route-arrow { margin: 0 17rpx; color: #b6f13a; font-size: 29rpx; font-weight: 800; }
+.value-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 20rpx; }
+.value-grid view { min-width: 0; padding: 0 16rpx; border-right: 2rpx solid #2d393f; }
+.value-grid view:first-child { padding-left: 0; }
+.value-grid view:last-child { padding-right: 0; border-right: 0; text-align: right; }
+.value-grid label { display: block; color: #647177; font-size: 16rpx; }
+.value-grid text { display: block; margin-top: 7rpx; overflow: hidden; color: #dce4e7; font-size: 23rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.value-grid .highlight { color: #b6f13a; }
+.transaction-note { margin-top: 21rpx; padding: 17rpx 18rpx; border-left: 5rpx solid #46545b; border-radius: 0 13rpx 13rpx 0; background: #11181c; }
+.transaction-note label { display: block; color: #647177; font-size: 16rpx; }
+.transaction-note text { display: block; margin-top: 5rpx; color: #b9c3c7; font-size: 20rpx; line-height: 1.5; }
+.transaction-time { display: block; margin-top: 16rpx; color: #647177; font-size: 17rpx; text-align: right; }
+.panel { padding: 28rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
+.empty-panel { margin-top: 16rpx; text-align: center; }
+.empty-title { display: block; font-size: 25rpx; font-weight: 800; }
+.muted { display: block; margin-top: 8rpx; color: #8f9ca2; font-size: 20rpx; line-height: 1.55; }
+.error-panel { margin-top: 22vh; }
+.panel button, .more { min-height: 78rpx; margin-top: 18rpx; border: 2rpx solid #b6f13a; border-radius: 16rpx; color: #111810; background: #b6f13a; font-size: 22rpx; font-weight: 800; }
+.more { margin-top: 22rpx; }

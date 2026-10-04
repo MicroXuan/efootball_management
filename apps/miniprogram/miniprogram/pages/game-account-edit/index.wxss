@@ -1,13 +1,13 @@
 page {
-  background: #07110d;
-  color: #eef7f1;
+  background: #0a0a0a;
+  color: #f7f8f5;
 }
 
 .page-shell {
   min-height: 100vh;
   box-sizing: border-box;
   padding: calc(env(safe-area-inset-top) + 34rpx) 32rpx 80rpx;
-  background: linear-gradient(165deg, #07110d 0%, #0d2118 55%, #111912 100%);
+  background: linear-gradient(165deg, #0a0a0a 0%, #0d2118 55%, #111912 100%);
 }
 
 .topbar {
@@ -23,7 +23,7 @@ page {
   border: 2rpx solid rgba(85, 239, 139, 0.28);
   border-radius: 50%;
   background: transparent;
-  color: #55ef8b;
+  color: #b0ff00;
   font-size: 52rpx;
   line-height: 62rpx;
 }
@@ -40,14 +40,14 @@ page {
 }
 
 .eyebrow {
-  color: #d4b05f;
+  color: #d9e342;
   font-size: 18rpx;
   letter-spacing: 5rpx;
 }
 
 .page-title {
   margin-top: 6rpx;
-  font-family: STKaiti, KaiTi, serif;
+  font-family:inherit;
   font-size: 48rpx;
   font-weight: 700;
 }
@@ -55,7 +55,7 @@ page {
 .editor-card {
   margin-top: 46rpx;
   padding: 34rpx;
-  border-top: 4rpx solid #55ef8b;
+  border-top: 4rpx solid #b0ff00;
   background: rgba(18, 38, 27, 0.92);
 }
 
@@ -82,7 +82,7 @@ page {
   padding: 0 22rpx;
   border-bottom: 2rpx solid rgba(142, 164, 151, 0.28);
   background: rgba(7, 17, 13, 0.58);
-  color: #eef7f1;
+  color: #f7f8f5;
   font-size: 28rpx;
   line-height: 92rpx;
 }
@@ -128,14 +128,14 @@ page {
 
 .primary-button,
 .delete-button {
-  border-radius: 0;
+  border-radius:20rpx;
   font-weight: 700;
 }
 
 .primary-button {
   margin-top: 34rpx;
-  background: #55ef8b;
-  color: #07110d;
+  background: #b0ff00;
+  color: #0a0a0a;
 }
 
 .primary-button[disabled] {

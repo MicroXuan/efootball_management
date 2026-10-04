@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "backgroundColor": "#0E1417",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

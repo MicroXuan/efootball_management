@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { ResourceIdSchema } from './common.js';
-import { ExpectedVersionSchema } from './competition.js';
+import {
+  CompetitionStageCodeSchema,
+  CompetitionStageSummarySchema,
+  ExpectedVersionSchema,
+  StandingsSnapshotResponseSchema
+} from './competition.js';
 import { GamePlatformSchema } from './game-account.js';
 
 const TimestampSchema = z.iso.datetime();
@@ -291,12 +296,162 @@ export const EnrollLeagueTeamsRequestSchema = z.object({
   expectedSeasonVersion: ExpectedVersionSchema
 });
 
+export const SeasonAllocationProposalStatusSchema = z.enum(['DRAFT', 'CONFIRMED', 'SUPERSEDED']);
+export const SeasonAllocationSourceSchema = z.enum([
+  'FIRST_SEASON',
+  'RETAINED',
+  'PROMOTED',
+  'RELEGATED',
+  'REPLACEMENT',
+  'CHAMPION_POOL',
+  'NEW_ENTRY'
+]);
+
+export const GenerateSeasonAllocationRequestSchema = z.object({
+  expectedSeasonVersion: ExpectedVersionSchema,
+  randomSeed: z.number().int().positive()
+});
+
+const SeasonAllocationOverrideSchema = z.object({
+  seasonEntryId: ResourceIdSchema,
+  targetStageCode: CompetitionStageCodeSchema,
+  reason: z.string().trim().min(1).max(512)
+});
+
+export const ConfirmSeasonAllocationRequestSchema = z.object({
+  proposalId: ResourceIdSchema,
+  expectedSeasonVersion: ExpectedVersionSchema,
+  overrides: z.array(SeasonAllocationOverrideSchema).max(64).default([])
+}).superRefine((value, context) => {
+  const seen = new Set<string>();
+  value.overrides.forEach((override, index) => {
+    if (seen.has(override.seasonEntryId)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['overrides', index, 'seasonEntryId'],
+        message: 'seasonEntryId must not be duplicated'
+      });
+    }
+    seen.add(override.seasonEntryId);
+  });
+});
+
+export const SeasonAllocationProposalRowSchema = z.object({
+  id: ResourceIdSchema,
+  proposalId: ResourceIdSchema,
+  seasonEntryId: ResourceIdSchema,
+  teamName: z.string().trim().min(1).max(64),
+  suggestedStageCode: CompetitionStageCodeSchema,
+  source: SeasonAllocationSourceSchema,
+  previousRank: z.number().int().positive().nullable(),
+  pointsPerMatch: z.number().finite().nonnegative().nullable(),
+  goalDifferencePerMatch: z.number().finite().nullable(),
+  goalsForPerMatch: z.number().finite().nonnegative().nullable(),
+  tiePending: z.boolean(),
+  reason: z.string().trim().min(1).max(512)
+});
+
+export const SeasonAllocationProposalSchema = z.object({
+  id: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  version: z.number().int().positive(),
+  status: SeasonAllocationProposalStatusSchema,
+  algorithmVersion: z.string().trim().min(1).max(32),
+  randomSeed: z.number().int().positive(),
+  rows: z.array(SeasonAllocationProposalRowSchema),
+  createdAt: TimestampSchema,
+  confirmedAllocation: z.object({
+    competitionId: ResourceIdSchema,
+    seasonVersion: z.number().int().positive(),
+    seasonStatus: LeagueSeasonStatusSchema,
+    stages: z.array(z.object({
+      id: ResourceIdSchema,
+      stageCode: CompetitionStageCodeSchema,
+      displayName: z.string().trim().min(1).max(64),
+      participantCount: z.number().int().nonnegative(),
+      matchCount: z.number().int().nonnegative(),
+      status: z.enum(['DRAFT', 'PUBLISHED']),
+      version: z.number().int().positive()
+    })),
+    decisions: z.array(z.object({
+      seasonEntryId: ResourceIdSchema,
+      finalStageCode: CompetitionStageCodeSchema,
+      reason: z.string().nullable()
+    }))
+  }).nullable().optional()
+});
+
+export const SeasonAllocationDecisionSchema = z.object({
+  id: ResourceIdSchema,
+  proposalId: ResourceIdSchema,
+  seasonEntryId: ResourceIdSchema,
+  finalStageCode: CompetitionStageCodeSchema,
+  overridden: z.boolean(),
+  reason: z.string().trim().min(1).max(512).nullable(),
+  createdAt: TimestampSchema
+}).superRefine((value, context) => {
+  if (value.overridden && !value.reason) {
+    context.addIssue({
+      code: 'custom',
+      path: ['reason'],
+      message: 'reason is required for an overridden allocation'
+    });
+  }
+});
+
+export const DivisionStandingsResponseSchema = z.object({
+  seasonId: ResourceIdSchema,
+  competitionId: ResourceIdSchema,
+  myStageId: ResourceIdSchema.nullable(),
+  groups: z.array(z.object({
+    stage: CompetitionStageSummarySchema,
+    standings: StandingsSnapshotResponseSchema
+  }))
+});
+
+export const LeagueWorkspaceResponseSchema = z.object({
+  leagueId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  team: z.object({
+    leagueTeamId: ResourceIdSchema,
+    name: z.string().trim().min(1).max(64),
+    shortName: z.string().trim().min(1).max(24),
+    logoUrl: z.string().url().nullable()
+  }),
+  division: z.object({
+    stageId: ResourceIdSchema,
+    stageCode: CompetitionStageCodeSchema,
+    displayName: z.string().trim().min(1).max(64)
+  }).nullable(),
+  currentRank: z.object({
+    rank: z.number().int().positive(),
+    points: z.number().int(),
+    played: z.number().int().nonnegative(),
+    tiePending: z.boolean()
+  }).nullable(),
+  nextMatch: z.object({
+    id: ResourceIdSchema,
+    roundNumber: z.number().int().positive(),
+    plannedAt: TimestampSchema.nullable(),
+    opponentName: z.string().trim().min(1).max(64),
+    side: z.enum(['HOME', 'AWAY'])
+  }).nullable(),
+  capabilities: z.object({
+    canViewStandings: z.boolean(),
+    canViewAssets: z.boolean(),
+    canViewFinance: z.boolean(),
+    canManageValuations: z.boolean()
+  })
+});
+
 export type LeagueStatus = z.infer<typeof LeagueStatusSchema>;
 export type LeagueEdition = z.infer<typeof LeagueEditionSchema>;
 export type TeamProfileStatus = z.infer<typeof TeamProfileStatusSchema>;
 export type LeagueSeasonStatus = z.infer<typeof LeagueSeasonStatusSchema>;
 export type SeasonEntrySource = z.infer<typeof SeasonEntrySourceSchema>;
 export type SeasonEntryStatus = z.infer<typeof SeasonEntryStatusSchema>;
+export type SeasonAllocationProposalStatus = z.infer<typeof SeasonAllocationProposalStatusSchema>;
+export type SeasonAllocationSource = z.infer<typeof SeasonAllocationSourceSchema>;
 
 export type CreateTeamProfileRequest = z.input<typeof CreateTeamProfileRequestSchema>;
 export type ParsedCreateTeamProfileRequest = z.output<typeof CreateTeamProfileRequestSchema>;
@@ -329,3 +484,10 @@ export type WithdrawSeasonEntryRequest = z.infer<typeof WithdrawSeasonEntryReque
 export type SetCurrentSeasonRequest = z.infer<typeof SetCurrentSeasonRequestSchema>;
 export type EnrollLeagueTeamsRequest = z.infer<typeof EnrollLeagueTeamsRequestSchema>;
 export type SeasonEntryResponse = z.infer<typeof SeasonEntrySchema>;
+export type GenerateSeasonAllocationRequest = z.infer<typeof GenerateSeasonAllocationRequestSchema>;
+export type ConfirmSeasonAllocationRequest = z.infer<typeof ConfirmSeasonAllocationRequestSchema>;
+export type SeasonAllocationProposalRow = z.infer<typeof SeasonAllocationProposalRowSchema>;
+export type SeasonAllocationProposal = z.infer<typeof SeasonAllocationProposalSchema>;
+export type SeasonAllocationDecision = z.infer<typeof SeasonAllocationDecisionSchema>;
+export type DivisionStandingsResponse = z.infer<typeof DivisionStandingsResponseSchema>;
+export type LeagueWorkspaceResponse = z.infer<typeof LeagueWorkspaceResponseSchema>;

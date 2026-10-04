@@ -4,6 +4,7 @@
     "pages/competitions/index",
     "pages/leagues/index",
     "pages/league-detail/index",
+    "pages/season-standings/index",
     "pages/competition-detail/index",
     "pages/my-matches/index",
     "pages/match-result/index",
@@ -13,17 +14,25 @@
     "pages/profile/index",
     "pages/my-league-teams/index",
     "pages/league-team-detail/index",
+    "pages/valuation-manage/index",
+    "pages/team-assets/index",
+    "pages/league-transactions/index",
+    "pages/team-finance/index",
+    "pages/favorites/index",
     "pages/player-card-detail/index"
   ],
   "window": {
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "非概念实况",
-    "navigationBarBackgroundColor": "#07110d"
+    "navigationBarBackgroundColor": "#0E1417",
+    "backgroundColor": "#0E1417",
+    "backgroundTextStyle": "light"
   },
   "tabBar": {
-    "color": "#718078",
-    "selectedColor": "#66f05a",
-    "backgroundColor": "#0b100e",
+    "custom": true,
+    "color": "#AAB5BA",
+    "selectedColor": "#B6F13A",
+    "backgroundColor": "#151D21",
     "borderStyle": "black",
     "list": [
       {

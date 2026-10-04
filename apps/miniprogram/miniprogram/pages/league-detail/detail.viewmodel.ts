@@ -1,4 +1,36 @@
-import type { LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
+import type { LeagueSeasonStatus, LeagueSeasonSummary, LeagueWorkspaceResponse, SeasonEntryResponse } from '@efm/contracts'
+
+export type SeasonRailStep = {
+  key: 'registration' | 'confirmation' | 'schedule' | 'settlement'
+  label: '报名' | '确认' | '赛程' | '结算'
+  state: 'complete' | 'current' | 'upcoming' | 'cancelled'
+}
+
+const railBase: ReadonlyArray<Pick<SeasonRailStep, 'key' | 'label'>> = [
+  { key: 'registration', label: '报名' },
+  { key: 'confirmation', label: '确认' },
+  { key: 'schedule', label: '赛程' },
+  { key: 'settlement', label: '结算' },
+]
+
+export function seasonRailSteps(status: LeagueSeasonStatus): SeasonRailStep[] {
+  if (status === 'CANCELLED') {
+    return railBase.map((step) => ({ ...step, state: 'cancelled' }))
+  }
+  if (status === 'COMPLETED') {
+    return railBase.map((step) => ({ ...step, state: 'complete' }))
+  }
+
+  const currentIndex = status === 'ALLOCATION_REVIEW'
+    ? 1
+    : status === 'READY' || status === 'IN_PROGRESS'
+      ? 2
+      : 0
+  return railBase.map((step, index) => ({
+    ...step,
+    state: index < currentIndex ? 'complete' : index === currentIndex ? 'current' : 'upcoming',
+  }))
+}
 
 export function selectSeason(
   seasons: readonly LeagueSeasonSummary[],
@@ -29,6 +61,35 @@ export function entryStatusCopy(
     WITHDRAWN: '本赛季已退出',
   }
   return labels[entry.status]
+}
+
+export function standingsAccess(entry: SeasonEntryResponse | null): {
+  enabled: boolean
+  label: string
+  hint: string
+} {
+  if (entry?.status === 'APPROVED') {
+    return { enabled: true, label: '查看分组积分榜', hint: '查看各组实时排名与比赛数据' }
+  }
+  return { enabled: false, label: '报名后开放', hint: '仅当前赛季正式参赛球队可查看' }
+}
+
+export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
+  const rank = workspace.currentRank
+    ? `${workspace.currentRank.rank}${workspace.currentRank.tiePending ? '*' : ''}`
+    : '—'
+  const nextMatch = workspace.nextMatch
+    ? `第 ${workspace.nextMatch.roundNumber} 轮 · 对阵 ${workspace.nextMatch.opponentName}`
+    : '暂无待进行比赛'
+  return {
+    teamName: workspace.team.name,
+    teamShortName: workspace.team.shortName,
+    divisionName: workspace.division?.displayName ?? '等待正式分组',
+    rank,
+    rankMeta: workspace.currentRank ? `${workspace.currentRank.played} 场 · ${workspace.currentRank.points} 分` : '排名尚未产生',
+    nextMatch,
+    nextMatchTime: workspace.nextMatch?.plannedAt?.slice(0, 16).replace('T', ' ') ?? '时间待定',
+  }
 }
 
 export function leagueDetailErrorMessage(code: string): string {

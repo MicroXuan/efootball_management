@@ -1,0 +1,72 @@
+:host { display: block; }
+
+.season-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.season-rail__step {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  color: #7e8b91;
+}
+
+.season-rail__step::before,
+.season-rail__step::after {
+  position: absolute;
+  top: 19rpx;
+  width: 50%;
+  height: 2rpx;
+  background: #344047;
+  content: '';
+}
+
+.season-rail__step::before { left: 0; }
+.season-rail__step::after { right: 0; }
+.season-rail__step:first-child::before,
+.season-rail__step:last-child::after { display: none; }
+
+.season-rail__marker {
+  position: relative;
+  z-index: 1;
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid #344047;
+  border-radius: 12rpx;
+  background: #151d21;
+  font-size: 18rpx;
+  font-weight: 800;
+}
+
+.season-rail__label {
+  margin-top: 12rpx;
+  font-size: 19rpx;
+  font-weight: 700;
+}
+
+.season-rail__step--complete { color: #aab5ba; }
+.season-rail__step--complete .season-rail__marker {
+  border-color: #627078;
+  background: #263238;
+}
+
+.season-rail__step--current { color: #f4f7f8; }
+.season-rail__step--current .season-rail__marker {
+  border-color: #b6f13a;
+  color: #111810;
+  background: #b6f13a;
+  box-shadow: 0 0 0 8rpx rgba(182, 241, 58, 0.08);
+}
+
+.season-rail__step--cancelled { color: #ffaaa5; }
+.season-rail__step--cancelled .season-rail__marker {
+  border-color: rgba(255, 127, 120, 0.45);
+  color: #ffaaa5;
+  background: rgba(255, 127, 120, 0.08);
+}

@@ -9,6 +9,7 @@ const team: MyLeagueTeamSummary = {
   id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', ownerPublicUserNo: '000123', teamNumber: 25,
   name: '上海申花', shortName: '申花', logoUrl: null, status: 'ACTIVE', activePlayerCount: 3,
   salaryTotalMinor: 600, salaryCapMinor: 2000, rosterStatus: 'COMPLIANT', version: 1,
+  shellValueMinor: 0,
   createdAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z',
   leagueName: 'CELL传奇联赛', leagueDescription: '', leagueLogoUrl: null, leagueEdition: 'NATIONAL',
   currentSeason: { id: 'season-1', displayName: 'CELL S20', status: 'IN_PROGRESS', approvedEntryCount: 18 },

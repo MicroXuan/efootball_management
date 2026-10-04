@@ -1,15 +1,116 @@
 page {
   min-height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --efm-bg: #0b100e;
-  --efm-surface: #141c18;
-  --efm-border: #294c3a;
-  --efm-primary: #66f05a;
-  --efm-accent: #f0b84b;
-  --efm-text: #f5f7f6;
-  --efm-muted: #98a69f;
+  box-sizing: border-box;
+  color: #f4f7f8;
+  background: #0e1417;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-variant-numeric: tabular-nums;
+  --efm-bg: #0e1417;
+  --efm-surface: #151d21;
+  --efm-surface-raised: #1c262b;
+  --efm-border-strong: #344047;
+  --efm-border-weak: #2d393f;
+  --efm-text: #f4f7f8;
+  --efm-text-secondary: #aab5ba;
+  --efm-text-muted: #7e8b91;
+  --efm-accent: #b6f13a;
+  --efm-on-accent: #111810;
+  --efm-info: #6db6ff;
+  --efm-warning: #e8bd65;
+  --efm-danger: #ff7f78;
+  --efm-radius-card: 24rpx;
+  --efm-radius-control: 16rpx;
+  --efm-radius-small: 10rpx;
+  --efm-shadow-card: 0 16rpx 44rpx rgba(0, 0, 0, 0.2);
+}
+
+view,
+text,
+button,
+input,
+textarea,
+picker,
+image {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+picker {
+  font-family: inherit;
 }
 
 button {
-  font-family: inherit;
+  border-radius: var(--efm-radius-control);
+}
+
+button::after {
+  border: 0;
+}
+
+.players-page,
+.competitions-page,
+.leagues-page,
+.profile-page,
+.matches-page,
+.page-shell,
+.detail-page,
+.manage-page,
+.editor-page,
+.result-page {
+  min-height: 100vh;
+  color: var(--efm-text);
+  background: var(--efm-bg);
+}
+
+.state-card,
+.panel,
+.form-card,
+.data-card {
+  border: 2rpx solid var(--efm-border-weak);
+  border-radius: var(--efm-radius-card);
+  background: var(--efm-surface);
+  box-shadow: var(--efm-shadow-card);
+}
+
+.primary-button,
+.action-button,
+.retry-button,
+.save,
+.primary {
+  border: 2rpx solid var(--efm-accent);
+  border-radius: var(--efm-radius-control);
+  color: var(--efm-on-accent);
+  background: var(--efm-accent);
+  font-weight: 750;
+}
+
+.outline-button,
+.secondary-button,
+.manager-button,
+.action,
+.edit,
+.account-empty {
+  border: 2rpx solid var(--efm-border-strong);
+  border-radius: var(--efm-radius-control);
+  color: var(--efm-text);
+  background: var(--efm-surface-raised);
+}
+
+.danger {
+  border: 2rpx solid rgba(255, 127, 120, 0.42);
+  border-radius: var(--efm-radius-control);
+  color: var(--efm-danger);
+  background: rgba(255, 127, 120, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  view,
+  button,
+  image {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
 }

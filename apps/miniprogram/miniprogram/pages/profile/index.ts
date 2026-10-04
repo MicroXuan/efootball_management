@@ -19,6 +19,7 @@ Page({
   },
 
   onShow() {
+    this.getTabBar?.()?.setData({ selected: 2 })
     void this.loadPage()
   },
 
@@ -56,6 +57,10 @@ Page({
   copyUserNo() {
     const value = this.data.profile.publicUserNoCopy
     if (value) wx.setClipboardData({ data: value })
+  },
+
+  openFavorites() {
+    wx.navigateTo({ url: '/pages/favorites/index' })
   },
 
   openTeam(event: TeamTapEvent) {

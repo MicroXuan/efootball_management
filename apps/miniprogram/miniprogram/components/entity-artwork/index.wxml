@@ -1,0 +1,12 @@
+<view class="artwork artwork--{{shape}}" aria-label="{{fallback}}">
+  <image
+    wx:if="{{src && !imageFailed}}"
+    class="artwork__image"
+    src="{{src}}"
+    mode="{{shape === 'portrait' ? 'aspectFill' : 'aspectFit'}}"
+    binderror="onImageError"
+  />
+  <view wx:else class="artwork__fallback">
+    <text>{{fallback}}</text>
+  </view>
+</view>

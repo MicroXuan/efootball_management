@@ -5,7 +5,7 @@
   </view>
 
   <view class="brand-block">
-    <text class="eyebrow">LIVE FOOTBALL OPERATIONS</text>
+    <text class="eyebrow">赛事运营中枢</text>
     <text class="title">非概念实况</text>
     <text class="subtitle">赛事、战队与球员资产，在同一块战术板上。</text>
   </view>
@@ -13,7 +13,7 @@
   <view class="login-panel">
     <view class="panel-line">
       <text>参赛者通道</text>
-      <text class="panel-code">EFM / 01</text>
+      <text class="panel-code">球员档案 · 01</text>
     </view>
     <button
       class="login-button"

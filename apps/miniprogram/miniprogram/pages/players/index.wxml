@@ -1,11 +1,19 @@
 <view class="catalog-page">
   <view class="catalog-head">
     <view>
-      <text class="head-kicker">SCOUTING INDEX</text>
+      <text class="head-kicker">球员索引</text>
       <text class="head-title">球员档案</text>
     </view>
-    <view class="head-mark">EFM / 01</view>
+    <view class="head-mark">球员档案 · 01</view>
   </view>
+
+  <picker mode="selector" range="{{packOptions}}" range-key="label" value="{{packIndex}}" bindchange="onPackChange">
+    <view class="pack-selector">
+      <view><text class="pack-label">球员包</text><text class="pack-value">{{packOptions[packIndex].label}}</text></view>
+      <text class="pack-chevron">⌄</text>
+    </view>
+  </picker>
+  <text wx:if="{{packErrorMessage}}" class="pack-error">{{packErrorMessage}}</text>
 
   <view class="search-box">
     <text class="search-icon">⌕</text>
@@ -40,14 +48,14 @@
   <loading-state wx:if="{{loading && cards.length === 0}}" label="正在检索球员档案" />
 
   <view wx:elif="{{errorMessage && cards.length === 0}}" class="catalog-state">
-    <text class="state-code">OFFLINE / RETRY</text>
+    <text class="state-code">离线 · 可重试</text>
     <text class="state-title">暂时无法读取球员库</text>
     <text class="state-copy">{{errorMessage}}</text>
     <button class="retry-button" bindtap="retry">重新加载</button>
   </view>
 
   <view wx:elif="{{!loading && cards.length === 0}}" class="catalog-state">
-    <text class="state-code">NO MATCH</text>
+    <text class="state-code">无匹配结果</text>
     <text class="state-title">没有找到符合条件的球员</text>
     <text class="state-copy">调整名称或筛选条件后再试。</text>
   </view>
@@ -56,16 +64,23 @@
     <view wx:for="{{groups}}" wx:key="id" class="card-group">
       <view class="group-head">
         <text class="group-title">{{item.title}}</text>
-        <text class="group-count">{{item.cards.length}} CARDS</text>
+        <text class="group-count">{{item.cards.length}} 张卡片</text>
       </view>
       <view class="card-grid">
-        <player-card
+        <view
           wx:for="{{item.cards}}"
           wx:for-item="card"
           wx:key="id"
-          card="{{card}}"
-          bind:cardtap="onCardTap"
-        />
+          class="card-cell"
+        >
+          <player-card card="{{card}}" bind:cardtap="onCardTap" />
+          <button
+            class="favorite-button {{card.isFavorite ? 'is-active' : ''}}"
+            data-player-id="{{card.playerId}}"
+            catchtap="onFavoriteTap"
+            aria-label="{{card.isFavorite ? '取消收藏' : '收藏球员'}}"
+          >{{card.isFavorite ? '★' : '☆'}}</button>
+        </view>
       </view>
     </view>
     <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}} · 点击重试</text>

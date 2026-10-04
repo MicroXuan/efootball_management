@@ -24,6 +24,7 @@ import {
 import { z } from 'zod';
 import { adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
+import { SeasonRail } from '../components/season-rail';
 
 const SeasonListSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
 const SetCurrentResponseSchema = z.object({ leagueId: z.string(), currentSeasonId: z.string(), version: z.number().int() });
@@ -43,6 +44,10 @@ type Fields = {
 
 const asInputTime = (value: string) => value.slice(0, 16);
 const asIso = (value: string) => new Date(value).toISOString();
+const seasonStatusLabel = {
+  DRAFT: '筹备中', REGISTRATION_OPEN: '报名中', ALLOCATION_REVIEW: '名单确认',
+  READY: '待开赛', IN_PROGRESS: '进行中', COMPLETED: '已结束', CANCELLED: '已取消'
+} as const;
 
 export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
@@ -149,14 +154,31 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
   };
 
   if (loading) return <div className="loading-block"><Spin /></div>;
+  const currentSeason = seasons.find((season) => season.id === league?.currentSeason?.id) ?? league?.currentSeason;
   return <div className="page-grid page-grid--seasons">
-    <Card title="赛季管理" className="data-card">
+    <Card className={`current-season-card${currentSeason?.status === 'CANCELLED' ? ' current-season-card--cancelled' : ''}`}>
+      {currentSeason ? <div className="current-season-summary">
+        <div className="current-season-summary__heading">
+          <div>
+            <span className="section-kicker">当前赛季</span>
+            <h2>{currentSeason.displayName}</h2>
+            <p><strong>{seasonStatusLabel[currentSeason.status]}</strong><span>{currentSeason.approvedEntryCount} 支球队参赛</span></p>
+          </div>
+          <Button type="primary" href="#current-season-teams">进入当前赛季</Button>
+        </div>
+        <SeasonRail status={currentSeason.status} />
+      </div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未设置当前赛季">
+        <Button type="primary" href="#season-editor">创建首个赛季</Button>
+      </Empty>}
+    </Card>
+
+    <Card title="全部赛季" className="data-card">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       {seasons.length === 0 ? <Empty description="暂无赛季" /> : <Table rowKey="id" pagination={false} dataSource={seasons} columns={[
         { title: '赛季', dataIndex: 'displayName' },
         { title: '时间', render: (_, row) => `${row.startsAt.slice(0, 10)} 至 ${row.endsAt.slice(0, 10)}` },
         { title: '参赛球队', dataIndex: 'approvedEntryCount' },
-        { title: '状态', render: (_, row) => league?.currentSeason?.id === row.id ? <Tag color="green">当前赛季</Tag> : <Tag>{row.status}</Tag> },
+        { title: '状态', render: (_, row) => league?.currentSeason?.id === row.id ? <Tag color="success">当前赛季</Tag> : <Tag>{row.status}</Tag> },
         { title: '操作', render: (_, row) => <>
           {row.status === 'DRAFT' ? <Button type="link" disabled={submitting} onClick={() => beginEdit(row)}>编辑</Button> : null}
           {league?.currentSeason?.id !== row.id ? <Button type="link" disabled={submitting} onClick={() => void setCurrent(row)}>设为当前赛季</Button> : null}
@@ -164,7 +186,7 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
       ]} />}
     </Card>
 
-    <Card title={editing ? `编辑赛季 · ${editing.displayName}` : '新建赛季'} className="form-card">
+    <Card id="season-editor" title={editing ? `编辑赛季 · ${editing.displayName}` : '新建赛季'} className="form-card">
       <Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save}>
         <Form.Item label="赛季编号" name="seasonNumber" rules={[{ required: true }]}><InputNumber min={1} disabled={Boolean(editing)} /></Form.Item>
         <Form.Item label="赛季名称" name="displayName" rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
@@ -182,7 +204,7 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
       </Form>
     </Card>
 
-    <Card title="当前赛季球队" className="data-card season-enrollment-card">
+    <Card id="current-season-teams" title="当前赛季球队" className="data-card season-enrollment-card">
       {!league?.currentSeason ? <Alert type="warning" showIcon title="请先设置当前赛季" /> : <>
         <p>选择需要加入 {league.currentSeason.displayName} 的球队。系统不会自动全选，重复加入会安全跳过。</p>
         <Checkbox.Group

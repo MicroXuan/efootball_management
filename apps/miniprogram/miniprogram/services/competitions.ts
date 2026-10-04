@@ -1,11 +1,14 @@
 import type {
   CompetitionDetail,
+  CupBracketView,
   CompetitionListResponse,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
+  CupRegistrationResponse,
   MyCompetitionListResponse,
   MyMatchListResponse,
   StandingsSnapshotResponse,
+  SeasonEntryResponse,
   SubmitMatchResultRequest,
   RejectMatchResultRequest,
   ManagerMatchResultRequest,
@@ -50,6 +53,32 @@ export const competitionsApi = {
       data: { gameAccountId, acceptedRuleVersion },
     })
   },
+  seasonEntry(seasonId: string) {
+    return api.request<SeasonEntryResponse | null>({
+      path: `/seasons/${encodeURIComponent(seasonId)}/entries/me`,
+    })
+  },
+  cupRegistration(competitionId: string) {
+    return api.request<CupRegistrationResponse | null>({
+      path: `/cups/${encodeURIComponent(competitionId)}/registration/me`,
+    })
+  },
+  registerCup(competitionId: string, seasonEntryId: string, acceptedRuleVersion: number) {
+    return api.request<CupRegistrationResponse>({
+      path: `/cups/${encodeURIComponent(competitionId)}/registration`,
+      method: 'POST',
+      headers: { 'Idempotency-Key': actionKey() },
+      data: { seasonEntryId, acceptedRuleVersion },
+    })
+  },
+  withdrawCup(competitionId: string, expectedVersion: number) {
+    return api.request<CupRegistrationResponse>({
+      path: `/cups/${encodeURIComponent(competitionId)}/registration/me`,
+      method: 'DELETE',
+      headers: { 'Idempotency-Key': actionKey() },
+      data: { expectedVersion },
+    })
+  },
   withdraw(competitionId: string, expectedVersion: number) {
     return api.request<CompetitionRegistrationResponse>({
       path: `/competitions/${encodeURIComponent(competitionId)}/registrations/me`,
@@ -66,6 +95,11 @@ export const competitionsApi = {
   standings(competitionId: string) {
     return api.request<StandingsSnapshotResponse>({
       path: `/competitions/${encodeURIComponent(competitionId)}/standings`, skipAuth: true,
+    })
+  },
+  bracket(competitionId: string) {
+    return api.request<CupBracketView>({
+      path: `/cups/${encodeURIComponent(competitionId)}/bracket`, skipAuth: true,
     })
   },
   submitResult(matchId: string, input: SubmitMatchResultRequest) {

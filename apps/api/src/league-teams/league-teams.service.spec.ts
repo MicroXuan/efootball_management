@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { config } from 'dotenv';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueTeamsService } from './league-teams.service.js';
+
+config({ path: '../../.env', quiet: true });
 
 describe('LeagueTeamsService', () => {
   const prisma = new PrismaService();
@@ -261,5 +264,33 @@ describe('LeagueTeamsService', () => {
         status: 'NEEDS_NUMBER'
       })
     ]);
+  });
+
+  it('updates the team shell value with versioning, idempotency, and an audit record', async () => {
+    const { user } = await createUser('队壳用户');
+    const league = await createLeague('队壳价值');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      teamNumber: 8,
+      name: '队壳球队',
+      shortName: '队壳',
+      logoUrl: null
+    }, randomUUID());
+    const key = randomUUID();
+
+    const updated = await service.update(actorId, league.id, team.id, {
+      shellValueMinor: 88_000,
+      expectedVersion: team.version
+    }, key);
+    const replay = await service.update(actorId, league.id, team.id, {
+      shellValueMinor: 88_000,
+      expectedVersion: team.version
+    }, key);
+
+    expect(updated).toMatchObject({ shellValueMinor: 88_000, version: team.version + 1 });
+    expect(replay).toEqual(updated);
+    await expect(prisma.auditLog.count({
+      where: { leagueId: league.id, resourceId: team.id, action: 'LEAGUE_TEAM_SHELL_VALUE_UPDATED' }
+    })).resolves.toBe(1);
   });
 });

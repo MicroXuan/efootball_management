@@ -1,40 +1,62 @@
-<view class="page-shell">
+<view class="page-shell leagues-page">
   <view class="masthead">
-    <view><text class="eyebrow">LEAGUE DIRECTORY</text><text class="page-title">联赛中心</text></view>
-    <text class="edition">LIVE / 01</text>
+    <view>
+      <text class="eyebrow">联赛目录</text>
+      <text class="page-title">联赛中心</text>
+    </view>
+    <text class="edition">LIVE · 01</text>
   </view>
-  <text class="intro">查看全部联赛，或只查看管理员已经为你绑定球队的联赛。</text>
+  <text class="intro">发现公开联赛，查看当前赛季；已分配球队的联赛会收纳在“我的联赛”。</text>
 
-  <view class="league-tabs">
+  <view class="league-tabs" aria-label="联赛范围">
     <button class="{{activeTab === 'all' ? 'is-active' : ''}}" data-tab="all" bindtap="switchTab">全部联赛</button>
     <button class="{{activeTab === 'mine' ? 'is-active' : ''}}" data-tab="mine" bindtap="switchTab">我的联赛</button>
   </view>
 
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">OFFLINE / RETRY</text><text class="state-title">暂时无法读取联赛</text>
-    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadLeagues">重新加载</button>
+    <text class="state-code">连接中断</text>
+    <text class="state-title">暂时无法读取联赛</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="outline-button" bindtap="loadLeagues">重新加载</button>
   </view>
   <view wx:elif="{{!hasLeagues}}" class="state-card">
-    <text class="state-code">{{activeTab === 'mine' ? 'NO BOUND TEAM' : 'NO PUBLIC LEAGUE'}}</text>
+    <text class="state-code">{{activeTab === 'mine' ? '暂无绑定球队' : '暂无公开联赛'}}</text>
     <text class="state-title">{{activeTab === 'mine' ? (loggedIn ? '还没有绑定联赛球队' : '登录后查看我的联赛') : '还没有公开联赛'}}</text>
     <text class="state-copy">{{activeTab === 'mine' ? '球队由联赛管理员在后台分配，分配后会自动显示在这里。' : '平台管理员创建联赛并设置当前赛季后，会在这里显示。'}}</text>
   </view>
   <view wx:else class="league-list">
-    <view wx:for="{{leagues}}" wx:key="id" class="league-card" data-id="{{item.id}}" bindtap="openLeague">
-      <view class="brand-line">
-        <image wx:if="{{item.logoUrl}}" class="league-logo" src="{{item.logoUrl}}" mode="aspectFit" />
-        <view wx:else class="league-logo logo-fallback">{{item.logoText}}</view>
-        <view class="brand-copy">
-          <view class="league-title-line"><text class="league-name">{{item.displayName}}</text><text class="edition-badge">{{item.editionLabel}}</text></view>
-          <text class="league-meta">{{item.description}}</text>
-          <text wx:if="{{item.teamName}}" class="my-team">我的球队 · {{item.teamName}}</text>
+    <view
+      wx:for="{{leagues}}"
+      wx:key="id"
+      class="league-card"
+      hover-class="league-card--pressed"
+      data-id="{{item.id}}"
+      bindtap="openLeague"
+      role="button"
+      aria-label="进入{{item.displayName}}"
+    >
+      <view class="league-card__identity">
+        <view class="league-mark">
+          <entity-artwork src="{{item.logoUrl}}" fallback="{{item.logoText}}" shape="square" />
         </view>
-        <text class="arrow">↗</text>
+        <view class="league-card__copy">
+          <view class="league-card__meta-line">
+            <text class="edition-badge">{{item.editionLabel}}</text>
+            <text wx:if="{{item.teamName}}" class="my-team">我的球队 · {{item.teamName}}</text>
+          </view>
+          <text class="league-name">{{item.displayName}}</text>
+          <text class="league-meta">{{item.description}}</text>
+        </view>
+        <text class="arrow">→</text>
       </view>
       <view class="season-strip">
-        <view><text class="season-label">CURRENT SEASON</text><text class="season-name">{{item.seasonName}}</text></view>
-        <view class="season-state"><text>{{item.seasonState}}</text><text class="entry-copy">{{item.entryCopy}}</text></view>
+        <view class="season-copy">
+          <text class="season-label">当前赛季</text>
+          <text class="season-name">{{item.seasonName}}</text>
+          <text class="entry-copy">{{item.entryCopy}}</text>
+        </view>
+        <status-badge label="{{item.seasonState}}" tone="{{item.seasonTone}}" />
       </view>
     </view>
   </view>

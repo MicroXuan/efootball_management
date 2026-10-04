@@ -1,6 +1,14 @@
-import { Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Radio, Space, Tag, Typography } from 'antd';
-import { useMemo, useState } from 'react';
-import { RosterMutationResponseSchema, RosterPlayerCandidateListResponseSchema, type RosterPlayerCandidate } from '@efm/contracts';
+import { Alert, Button, Descriptions, Drawer, Empty, Form, Input, InputNumber, Radio, Select, Space, Tag, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CardPackListResponseSchema,
+  RosterMutationResponseSchema,
+  RosterPlayerCandidateListResponseSchema,
+  type CardPackSummary,
+  type PlayerCardType,
+  type PlayerPosition,
+  type RosterPlayerCandidate
+} from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 
@@ -9,7 +17,12 @@ type Props = { open: boolean; leagueId: string; teamId: string; seasonId: string
 
 export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary, api = adminApi, onClose, onCompleted }: Props) {
   const [keyword, setKeyword] = useState('');
+  const [position, setPosition] = useState<PlayerPosition | undefined>();
+  const [cardType, setCardType] = useState<PlayerCardType | undefined>();
+  const [cardPackId, setCardPackId] = useState<string | undefined>();
+  const [packs, setPacks] = useState<Array<CardPackSummary & { cardCount: number }>>([]);
   const [results, setResults] = useState<RosterPlayerCandidate[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [amountMinor, setAmountMinor] = useState<number | null>(null);
   const [reason, setReason] = useState('');
@@ -17,12 +30,23 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   const [busy, setBusy] = useState(false);
   const mutationKey = useMutationKey();
   const selected = useMemo(() => results.flatMap((player) => player.cards).find((card) => card.id === selectedCardId), [results, selectedCardId]);
+  useEffect(() => {
+    if (!open) return;
+    void api.request('/v1/card-packs?limit=100', { schema: CardPackListResponseSchema })
+      .then((response) => setPacks(response.items))
+      .catch(() => setPacks([]));
+  }, [api, open]);
   const search = async () => {
     if (!keyword.trim()) return;
     setBusy(true); setError(null);
     try {
-      const response = await api.request(`/v1/admin/roster/leagues/${leagueId}/player-candidates?keyword=${encodeURIComponent(keyword.trim())}`, { schema: RosterPlayerCandidateListResponseSchema });
+      const params = new URLSearchParams({ keyword: keyword.trim() });
+      if (position) params.set('position', position);
+      if (cardType) params.set('cardType', cardType);
+      if (cardPackId) params.set('cardPackId', cardPackId);
+      const response = await api.request(`/v1/admin/roster/leagues/${leagueId}/player-candidates?${params.toString()}`, { schema: RosterPlayerCandidateListResponseSchema });
       setResults(response.items);
+      setHasSearched(true);
       const recommended = response.items.find((player) => player.recommendedPlayerCardId)?.recommendedPlayerCardId ?? null;
       setSelectedCardId(recommended ?? response.items[0]?.cards[0]?.id ?? null);
     } catch { setError('球员搜索失败'); }
@@ -44,11 +68,27 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   return <Drawer open={open} onClose={onClose} title="购买球员" size="large" destroyOnHidden>
     {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
     <Space.Compact block><Input aria-label="搜索球员" value={keyword} onChange={(event) => setKeyword(event.target.value)} onPressEnter={() => void search()} placeholder="中文名或英文名" /><Button aria-label="搜索" loading={busy} onClick={() => void search()}>搜索</Button></Space.Compact>
+    <Space wrap style={{ marginTop: 16, marginBottom: 8 }}>
+      <Select aria-label="位置" allowClear placeholder="全部位置" value={position} onChange={(value) => setPosition(value)} options={[
+        { value: 'GK', label: '门将' }, { value: 'CB', label: '中后卫' }, { value: 'LB', label: '左后卫' }, { value: 'RB', label: '右后卫' },
+        { value: 'DMF', label: '后腰' }, { value: 'CMF', label: '中前卫' }, { value: 'LMF', label: '左前卫' }, { value: 'RMF', label: '右前卫' },
+        { value: 'AMF', label: '前腰' }, { value: 'LWF', label: '左边锋' }, { value: 'RWF', label: '右边锋' }, { value: 'SS', label: '影锋' }, { value: 'CF', label: '中锋' }
+      ]} />
+      <Select aria-label="卡种" allowClear placeholder="全部卡种" value={cardType} onChange={(value) => setCardType(value)} options={[
+        { value: 'STANDARD', label: '基础卡' }, { value: 'FEATURED', label: '精选' }, { value: 'TRENDING', label: '状态火热' },
+        { value: 'HIGHLIGHT', label: '高光' }, { value: 'EPIC', label: '史诗' }, { value: 'BIG_TIME', label: '时刻' }, { value: 'OTHER', label: '其他' }
+      ]} />
+      <Select aria-label="球员包" allowClear showSearch optionFilterProp="label" placeholder="全部球员包" value={cardPackId} onChange={(value) => setCardPackId(value)} options={packs.map((pack) => ({
+        value: pack.id,
+        label: pack.nameZh ?? pack.nameEn ?? '未命名球员包'
+      }))} style={{ minWidth: 180 }} />
+    </Space>
+    {hasSearched && results.length === 0 && !busy ? <Empty description="没有符合筛选条件的球员" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
     {results.map((player) => <section className="candidate-group" key={player.playerId}>
       <div className="candidate-title"><strong>{player.playerName}</strong>{player.ownedByTeamId ? <Tag color="red">本联赛已归属</Tag> : null}</div>
       <Radio.Group value={selectedCardId} onChange={(event) => { setSelectedCardId(event.target.value); mutationKey.reset(); }}>
         <div className="candidate-card-grid">{player.cards.map((card) => <Radio key={card.id} value={card.id} aria-label={card.cardName} disabled={Boolean(player.ownedByTeamId)}>
-          <div className="candidate-card"><strong>{card.cardName}</strong>{card.recommended ? <Tag color="green">系统推荐</Tag> : null}<span>{card.position} · 初始 {card.overallRating}</span><span>自动加点 {card.maxOverall ?? '—'} · DT {card.dtRating ?? '—'}</span></div>
+          <div className="candidate-card"><strong>{card.cardName}</strong>{card.recommended ? <Tag color="success">系统推荐</Tag> : null}<span>{card.position} · 初始 {card.overallRating}</span><span>自动加点 {card.maxOverall ?? '—'} · DT {card.dtRating ?? '—'}</span></div>
         </Radio>)}</div>
       </Radio.Group>
     </section>)}

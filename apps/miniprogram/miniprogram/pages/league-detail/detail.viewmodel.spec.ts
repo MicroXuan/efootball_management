@@ -1,10 +1,13 @@
-import type { LeagueSeasonSummary, SeasonEntryResponse } from '@efm/contracts'
+import type { LeagueSeasonSummary, LeagueWorkspaceResponse, SeasonEntryResponse } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   entryStatusCopy,
   leagueDetailErrorMessage,
+  seasonRailSteps,
   seasonStructureCopy,
   selectSeason,
+  standingsAccess,
+  workspaceSummary,
 } from './detail.viewmodel'
 
 const season = (overrides: Partial<LeagueSeasonSummary> = {}): LeagueSeasonSummary => ({
@@ -51,5 +54,46 @@ describe('league detail view model', () => {
 
   it('localizes read failures', () => {
     expect(leagueDetailErrorMessage('VERSION_CONFLICT')).toBe('赛季或报名状态已变更，请刷新后重试')
+  })
+
+  it('opens private standings only to an approved season entry', () => {
+    expect(standingsAccess(entry('APPROVED'))).toEqual({
+      enabled: true,
+      label: '查看分组积分榜',
+      hint: '查看各组实时排名与比赛数据',
+    })
+    expect(standingsAccess(entry('PENDING'))).toEqual({
+      enabled: false,
+      label: '报名后开放',
+      hint: '仅当前赛季正式参赛球队可查看',
+    })
+    expect(standingsAccess(null).enabled).toBe(false)
+  })
+
+  it('presents enrolled workspace data and stable empty states', () => {
+    const workspace: LeagueWorkspaceResponse = {
+      leagueId: 'league-1', seasonId: 'season-1', team: { leagueTeamId: 'team-1', name: '海港', shortName: '海港', logoUrl: null },
+      division: { stageId: 'stage-a', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
+      currentRank: { rank: 2, points: 13, played: 6, tiePending: true },
+      nextMatch: { id: 'match-1', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
+      capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true },
+    }
+    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2*', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
+    expect(workspaceSummary({ ...workspace, division: null, currentRank: null, nextMatch: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', nextMatch: '暂无待进行比赛' })
+  })
+
+  it.each([
+    ['DRAFT', ['current', 'upcoming', 'upcoming', 'upcoming']],
+    ['REGISTRATION_OPEN', ['current', 'upcoming', 'upcoming', 'upcoming']],
+    ['ALLOCATION_REVIEW', ['complete', 'current', 'upcoming', 'upcoming']],
+    ['READY', ['complete', 'complete', 'current', 'upcoming']],
+    ['IN_PROGRESS', ['complete', 'complete', 'current', 'upcoming']],
+    ['COMPLETED', ['complete', 'complete', 'complete', 'complete']],
+    ['CANCELLED', ['cancelled', 'cancelled', 'cancelled', 'cancelled']],
+  ] as const)('maps %s to a four-stage season rail', (status, states) => {
+    const steps = seasonRailSteps(status)
+
+    expect(steps.map((step) => step.label)).toEqual(['报名', '确认', '赛程', '结算'])
+    expect(steps.map((step) => step.state)).toEqual(states)
   })
 })

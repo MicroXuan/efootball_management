@@ -1,11 +1,24 @@
 import { Alert, Button, Card, Empty, Form, Input, InputNumber, Space, Spin, Table, Tag } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueTeamDetailSchema, LeagueTeamListResponseSchema, PublicUserLookupSchema, type LeagueTeamSummary, type PublicUserLookup } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 
 type CreateFields = { publicUserNo: string; teamNumber: number; name: string; shortName: string };
+
+export function filterLeagueTeams(teams: LeagueTeamSummary[], keyword: string) {
+  const normalizedKeyword = keyword.trim().toLocaleLowerCase('zh-CN');
+  if (!normalizedKeyword) return teams;
+
+  return teams.filter((team) => [
+    team.name,
+    team.shortName,
+    team.teamNumber?.toString() ?? '',
+    team.ownerDisplayName ?? '',
+    team.ownerPublicUserNo
+  ].some((value) => value.toLocaleLowerCase('zh-CN').includes(normalizedKeyword)));
+}
 
 export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
@@ -16,8 +29,10 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [filterKeyword, setFilterKeyword] = useState('');
   const [form] = Form.useForm<CreateFields>();
   const mutationKey = useMutationKey();
+  const filteredTeams = useMemo(() => filterLeagueTeams(teams, filterKeyword), [teams, filterKeyword]);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError(false);
@@ -60,12 +75,21 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
     <Card title="联赛球队" className="data-card">
       {loadError ? <Alert role="alert" type="error" showIcon title="球队列表加载失败" action={<Button onClick={() => void load()}>重新加载</Button>} /> : null}
       {loading ? <div className="loading-block"><Spin /></div> : teams.length === 0 && !loadError ? <Empty description="暂无球队" /> : null}
-      {!loading && teams.length ? <Table rowKey="id" pagination={false} dataSource={teams} columns={[
+      {!loading && teams.length ? <Input.Search
+        aria-label="筛选球队"
+        allowClear
+        placeholder="搜索球队、编号或负责人"
+        value={filterKeyword}
+        onChange={(event) => setFilterKeyword(event.target.value)}
+        style={{ marginBottom: 20 }}
+      /> : null}
+      {!loading && teams.length > 0 && filteredTeams.length === 0 ? <Empty description="没有符合筛选条件的球队" /> : null}
+      {!loading && filteredTeams.length ? <Table rowKey="id" pagination={false} dataSource={filteredTeams} columns={[
         { title: '编号', dataIndex: 'teamNumber', render: (value) => value ?? '—' },
         { title: '球队', dataIndex: 'name', render: (value, row) => <Link to={`/leagues/${leagueId}/teams/${row.id}`}>{value}</Link> },
-        { title: '用户编号', dataIndex: 'ownerPublicUserNo' },
+        { title: '负责人', render: (_, row) => row.ownerDisplayName ? `${row.ownerDisplayName} · ${row.ownerPublicUserNo}` : row.ownerPublicUserNo },
         { title: '阵容', render: (_, row) => `${row.activePlayerCount}/25` },
-        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'green' : 'red'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
+        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
       ]} /> : null}
     </Card>
     <Card title="创建球队" className="form-card">
@@ -75,9 +99,9 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
           <Space.Compact block><Form.Item name="publicUserNo" noStyle rules={[{ required: true }]}><Input id="public-user-no" maxLength={6} inputMode="numeric" /></Form.Item><Button onClick={() => void lookup()}>查找用户</Button></Space.Compact>
         </Form.Item>
         {owner ? <Alert type="success" showIcon title={owner.displayName} description={`用户编号 ${owner.publicUserNo}`} /> : null}
-        <Form.Item label="球队编号" name="teamNumber" rules={[{ required: true }]}><InputNumber min={0} max={9999} precision={0} /></Form.Item>
-        <Form.Item label="球队名称" name="name" rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
-        <Form.Item label="球队简称" name="shortName" rules={[{ required: true }]}><Input maxLength={24} /></Form.Item>
+        <Form.Item label="球队编号" name="teamNumber" rules={[{ required: true, message: '请输入球队编号' }]}><InputNumber min={0} max={9999} precision={0} /></Form.Item>
+        <Form.Item label="球队名称" name="name" rules={[{ required: true, message: '请输入球队名称' }]}><Input maxLength={64} /></Form.Item>
+        <Form.Item label="球队简称" name="shortName" rules={[{ required: true, message: '请输入球队简称' }]}><Input maxLength={24} /></Form.Item>
         <Button type="primary" htmlType="submit" loading={submitting} disabled={!owner || submitting}>创建球队</Button>
       </Form>
     </Card>

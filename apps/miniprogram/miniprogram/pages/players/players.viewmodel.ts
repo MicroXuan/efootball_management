@@ -1,4 +1,5 @@
 import type {
+  CardPackSummary,
   PlayerCardSummary,
   PlayerCardType,
   PlayerPosition,
@@ -15,7 +16,10 @@ export type PlayerCardViewModel = PlayerCardSummary & {
   packName: string | null
   usesFallbackArtwork: boolean
   fallbackInitials: string
+  isFavorite: boolean
 }
+
+export type PackOption = { value: string; label: string }
 
 export type PlayerCardGroup = {
   id: string
@@ -98,7 +102,40 @@ export function mergeUniqueCards(
   })
 }
 
-export function toCardViewModel(card: PlayerCardSummary): PlayerCardViewModel {
+export function toPackOptions(
+  packs: Array<CardPackSummary & { cardCount: number }>,
+): PackOption[] {
+  return [
+    { value: '', label: '全部球员包' },
+    ...packs.map((pack) => ({
+      value: pack.id,
+      label: `${pack.nameZh ?? pack.nameEn ?? '未命名球员包'} · ${pack.cardCount} 张`,
+    })),
+  ]
+}
+
+export function favoriteLookup(
+  cards: PlayerCardSummary[],
+  favoritePlayerIds: string[],
+): Record<string, boolean> {
+  const favoriteIds = new Set(favoritePlayerIds)
+  return Object.fromEntries(
+    [...new Set(cards.map(({ playerId }) => playerId))].map((playerId) => [playerId, favoriteIds.has(playerId)]),
+  )
+}
+
+export function isLatestPlayerRequest(
+  activeToken: number,
+  responseToken: number,
+  unloaded: boolean,
+): boolean {
+  return !unloaded && activeToken === responseToken
+}
+
+export function toCardViewModel(
+  card: PlayerCardSummary,
+  favorites: Record<string, boolean> = {},
+): PlayerCardViewModel {
   const displayName = card.playerNameZh ?? card.playerNameEn ?? '未知球员'
   return {
     ...card,
@@ -108,16 +145,20 @@ export function toCardViewModel(card: PlayerCardSummary): PlayerCardViewModel {
     packName: card.pack?.nameZh ?? card.pack?.nameEn ?? null,
     usesFallbackArtwork: !card.imageUrl,
     fallbackInitials: fallbackInitials(displayName),
+    isFavorite: favorites[card.playerId] === true,
   }
 }
 
-export function groupCardsByPack(cards: PlayerCardSummary[]): PlayerCardGroup[] {
+export function groupCardsByPack(
+  cards: PlayerCardSummary[],
+  favorites: Record<string, boolean> = {},
+): PlayerCardGroup[] {
   const groups = new Map<string, PlayerCardGroup>()
   for (const card of cards) {
     const id = card.pack?.id ?? 'other'
     const title = card.pack?.nameZh ?? card.pack?.nameEn ?? '其他球员卡'
     const group = groups.get(id) ?? { id, title, cards: [] }
-    group.cards.push(toCardViewModel(card))
+    group.cards.push(toCardViewModel(card, favorites))
     groups.set(id, group)
   }
   return [...groups.values()]

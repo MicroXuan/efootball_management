@@ -1,0 +1,276 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import type { AdminApi } from '../lib/api';
+import { ApiError } from '../lib/api';
+import { CupsPage } from './cups-page';
+
+const leagueId = '11111111-1111-4111-8111-111111111111';
+const seasonId = '22222222-2222-4222-8222-222222222222';
+const cupId = '33333333-3333-4333-8333-333333333333';
+const proposalId = '44444444-4444-4444-8444-444444444444';
+const timestamp = '2026-10-03T00:00:00.000Z';
+const season = {
+  id: seasonId, leagueId, seasonNumber: 3, displayName: 'S3', previousSeasonId: null, isFirstSeason: false,
+  registrationOpensAt: timestamp, registrationClosesAt: '2026-10-04T00:00:00.000Z',
+  startsAt: '2026-10-05T00:00:00.000Z', endsAt: '2026-11-05T00:00:00.000Z',
+  superCapacity: 23, championCapacity: 18, promotionCount: 4, status: 'IN_PROGRESS' as const,
+  entryCount: 12, approvedEntryCount: 12, version: 3, createdAt: timestamp, updatedAt: timestamp
+};
+const cup = {
+  id: cupId, seasonId, name: 'S3 足总杯', description: '赛季杯赛',
+  competitionType: 'KNOCKOUT_CUP' as const, format: 'SINGLE_ELIMINATION' as const,
+  status: 'IN_PROGRESS' as const, registrationOpensAt: timestamp,
+  registrationClosesAt: '2026-10-04T00:00:00.000Z', startsAt: '2026-10-05T00:00:00.000Z',
+  endsAt: '2026-11-05T00:00:00.000Z', participantLimit: 16, participantCount: 12,
+  targetGroupSize: null, qualifiersPerGroup: null, version: 4
+};
+const bracket = {
+  competitionId: cupId, proposalId, proposalVersion: 1, proposalStatus: 'CONFIRMED' as const,
+  bracketSize: 16, currentRoundNumber: 1,
+  rounds: [{
+    stageId: '55555555-5555-4555-8555-555555555555', roundNumber: 1,
+    stageCode: 'ROUND_OF_16', displayName: '16 强', status: 'PUBLISHED' as const,
+    pairings: [{
+      id: '66666666-6666-4666-8666-666666666666', pairingNumber: 1,
+      homeParticipant: { id: '77777777-7777-4777-8777-777777777777', displayName: '上海海港' },
+      awayParticipant: { id: '88888888-8888-4888-8888-888888888888', displayName: '北京国安' },
+      winnerParticipant: null, isBye: false,
+      match: { id: '99999999-9999-4999-8999-999999999999', status: 'AWAITING_RESULT' as const, homeScore: null, awayScore: null }
+    }]
+  }]
+};
+const groupedCup = {
+  ...cup,
+  competitionType: 'GROUP_KNOCKOUT_CUP' as const,
+  format: 'GROUP_KNOCKOUT' as const,
+  status: 'REGISTRATION_CLOSED' as const,
+  participantCount: 4,
+  targetGroupSize: 2,
+  qualifiersPerGroup: 1
+};
+const groupProposal = {
+  id: proposalId,
+  competitionId: cupId,
+  version: 1,
+  status: 'DRAFT' as const,
+  algorithmVersion: 'cup-groups-v1',
+  randomSeed: 7,
+  createdAt: timestamp,
+  rows: [
+    { id: 'a1111111-1111-4111-8111-111111111111', participantId: 'b1111111-1111-4111-8111-111111111111', teamName: '上海海港', suggestedGroupCode: 'GROUP_A', finalGroupCode: null, overridden: false, reason: null },
+    { id: 'a2222222-2222-4222-8222-222222222222', participantId: 'b2222222-2222-4222-8222-222222222222', teamName: '北京国安', suggestedGroupCode: 'GROUP_A', finalGroupCode: null, overridden: false, reason: null },
+    { id: 'a3333333-3333-4333-8333-333333333333', participantId: 'b3333333-3333-4333-8333-333333333333', teamName: '山东泰山', suggestedGroupCode: 'GROUP_B', finalGroupCode: null, overridden: false, reason: null },
+    { id: 'a4444444-4444-4444-8444-444444444444', participantId: 'b4444444-4444-4444-8444-444444444444', teamName: '成都蓉城', suggestedGroupCode: 'GROUP_B', finalGroupCode: null, overridden: false, reason: null }
+  ]
+};
+const groupStages = [
+  { id: 'c1111111-1111-4111-8111-111111111111', stageCode: 'GROUP_A', displayName: 'A 组', participantCount: 2, matchCount: 0, status: 'DRAFT' as const, version: 1 },
+  { id: 'c2222222-2222-4222-8222-222222222222', stageCode: 'GROUP_B', displayName: 'B 组', participantCount: 2, matchCount: 0, status: 'DRAFT' as const, version: 1 }
+];
+
+it('shows season cups and opens a readable knockout rail', async () => {
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [cup] };
+    if (path.endsWith(`/cups/${cupId}/bracket`)) return bracket;
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  expect(await screen.findByText('S3 足总杯')).toBeInTheDocument();
+  expect(screen.getByText('12 / 16')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '查看签表' }));
+  expect(await screen.findByText('16 强')).toBeInTheDocument();
+  expect(screen.getByText('上海海港')).toBeInTheDocument();
+  expect(screen.getByText('北京国安')).toBeInTheDocument();
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/bracket`,
+    expect.any(Object)
+  ));
+});
+
+it('creates a pure knockout cup with a complete timeline', async () => {
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: unknown; headers?: HeadersInit }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith(`/seasons/${seasonId}/cups`) && options?.method === 'POST') return cup;
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [] };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await screen.findByText('当前赛季还没有杯赛');
+  await userEvent.click(screen.getByRole('button', { name: '新建杯赛' }));
+  await userEvent.type(screen.getByLabelText('杯赛名称'), 'S3 足总杯');
+  fireEvent.change(screen.getByLabelText('报名开始'), { target: { value: '2026-10-03T09:00' } });
+  fireEvent.change(screen.getByLabelText('报名截止'), { target: { value: '2026-10-04T09:00' } });
+  fireEvent.change(screen.getByLabelText('开赛时间'), { target: { value: '2026-10-05T09:00' } });
+  fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '2026-11-05T09:00' } });
+  await userEvent.click(screen.getByRole('button', { name: '创建杯赛' }));
+
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups`,
+    expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+      body: expect.objectContaining({
+        seasonId,
+        name: 'S3 足总杯',
+        competitionType: 'KNOCKOUT_CUP',
+        format: 'SINGLE_ELIMINATION',
+        participantLimit: 16,
+        targetGroupSize: null,
+        qualifiersPerGroup: null
+      })
+    })
+  ));
+});
+
+it('generates a draft bracket and requires explicit confirmation before publishing it', async () => {
+  const closedCup = { ...cup, status: 'REGISTRATION_CLOSED' as const };
+  const draftBracket = { ...bracket, proposalStatus: 'DRAFT' as const, rounds: bracket.rounds.map((round) => ({ ...round, status: 'DRAFT' as const })) };
+  let bracketReads = 0;
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith(`/seasons/${seasonId}/cups`) && !options?.method) return { items: [closedCup] };
+    if (path.endsWith(`/cups/${cupId}/bracket-proposals`)) return { id: proposalId };
+    if (path.endsWith(`/cups/${cupId}/bracket-decisions`)) return { id: proposalId };
+    if (path.endsWith(`/cups/${cupId}/bracket`)) {
+      bracketReads += 1;
+      if (bracketReads === 1) throw new ApiError({ status: 404, code: 'CUP_BRACKET_NOT_FOUND' });
+      return draftBracket;
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await screen.findByText('S3 足总杯');
+  await userEvent.click(screen.getByRole('button', { name: '查看签表' }));
+  expect(await screen.findByText('该杯赛尚未生成淘汰签表')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '生成签表建议' }));
+  expect(await screen.findByText('签表建议 · 尚未发布')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '确认并发布签表' }));
+
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/bracket-decisions`,
+    expect.objectContaining({
+      method: 'POST',
+      body: { proposalId, expectedCompetitionVersion: closedCup.version }
+    })
+  ));
+});
+
+it('restores a draft group proposal and requires a reason for manual reassignment', async () => {
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [groupedCup] };
+    if (path.endsWith(`/cups/${cupId}/groups`)) return {
+      competitionId: cupId, competitionVersion: groupedCup.version, proposal: groupProposal, stages: []
+    };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await screen.findByText('S3 足总杯');
+  await userEvent.click(screen.getByRole('button', { name: '管理分组' }));
+  expect(await screen.findByText('分组建议版本 1')).toBeInTheDocument();
+  await userEvent.click(screen.getByLabelText('上海海港最终组别'));
+  await userEvent.click(await screen.findByText('B 组', { selector: '.ant-select-item-option-content' }));
+  await userEvent.click(screen.getByRole('button', { name: '确认并发布分组' }));
+
+  expect(await screen.findByText('人工调整组别时必须填写原因')).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/groups`,
+    expect.any(Object)
+  );
+});
+
+it('generates and confirms groups, then generates and publishes each group schedule', async () => {
+  const readySeason = { ...season, status: 'READY' as const };
+  let currentCup: Omit<typeof groupedCup, 'status'> & { status: 'REGISTRATION_CLOSED' | 'IN_PROGRESS' } = groupedCup;
+  let bracketReads = 0;
+  let view: {
+    competitionId: string;
+    competitionVersion: number;
+    proposal: (Omit<typeof groupProposal, 'status'> & { status: 'DRAFT' | 'CONFIRMED' }) | null;
+    stages: typeof groupStages;
+  } = {
+    competitionId: cupId, competitionVersion: groupedCup.version, proposal: null, stages: []
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/seasons')) return { items: [readySeason], nextCursor: null };
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [currentCup] };
+    if (path.endsWith(`/cups/${cupId}/groups`) && !options?.method) return view;
+    if (path.endsWith(`/cups/${cupId}/group-proposals`) && options?.method === 'POST') {
+      view = { ...view, proposal: groupProposal };
+      return groupProposal;
+    }
+    if (path.endsWith(`/cups/${cupId}/group-decisions`) && options?.method === 'POST') {
+      currentCup = { ...currentCup, version: currentCup.version + 1 };
+      view = {
+        competitionId: cupId,
+        competitionVersion: groupedCup.version + 1,
+        proposal: { ...groupProposal, status: 'CONFIRMED' as const },
+        stages: groupStages
+      };
+      return { competitionId: cupId, proposalId, version: groupedCup.version + 1, stages: groupStages };
+    }
+    if (path.includes('/competition-stages/') && path.endsWith('/schedule/generate')) {
+      return { id: path.includes(groupStages[0]!.id) ? groupStages[0]!.id : groupStages[1]!.id, competitionId: cupId, status: 'DRAFT', version: 2, roundCount: 1, matchCount: 1, matches: [] };
+    }
+    if (path.includes('/competition-stages/') && path.endsWith('/schedule/publish')) {
+      currentCup = { ...currentCup, status: 'IN_PROGRESS' as const, version: currentCup.version + 1 };
+      return { id: path.includes(groupStages[0]!.id) ? groupStages[0]!.id : groupStages[1]!.id, competitionId: cupId, status: 'PUBLISHED', version: 3, roundCount: 1, matchCount: 1, matches: [] };
+    }
+    if (path.endsWith(`/cups/${cupId}/bracket-proposals`)) return { id: proposalId };
+    if (path.endsWith(`/cups/${cupId}/bracket`)) {
+      bracketReads += 1;
+      if (bracketReads === 1) throw new ApiError({ status: 404, code: 'CUP_BRACKET_NOT_FOUND' });
+      return { ...bracket, proposalStatus: 'DRAFT' as const };
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await screen.findByText('S3 足总杯');
+  await userEvent.click(screen.getByRole('button', { name: '管理分组' }));
+  await userEvent.click(await screen.findByRole('button', { name: '生成分组建议' }));
+  expect(await screen.findByText('分组建议版本 1')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '确认并发布分组' }));
+  expect(await screen.findAllByText('2 支球队')).toHaveLength(2);
+
+  await userEvent.click(screen.getByRole('button', { name: 'A 组生成赛程' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[0]!.id}/schedule/generate`,
+    expect.objectContaining({ body: { expectedStageVersion: 1 } })
+  ));
+  await userEvent.click(screen.getByRole('button', { name: 'A 组发布赛程' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[0]!.id}/schedule/publish`,
+    expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: readySeason.version } })
+  ));
+  expect(await screen.findByText('赛程已发布')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'B 组生成赛程' }));
+  await userEvent.click(screen.getByRole('button', { name: 'B 组发布赛程' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[1]!.id}/schedule/publish`,
+    expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: readySeason.version + 1 } })
+  ));
+  await userEvent.click(screen.getByRole('button', { name: '查看淘汰签表' }));
+  expect(await screen.findByText('该杯赛尚未生成淘汰签表')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '生成签表建议' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/bracket-proposals`,
+    expect.objectContaining({ body: expect.objectContaining({ expectedCompetitionVersion: currentCup.version }) })
+  ));
+});

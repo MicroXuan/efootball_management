@@ -106,11 +106,12 @@ export function AdminAccountsPage({ api = adminApi }: { api?: AdminApi }) {
     } finally { setPending(null); }
   };
   return <div className="page-stack">
+    <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>管理员账号</h1><p>管理登录状态、密码与联赛授权范围。</p></div></header>
     <Card title="管理员账号" className="data-card">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       {loading ? <div className="loading-block"><Spin /></div> : accounts.length ? <Table rowKey="id" pagination={false} dataSource={accounts} columns={[
         { title: '账号', dataIndex: 'username' }, { title: '显示名称', dataIndex: 'displayName' },
-        { title: '状态', dataIndex: 'status', render: (value) => <Tag color={value === 'ACTIVE' ? 'green' : 'red'}>{value === 'ACTIVE' ? '启用' : '停用'}</Tag> },
+        { title: '状态', dataIndex: 'status', render: (value) => <Tag color={value === 'ACTIVE' ? 'success' : 'error'}>{value === 'ACTIVE' ? '启用' : '停用'}</Tag> },
         { title: '联赛权限', render: (_, row) => <Space wrap>{(grantsByAdmin[row.id] ?? []).length ? (grantsByAdmin[row.id] ?? []).map((grant) => <Tag key={grant.id} closable={!pending} onClose={(event) => { event.preventDefault(); void revoke(grant); }} closeIcon={<span aria-label={`撤销 ${grant.leagueName}`}>×</span>}>{grant.leagueName}</Tag>) : '暂无授权'}</Space> },
         { title: '上次登录', dataIndex: 'lastLoginAt', render: (value) => value ? new Date(value).toLocaleString() : '尚未登录' },
         { title: '操作', render: (_, row) => <Space><Button size="small" loading={pending === `status:${row.id}`} disabled={Boolean(pending)} onClick={() => void toggleStatus(row)}>{row.status === 'ACTIVE' ? '停用' : '启用'}</Button><Button size="small" disabled={Boolean(pending)} onClick={() => { passwordKey.reset(); setResetPasswordValue(''); setResetTarget(row); }}>重置密码</Button></Space> }

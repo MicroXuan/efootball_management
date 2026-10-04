@@ -8,7 +8,33 @@ import {
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionParticipantTypeSchema,
+  CompetitionStageCodeSchema,
+  CompetitionStageSummarySchema,
+  CompetitionTypeSchema,
+  ConfirmSeasonAllocationRequestSchema,
+  DivisionStandingsResponseSchema,
+  LeagueWorkspaceResponseSchema,
+  GenerateSeasonAllocationRequestSchema,
+  GenerateStageScheduleRequestSchema,
+  SeasonAllocationDecisionSchema,
+  SeasonAllocationProposalSchema,
+  SeasonAllocationProposalRowSchema,
+  PublishStageScheduleRequestSchema,
   CreateCompetitionRequestSchema,
+  CreateSeasonCupRequestSchema,
+  RegisterSeasonCupRequestSchema,
+  WithdrawSeasonCupRequestSchema,
+  CupRegistrationResponseSchema,
+  MyCompetitionResponseSchema,
+  GenerateCupGroupProposalRequestSchema,
+  ConfirmCupGroupProposalRequestSchema,
+  CupGroupProposalSchema,
+  GenerateCupBracketProposalRequestSchema,
+  ConfirmCupBracketProposalRequestSchema,
+  CupBracketProposalSchema,
+  CupBracketViewSchema,
+  SeasonCupSummarySchema,
+  CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
   CreateLeagueTeamRequestSchema,
@@ -22,12 +48,16 @@ import {
   NormalizedPlayerCardRecordSchema,
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
+  PlayerFavoriteListQuerySchema,
+  PlayerFavoriteStatusQuerySchema,
   PublicUserLookupSchema,
   PublicUserNumberSchema,
   RecalculateLeagueSalaryRequestSchema,
   ResourceIdSchema,
   RosterEntrySchema,
+  RosterEntryStatusSchema,
   RosterMutationResponseSchema,
+  RosterPlayerCandidateQuerySchema,
   RosterTransactionSchema,
   SalaryRecalculationResponseSchema,
   SalaryRuleVersionSchema,
@@ -36,6 +66,7 @@ import {
   TeamNumberSchema,
   TransferWindowSchema,
   FinanceLedgerEntrySchema,
+  FinanceLedgerTypeSchema,
   LeagueTeamDetailSchema,
   LeagueTeamSummarySchema,
   LeagueEditionSchema,
@@ -46,10 +77,217 @@ import {
   SetCurrentSeasonRequestSchema,
   SeasonEntryListQuerySchema,
   UpdateLeagueRequestSchema,
+  UpdateLeagueTeamRequestSchema,
   UpdateLeagueSeasonRequestSchema,
+  UpdateRosterLifecycleRequestSchema,
   UpdateTeamProfileRequestSchema,
   WechatLoginRequestSchema
 } from './index.js';
+import {
+  AuditLogSchema,
+  CreateManualFinanceEntryRequestSchema,
+  LeagueTransactionListResponseSchema,
+  PublishValuationSubmissionRequestSchema,
+  ReviewValuationSubmissionRequestSchema,
+  SaveValuationDraftRequestSchema,
+  TeamAssetOverviewSchema,
+  TeamFinanceSummarySchema,
+  ValuationWindowSchema,
+  ValuationWorkspaceSchema
+} from './index.js';
+
+describe('league economy contracts', () => {
+  const ids = {
+    admin: '11111111-1111-4111-8111-111111111111',
+    league: '22222222-2222-4222-8222-222222222222',
+    season: '33333333-3333-4333-8333-333333333333',
+    team: '44444444-4444-4444-8444-444444444444',
+    player: '55555555-5555-4555-8555-555555555555',
+    window: '66666666-6666-4666-8666-666666666666',
+    rule: '77777777-7777-4777-8777-777777777777',
+    snapshot: '88888888-8888-4888-8888-888888888888',
+    submission: '99999999-9999-4999-8999-999999999999'
+  };
+  const startsAt = '2026-10-01T00:00:00.000Z';
+  const endsAt = '2026-10-07T00:00:00.000Z';
+
+  it('accepts integer basis-point limits and rejects invalid valuation window rules', () => {
+    const window = ValuationWindowSchema.parse({
+      id: ids.window,
+      seasonId: ids.season,
+      name: '季前身价申报',
+      startsAt,
+      endsAt,
+      closedAt: null,
+      state: 'OPEN',
+      currentRule: {
+        id: ids.rule,
+        windowId: ids.window,
+        version: 2,
+        minimumValueMinor: 100,
+        maximumValueMinor: 10_000,
+        maximumIncreaseBps: 2500,
+        maximumDecreaseBps: 1500,
+        createdByAdminId: ids.admin,
+        createdAt: startsAt
+      },
+      createdByAdminId: ids.admin,
+      version: 3,
+      createdAt: startsAt,
+      updatedAt: startsAt
+    });
+    assert.equal(window.currentRule.maximumIncreaseBps, 2500);
+    assert.throws(() => ValuationWindowSchema.parse({
+      ...window,
+      currentRule: { ...window.currentRule, maximumIncreaseBps: 10_001 }
+    }));
+    assert.throws(() => ValuationWindowSchema.parse({
+      ...window,
+      currentRule: { ...window.currentRule, minimumValueMinor: 10_001 }
+    }));
+    assert.throws(() => ValuationWindowSchema.parse({
+      ...window,
+      currentRule: { ...window.currentRule, minimumValueMinor: 100.5 }
+    }));
+  });
+
+  it('parses a complete owner workspace and write requests while rejecting unknown states', () => {
+    const workspace = ValuationWorkspaceSchema.parse({
+      window: {
+        id: ids.window,
+        name: '季前身价申报',
+        state: 'OPEN',
+        startsAt,
+        endsAt,
+        rule: {
+          id: ids.rule,
+          version: 1,
+          minimumValueMinor: 100,
+          maximumValueMinor: 10_000,
+          maximumIncreaseBps: 2000,
+          maximumDecreaseBps: 2000
+        }
+      },
+      team: { id: ids.team, name: '海港竞技' },
+      submission: null,
+      players: [{
+        snapshotId: ids.snapshot,
+        playerId: ids.player,
+        playerName: '测试球员',
+        cardName: '基础卡',
+        cardImageUrl: null,
+        rosterStatus: 'ACTIVE',
+        baseValueMinor: null,
+        currentValueMinor: null,
+        minimumAllowedMinor: 100,
+        maximumAllowedMinor: 10_000,
+        draftValueMinor: null,
+        exceedsRange: false
+      }]
+    });
+    assert.equal(workspace.players.length, 1);
+    assert.throws(() => ValuationWorkspaceSchema.parse({
+      ...workspace,
+      window: { ...workspace.window, state: 'PAUSED' }
+    }));
+
+    const draft = SaveValuationDraftRequestSchema.parse({
+      windowId: ids.window,
+      expectedVersion: 1,
+      items: [{ snapshotId: ids.snapshot, proposedValueMinor: 1200 }]
+    });
+    assert.equal(draft.items[0]?.proposedValueMinor, 1200);
+    assert.throws(() => SaveValuationDraftRequestSchema.parse({
+      ...draft,
+      items: [{ snapshotId: ids.snapshot, proposedValueMinor: 1.2 }]
+    }));
+    assert.equal(PublishValuationSubmissionRequestSchema.parse({
+      windowId: ids.window,
+      expectedVersion: 1,
+      idempotencyKey: 'publish-team-1'
+    }).expectedVersion, 1);
+    assert.equal(ReviewValuationSubmissionRequestSchema.parse({
+      expectedVersion: 1,
+      idempotencyKey: 'review-team-1',
+      reason: '核对完成，整批通过'
+    }).reason, '核对完成，整批通过');
+    assert.throws(() => ReviewValuationSubmissionRequestSchema.parse({
+      expectedVersion: 1,
+      idempotencyKey: 'review-team-1',
+      reason: ' '
+    }));
+  });
+
+  it('marks incomplete assets and supports transaction and legacy finance views', () => {
+    const assets = TeamAssetOverviewSchema.parse({
+      leagueId: ids.league,
+      teamId: ids.team,
+      teamName: '海港竞技',
+      teamNumber: 7,
+      divisionName: '冠军 A 组',
+      teamLogoUrl: null,
+      ownerDisplayName: '小宣',
+      ownerPublicUserNo: '100069',
+      ownerAvatarUrl: null,
+      shellValueMinor: 5000,
+      knownPlayerValueMinor: 8000,
+      totalKnownValueMinor: 13_000,
+      valuationCompleteness: 'INCOMPLETE',
+      missingValuationCount: 1,
+      activePlayerCount: 3,
+      activeSalaryMinor: 1200,
+      players: []
+    });
+    assert.equal(assets.valuationCompleteness, 'INCOMPLETE');
+    assert.equal(assets.divisionName, '冠军 A 组');
+    assert.throws(() => TeamAssetOverviewSchema.parse({ ...assets, valuationCompleteness: 'PARTIAL' }));
+
+    const transactions = LeagueTransactionListResponseSchema.parse({ items: [], nextCursor: null });
+    assert.equal(transactions.items.length, 0);
+
+    const finance = TeamFinanceSummarySchema.parse({
+      leagueId: ids.league,
+      teamId: ids.team,
+      seasonId: null,
+      creditTotalMinor: 500,
+      debitTotalMinor: 200,
+      balanceMinor: 300,
+      uncategorizedEntryCount: 2,
+      entries: []
+    });
+    assert.equal(finance.seasonId, null);
+    assert.equal(CreateManualFinanceEntryRequestSchema.parse({
+      leagueTeamId: ids.team,
+      seasonId: null,
+      direction: 'DEBIT',
+      type: 'MANUAL_ADJUSTMENT',
+      amountMinor: 100,
+      note: '赛季外调整',
+      reason: '管理员纠正历史余额',
+      idempotencyKey: 'finance-adjustment-1'
+    }).seasonId, null);
+  });
+
+  it('requires Chinese-ready audit display context', () => {
+    const audit = AuditLogSchema.parse({
+      id: ids.submission,
+      actorAdminId: ids.admin,
+      actorDisplayName: '小宣',
+      leagueId: ids.league,
+      leagueName: 'CELL 传奇联赛',
+      action: 'VALUATION_SUBMISSION_APPROVE',
+      resourceType: 'ValuationSubmission',
+      resourceId: ids.submission,
+      subjectDisplayName: '海港竞技季前身价申报',
+      reason: '核对完成',
+      metadata: {},
+      createdAt: startsAt
+    });
+    assert.equal(audit.actorDisplayName, '小宣');
+    assert.equal(audit.leagueName, 'CELL 传奇联赛');
+    assert.equal(audit.subjectDisplayName, '海港竞技季前身价申报');
+  });
+});
 
 describe('shared API contracts', () => {
   it('exposes the current user public number for administrator binding', () => {
@@ -319,6 +557,31 @@ describe('shared API contracts', () => {
     assert.throws(() => PlayerSearchQuerySchema.parse({ limit: 101 }));
   });
 
+  it('validates player favorite requests and bounded list queries', () => {
+    const playerId = '11111111-1111-4111-8111-111111111111';
+    assert.equal(CreatePlayerFavoriteRequestSchema.parse({ playerId }).playerId, playerId);
+    assert.throws(() => CreatePlayerFavoriteRequestSchema.parse({ playerId: 'player-1' }));
+
+    const query = PlayerFavoriteListQuerySchema.parse({ keyword: '  梅西  ' });
+    assert.equal(query.keyword, '梅西');
+    assert.equal(query.limit, 20);
+    assert.equal(PlayerFavoriteListQuerySchema.parse({ limit: 100 }).limit, 100);
+    assert.throws(() => PlayerFavoriteListQuerySchema.parse({ limit: 101 }));
+  });
+
+  it('rejects oversized favorite status queries', () => {
+    const first = '11111111-1111-4111-8111-111111111111';
+    const second = '22222222-2222-4222-8222-222222222222';
+    assert.deepEqual(
+      PlayerFavoriteStatusQuerySchema.parse({ playerIds: `${first},${first},${second}` }).playerIds,
+      [first, second]
+    );
+    const tooMany = Array.from({ length: 101 }, (_, index) => (
+      `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+    )).join(',');
+    assert.throws(() => PlayerFavoriteStatusQuerySchema.parse({ playerIds: tooMany }));
+  });
+
   it('rejects an import record without either player name', () => {
     assert.throws(() => NormalizedPlayerCardRecordSchema.parse({
       externalId: 'card-1',
@@ -553,6 +816,49 @@ describe('shared API contracts', () => {
 });
 
 describe('league team administration contracts', () => {
+  it('validates combined administrator player candidate filters', () => {
+    const packId = '11111111-1111-4111-8111-111111111111';
+    assert.deepEqual(RosterPlayerCandidateQuerySchema.parse({
+      keyword: '  梅西  ', position: 'AMF', cardType: 'EPIC', cardPackId: packId
+    }), { keyword: '梅西', position: 'AMF', cardType: 'EPIC', cardPackId: packId });
+    assert.throws(() => RosterPlayerCandidateQuerySchema.parse({ keyword: ' ' }));
+    assert.throws(() => RosterPlayerCandidateQuerySchema.parse({ keyword: '梅西', position: 'ST' }));
+  });
+
+  it('accepts non-active asset lifecycle states and league economy ledger types', () => {
+    assert.equal(RosterEntryStatusSchema.parse('DISAPPEARED'), 'DISAPPEARED');
+    assert.equal(RosterEntryStatusSchema.parse('RETIRED'), 'RETIRED');
+    assert.equal(FinanceLedgerTypeSchema.parse('TRANSACTION_FEE'), 'TRANSACTION_FEE');
+    assert.equal(FinanceLedgerTypeSchema.parse('LUXURY_TAX'), 'LUXURY_TAX');
+    assert.equal(FinanceLedgerTypeSchema.parse('OFFSEASON_FEE'), 'OFFSEASON_FEE');
+    assert.equal(FinanceLedgerTypeSchema.parse('UNFINISHED_MATCH_PENALTY'), 'UNFINISHED_MATCH_PENALTY');
+    assert.equal(FinanceLedgerTypeSchema.parse('AUCTION'), 'AUCTION');
+    assert.equal(FinanceLedgerTypeSchema.parse('ROOKIE_SELECTION'), 'ROOKIE_SELECTION');
+    assert.equal(FinanceLedgerTypeSchema.parse('INSTALLMENT_PAYMENT'), 'INSTALLMENT_PAYMENT');
+  });
+
+  it('validates team shell value and roster lifecycle maintenance requests', () => {
+    assert.equal(UpdateLeagueTeamRequestSchema.parse({
+      shellValueMinor: 12_000,
+      expectedVersion: 1
+    }).shellValueMinor, 12_000);
+    assert.equal(UpdateRosterLifecycleRequestSchema.parse({
+      seasonId: '11111111-1111-4111-8111-111111111111',
+      ownershipId: '22222222-2222-4222-8222-222222222222',
+      status: 'DISAPPEARED',
+      reason: '球员从游戏数据库中消失',
+      expectedVersion: 1,
+      idempotencyKey: 'roster-lifecycle-1'
+    }).status, 'DISAPPEARED');
+    assert.throws(() => UpdateRosterLifecycleRequestSchema.parse({
+      seasonId: '11111111-1111-4111-8111-111111111111',
+      ownershipId: '22222222-2222-4222-8222-222222222222',
+      status: 'RELEASED',
+      reason: '不允许',
+      expectedVersion: 1,
+      idempotencyKey: 'roster-lifecycle-2'
+    }));
+  });
   const ids = {
     admin: '11111111-1111-4111-8111-111111111111',
     league: '22222222-2222-4222-8222-222222222222',
@@ -735,6 +1041,7 @@ describe('league team administration contracts', () => {
       leagueId: ids.league,
       ownerUserId: ids.user,
       ownerPublicUserNo: '100069',
+      ownerDisplayName: '小宣',
       teamNumber: 0,
       name: '巴西红牛',
       shortName: '红牛',
@@ -744,11 +1051,12 @@ describe('league team administration contracts', () => {
       activePlayerCount: 1,
       salaryTotalMinor: 600,
       salaryCapMinor: 10_000,
+      shellValueMinor: 20_000,
       version: 1,
       createdAt,
       updatedAt: createdAt
     };
-    assert.equal(LeagueTeamSummarySchema.parse(team).teamNumber, 0);
+    assert.equal(LeagueTeamSummarySchema.parse(team).ownerDisplayName, '小宣');
     assert.equal(LeagueTeamDetailSchema.parse({
       ...team,
       ownerDisplayName: '小宣',
@@ -836,5 +1144,431 @@ describe('league team administration contracts', () => {
       createdAt
     });
     assert.equal(ledger.direction, 'DEBIT');
+  });
+});
+
+describe('tiered league contracts', () => {
+  const ids = {
+    league: '11111111-1111-4111-8111-111111111111',
+    season: '22222222-2222-4222-8222-222222222222',
+    competition: '33333333-3333-4333-8333-333333333333',
+    stage: '44444444-4444-4444-8444-444444444444',
+    proposal: '55555555-5555-4555-8555-555555555555',
+    row: '66666666-6666-4666-8666-666666666666',
+    entry: '77777777-7777-4777-8777-777777777777',
+    participant: '88888888-8888-4888-8888-888888888888'
+  };
+  const createdAt = '2026-10-03T00:00:00.000Z';
+
+  it('parses tiered competition types, stages, proposals, and grouped standings', () => {
+    assert.equal(CompetitionTypeSchema.parse('DIVISION_LEAGUE'), 'DIVISION_LEAGUE');
+    assert.equal(CompetitionStageCodeSchema.parse('CHAMPION_A'), 'CHAMPION_A');
+
+    const stage = CompetitionStageSummarySchema.parse({
+      id: ids.stage,
+      competitionId: ids.competition,
+      stageCode: 'CHAMPION_A',
+      displayName: '冠军 A 组',
+      sequence: 1,
+      capacity: 18,
+      format: 'ROUND_ROBIN',
+      status: 'DRAFT',
+      participantCount: 1,
+      version: 1
+    });
+    const row = SeasonAllocationProposalRowSchema.parse({
+      id: ids.row,
+      proposalId: ids.proposal,
+      seasonEntryId: ids.entry,
+      teamName: '上海海港',
+      suggestedStageCode: stage.stageCode,
+      source: 'FIRST_SEASON',
+      previousRank: null,
+      pointsPerMatch: null,
+      goalDifferencePerMatch: null,
+      goalsForPerMatch: null,
+      tiePending: false,
+      reason: '首赛季均分'
+    });
+    assert.equal(SeasonAllocationProposalSchema.parse({
+      id: ids.proposal,
+      seasonId: ids.season,
+      version: 1,
+      status: 'DRAFT',
+      algorithmVersion: 'tiered-v1',
+      randomSeed: 20261003,
+      rows: [row],
+      createdAt
+    }).rows[0]?.suggestedStageCode, 'CHAMPION_A');
+    assert.equal(SeasonAllocationDecisionSchema.parse({
+      id: ids.row,
+      proposalId: ids.proposal,
+      seasonEntryId: ids.entry,
+      finalStageCode: 'CHAMPION_A',
+      overridden: false,
+      reason: null,
+      createdAt
+    }).overridden, false);
+    assert.equal(DivisionStandingsResponseSchema.parse({
+      seasonId: ids.season,
+      competitionId: ids.competition,
+      myStageId: ids.stage,
+      groups: [{
+        stage: { ...stage, status: 'PUBLISHED' },
+        standings: {
+          competitionId: ids.competition,
+          stageId: ids.stage,
+          version: 1,
+          ruleVersion: 1,
+          triggeringResultVersionId: null,
+          generatedAt: createdAt,
+          rows: [{
+            participantId: ids.participant,
+            displayName: '上海海港',
+            played: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            goalsFor: 0,
+            goalsAgainst: 0,
+            goalDifference: 0,
+            basePoints: 0,
+            adjustmentPoints: 0,
+            totalPoints: 0,
+            rank: 1,
+            tiePending: false,
+            tieBreakValues: {}
+          }]
+        }
+      }]
+    }).groups[0]?.standings.rows[0]?.rank, 1);
+  });
+
+  it('parses an enrolled league workspace summary', () => {
+    const workspace = LeagueWorkspaceResponseSchema.parse({
+      leagueId: '11111111-1111-4111-8111-111111111111', seasonId: '22222222-2222-4222-8222-222222222222',
+      team: { leagueTeamId: '33333333-3333-4333-8333-333333333333', name: '上海海港', shortName: '海港', logoUrl: null },
+      division: { stageId: '44444444-4444-4444-8444-444444444444', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
+      currentRank: { rank: 2, points: 13, played: 6, tiePending: false },
+      nextMatch: { id: '55555555-5555-4555-8555-555555555555', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
+      capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true }
+    });
+
+    assert.equal(workspace.currentRank?.rank, 2);
+    assert.equal(workspace.nextMatch?.opponentName, '申花');
+  });
+
+  it('rejects invalid stage codes, seeds, duplicate overrides, and empty reasons', () => {
+    assert.throws(() => CompetitionStageCodeSchema.parse('UNKNOWN_STAGE'));
+    assert.throws(() => GenerateSeasonAllocationRequestSchema.parse({ expectedSeasonVersion: 1, randomSeed: 0 }));
+    const override = {
+      seasonEntryId: ids.entry,
+      targetStageCode: 'CHAMPION_B',
+      reason: '平衡组别人数'
+    };
+    assert.throws(() => ConfirmSeasonAllocationRequestSchema.parse({
+      proposalId: ids.proposal,
+      expectedSeasonVersion: 2,
+      overrides: [override, override]
+    }));
+    assert.throws(() => ConfirmSeasonAllocationRequestSchema.parse({
+      proposalId: ids.proposal,
+      expectedSeasonVersion: 2,
+      overrides: [{ ...override, reason: ' ' }]
+    }));
+  });
+
+  it('requires optimistic versions for stage schedule generation and publication', () => {
+    assert.deepEqual(GenerateStageScheduleRequestSchema.parse({ expectedStageVersion: 2 }), {
+      expectedStageVersion: 2
+    });
+    assert.deepEqual(PublishStageScheduleRequestSchema.parse({
+      expectedStageVersion: 2,
+      expectedSeasonVersion: 4
+    }), { expectedStageVersion: 2, expectedSeasonVersion: 4 });
+    assert.throws(() => GenerateStageScheduleRequestSchema.parse({ expectedStageVersion: 0 }));
+  });
+});
+
+describe('cup center contracts', () => {
+  const seasonId = '11111111-1111-4111-8111-111111111111';
+  const entryId = '22222222-2222-4222-8222-222222222222';
+  const competitionId = '33333333-3333-4333-8333-333333333333';
+  const userId = '44444444-4444-4444-8444-444444444444';
+  const registrationId = '55555555-5555-4555-8555-555555555555';
+  const registrationOpensAt = '2026-10-03T12:00:00.000Z';
+  const registrationClosesAt = '2026-10-10T12:00:00.000Z';
+  const startsAt = '2026-10-11T12:00:00.000Z';
+  const endsAt = '2026-11-30T12:00:00.000Z';
+
+  it('accepts a group-knockout cup with explicit group rules', () => {
+    const parsed = CreateSeasonCupRequestSchema.parse({
+      seasonId,
+      name: 'S3 足总杯',
+      description: '当前赛季杯赛',
+      competitionType: 'GROUP_KNOCKOUT_CUP',
+      format: 'GROUP_KNOCKOUT',
+      platform: 'MOBILE',
+      serverRegion: '国际服',
+      registrationOpensAt,
+      registrationClosesAt,
+      startsAt,
+      endsAt,
+      participantLimit: 32,
+      targetGroupSize: 4,
+      qualifiersPerGroup: 2
+    });
+
+    assert.equal(parsed.targetGroupSize, 4);
+    assert.equal(parsed.qualifiersPerGroup, 2);
+  });
+
+  it('accepts pure knockout cups and rejects mismatched formats or invalid qualification rules', () => {
+    const knockout = CreateSeasonCupRequestSchema.parse({
+      seasonId,
+      name: '周末趣味杯',
+      description: '',
+      competitionType: 'KNOCKOUT_CUP',
+      format: 'SINGLE_ELIMINATION',
+      platform: 'MOBILE',
+      serverRegion: '国际服',
+      registrationOpensAt,
+      registrationClosesAt,
+      startsAt,
+      endsAt,
+      participantLimit: 16,
+      targetGroupSize: null,
+      qualifiersPerGroup: null
+    });
+    assert.equal(knockout.format, 'SINGLE_ELIMINATION');
+    assert.throws(() => CreateSeasonCupRequestSchema.parse({
+      ...knockout,
+      competitionType: 'GROUP_KNOCKOUT_CUP'
+    }));
+    assert.throws(() => CreateSeasonCupRequestSchema.parse({
+      ...knockout,
+      competitionType: 'GROUP_KNOCKOUT_CUP',
+      format: 'GROUP_KNOCKOUT',
+      targetGroupSize: 4,
+      qualifiersPerGroup: 4
+    }));
+  });
+
+  it('binds a cup registration to a formal season entry without requiring a game account', () => {
+    assert.deepEqual(RegisterSeasonCupRequestSchema.parse({
+      seasonEntryId: entryId,
+      acceptedRuleVersion: 1
+    }), { seasonEntryId: entryId, acceptedRuleVersion: 1 });
+
+    const response = CupRegistrationResponseSchema.parse({
+      id: registrationId,
+      competitionId,
+      seasonEntryId: entryId,
+      applicantId: userId,
+      teamName: '上海海港',
+      status: 'APPROVED',
+      withdrawnAt: null,
+      version: 1,
+      createdAt: registrationOpensAt,
+      updatedAt: registrationOpensAt
+    });
+    assert.equal(response.teamName, '上海海港');
+    assert.deepEqual(WithdrawSeasonCupRequestSchema.parse({ expectedVersion: 2 }), { expectedVersion: 2 });
+  });
+
+  it('includes the season and team registration in a cup entry on my competitions', () => {
+    const item = MyCompetitionResponseSchema.parse({
+      competition: {
+        id: competitionId,
+        seasonId: entryId,
+        competitionType: 'KNOCKOUT_CUP',
+        name: 'S3 足总杯',
+        description: '赛季球队杯赛',
+        platform: 'MOBILE',
+        serverRegion: '国际服',
+        participantType: 'TEAM',
+        format: 'SINGLE_ELIMINATION',
+        status: 'REGISTRATION_OPEN',
+        registrationOpensAt,
+        registrationClosesAt,
+        startsAt,
+        endsAt,
+        participantLimit: 16,
+        participantCount: 1,
+        version: 1,
+        activeRuleVersion: 1,
+        createdAt: registrationOpensAt,
+        updatedAt: registrationOpensAt
+      },
+      registration: {
+        id: registrationId,
+        competitionId,
+        seasonEntryId: entryId,
+        applicantId: userId,
+        teamName: '上海海港',
+        status: 'APPROVED',
+        withdrawnAt: null,
+        version: 1,
+        createdAt: registrationOpensAt,
+        updatedAt: registrationOpensAt
+      },
+      nextMatch: null
+    });
+    assert.equal(item.competition.seasonId, entryId);
+    assert.equal('teamName' in item.registration && item.registration.teamName, '上海海港');
+  });
+
+  it('validates versioned group proposal generation, overrides, and response rows', () => {
+    assert.deepEqual(GenerateCupGroupProposalRequestSchema.parse({
+      expectedCompetitionVersion: 2,
+      randomSeed: 20261003
+    }), { expectedCompetitionVersion: 2, randomSeed: 20261003 });
+    assert.deepEqual(ConfirmCupGroupProposalRequestSchema.parse({
+      proposalId: registrationId,
+      expectedCompetitionVersion: 2,
+      overrides: [{
+        participantId: entryId,
+        targetGroupCode: 'GROUP_B',
+        reason: '平衡小组人数'
+      }]
+    }).overrides[0]?.targetGroupCode, 'GROUP_B');
+    assert.throws(() => ConfirmCupGroupProposalRequestSchema.parse({
+      proposalId: registrationId,
+      expectedCompetitionVersion: 2,
+      overrides: [
+        { participantId: entryId, targetGroupCode: 'GROUP_A', reason: '第一次调整' },
+        { participantId: entryId, targetGroupCode: 'GROUP_B', reason: '重复调整' }
+      ]
+    }));
+    assert.equal(CupGroupProposalSchema.parse({
+      id: registrationId,
+      competitionId,
+      version: 1,
+      status: 'DRAFT',
+      algorithmVersion: 'cup-groups-v1',
+      randomSeed: 20261003,
+      rows: [{
+        id: userId,
+        participantId: entryId,
+        teamName: '上海海港',
+        suggestedGroupCode: 'GROUP_A',
+        finalGroupCode: null,
+        overridden: false,
+        reason: null
+      }],
+      createdAt: registrationOpensAt
+    }).rows[0]?.suggestedGroupCode, 'GROUP_A');
+  });
+
+  it('validates a versioned knockout bracket with explicit byes and future-round sources', () => {
+    assert.equal(CompetitionStageCodeSchema.parse('ROUND_OF_128'), 'ROUND_OF_128');
+    assert.deepEqual(GenerateCupBracketProposalRequestSchema.parse({
+      expectedCompetitionVersion: 3,
+      randomSeed: 20261003
+    }), { expectedCompetitionVersion: 3, randomSeed: 20261003 });
+    assert.deepEqual(ConfirmCupBracketProposalRequestSchema.parse({
+      proposalId: registrationId,
+      expectedCompetitionVersion: 3
+    }), { proposalId: registrationId, expectedCompetitionVersion: 3 });
+
+    const proposal = CupBracketProposalSchema.parse({
+      id: registrationId,
+      competitionId,
+      version: 1,
+      status: 'DRAFT',
+      algorithmVersion: 'cup-bracket-v1',
+      randomSeed: 20261003,
+      bracketSize: 4,
+      rounds: [{
+        roundNumber: 1,
+        stageCode: 'SEMI_FINAL',
+        displayName: '半决赛',
+        pairings: [{
+          id: userId,
+          pairingNumber: 1,
+          homeParticipantId: entryId,
+          awayParticipantId: null,
+          homeSourcePairingId: null,
+          awaySourcePairingId: null,
+          byeParticipantId: entryId,
+          matchId: null,
+          winnerParticipantId: null
+        }]
+      }, {
+        roundNumber: 2,
+        stageCode: 'FINAL',
+        displayName: '决赛',
+        pairings: [{
+          id: competitionId,
+          pairingNumber: 1,
+          homeParticipantId: null,
+          awayParticipantId: null,
+          homeSourcePairingId: userId,
+          awaySourcePairingId: registrationId,
+          byeParticipantId: null,
+          matchId: null,
+          winnerParticipantId: null
+        }]
+      }],
+      createdAt: registrationOpensAt
+    });
+    assert.equal(proposal.rounds[0]?.pairings[0]?.byeParticipantId, entryId);
+    assert.equal(proposal.rounds[1]?.pairings[0]?.homeSourcePairingId, userId);
+  });
+
+  it('exposes a Chinese-ready bracket read model with current round and official score', () => {
+    const view = CupBracketViewSchema.parse({
+      competitionId,
+      proposalId: registrationId,
+      proposalVersion: 2,
+      proposalStatus: 'CONFIRMED',
+      bracketSize: 4,
+      currentRoundNumber: 1,
+      rounds: [{
+        stageId: userId,
+        roundNumber: 1,
+        stageCode: 'SEMI_FINAL',
+        displayName: '半决赛',
+        status: 'PUBLISHED',
+        pairings: [{
+          id: entryId,
+          pairingNumber: 1,
+          homeParticipant: { id: userId, displayName: '上海海港' },
+          awayParticipant: { id: registrationId, displayName: '北京国安' },
+          winnerParticipant: { id: userId, displayName: '上海海港' },
+          isBye: false,
+          match: {
+            id: competitionId,
+            status: 'CONFIRMED',
+            homeScore: 2,
+            awayScore: 1
+          }
+        }]
+      }]
+    });
+    assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.displayName, '上海海港');
+    assert.equal(view.proposalStatus, 'CONFIRMED');
+  });
+
+  it('exposes a season cup card with format and group configuration', () => {
+    const cup = SeasonCupSummarySchema.parse({
+      id: competitionId,
+      seasonId: entryId,
+      name: 'S3 足总杯',
+      description: '赛季杯赛',
+      competitionType: 'GROUP_KNOCKOUT_CUP',
+      format: 'GROUP_KNOCKOUT',
+      status: 'REGISTRATION_OPEN',
+      registrationOpensAt,
+      registrationClosesAt,
+      startsAt,
+      endsAt,
+      participantLimit: 32,
+      participantCount: 12,
+      targetGroupSize: 4,
+      qualifiersPerGroup: 2,
+      version: 1
+    });
+    assert.equal(cup.participantCount, 12);
   });
 });

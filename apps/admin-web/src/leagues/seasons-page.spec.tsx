@@ -42,7 +42,7 @@ it('marks the current season and switches it with the league version', async () 
     <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
   </Routes></MemoryRouter>);
 
-  expect(await screen.findByText('当前赛季')).toBeInTheDocument();
+  expect((await screen.findAllByText('当前赛季')).length).toBeGreaterThan(0);
   const s2Row = screen.getByText('S2').closest('tr') as HTMLElement;
   await userEvent.click(within(s2Row).getByRole('button', { name: '设为当前赛季' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
@@ -65,4 +65,34 @@ it('does not preselect every existing team when enrolling teams', async () => {
   const checkbox = await screen.findByRole('checkbox', { name: /上海申花/ });
   expect(checkbox).not.toBeChecked();
   expect(screen.getByRole('button', { name: '加入当前赛季' })).toBeDisabled();
+});
+
+it('makes the current season and its entry action prominent', async () => {
+  const request = vi.fn(async (path: string) => {
+    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
+    if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
+    if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/seasons`]}><Routes>
+    <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  expect(await screen.findByRole('heading', { name: 'S1' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '进入当前赛季' })).toHaveAttribute('href', '#current-season-teams');
+  expect(screen.getByRole('list', { name: '赛季进程' })).toBeInTheDocument();
+});
+
+it('offers a clear next action when no current season exists', async () => {
+  const request = vi.fn(async (path: string) => {
+    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return { ...league, currentSeason: null };
+    if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [], nextCursor: null };
+    if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [], nextCursor: null };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/seasons`]}><Routes>
+    <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  expect(await screen.findByRole('link', { name: '创建首个赛季' })).toHaveAttribute('href', '#season-editor');
 });
