@@ -29,9 +29,25 @@ function query(path: string, values: Record<string, string | number | undefined>
   return `${path}${encoded ? `?${encoded}` : ''}`
 }
 
+export type CompetitionListOptions = {
+  cursor?: string
+  limit?: number
+  seasonId?: string
+  category?: 'CUP'
+}
+
+export function competitionListPath(options: CompetitionListOptions = {}): string {
+  return query('/competitions', {
+    cursor: options.cursor,
+    limit: options.limit ?? 20,
+    seasonId: options.seasonId,
+    category: options.category,
+  })
+}
+
 export const competitionsApi = {
-  list(cursor?: string, limit = 20) {
-    return api.request<CompetitionListResponse>({ path: query('/competitions', { cursor, limit }), skipAuth: true })
+  list(options: CompetitionListOptions = {}) {
+    return api.request<CompetitionListResponse>({ path: competitionListPath(options), skipAuth: true })
   },
   detail(id: string) {
     return api.request<CompetitionDetail>({ path: `/competitions/${encodeURIComponent(id)}`, skipAuth: true })

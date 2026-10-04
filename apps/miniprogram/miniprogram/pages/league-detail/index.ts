@@ -11,12 +11,16 @@ import {
   selectSeason,
   standingsAccess,
   type SeasonRailStep,
+  type WorkspaceModule,
+  workspaceModuleRoute,
+  workspaceModules,
   workspaceSummary,
 } from './detail.viewmodel'
 import { seasonStatusLabel, seasonStatusTone } from '../leagues/leagues.viewmodel'
 
 type LoadOptions = { id?: string }
 type SeasonPickerEvent = { detail: { value: string } }
+type WorkspaceModuleTapEvent = { currentTarget: { dataset: { key?: string } } }
 
 Page({
   data: {
@@ -43,6 +47,7 @@ Page({
     standingsHint: '仅当前赛季正式参赛球队可查看',
     workspace: null as LeagueWorkspaceResponse | null,
     workspaceView: null as ReturnType<typeof workspaceSummary> | null,
+    workspaceModules: [] as WorkspaceModule[],
   },
 
   onLoad(options: LoadOptions) {
@@ -95,20 +100,20 @@ Page({
   async loadEntry() {
     const season = this.data.selectedSeason
     if (!season) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), ...this.standingsData(null), workspace: null, workspaceView: null })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), ...this.standingsData(null), workspace: null, workspaceView: null, workspaceModules: [] })
       return
     }
     if (!this.data.loggedIn) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), ...this.standingsData(null), workspace: null, workspaceView: null })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), ...this.standingsData(null), workspace: null, workspaceView: null, workspaceModules: [] })
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
     this.setData({ entry, entryStatus: entryStatusCopy(true, Boolean(this.data.profile), entry), ...this.standingsData(entry) })
     if (entry?.status === 'APPROVED') {
       const workspace = await leaguesApi.workspace(this.data.leagueId, season.id)
-      this.setData({ workspace, workspaceView: workspaceSummary(workspace) })
+      this.setData({ workspace, workspaceView: workspaceSummary(workspace), workspaceModules: workspaceModules(workspace) })
     } else {
-      this.setData({ workspace: null, workspaceView: null })
+      this.setData({ workspace: null, workspaceView: null, workspaceModules: [] })
     }
   },
 
@@ -125,14 +130,19 @@ Page({
     })
   },
 
-  openAssets() { this.openTeamModule('/pages/team-assets/index') },
-  openFinance() { this.openTeamModule('/pages/team-finance/index', true) },
-  openValuations() { this.openTeamModule('/pages/valuation-manage/index') },
-  openTeamModule(path: string, includeSeason = false) {
+  onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return
-    const season = includeSeason ? `&seasonId=${encodeURIComponent(workspace.seasonId)}` : ''
-    wx.navigateTo({ url: `${path}?teamId=${encodeURIComponent(workspace.team.leagueTeamId)}${season}` })
+    const route = workspaceModuleRoute(
+      event.currentTarget.dataset.key ?? '',
+      workspace,
+      this.data.league?.name ?? '',
+    )
+    if (!route) {
+      wx.showToast({ title: '当前功能暂未开放', icon: 'none' })
+      return
+    }
+    wx.navigateTo({ url: route })
   },
 
   onSeasonChange(event: SeasonPickerEvent) {
@@ -149,6 +159,7 @@ Page({
       ...this.standingsData(null),
       workspace: null,
       workspaceView: null,
+      workspaceModules: [],
       seasonRail: seasonRailSteps(selectedSeason.status),
       seasonStatusLabel: seasonStatusLabel(selectedSeason.status),
       seasonStatusTone: seasonStatusTone(selectedSeason.status),

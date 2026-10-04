@@ -1,14 +1,14 @@
-import { Button, ConfigProvider, Layout, Menu, Tag } from 'antd';
+import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AdminSessionProvider, useAdminSession } from './auth/admin-session';
-import { LoginPage } from './auth/login-page';
 import { ProtectedRoute } from './auth/protected-route';
 import { adminApi } from './lib/api';
 import { premiumAdminTheme } from './design-system/theme';
-import { AdminIcon } from './design-system/icons';
 
+const LoginPage = lazy(() => import('./auth/login-page').then((module) => ({ default: module.LoginPage })));
+const ApplicationShell = lazy(() => import('./application-shell').then((module) => ({ default: module.ApplicationShell })));
 const AdminAccountsPage = lazy(() => import('./platform/admin-accounts-page').then((module) => ({ default: module.AdminAccountsPage })));
 const AuditPage = lazy(() => import('./platform/audit-page').then((module) => ({ default: module.AuditPage })));
 const LeaguesPage = lazy(() => import('./platform/leagues-page').then((module) => ({ default: module.LeaguesPage })));
@@ -24,49 +24,6 @@ const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => (
 const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
 const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
 const ValuationReviewsPage = lazy(() => import('./valuations/valuation-reviews-page').then((module) => ({ default: module.ValuationReviewsPage })));
-
-const { Header, Sider, Content } = Layout;
-
-export function ApplicationShell() {
-  const session = useAdminSession();
-  const location = useLocation();
-  const admin = session.identity?.admin;
-  const platformItems = session.identity?.platformAdmin ? [
-    { key: '/platform/leagues', icon: <AdminIcon name="league" />, label: <Link aria-current={location.pathname === '/platform/leagues' ? 'page' : undefined} to="/platform/leagues">联赛管理</Link> },
-    { key: '/platform/admins', icon: <AdminIcon name="administrators" />, label: <Link aria-current={location.pathname === '/platform/admins' ? 'page' : undefined} to="/platform/admins">管理员账号</Link> },
-    { key: '/platform/audit', icon: <AdminIcon name="audit" />, label: <Link aria-current={location.pathname === '/platform/audit' ? 'page' : undefined} to="/platform/audit">审计日志</Link> }
-  ] : [];
-  const leagueItems = (session.identity?.leagueGrants ?? []).map((grant) => ({
-    key: `/leagues/${grant.leagueId}`,
-    icon: <AdminIcon name="league" />,
-    label: <Link aria-current={location.pathname.startsWith(`/leagues/${grant.leagueId}`) ? 'page' : undefined} to={`/leagues/${grant.leagueId}/teams`}>{grant.leagueName}</Link>
-  }));
-  const selectedKey = leagueItems.find((item) => location.pathname.startsWith(item.key))?.key ?? location.pathname;
-
-  return (
-    <Layout className="admin-shell">
-      <Sider width={272} className="admin-sider">
-        <div className="shell-brand"><span>球</span><strong>赛事控制台</strong></div>
-        <nav aria-label="后台主导航"><Menu mode="inline" selectedKeys={[selectedKey]} items={[
-          ...(platformItems.length ? [{ type: 'group' as const, label: '平台管理', children: platformItems }] : []),
-          ...(leagueItems.length ? [{ type: 'group' as const, label: '我的联赛', children: leagueItems }] : [])
-        ]} /></nav>
-        <div className="shell-version">管理系统 · 0.2</div>
-      </Sider>
-      <Layout>
-        <Header className="admin-header">
-          <div><span className="section-kicker">赛事运营</span><strong>管理工作台</strong></div>
-          <div className="admin-identity">
-            <Tag color="success">{session.identity?.platformAdmin ? '平台管理员' : '联赛管理员'}</Tag>
-            <span>{admin?.displayName}</span>
-            <Button type="text" onClick={() => void session.logout()}>退出登录</Button>
-          </div>
-        </Header>
-        <Content className="admin-content"><Outlet /></Content>
-      </Layout>
-    </Layout>
-  );
-}
 
 function DefaultRoute() {
   const { identity } = useAdminSession();
@@ -88,8 +45,8 @@ export function App() {
     <ConfigProvider locale={zhCN} theme={premiumAdminTheme}>
       <AdminSessionProvider>
         <BrowserRouter><Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route element={<ProtectedRoute />}><Route element={<ApplicationShell />}>
+          <Route path="/login" element={deferred(<LoginPage />)} />
+          <Route element={<ProtectedRoute />}><Route element={deferred(<ApplicationShell />)}>
             <Route index element={<DefaultRoute />} />
             <Route element={<PlatformRoute />}>
               <Route path="platform/leagues" element={deferred(<LeaguesPage api={adminApi} />)} />

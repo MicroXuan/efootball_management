@@ -452,6 +452,8 @@ export const ManagerMatchResultRequestSchema = SubmitMatchResultRequestSchema.ex
 
 export const CompetitionListQuerySchema = z.object({
   status: CompetitionStatusSchema.optional(),
+  seasonId: ResourceIdSchema.optional(),
+  category: z.literal('CUP').optional(),
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20)
 });

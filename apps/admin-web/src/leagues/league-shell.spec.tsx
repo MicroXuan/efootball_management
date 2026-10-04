@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminMeResponse } from '@efm/contracts';
 import type { AdminApi } from '../lib/api';
 import { AdminSessionProvider } from '../auth/admin-session';
-import { ApplicationShell } from '../app';
+import { ApplicationShell } from '../application-shell';
 import { LeagueShell } from './league-shell';
 
 const baseAdmin: AdminMeResponse['admin'] = {

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { CompetitionSummary } from '@efm/contracts'
-import { competitionErrorMessage, formatLocalDate, lifecycleLabel, mergeCompetitionPages } from './competitions.viewmodel'
+import {
+  competitionErrorMessage,
+  competitionListContext,
+  formatLocalDate,
+  lifecycleLabel,
+  mergeCompetitionPages,
+} from './competitions.viewmodel'
 
 function competition(id: string): CompetitionSummary {
   return {
@@ -14,6 +20,24 @@ function competition(id: string): CompetitionSummary {
 }
 
 describe('competition list view model', () => {
+  it('builds a league cup context only when a season is present', () => {
+    expect(competitionListContext({ seasonId: 'season-1', leagueName: '传奇联赛' })).toEqual({
+      seasonId: 'season-1',
+      category: 'CUP',
+      kicker: '传奇联赛',
+      title: '杯赛中心',
+      headMark: '小组赛 · 淘汰赛',
+      briefingLabel: '当前赛季',
+      briefingCopy: '仅展示传奇联赛当前赛季的杯赛、报名状态与淘汰赛程。',
+      emptyCode: '暂无杯赛',
+      emptyTitle: '当前赛季尚未发布杯赛',
+      emptyCopy: '管理员发布后，杯赛会出现在这里。',
+    })
+    expect(competitionListContext({ leagueName: '不应生效' })).toMatchObject({
+      seasonId: '', category: undefined, kicker: '赛事中枢', title: '赛事中枢',
+    })
+  })
+
   it('maps lifecycle labels and formats UTC with a supplied local offset', () => {
     expect(lifecycleLabel('REGISTRATION_OPEN')).toBe('报名中')
     expect(lifecycleLabel('IN_PROGRESS')).toBe('进行中')
