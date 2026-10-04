@@ -89,6 +89,7 @@ export class CupBracketQueriesService {
       competitionId: proposal.competitionId,
       proposalId: proposal.id,
       proposalVersion: proposal.version,
+      proposalStatus: proposal.status,
       bracketSize: proposal.bracketSize,
       currentRoundNumber: rounds.find((round) =>
         round.status === 'PUBLISHED'

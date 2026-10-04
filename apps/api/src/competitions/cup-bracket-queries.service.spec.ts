@@ -61,6 +61,7 @@ describe('CupBracketQueriesService', () => {
       where: { competitionId: 'cup-1', status: 'CONFIRMED' }
     }));
     expect(result.currentRoundNumber).toBe(1);
+    expect(result.proposalStatus).toBe('CONFIRMED');
     expect(result.rounds[0]?.pairings[0]).toEqual(expect.objectContaining({
       homeParticipant: { id: 'p1', displayName: '上海海港' },
       match: { id: 'match-1', status: 'CONFIRMED', homeScore: 2, awayScore: 1 }

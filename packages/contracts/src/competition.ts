@@ -396,6 +396,7 @@ export const CupBracketViewSchema = z.object({
   competitionId: ResourceIdSchema,
   proposalId: ResourceIdSchema,
   proposalVersion: z.number().int().positive(),
+  proposalStatus: CupProposalStatusSchema,
   bracketSize: z.number().int().min(2).max(128),
   currentRoundNumber: z.number().int().positive().nullable(),
   rounds: z.array(z.object({

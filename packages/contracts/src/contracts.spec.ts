@@ -1474,6 +1474,7 @@ describe('cup center contracts', () => {
       competitionId,
       proposalId: registrationId,
       proposalVersion: 2,
+      proposalStatus: 'CONFIRMED',
       bracketSize: 4,
       currentRoundNumber: 1,
       rounds: [{
@@ -1499,6 +1500,7 @@ describe('cup center contracts', () => {
       }]
     });
     assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.displayName, '上海海港');
+    assert.equal(view.proposalStatus, 'CONFIRMED');
   });
 
   it('exposes a season cup card with format and group configuration', () => {
