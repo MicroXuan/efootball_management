@@ -265,7 +265,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
 
   const publishGroupSchedule = async (stageId: string) => {
     const stage = groupView?.stages.find(({ id }) => id === stageId);
-    if (!stage || !selectedSeason || submitting) return;
+    if (!stage || !selectedCup || !selectedSeason || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -285,6 +285,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           ? { ...item, version: preview.version, matchCount: preview.matchCount, status: 'PUBLISHED' }
           : item)
       } : current);
+      await loadCups(selectedCup.seasonId, selectedCup.id);
     } catch {
       setError('小组赛程发布失败，请确认预览已生成且版本未变更');
     } finally {

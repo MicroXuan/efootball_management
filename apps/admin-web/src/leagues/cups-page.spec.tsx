@@ -195,6 +195,8 @@ it('restores a draft group proposal and requires a reason for manual reassignmen
 
 it('generates and confirms groups, then generates and publishes each group schedule', async () => {
   const readySeason = { ...season, status: 'READY' as const };
+  let currentCup: Omit<typeof groupedCup, 'status'> & { status: 'REGISTRATION_CLOSED' | 'IN_PROGRESS' } = groupedCup;
+  let bracketReads = 0;
   let view: {
     competitionId: string;
     competitionVersion: number;
@@ -205,13 +207,14 @@ it('generates and confirms groups, then generates and publishes each group sched
   };
   const request = vi.fn(async (path: string, options?: { method?: string; body?: Record<string, unknown> }) => {
     if (path.endsWith('/seasons')) return { items: [readySeason], nextCursor: null };
-    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [groupedCup] };
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [currentCup] };
     if (path.endsWith(`/cups/${cupId}/groups`) && !options?.method) return view;
     if (path.endsWith(`/cups/${cupId}/group-proposals`) && options?.method === 'POST') {
       view = { ...view, proposal: groupProposal };
       return groupProposal;
     }
     if (path.endsWith(`/cups/${cupId}/group-decisions`) && options?.method === 'POST') {
+      currentCup = { ...currentCup, version: currentCup.version + 1 };
       view = {
         competitionId: cupId,
         competitionVersion: groupedCup.version + 1,
@@ -224,7 +227,14 @@ it('generates and confirms groups, then generates and publishes each group sched
       return { id: path.includes(groupStages[0]!.id) ? groupStages[0]!.id : groupStages[1]!.id, competitionId: cupId, status: 'DRAFT', version: 2, roundCount: 1, matchCount: 1, matches: [] };
     }
     if (path.includes('/competition-stages/') && path.endsWith('/schedule/publish')) {
+      currentCup = { ...currentCup, status: 'IN_PROGRESS' as const, version: currentCup.version + 1 };
       return { id: path.includes(groupStages[0]!.id) ? groupStages[0]!.id : groupStages[1]!.id, competitionId: cupId, status: 'PUBLISHED', version: 3, roundCount: 1, matchCount: 1, matches: [] };
+    }
+    if (path.endsWith(`/cups/${cupId}/bracket-proposals`)) return { id: proposalId };
+    if (path.endsWith(`/cups/${cupId}/bracket`)) {
+      bracketReads += 1;
+      if (bracketReads === 1) throw new ApiError({ status: 404, code: 'CUP_BRACKET_NOT_FOUND' });
+      return { ...bracket, proposalStatus: 'DRAFT' as const };
     }
     throw new Error(`unexpected ${path}`);
   });
@@ -255,5 +265,12 @@ it('generates and confirms groups, then generates and publishes each group sched
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[1]!.id}/schedule/publish`,
     expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: readySeason.version + 1 } })
+  ));
+  await userEvent.click(screen.getByRole('button', { name: '查看淘汰签表' }));
+  expect(await screen.findByText('该杯赛尚未生成淘汰签表')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '生成签表建议' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/bracket-proposals`,
+    expect.objectContaining({ body: expect.objectContaining({ expectedCompetitionVersion: currentCup.version }) })
   ));
 });
