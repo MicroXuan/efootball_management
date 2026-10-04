@@ -237,6 +237,50 @@ select { font: inherit; }
 .cup-bracket-empty p, .cup-form-intro { margin: 0; color: var(--admin-text-secondary); line-height: 1.6; }
 .cup-form-intro { margin: -4px 0 22px; padding: 12px 14px; border-radius: 12px; background: #f2f6ec; }
 .cup-time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.cup-group-stage { overflow: hidden; border: 1px solid #cfd8d5; border-radius: 20px; background: #fff; box-shadow: var(--admin-shadow-card); }
+.cup-group-stage__header { padding: 26px 28px; display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; border-bottom: 1px solid #dfe5e2; background: linear-gradient(120deg, #f8faf7 0%, #eef4e7 100%); }
+.cup-group-stage__header h2 { margin: 7px 0 5px; color: var(--admin-text); font-size: 28px; letter-spacing: -.035em; }
+.cup-group-stage__header p { max-width: 680px; margin: 0; color: var(--admin-text-secondary); line-height: 1.65; }
+.cup-stage-rail { min-width: 420px; display: grid; grid-template-columns: repeat(4, 1fr); }
+.cup-stage-rail span { position: relative; padding-top: 18px; color: #85908e; font-size: 12px; font-weight: 800; text-align: center; }
+.cup-stage-rail span::before { position: absolute; top: 3px; left: 0; width: 100%; border-top: 2px solid #cad2cf; content: ""; }
+.cup-stage-rail span::after { position: absolute; top: -1px; left: 50%; width: 10px; height: 10px; border: 2px solid #cad2cf; border-radius: 50%; background: #f4f7f2; content: ""; transform: translateX(-50%); }
+.cup-stage-rail span.is-current, .cup-stage-rail span.is-complete { color: #27322f; }
+.cup-stage-rail span.is-current::before, .cup-stage-rail span.is-complete::before { border-color: #7a9d33; }
+.cup-stage-rail span.is-current::after { border-color: #506f17; background: #b6f13a; box-shadow: 0 0 0 4px rgba(125,157,51,.14); }
+.cup-stage-rail span.is-complete::after { border-color: #506f17; background: #506f17; }
+.cup-stage-rail small { display: block; margin-top: 3px; font-size: 11px; font-weight: 650; white-space: nowrap; }
+.cup-group-empty { padding: 38px 24px 42px; display: flex; align-items: center; flex-direction: column; text-align: center; }
+.cup-group-empty p { max-width: 560px; margin: -6px 0 18px; color: var(--admin-text-secondary); line-height: 1.6; }
+.cup-group-stage__titlebar { padding: 20px 28px 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cup-group-stage__titlebar strong, .cup-group-stage__titlebar span { display: block; }
+.cup-group-stage__titlebar strong { color: var(--admin-text); font-size: 18px; }
+.cup-group-stage__titlebar span { margin-top: 4px; color: var(--admin-text-secondary); font-size: 13px; }
+.cup-group-board { padding: 12px 28px 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+.cup-group-column { overflow: hidden; border: 1px solid #d5ddda; border-radius: 16px; background: #f8faf9; }
+.cup-group-column > header { padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d5ddda; color: #fff; background: #263431; }
+.cup-group-column > header span { font-size: 17px; font-weight: 800; }
+.cup-group-column > header small { color: #d7e0dd; font-weight: 700; }
+.cup-group-team-list { padding: 10px; display: grid; gap: 9px; }
+.cup-group-team { padding: 12px; display: grid; grid-template-columns: minmax(120px, 1fr) 112px; gap: 9px 12px; border: 1px solid #e0e5e3; border-radius: 12px; background: #fff; }
+.cup-group-team.is-adjusted { border-color: #d7b567; background: #fffaf0; }
+.cup-group-team__identity { min-width: 0; }
+.cup-group-team__identity strong, .cup-group-team__identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cup-group-team__identity strong { color: var(--admin-text); font-size: 14px; }
+.cup-group-team__identity span { margin-top: 3px; color: var(--admin-text-weak); font-size: 11px; }
+.cup-group-team > .ant-input { grid-column: 1 / -1; }
+.cup-group-stage__actions { padding: 0 28px 26px; display: flex; justify-content: flex-end; gap: 10px; }
+.cup-group-schedules { padding: 24px 28px 28px; border-top: 1px solid #dfe5e2; background: #f7f9f8; }
+.cup-group-schedules__heading { margin-bottom: 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.cup-group-schedules__heading h3 { margin: 5px 0 0; color: var(--admin-text); font-size: 22px; letter-spacing: -.025em; }
+.cup-group-schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.cup-group-schedule-card { padding: 18px; border: 1px solid #d5ddda; border-radius: 15px; background: #fff; box-shadow: 0 5px 18px rgba(29,42,48,.04); }
+.cup-group-schedule-card__status, .cup-group-schedule-card p, .cup-group-schedule-card > div:last-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cup-group-schedule-card__status > span { color: var(--admin-text-weak); font-size: 12px; }
+.cup-group-schedule-card h4 { margin: 18px 0 6px; color: var(--admin-text); font-size: 24px; }
+.cup-group-schedule-card p { margin: 0 0 18px; align-items: flex-end; }
+.cup-group-schedule-card p strong { color: var(--admin-text); }
+.cup-group-schedule-card p span { color: var(--admin-text-secondary); font-size: 12px; }
 .bracket-stage { overflow: hidden; padding: 26px; border: 1px solid #2c393f; border-radius: 18px; color: #eef3f4; background: radial-gradient(circle at 15% 0%, rgba(182,241,58,.09), transparent 28%), #121a1e; box-shadow: 0 16px 46px rgba(16,23,27,.14); }
 .bracket-stage > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
 .bracket-stage .section-kicker { color: #8f9ca2; }
@@ -293,6 +337,9 @@ select { font: inherit; }
   .cup-command-bar .ant-select { width: 100%; }
   .cup-command-bar__actions, .cup-bracket-empty .ant-card-body { align-items: stretch; flex-direction: column; }
   .cup-time-grid { grid-template-columns: 1fr; }
+  .cup-group-stage__header { align-items: stretch; flex-direction: column; }
+  .cup-stage-rail { width: 100%; min-width: 0; }
+  .cup-group-board { grid-template-columns: 1fr; }
   .bracket-stage > header { flex-direction: column; }
   .bracket-stage__actions { align-items: flex-start; }
   .season-rail { gap: 14px; grid-template-columns: 1fr; }
@@ -301,6 +348,15 @@ select { font: inherit; }
   .league-card__main { padding: 16px; }
   .league-card__season { padding-inline: 16px; grid-template-columns: 1fr; gap: 5px; }
   .league-card__actions { padding-inline: 16px; grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .cup-group-stage__header, .cup-group-stage__titlebar, .cup-group-schedules { padding-right: 18px; padding-left: 18px; }
+  .cup-group-board { padding-right: 18px; padding-left: 18px; }
+  .cup-stage-rail small { font-size: 9px; white-space: normal; }
+  .cup-group-team { grid-template-columns: 1fr; }
+  .cup-group-stage__actions, .cup-group-schedules__heading { align-items: stretch; flex-direction: column; }
+  .cup-group-stage__actions { padding-right: 18px; padding-left: 18px; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -4,11 +4,14 @@ import { useParams } from 'react-router-dom';
 import {
   CupBracketViewSchema,
   CupBracketProposalSchema,
+  CupGroupProposalSchema,
+  CupGroupViewSchema,
   CreateSeasonCupRequestSchema,
   LeagueSeasonSummarySchema,
   SeasonCupSummarySchema,
   SeasonCupListResponseSchema,
   type CupBracketView,
+  type CupGroupView,
   type LeagueSeasonSummary,
   type SeasonCupSummary
 } from '@efm/contracts';
@@ -17,6 +20,16 @@ import { adminApi, ApiError, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 
 const SeasonListSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
+const CupGroupDecisionSchema = z.object({
+  competitionId: z.string(), proposalId: z.string(), version: z.number(),
+  stages: z.array(z.object({
+    id: z.string(), stageCode: z.string(), displayName: z.string(), participantCount: z.number()
+  }))
+});
+const SchedulePreviewSchema = z.object({
+  id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
+  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.unknown())
+});
 const statusLabel: Record<SeasonCupSummary['status'], string> = {
   DRAFT: '筹备中',
   REGISTRATION_OPEN: '报名中',
@@ -52,8 +65,12 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const [cups, setCups] = useState<SeasonCupSummary[]>([]);
   const [selectedCup, setSelectedCup] = useState<SeasonCupSummary | null>(null);
   const [bracket, setBracket] = useState<CupBracketView | null>(null);
+  const [groupView, setGroupView] = useState<CupGroupView | null>(null);
+  const [groupTargets, setGroupTargets] = useState<Record<string, string>>({});
+  const [groupReasons, setGroupReasons] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [bracketLoading, setBracketLoading] = useState(false);
+  const [groupLoading, setGroupLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [cupType, setCupType] = useState<CupFormFields['competitionType']>('KNOCKOUT_CUP');
   const [submitting, setSubmitting] = useState(false);
@@ -61,6 +78,9 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const [form] = Form.useForm<CupFormFields>();
   const createKey = useMutationKey();
   const bracketKey = useMutationKey();
+  const groupKey = useMutationKey();
+  const scheduleKey = useMutationKey();
+  const selectedSeason = seasons.find(({ id }) => id === seasonId) ?? null;
 
   const loadCups = useCallback(async (targetSeasonId: string, preserveCupId?: string) => {
     if (!targetSeasonId) return [];
@@ -71,7 +91,10 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
     setCups(result.items);
     const preserved = preserveCupId ? result.items.find(({ id }) => id === preserveCupId) ?? null : null;
     setSelectedCup(preserved);
-    if (!preserved) setBracket(null);
+    if (!preserved) {
+      setBracket(null);
+      setGroupView(null);
+    }
     return result.items;
   }, [api, leagueId]);
 
@@ -95,6 +118,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
 
   const openBracket = async (cup: SeasonCupSummary) => {
     setSelectedCup(cup);
+    setGroupView(null);
     setBracketLoading(true);
     setError(null);
     try {
@@ -112,6 +136,159 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       }
     } finally {
       setBracketLoading(false);
+    }
+  };
+
+  const applyGroupView = (view: CupGroupView) => {
+    setGroupView(view);
+    setGroupTargets(Object.fromEntries(view.proposal?.rows.map((row) => [
+      row.participantId, row.finalGroupCode ?? row.suggestedGroupCode
+    ]) ?? []));
+    setGroupReasons(Object.fromEntries(view.proposal?.rows.map((row) => [row.participantId, row.reason ?? '']) ?? []));
+  };
+
+  const loadGroups = async (cup: SeasonCupSummary) => {
+    setSelectedCup(cup);
+    setBracket(null);
+    setGroupLoading(true);
+    setError(null);
+    try {
+      const result = await api.request(
+        `/v1/admin/leagues/${leagueId}/seasons/${cup.seasonId}/cups/${cup.id}/groups`,
+        { schema: CupGroupViewSchema }
+      );
+      applyGroupView(result);
+    } catch {
+      setGroupView(null);
+      setError('分组工作台加载失败，请稍后重试');
+    } finally {
+      setGroupLoading(false);
+    }
+  };
+
+  const generateGroups = async () => {
+    if (!selectedCup || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const proposal = await api.request(
+        `/v1/admin/leagues/${leagueId}/seasons/${selectedCup.seasonId}/cups/${selectedCup.id}/group-proposals`,
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': groupKey.current() },
+          schema: CupGroupProposalSchema,
+          body: { expectedCompetitionVersion: groupView?.competitionVersion ?? selectedCup.version, randomSeed: randomSeed() }
+        }
+      );
+      groupKey.reset();
+      applyGroupView({
+        competitionId: selectedCup.id,
+        competitionVersion: groupView?.competitionVersion ?? selectedCup.version,
+        proposal,
+        stages: []
+      });
+    } catch {
+      setError('分组建议生成失败，请确认报名已截止且至少有 2 支球队');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmGroups = async () => {
+    if (!selectedCup || !groupView?.proposal || groupView.proposal.status !== 'DRAFT' || submitting) return;
+    const overrides = groupView.proposal.rows
+      .filter((row) => groupTargets[row.participantId] !== row.suggestedGroupCode)
+      .map((row) => ({
+        participantId: row.participantId,
+        targetGroupCode: groupTargets[row.participantId],
+        reason: groupReasons[row.participantId]?.trim() ?? ''
+      }));
+    if (overrides.some(({ reason }) => !reason)) {
+      setError('人工调整组别时必须填写原因');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.request(
+        `/v1/admin/leagues/${leagueId}/seasons/${selectedCup.seasonId}/cups/${selectedCup.id}/group-decisions`,
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': groupKey.current() },
+          schema: CupGroupDecisionSchema,
+          body: {
+            proposalId: groupView.proposal.id,
+            expectedCompetitionVersion: groupView.competitionVersion,
+            overrides
+          }
+        }
+      );
+      groupKey.reset();
+      const refreshed = await loadCups(selectedCup.seasonId, selectedCup.id);
+      const updatedCup = refreshed.find(({ id }) => id === selectedCup.id) ?? {
+        ...selectedCup,
+        version: groupView.competitionVersion + 1
+      };
+      await loadGroups(updatedCup);
+    } catch (caught) {
+      setError(caught instanceof ApiError && caught.status === 409
+        ? '分组已被其他管理员修改，请重新打开工作台'
+        : '正式分组发布失败，请检查各组人数是否均衡');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const generateGroupSchedule = async (stageId: string) => {
+    const stage = groupView?.stages.find(({ id }) => id === stageId);
+    if (!stage || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/generate`, {
+        method: 'POST', headers: { 'Idempotency-Key': scheduleKey.current() }, schema: SchedulePreviewSchema,
+        body: { expectedStageVersion: stage.version }
+      });
+      scheduleKey.reset();
+      setGroupView((current) => current ? {
+        ...current,
+        stages: current.stages.map((item) => item.id === stageId
+          ? { ...item, version: preview.version, matchCount: preview.matchCount }
+          : item)
+      } : current);
+    } catch {
+      setError('小组赛程生成失败，请刷新后重试');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const publishGroupSchedule = async (stageId: string) => {
+    const stage = groupView?.stages.find(({ id }) => id === stageId);
+    if (!stage || !selectedSeason || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/publish`, {
+        method: 'POST', headers: { 'Idempotency-Key': scheduleKey.current() }, schema: SchedulePreviewSchema,
+        body: { expectedStageVersion: stage.version, expectedSeasonVersion: selectedSeason.version }
+      });
+      scheduleKey.reset();
+      if (selectedSeason.status === 'READY') {
+        setSeasons((current) => current.map((item) => item.id === selectedSeason.id
+          ? { ...item, status: 'IN_PROGRESS', version: item.version + 1 }
+          : item));
+      }
+      setGroupView((current) => current ? {
+        ...current,
+        stages: current.stages.map((item) => item.id === stageId
+          ? { ...item, version: preview.version, matchCount: preview.matchCount, status: 'PUBLISHED' }
+          : item)
+      } : current);
+    } catch {
+      setError('小组赛程发布失败，请确认预览已生成且版本未变更');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -244,11 +421,32 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         <h3>{cup.name}</h3>
         <p>{cup.description || '暂无杯赛说明'}</p>
         <div className="cup-card__meter"><strong>{cup.participantCount} / {cup.participantLimit}</strong><span>已报名 / 上限</span></div>
-        <Button type="primary" onClick={() => void openBracket(cup)}>查看签表</Button>
+        <Button type="primary" onClick={() => void (cup.competitionType === 'GROUP_KNOCKOUT_CUP'
+          ? loadGroups(cup)
+          : openBracket(cup))}>
+          {cup.competitionType === 'GROUP_KNOCKOUT_CUP' ? '管理分组' : '查看签表'}
+        </Button>
       </Card>)}
     </div>}
 
-    {selectedCup && !bracket && !bracketLoading ? <Card className="cup-bracket-empty">
+    {groupLoading ? <Card className="cup-group-stage"><Spin /></Card> : null}
+
+    {selectedCup && groupView && !groupLoading ? <GroupWorkspace
+      cup={selectedCup}
+      view={groupView}
+      targets={groupTargets}
+      reasons={groupReasons}
+      submitting={submitting}
+      onTargetChange={(participantId, value) => setGroupTargets((current) => ({ ...current, [participantId]: value }))}
+      onReasonChange={(participantId, value) => setGroupReasons((current) => ({ ...current, [participantId]: value }))}
+      onGenerate={() => void generateGroups()}
+      onConfirm={() => void confirmGroups()}
+      onGenerateSchedule={(stageId) => void generateGroupSchedule(stageId)}
+      onPublishSchedule={(stageId) => void publishGroupSchedule(stageId)}
+      onOpenBracket={() => void openBracket(selectedCup)}
+    /> : null}
+
+    {selectedCup && !groupView && !groupLoading && !bracket && !bracketLoading ? <Card className="cup-bracket-empty">
       <div><span className="section-kicker">签表工作台</span><h3>{selectedCup.name}</h3>
         <p>{selectedCup.competitionType === 'GROUP_KNOCKOUT_CUP'
           ? '小组赛结束后生成淘汰签表建议，确认前不会对外发布。'
@@ -310,6 +508,120 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       </Form>
     </Drawer>
   </div>;
+}
+
+const cupGroupLabel = (code: string) => `${code.replace('GROUP_', '')} 组`;
+
+function GroupWorkspace({
+  cup,
+  view,
+  targets,
+  reasons,
+  submitting,
+  onTargetChange,
+  onReasonChange,
+  onGenerate,
+  onConfirm,
+  onGenerateSchedule,
+  onPublishSchedule,
+  onOpenBracket
+}: {
+  cup: SeasonCupSummary;
+  view: CupGroupView;
+  targets: Record<string, string>;
+  reasons: Record<string, string>;
+  submitting: boolean;
+  onTargetChange: (participantId: string, value: string) => void;
+  onReasonChange: (participantId: string, value: string) => void;
+  onGenerate: () => void;
+  onConfirm: () => void;
+  onGenerateSchedule: (stageId: string) => void;
+  onPublishSchedule: (stageId: string) => void;
+  onOpenBracket: () => void;
+}) {
+  const proposal = view.proposal;
+  const groupCodes = [...new Set(proposal?.rows.map(({ suggestedGroupCode }) => suggestedGroupCode) ?? [])].sort();
+  const confirmed = proposal?.status === 'CONFIRMED';
+  const allSchedulesPublished = view.stages.length > 0 && view.stages.every(({ status }) => status === 'PUBLISHED');
+
+  return <section className="cup-group-stage" aria-label="杯赛分组工作台">
+    <header className="cup-group-stage__header">
+      <div>
+        <span className="section-kicker">小组赛工作台</span>
+        <h2>{cup.name}</h2>
+        <p>审阅分组、发布各组赛程，小组赛结束后在同一条赛事轨道上生成淘汰签表。</p>
+      </div>
+      <div className="cup-stage-rail" aria-label="杯赛阶段">
+        <span className={proposal ? 'is-complete' : 'is-current'}>1 <small>分组建议</small></span>
+        <span className={confirmed ? 'is-complete' : proposal ? 'is-current' : ''}>2 <small>正式分组</small></span>
+        <span className={allSchedulesPublished ? 'is-complete' : confirmed ? 'is-current' : ''}>3 <small>小组赛程</small></span>
+        <span>4 <small>淘汰签表</small></span>
+      </div>
+    </header>
+
+    {!proposal ? <div className="cup-group-empty">
+      <Empty description="尚未生成分组建议" />
+      <p>系统会按报名球队和目标小组人数均衡分配，发布前可人工调整。</p>
+      <Button type="primary" disabled={cup.status !== 'REGISTRATION_CLOSED'} loading={submitting} onClick={onGenerate}>生成分组建议</Button>
+    </div> : <>
+      <div className="cup-group-stage__titlebar">
+        <div>
+          <strong>分组建议版本 {proposal.version}</strong>
+          <span>{confirmed ? '已发布，球队已锁定' : '待审阅，调整后需明确说明原因'}</span>
+        </div>
+        <Tag color={confirmed ? 'green' : 'gold'}>{confirmed ? '正式分组' : '草案'}</Tag>
+      </div>
+      <div className="cup-group-board">
+        {groupCodes.map((groupCode) => <article key={groupCode} className="cup-group-column">
+          <header><span>{cupGroupLabel(groupCode)}</span><small>{proposal.rows.filter((row) => targets[row.participantId] === groupCode).length} 支</small></header>
+          <div className="cup-group-team-list">
+            {proposal.rows.filter((row) => targets[row.participantId] === groupCode).map((row) => {
+              const adjusted = targets[row.participantId] !== row.suggestedGroupCode;
+              return <div key={row.participantId} className={`cup-group-team${adjusted ? ' is-adjusted' : ''}`}>
+                <div className="cup-group-team__identity"><strong>{row.teamName}</strong><span>{adjusted ? '人工调整' : '系统建议'}</span></div>
+                <Select
+                  aria-label={`${row.teamName}最终组别`}
+                  disabled={confirmed}
+                  value={targets[row.participantId]}
+                  options={groupCodes.map((code) => ({ label: cupGroupLabel(code), value: code }))}
+                  onChange={(value) => onTargetChange(row.participantId, value)}
+                />
+                {adjusted ? <Input
+                  aria-label={`${row.teamName}调整原因`}
+                  disabled={confirmed}
+                  value={reasons[row.participantId] ?? ''}
+                  placeholder="填写换组原因"
+                  onChange={(event) => onReasonChange(row.participantId, event.target.value)}
+                /> : null}
+              </div>;
+            })}
+          </div>
+        </article>)}
+      </div>
+      {!confirmed ? <div className="cup-group-stage__actions">
+        <Button loading={submitting} onClick={onGenerate}>重新生成建议</Button>
+        <Button type="primary" loading={submitting} onClick={onConfirm}>确认并发布分组</Button>
+      </div> : null}
+    </>}
+
+    {view.stages.length > 0 ? <div className="cup-group-schedules">
+      <div className="cup-group-schedules__heading">
+        <div><span className="section-kicker">赛程发布</span><h3>正式组别与小组赛程</h3></div>
+        <Button onClick={onOpenBracket}>查看淘汰签表</Button>
+      </div>
+      <div className="cup-group-schedule-grid">
+        {view.stages.map((stage) => <article key={stage.id} className="cup-group-schedule-card">
+          <div className="cup-group-schedule-card__status"><Tag color={stage.status === 'PUBLISHED' ? 'green' : 'gold'}>{stage.status === 'PUBLISHED' ? '已发布' : '待发布'}</Tag><span>{stage.matchCount ? `${stage.matchCount} 场` : '尚无赛程'}</span></div>
+          <h4>{stage.displayName}</h4>
+          <p><strong>{stage.participantCount} 支球队</strong><span>{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? '预览已生成' : '等待生成对阵'}</span></p>
+          <div>
+            <Button aria-label={`${stage.displayName}生成赛程`} disabled={stage.status === 'PUBLISHED'} loading={submitting} onClick={() => onGenerateSchedule(stage.id)}>生成预览</Button>
+            <Button aria-label={`${stage.displayName}发布赛程`} type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} loading={submitting} onClick={() => onPublishSchedule(stage.id)}>发布赛程</Button>
+          </div>
+        </article>)}
+      </div>
+    </div> : null}
+  </section>;
 }
 
 function BracketBoard({ bracket, confirming, onConfirm }: {
