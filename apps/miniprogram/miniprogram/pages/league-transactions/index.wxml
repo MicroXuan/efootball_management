@@ -1,1 +1,75 @@
-<view class="page-shell"><loading-state wx:if="{{state === 'loading'}}" label="正在加载交易记录"/><view wx:elif="{{state === 'error'}}" class="panel"><text>{{errorMessage}}</text><button bindtap="loadPage">重新加载</button></view><block wx:else><view class="hero"><text class="kicker">联赛公开记录</text><text class="title">交易记录</text><text class="muted">仅展示正式交易事实与手续费快照</text></view><view wx:if="{{!items.length}}" class="panel">暂无交易记录</view><view class="transaction" wx:for="{{items}}" wx:key="id"><view class="heading"><text>{{item.playerName}}</text><text class="pill">{{item.typeLabel}}</text></view><text class="teams">{{item.teamsCopy}}</text><view class="details"><text>成交额 {{item.amountCopy}}</text><text>{{item.valuationCopy}}</text><text>{{item.feeCopy}}</text></view><text class="muted">备注：{{item.reason}}</text></view><button wx:if="{{nextCursor}}" class="more" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多</button></block></view>
+<view class="page-shell">
+  <loading-state wx:if="{{state === 'loading'}}" label="正在加载交易记录" />
+
+  <view wx:elif="{{state === 'error'}}" class="panel error-panel">
+    <text>{{errorMessage}}</text>
+    <button bindtap="loadPage">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="hero">
+      <text class="kicker">联赛交易 · TRANSFER LEDGER</text>
+      <text class="title">交易记录</text>
+      <text class="hero-copy">正式交易、身价快照与手续费统一留痕，记录确认后不可修改。</text>
+      <view class="hero-stat">
+        <text>{{allItems.length}}</text>
+        <label>已加载正式记录</label>
+      </view>
+    </view>
+
+    <view class="filter-panel">
+      <text class="filter-label">交易方向</text>
+      <view class="filter-row">
+        <button class="filter-button {{directionFilter === 'ALL' ? 'is-active' : ''}}" data-filter="ALL" bindtap="switchDirection">全部</button>
+        <button class="filter-button {{directionFilter === 'BUY' ? 'is-active' : ''}}" data-filter="BUY" bindtap="switchDirection">买入</button>
+        <button class="filter-button {{directionFilter === 'SELL' ? 'is-active' : ''}}" data-filter="SELL" bindtap="switchDirection">卖出</button>
+      </view>
+      <text class="filter-label second-label">操作类型</text>
+      <view class="filter-row">
+        <button class="filter-button {{typeFilter === 'ALL' ? 'is-active' : ''}}" data-filter="ALL" bindtap="switchType">全部</button>
+        <button class="filter-button {{typeFilter === 'TRANSFER' ? 'is-active' : ''}}" data-filter="TRANSFER" bindtap="switchType">转会</button>
+        <button class="filter-button {{typeFilter === 'ADMIN' ? 'is-active' : ''}}" data-filter="ADMIN" bindtap="switchType">管理调整</button>
+      </view>
+    </view>
+
+    <view class="section-head">
+      <view>
+        <text class="section-index">01 / 正式流水</text>
+        <text class="section-title">交易明细</text>
+      </view>
+      <text class="result-count">{{items.length}} 条</text>
+    </view>
+
+    <view wx:if="{{!items.length}}" class="panel empty-panel">
+      <text class="empty-title">没有符合条件的交易</text>
+      <text class="muted">调整上方筛选条件，或等待管理员录入新的正式交易。</text>
+    </view>
+
+    <view wx:else class="transaction-list">
+      <view class="transaction" wx:for="{{items}}" wx:key="id">
+        <view class="transaction-head">
+          <text class="type-label {{item.categoryGroup === 'ADMIN' ? 'is-admin' : ''}}">{{item.typeLabel}}</text>
+          <text class="status-label">{{item.statusCopy}}</text>
+        </view>
+        <text class="player-name">{{item.playerName}}</text>
+        <view class="team-route">
+          <view><label>卖方</label><text>{{item.sellerCopy}}</text></view>
+          <text class="route-arrow">→</text>
+          <view class="buyer"><label>买方</label><text>{{item.buyerCopy}}</text></view>
+        </view>
+        <view class="value-grid">
+          <view><label>原身价</label><text>{{item.originalValueCopy}}</text></view>
+          <view><label>成交金额</label><text class="highlight">{{item.newValueCopy}}</text></view>
+          <view><label>手续费</label><text>{{item.feeValueCopy}}</text></view>
+        </view>
+        <view class="transaction-note">
+          <label>备注</label>
+          <text>{{item.noteCopy}}</text>
+        </view>
+        <text class="transaction-time">{{item.dateCopy}}</text>
+      </view>
+    </view>
+
+    <button wx:if="{{nextCursor}}" class="more" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多交易</button>
+  </block>
+</view>

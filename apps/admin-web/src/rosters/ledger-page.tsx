@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   FinanceLedgerEntrySchema, FinanceLedgerListResponseSchema, LeagueTeamListResponseSchema,
+  LeagueTransactionListResponseSchema,
   TransactionFeeRuleVersionListResponseSchema, TransactionFeeRuleVersionSchema,
-  type FinanceLedgerListResponse, type TransactionFeeRuleVersion
+  type FinanceLedgerListResponse, type LeagueTransactionListResponse, type TransactionFeeRuleVersion
 } from '@efm/contracts';
 import { adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
@@ -18,6 +19,13 @@ const financeTypeLabels: Record<string, string> = {
   ROOKIE_SELECTION: '新秀选择', INSTALLMENT_PAYMENT: '分期付款', MANUAL_ADJUSTMENT: '其他调整'
 };
 const manualTypes = ['LUXURY_TAX', 'OFFSEASON_FEE', 'UNFINISHED_MATCH_PENALTY', 'AUCTION', 'ROOKIE_SELECTION', 'INSTALLMENT_PAYMENT', 'MANUAL_ADJUSTMENT'];
+const transactionTypeLabels: Record<string, string> = {
+  BUY: '购买', SELL: '出售', RELEASE: '解约', TRANSFER: '转会', CARD_UPGRADE: '卡片升级',
+  SALARY_RECALCULATION: '工资重算', EMERGENCY_CORRECTION: '紧急修正'
+};
+
+const money = (value: number | null) => value === null ? '未记录' : value.toLocaleString('zh-CN');
+const dateTime = (value: string) => value.slice(0, 16).replace('T', ' ');
 
 type ManualFields = {
   leagueTeamId: string; seasonId?: string; direction: 'CREDIT' | 'DEBIT';
@@ -29,6 +37,7 @@ type FeeFields = { rateBps: number; minimumFeeMinor: number; effectiveAt: string
 export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
   const [data, setData] = useState<FinanceLedgerListResponse>({ items: [], nextCursor: null });
+  const [transactions, setTransactions] = useState<LeagueTransactionListResponse>({ items: [], nextCursor: null });
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
   const [rules, setRules] = useState<TransactionFeeRuleVersion[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +47,14 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
   const manualKey = useMutationKey(); const feeKey = useMutationKey();
   const load = useCallback(async () => {
     try {
-      const [ledger, teamResult, ruleResult] = await Promise.all([
+      const [ledger, transactionResult, teamResult, ruleResult] = await Promise.all([
         api.request(`/v1/admin/roster/leagues/${leagueId}/ledger`, { schema: FinanceLedgerListResponseSchema }),
+        api.request(`/v1/admin/leagues/${leagueId}/transactions`, { schema: LeagueTransactionListResponseSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/teams`, { schema: LeagueTeamListResponseSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/transaction-fee-rules`, { schema: TransactionFeeRuleVersionListResponseSchema })
       ]);
-      setData(ledger); setTeams(teamResult.items.map(({ id, name }) => ({ id, name }))); setRules(ruleResult.items);
+      setData(ledger); setTransactions(transactionResult);
+      setTeams(teamResult.items.map(({ id, name }) => ({ id, name }))); setRules(ruleResult.items);
     } catch { setError('财务数据加载失败'); }
   }, [api, leagueId]);
   useEffect(() => { void load(); }, [load]);
@@ -69,7 +80,8 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
     } catch { setError('手续费规则发布失败，请刷新后重试'); }
     finally { setSubmitting(false); }
   };
-  return <Card title="财务流水与阵容交易历史">
+  return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+  <Card title="财务流水">
     {error ? <Alert role="alert" type="warning" title={error} /> : null}
     <Alert type="info" showIcon title="实时数据，非最终结算" description="流水写入后不可修改或删除；赛季为空的旧流水归入“历史未归档”。" />
     <Descriptions column={2} items={[
@@ -105,5 +117,20 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
         <Button type="primary" htmlType="submit" loading={submitting}>发布新版本</Button>
       </Form>
     </Modal>
-  </Card>;
+  </Card>
+  <Card title="阵容交易历史" extra={<Tag color="success">正式记录</Tag>}>
+    <Typography.Paragraph type="secondary">
+      买入、转会、出售、解约和卡片调整会自动写入这里。历史不可编辑，确保金额与手续费可追溯。
+    </Typography.Paragraph>
+    <Table pagination={false} rowKey="id" dataSource={transactions.items} scroll={{ x: 960 }} locale={{ emptyText: '暂无阵容交易记录' }} columns={[
+      { title: '时间', dataIndex: 'createdAt', render: (value: string) => dateTime(value) },
+      { title: '类型', render: (_, row) => <Tag color={row.type === 'EMERGENCY_CORRECTION' ? 'gold' : 'green'}>{transactionTypeLabels[row.type] ?? '其他交易'}</Tag> },
+      { title: '球员', dataIndex: 'playerName' },
+      { title: '买卖双方', render: (_, row) => `${row.sourceTeamName ?? '外部'} → ${row.targetTeamName ?? '外部'}` },
+      { title: '原值 → 新值', render: (_, row) => `${money(row.valuationSnapshotMinor)} → ${money(row.amountMinor)}` },
+      { title: '手续费', render: (_, row) => `手续费 ${money(row.transactionFeeMinor)}` },
+      { title: '备注', dataIndex: 'reason' }
+    ]} />
+  </Card>
+  </Space>;
 }

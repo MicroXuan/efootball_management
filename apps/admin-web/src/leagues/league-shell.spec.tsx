@@ -62,5 +62,6 @@ describe('role-aware administration navigation', () => {
 
     expect(await screen.findByRole('navigation', { name: '联赛工作区导航' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '赛季管理' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: '财务与交易' })).toBeInTheDocument();
   });
 });

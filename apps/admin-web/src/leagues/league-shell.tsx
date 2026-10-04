@@ -22,7 +22,7 @@ export function LeagueShell() {
         { key: 'windows', label: <Link aria-current={activeKey === 'windows' ? 'page' : undefined} to={`/leagues/${leagueId}/transfer-windows`}>转会窗口</Link> },
         { key: 'valuation-windows', label: <Link aria-current={activeKey === 'valuation-windows' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-windows`}><AdminIcon name="valuation" />身价窗口</Link> },
         { key: 'valuation-reviews', label: <Link aria-current={activeKey === 'valuation-reviews' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-reviews`}><AdminIcon name="review" />身价审核</Link> },
-        { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}>财务流水</Link> }
+        { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}>财务与交易</Link> }
       ]} /></nav>
     </div>
     <Outlet />
