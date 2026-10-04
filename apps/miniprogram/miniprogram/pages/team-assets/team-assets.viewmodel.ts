@@ -28,19 +28,25 @@ export function teamAssetsView(assets: TeamAssetOverview) {
   const active = group('ACTIVE')
   const disappeared = group('DISAPPEARED')
   const retired = group('RETIRED')
+  const valueSuffix = assets.valuationCompleteness === 'COMPLETE' ? '' : '+'
+  const teamNumber = assets.teamNumber === null ? '待编号' : `${String(assets.teamNumber).padStart(2, '0')}号`
   return {
     ...assets,
     identity: `${assets.teamNumber ?? '—'} · ${assets.teamName}`,
     ownerCopy: `${assets.ownerDisplayName} · ${assets.ownerPublicUserNo}`,
-    badgeUrl: assets.teamLogoUrl ?? assets.ownerAvatarUrl,
-    badgeText: Array.from(assets.teamName)[0] ?? '队',
+    identityCopy: `${teamNumber} · ${assets.teamName} · ${assets.ownerDisplayName}`,
+    teamBadgeUrl: assets.teamLogoUrl,
+    teamBadgeText: Array.from(assets.teamName)[0] ?? '队',
+    ownerAvatarUrl: assets.ownerAvatarUrl,
+    ownerAvatarText: Array.from(assets.ownerDisplayName)[0] ?? '用',
     teamNumberCopy: assets.teamNumber === null ? '球队编号待分配' : `球队编号 ${String(assets.teamNumber).padStart(2, '0')}`,
     divisionCopy: assets.divisionName ?? '组别待公布',
     completenessCopy: assets.valuationCompleteness === 'COMPLETE' ? '身价数据完整' : `缺少 ${assets.missingValuationCount} 人身价`,
     totalCopy: assets.valuationCompleteness === 'COMPLETE' ? String(assets.totalKnownValueMinor) : `${assets.totalKnownValueMinor}+`,
     shellCopy: money(assets.shellValueMinor),
     salaryCopy: money(assets.activeSalaryMinor),
-    totalDisplayCopy: `${money(assets.totalKnownValueMinor)}${assets.valuationCompleteness === 'COMPLETE' ? '' : '+'}`,
+    playerValueCopy: `${money(assets.knownPlayerValueMinor)}${valueSuffix}`,
+    totalAssetCopy: `${money(assets.totalKnownValueMinor)}${valueSuffix}`,
     tabs: [
       { key: 'ACTIVE' as const, label: '一线阵容', count: active.length },
       { key: 'DISAPPEARED' as const, label: '已消失', count: disappeared.length },

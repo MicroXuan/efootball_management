@@ -8,22 +8,27 @@
 
   <block wx:else>
     <view class="hero">
-      <image wx:if="{{assets.badgeUrl}}" class="team-badge" src="{{assets.badgeUrl}}" mode="aspectFit" />
-      <view wx:else class="team-badge badge-placeholder">{{assets.badgeText}}</view>
+      <view class="identity-marks">
+        <image wx:if="{{assets.teamBadgeUrl}}" class="team-badge" src="{{assets.teamBadgeUrl}}" mode="aspectFit" />
+        <view wx:else class="team-badge badge-placeholder">{{assets.teamBadgeText}}</view>
+        <image wx:if="{{assets.ownerAvatarUrl}}" class="owner-avatar" src="{{assets.ownerAvatarUrl}}" mode="aspectFill" />
+        <view wx:else class="owner-avatar owner-avatar-placeholder">{{assets.ownerAvatarText}}</view>
+      </view>
       <view class="hero-copy">
-        <text class="kicker">球队资产 · TEAM ASSETS</text>
+        <text class="kicker">球队资产</text>
         <text class="title">{{assets.teamName}}</text>
-        <text class="identity">{{assets.teamNumberCopy}} · {{assets.divisionCopy}}</text>
-        <text class="owner-name">{{assets.ownerDisplayName}}</text>
+        <text class="identity">{{assets.identityCopy}}</text>
+        <text class="division">{{assets.divisionCopy}}</text>
         <text class="owner-number">微信用户编号 {{assets.ownerPublicUserNo}}</text>
       </view>
     </view>
 
     <view class="metrics">
-      <view class="metric metric-primary"><text>{{assets.totalDisplayCopy}}</text><label>球队总资产</label></view>
-      <view class="metric"><text>{{assets.activePlayerCount}}<text class="metric-suffix">/25</text></text><label>一线人数</label></view>
+      <view class="metric metric-primary metric-wide"><text>{{assets.totalAssetCopy}}</text><label>球队总资产 · 队壳 + 球员身价</label></view>
+      <view class="metric"><text>{{assets.playerValueCopy}}</text><label>球员总身价</label></view>
+      <view class="metric"><text>{{assets.salaryCopy}}</text><label>总工资</label></view>
       <view class="metric"><text>{{assets.shellCopy}}</text><label>队壳价值</label></view>
-      <view class="metric"><text>{{assets.salaryCopy}}</text><label>当前工资</label></view>
+      <view class="metric"><text>{{assets.activePlayerCount}}<text class="metric-suffix">/25</text></text><label>一线人数</label></view>
     </view>
 
     <view class="valuation-status {{assets.valuationCompleteness === 'COMPLETE' ? 'is-complete' : ''}}">
