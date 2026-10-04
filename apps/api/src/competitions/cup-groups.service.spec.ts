@@ -133,7 +133,81 @@ function confirmationHarness() {
   return { service, transaction };
 }
 
+function readHarness(options?: { proposalStatus?: 'DRAFT' | 'CONFIRMED'; empty?: boolean; leagueId?: string }) {
+  const proposalStatus = options?.proposalStatus ?? 'DRAFT';
+  const proposalRows = participants(4).map((participant, index) => ({
+    id: `row-${index + 1}`,
+    proposalId: 'proposal-1',
+    participantId: participant.id,
+    teamName: participant.displayNameSnapshot,
+    suggestedGroupCode: index < 2 ? 'GROUP_A' : 'GROUP_B',
+    finalGroupCode: proposalStatus === 'CONFIRMED' ? (index < 2 ? 'GROUP_A' : 'GROUP_B') : null,
+    overridden: false,
+    reason: null
+  }));
+  const competition = {
+    id: 'cup-1', version: 3, competitionType: 'GROUP_KNOCKOUT_CUP',
+    season: { leagueId: options?.leagueId ?? 'league-1' },
+    cupGroupProposals: options?.empty ? [] : [{
+      id: 'proposal-1', competitionId: 'cup-1', version: 1, status: proposalStatus,
+      algorithmVersion: 'cup-groups-v1', randomSeed: 7, createdAt, rows: proposalRows
+    }],
+    stages: proposalStatus === 'CONFIRMED' && !options?.empty ? [{
+      id: 'stage-a', stageCode: 'GROUP_A', displayName: 'A 组', status: 'DRAFT', version: 2,
+      _count: { participants: 2, matches: 1 }
+    }] : []
+  };
+  const prisma = { competition: { findUnique: jest.fn(async () => competition) } };
+  const authorization = {
+    requireLeagueAccess: jest.fn(async (...args: string[]) => { void args; return { id: 'admin-1' }; })
+  };
+  const service = new CupGroupsService(
+    prisma as never,
+    authorization as never,
+    { execute: jest.fn() } as never,
+    { record: jest.fn() } as never
+  );
+  return { service, prisma };
+}
+
 describe('CupGroupsService', () => {
+  it('reads the latest draft proposal so review survives a page refresh', async () => {
+    const { service } = readHarness();
+
+    const result = await service.getAdmin('admin-1', 'league-1', 'cup-1');
+
+    expect(result).toEqual(expect.objectContaining({
+      competitionId: 'cup-1', competitionVersion: 3, proposal: expect.objectContaining({
+        id: 'proposal-1', status: 'DRAFT', rows: expect.arrayContaining([
+          expect.objectContaining({ participantId: 'participant-1', suggestedGroupCode: 'GROUP_A' })
+        ])
+      }), stages: []
+    }));
+  });
+
+  it('reads confirmed groups with schedule readiness metadata', async () => {
+    const { service } = readHarness({ proposalStatus: 'CONFIRMED' });
+
+    const result = await service.getAdmin('admin-1', 'league-1', 'cup-1');
+
+    expect(result.proposal?.status).toBe('CONFIRMED');
+    expect(result.stages).toEqual([{ id: 'stage-a', stageCode: 'GROUP_A', displayName: 'A 组', participantCount: 2, matchCount: 1, status: 'DRAFT', version: 2 }]);
+  });
+
+  it('returns an empty group workspace before a proposal is generated', async () => {
+    const { service } = readHarness({ empty: true });
+
+    await expect(service.getAdmin('admin-1', 'league-1', 'cup-1')).resolves.toEqual({
+      competitionId: 'cup-1', competitionVersion: 3, proposal: null, stages: []
+    });
+  });
+
+  it('does not expose a cup that belongs to another league', async () => {
+    const { service } = readHarness({ leagueId: 'league-2' });
+
+    await expect(service.getAdmin('admin-1', 'league-1', 'cup-1')).rejects.toMatchObject({ code: 'CUP_NOT_FOUND' });
+  });
+
   it('generates a reproducible balanced proposal and supersedes the previous draft', async () => {
     const { service, transaction } = harness();
 

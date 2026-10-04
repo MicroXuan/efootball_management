@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   ConfirmCupGroupProposalRequest,
   CupGroupProposal,
+  CupGroupView,
   GenerateCupGroupProposalRequest
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
@@ -27,6 +28,46 @@ export class CupGroupsService {
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
     @Inject(AuditLogService) private readonly audit: AuditLogService
   ) {}
+
+  async getAdmin(actorAdminId: string, leagueId: string, competitionId: string): Promise<CupGroupView> {
+    await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
+    const competition = await this.prisma.competition.findUnique({
+      where: { id: competitionId },
+      include: {
+        season: { select: { leagueId: true } },
+        cupGroupProposals: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          include: PROPOSAL_INCLUDE
+        },
+        stages: {
+          where: { stageCode: { startsWith: 'GROUP_' } },
+          orderBy: [{ sequence: 'asc' }, { id: 'asc' }],
+          include: { _count: { select: { participants: true, matches: true } } }
+        }
+      }
+    });
+    if (!competition || competition.season?.leagueId !== leagueId
+      || competition.competitionType !== 'GROUP_KNOCKOUT_CUP') {
+      throw new CompetitionError('CUP_NOT_FOUND', '小组淘汰杯不存在', 404);
+    }
+    return {
+      competitionId: competition.id,
+      competitionVersion: competition.version,
+      proposal: competition.cupGroupProposals[0]
+        ? this.response(competition.cupGroupProposals[0])
+        : null,
+      stages: competition.stages.map((stage) => ({
+        id: stage.id,
+        stageCode: stage.stageCode!,
+        displayName: stage.displayName!,
+        participantCount: stage._count.participants,
+        matchCount: stage._count.matches,
+        status: stage.status,
+        version: stage.version
+      }))
+    };
+  }
 
   async generate(
     actorAdminId: string,

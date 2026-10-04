@@ -66,6 +66,15 @@ export class AdminCupCompetitionsController {
     return this.groups.generate(admin.id, leagueId, competitionId, body, this.key(key));
   }
 
+  @Get(':competitionId/groups')
+  getGroups(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
+  ) {
+    return this.groups.getAdmin(admin.id, leagueId, competitionId);
+  }
+
   @Post(':competitionId/group-decisions')
   confirmGroups(
     @CurrentAdmin() admin: CurrentAdminIdentity,

@@ -331,6 +331,25 @@ export const CupGroupProposalSchema = z.object({
   createdAt: TimestampSchema
 });
 
+export const CupGroupStageSummarySchema = z.object({
+  id: ResourceIdSchema,
+  stageCode: CompetitionStageCodeSchema.refine((value) => value.startsWith('GROUP_'), {
+    message: 'stageCode must be a cup group code'
+  }),
+  displayName: z.string().trim().min(1).max(64),
+  participantCount: z.number().int().nonnegative(),
+  matchCount: z.number().int().nonnegative(),
+  status: z.enum(['DRAFT', 'PUBLISHED']),
+  version: z.number().int().positive()
+});
+
+export const CupGroupViewSchema = z.object({
+  competitionId: ResourceIdSchema,
+  competitionVersion: z.number().int().positive(),
+  proposal: CupGroupProposalSchema.nullable(),
+  stages: z.array(CupGroupStageSummarySchema)
+});
+
 export const GenerateCupBracketProposalRequestSchema = z.object({
   expectedCompetitionVersion: ExpectedVersionSchema,
   randomSeed: z.number().int().positive()
@@ -657,6 +676,8 @@ export type PublishStageScheduleRequest = z.infer<typeof PublishStageScheduleReq
 export type GenerateCupGroupProposalRequest = z.infer<typeof GenerateCupGroupProposalRequestSchema>;
 export type ConfirmCupGroupProposalRequest = z.infer<typeof ConfirmCupGroupProposalRequestSchema>;
 export type CupGroupProposal = z.infer<typeof CupGroupProposalSchema>;
+export type CupGroupStageSummary = z.infer<typeof CupGroupStageSummarySchema>;
+export type CupGroupView = z.infer<typeof CupGroupViewSchema>;
 export type GenerateCupBracketProposalRequest = z.infer<typeof GenerateCupBracketProposalRequestSchema>;
 export type ConfirmCupBracketProposalRequest = z.infer<typeof ConfirmCupBracketProposalRequestSchema>;
 export type CupBracketProposal = z.infer<typeof CupBracketProposalSchema>;
