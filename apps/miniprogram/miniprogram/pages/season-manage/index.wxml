@@ -33,7 +33,7 @@
         <picker range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="onSeasonChange"><view class="picker">切换赛季 <text>{{selectedSeason.displayName}}⌄</text></view></picker>
         <view class="tally"><view><text>{{invitedRenewals}}</text><text>续赛待确认</text></view><view><text>{{confirmedRenewals}}</text><text>续赛已确认</text></view><view><text>{{newApplicants}}</text><text>新报名</text></view></view>
         <button wx:if="{{transition && transition.kind !== 'NEXT_PHASE'}}" class="primary warning" loading="{{mutating}}" disabled="{{mutating}}" bindtap="performTransition">{{transition.label}}</button>
-        <view wx:if="{{transition && transition.kind === 'NEXT_PHASE'}}" class="terminal"><text class="terminal-code">报名已关闭</text><text class="terminal-title">下一阶段：分组确认</text><text>报名名单已冻结。本版本在此结束，后续接入超级组、冠军 A/B 组的系统建议与管理员确认。</text></view>
+        <view wx:if="{{transition && transition.kind === 'NEXT_PHASE'}}" class="terminal"><text class="terminal-code">报名已关闭</text><text class="terminal-title">下一阶段：分组确认</text><text>报名名单已冻结。请前往管理后台核对系统分组建议；确认正式分组后，即可生成并发布赛程。</text></view>
       </view>
 
       <view class="queue-card">
