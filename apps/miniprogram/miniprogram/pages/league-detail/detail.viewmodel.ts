@@ -150,7 +150,11 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
   ]
 }
 
-export function workspaceModuleRoute(key: string, workspace: LeagueWorkspaceResponse): string | null {
+export function workspaceModuleRoute(
+  key: string,
+  workspace: LeagueWorkspaceResponse,
+  leagueName = '',
+): string | null {
   const item = workspaceModules(workspace).find((module) => module.key === key)
   if (!item?.enabled) return null
   const leagueId = encodeURIComponent(workspace.leagueId)
@@ -163,7 +167,7 @@ export function workspaceModuleRoute(key: string, workspace: LeagueWorkspaceResp
     transactions: `/pages/league-transactions/index?leagueId=${leagueId}`,
     finance: `/pages/team-finance/index?teamId=${teamId}&seasonId=${seasonId}`,
     valuations: `/pages/valuation-manage/index?teamId=${teamId}`,
-    cups: '/pages/competitions/index',
+    cups: `/pages/competitions/index?seasonId=${seasonId}&leagueName=${encodeURIComponent(leagueName || '当前联赛')}`,
     favorites: '/pages/favorites/index',
   }
   return routes[item.key]

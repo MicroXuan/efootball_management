@@ -7,6 +7,7 @@ import {
   AdminLoginRequestSchema,
   CompetitionDetailSchema,
   CompetitionFormatSchema,
+  CompetitionListQuerySchema,
   CompetitionParticipantTypeSchema,
   CompetitionStageCodeSchema,
   CompetitionStageSummarySchema,
@@ -1300,6 +1301,20 @@ describe('cup center contracts', () => {
   const registrationClosesAt = '2026-10-10T12:00:00.000Z';
   const startsAt = '2026-10-11T12:00:00.000Z';
   const endsAt = '2026-11-30T12:00:00.000Z';
+
+  it('accepts a season-scoped cup-only public list query', () => {
+    assert.deepEqual(CompetitionListQuerySchema.parse({
+      seasonId,
+      category: 'CUP',
+      limit: '12'
+    }), {
+      seasonId,
+      category: 'CUP',
+      limit: 12
+    });
+    assert.throws(() => CompetitionListQuerySchema.parse({ seasonId: 'invalid', category: 'CUP' }));
+    assert.throws(() => CompetitionListQuerySchema.parse({ seasonId, category: 'LEAGUE' }));
+  });
 
   it('accepts a group-knockout cup with explicit group rules', () => {
     const parsed = CreateSeasonCupRequestSchema.parse({

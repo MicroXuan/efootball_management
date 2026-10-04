@@ -2,7 +2,12 @@ import type { CompetitionSummary, MyCompetitionResponse } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
 import { session } from '../../services/session'
-import { competitionErrorMessage, mergeCompetitionPages, toCompetitionCard } from './competitions.viewmodel'
+import {
+  competitionErrorMessage,
+  competitionListContext,
+  mergeCompetitionPages,
+  toCompetitionCard,
+} from './competitions.viewmodel'
 
 let unloaded = false
 
@@ -15,10 +20,23 @@ Page({
     rawItems: [] as CompetitionSummary[],
     nextCursor: null as string | null,
     hasMore: true,
+    seasonId: '',
+    category: '' as '' | 'CUP',
+    kicker: '赛事中枢',
+    title: '赛事中枢',
+    headMark: '比赛日程 · 02',
+    briefingLabel: '本周任务',
+    briefingCopy: '报名、赛程与积分，都在一条比赛时间线上。',
+    emptyCode: '暂无赛程',
+    emptyTitle: '暂时没有公开赛事',
+    emptyCopy: '新赛事发布后会出现在这里。',
   },
 
-  onLoad() {
+  onLoad(options: { seasonId?: string; leagueName?: string }) {
     unloaded = false
+    const context = competitionListContext(options)
+    this.setData({ ...context, category: context.category ?? '' })
+    wx.setNavigationBarTitle({ title: context.title })
     void this.load('refresh')
   },
 
@@ -39,7 +57,11 @@ Page({
   async load(mode: 'refresh' | 'append') {
     this.setData(mode === 'append' ? { loadingMore: true } : { loading: true, errorMessage: '' })
     try {
-      const publicPage = await competitionsApi.list(mode === 'append' ? this.data.nextCursor ?? undefined : undefined)
+      const publicPage = await competitionsApi.list({
+        cursor: mode === 'append' ? this.data.nextCursor ?? undefined : undefined,
+        seasonId: this.data.seasonId || undefined,
+        category: this.data.category || undefined,
+      })
       const mine = session.getAccessToken() ? await competitionsApi.mine(undefined, 100).catch(() => null) : null
       const registrations = new Map<string, MyCompetitionResponse['registration']>(
         (mine?.items ?? []).map((item) => [item.competition.id, item.registration]),

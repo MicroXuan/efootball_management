@@ -1,15 +1,15 @@
 <view class="competition-page">
   <view class="page-head">
     <view>
-      <text class="kicker">赛事中枢</text>
-      <text class="title">赛事中枢</text>
+      <text class="kicker">{{kicker}}</text>
+      <text class="title">{{title}}</text>
     </view>
-    <text class="head-mark">比赛日程 · 02</text>
+    <text class="head-mark">{{headMark}}</text>
   </view>
 
   <view class="briefing">
-    <text class="briefing-label">本周任务</text>
-    <text class="briefing-copy">报名、赛程与积分，都在一条比赛时间线上。</text>
+    <text class="briefing-label">{{briefingLabel}}</text>
+    <text class="briefing-copy">{{briefingCopy}}</text>
   </view>
 
   <loading-state wx:if="{{loading && items.length === 0}}" label="正在读取赛事" />
@@ -20,9 +20,9 @@
     <button class="outline-button" bindtap="retry">重新加载</button>
   </view>
   <view wx:elif="{{!loading && items.length === 0}}" class="state-panel">
-    <text class="state-code">暂无赛程</text>
-    <text class="state-title">暂时没有公开赛事</text>
-    <text class="state-copy">新赛事发布后会出现在这里。</text>
+    <text class="state-code">{{emptyCode}}</text>
+    <text class="state-title">{{emptyTitle}}</text>
+    <text class="state-copy">{{emptyCopy}}</text>
   </view>
 
   <view wx:else class="timeline">

@@ -18,6 +18,41 @@ const errorCopy: Record<string, string> = {
   NETWORK_ERROR: '网络连接失败，请稍后重试',
 }
 
+export type CompetitionListContext = {
+  seasonId: string
+  category: 'CUP' | undefined
+  kicker: string
+  title: string
+  headMark: string
+  briefingLabel: string
+  briefingCopy: string
+  emptyCode: string
+  emptyTitle: string
+  emptyCopy: string
+}
+
+export function competitionListContext(options: {
+  seasonId?: string
+  leagueName?: string
+}): CompetitionListContext {
+  const seasonId = options.seasonId?.trim() ?? ''
+  if (!seasonId) {
+    return {
+      seasonId: '', category: undefined, kicker: '赛事中枢', title: '赛事中枢',
+      headMark: '比赛日程 · 02', briefingLabel: '本周任务',
+      briefingCopy: '报名、赛程与积分，都在一条比赛时间线上。', emptyCode: '暂无赛程',
+      emptyTitle: '暂时没有公开赛事', emptyCopy: '新赛事发布后会出现在这里。',
+    }
+  }
+  const leagueName = options.leagueName?.trim() || '当前联赛'
+  return {
+    seasonId, category: 'CUP', kicker: leagueName, title: '杯赛中心', headMark: '小组赛 · 淘汰赛',
+    briefingLabel: '当前赛季', briefingCopy: `仅展示${leagueName}当前赛季的杯赛、报名状态与淘汰赛程。`,
+    emptyCode: '暂无杯赛', emptyTitle: '当前赛季尚未发布杯赛',
+    emptyCopy: '管理员发布后，杯赛会出现在这里。',
+  }
+}
+
 export function lifecycleLabel(status: CompetitionStatus): string {
   return lifecycleLabels[status]
 }

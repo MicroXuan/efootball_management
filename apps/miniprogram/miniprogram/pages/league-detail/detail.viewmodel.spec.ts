@@ -119,7 +119,7 @@ describe('league detail view model', () => {
 
   it('builds stable module routes and refuses navigation into a closed valuation window', () => {
     const routeFor = (detailViewModel as unknown as {
-      workspaceModuleRoute?: (key: string, workspace: LeagueWorkspaceResponse) => string | null
+      workspaceModuleRoute?: (key: string, workspace: LeagueWorkspaceResponse, leagueName?: string) => string | null
     }).workspaceModuleRoute
     const workspace = workspaceFixture({
       capabilities: {
@@ -132,7 +132,7 @@ describe('league detail view model', () => {
 
     expect(routeFor?.('transactions', workspace)).toBe('/pages/league-transactions/index?leagueId=league-1')
     expect(routeFor?.('finance', workspace)).toBe('/pages/team-finance/index?teamId=team-1&seasonId=season-1')
-    expect(routeFor?.('cups', workspace)).toBe('/pages/competitions/index')
+    expect(routeFor?.('cups', workspace, '中国超级联赛')).toBe('/pages/competitions/index?seasonId=season-1&leagueName=%E4%B8%AD%E5%9B%BD%E8%B6%85%E7%BA%A7%E8%81%94%E8%B5%9B')
     expect(routeFor?.('favorites', workspace)).toBe('/pages/favorites/index')
     expect(routeFor?.('valuations', workspace)).toBeNull()
   })

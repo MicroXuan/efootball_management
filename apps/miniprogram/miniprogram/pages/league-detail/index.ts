@@ -133,7 +133,11 @@ Page({
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return
-    const route = workspaceModuleRoute(event.currentTarget.dataset.key ?? '', workspace)
+    const route = workspaceModuleRoute(
+      event.currentTarget.dataset.key ?? '',
+      workspace,
+      this.data.league?.name ?? '',
+    )
     if (!route) {
       wx.showToast({ title: '当前功能暂未开放', icon: 'none' })
       return

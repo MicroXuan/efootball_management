@@ -243,6 +243,10 @@ export class CompetitionsService {
     const records = await this.prisma.competition.findMany({
       where: {
         status: query.status && query.status !== 'DRAFT' ? query.status : { not: 'DRAFT' },
+        ...(query.seasonId ? { seasonId: query.seasonId } : {}),
+        ...(query.category === 'CUP' ? {
+          competitionType: { in: ['GROUP_KNOCKOUT_CUP', 'KNOCKOUT_CUP'] as const }
+        } : {}),
         ...(cursor ? {
           OR: [
             { registrationOpensAt: { lt: cursor.registrationOpensAt } },
