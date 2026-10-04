@@ -36,6 +36,7 @@ export const TeamAssetOverviewSchema = z.object({
   teamId: ResourceIdSchema,
   teamName: z.string().min(1),
   teamNumber: z.number().int().nonnegative().nullable(),
+  divisionName: z.string().min(1).nullable(),
   teamLogoUrl: z.string().nullable(),
   ownerDisplayName: z.string().min(1),
   ownerPublicUserNo: z.string().regex(/^\d{6}$/),

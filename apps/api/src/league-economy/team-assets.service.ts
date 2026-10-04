@@ -10,7 +10,10 @@ export class TeamAssetsService {
   async getTeamAssets(userId: string, teamId: string): Promise<TeamAssetOverview> {
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
-      include: { owner: { select: { displayName: true, publicUserNo: true, avatarUrl: true } } }
+      include: {
+        league: { select: { currentSeasonId: true } },
+        owner: { select: { displayName: true, publicUserNo: true, avatarUrl: true } }
+      }
     });
     if (!team) throw this.error('LEAGUE_TEAM_NOT_FOUND', '球队不存在', 404);
     if (team.ownerUserId !== userId) {
@@ -20,8 +23,25 @@ export class TeamAssetsService {
       throw this.error('PUBLIC_USER_NUMBER_MISSING', '球队拥有者尚未分配公开编号', 409);
     }
     const entry = await this.prisma.seasonEntry.findFirst({
-      where: { leagueTeamId: teamId, ownerUserId: userId, status: 'APPROVED' },
-      select: { id: true }
+      where: {
+        leagueTeamId: teamId,
+        ownerUserId: userId,
+        status: 'APPROVED',
+        ...(team.league.currentSeasonId ? { seasonId: team.league.currentSeasonId } : {})
+      },
+      include: {
+        competitionParticipants: {
+          where: { competition: { competitionType: 'DIVISION_LEAGUE' } },
+          take: 1,
+          include: {
+            stageMemberships: {
+              take: 1,
+              orderBy: { seed: 'asc' },
+              include: { stage: { select: { displayName: true } } }
+            }
+          }
+        }
+      }
     });
     if (!entry) {
       throw this.error('TEAM_ASSET_SEASON_ENTRY_REQUIRED', '球队尚未获得联赛参赛资格', 403);
@@ -56,6 +76,7 @@ export class TeamAssetsService {
       teamId: team.id,
       teamName: team.name,
       teamNumber: team.teamNumber,
+      divisionName: entry.competitionParticipants[0]?.stageMemberships[0]?.stage.displayName ?? null,
       teamLogoUrl: team.logoUrl,
       ownerDisplayName: team.owner.displayName,
       ownerPublicUserNo: team.owner.publicUserNo,

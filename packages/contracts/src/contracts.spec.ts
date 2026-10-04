@@ -224,6 +224,7 @@ describe('league economy contracts', () => {
       teamId: ids.team,
       teamName: '海港竞技',
       teamNumber: 7,
+      divisionName: '冠军 A 组',
       teamLogoUrl: null,
       ownerDisplayName: '小宣',
       ownerPublicUserNo: '100069',
@@ -238,6 +239,7 @@ describe('league economy contracts', () => {
       players: []
     });
     assert.equal(assets.valuationCompleteness, 'INCOMPLETE');
+    assert.equal(assets.divisionName, '冠军 A 组');
     assert.throws(() => TeamAssetOverviewSchema.parse({ ...assets, valuationCompleteness: 'PARTIAL' }));
 
     const transactions = LeagueTransactionListResponseSchema.parse({ items: [], nextCursor: null });

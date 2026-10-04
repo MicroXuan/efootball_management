@@ -1,1 +1,71 @@
-<view class="page-shell"><loading-state wx:if="{{state === 'loading'}}" label="正在加载球队财务"/><view wx:elif="{{state === 'error'}}" class="panel"><text>{{errorMessage}}</text><button bindtap="loadPage">重新加载</button></view><block wx:else><view class="hero"><text class="kicker">球队财务</text><text class="title">实时收支</text><text class="notice">{{finance.notice}}</text></view><view class="metrics"><view><text>+{{finance.creditTotalMinor}}</text><label>收入</label></view><view><text>-{{finance.debitTotalMinor}}</text><label>支出</label></view><view><text>{{finance.balanceCopy}}</text><label>实时余额</label></view></view><view wx:if="{{finance.seasonId === null}}" class="panel">历史未归档 · {{finance.uncategorizedEntryCount}} 条</view><view class="section-title">结算明细</view><view wx:if="{{!finance.entries.length}}" class="panel">暂无财务明细</view><view class="entry" wx:for="{{finance.entries}}" wx:key="id"><view><text>{{item.typeLabel}}</text><text class="muted">{{item.note}}</text></view><text class="amount {{item.direction === 'DEBIT' ? 'debit' : ''}}">{{item.amountCopy}}</text></view></block></view>
+<view class="page-shell">
+  <loading-state wx:if="{{state === 'loading'}}" label="正在加载球队财务" />
+
+  <view wx:elif="{{state === 'error'}}" class="panel error-panel">
+    <text>{{errorMessage}}</text>
+    <button bindtap="loadPage">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="hero">
+      <text class="kicker">球队财务 · TEAM FINANCE</text>
+      <view class="hero-heading">
+        <view>
+          <text class="title">赛季账本</text>
+          <text class="period">{{finance.periodCopy}}</text>
+        </view>
+        <view class="live-badge"><view></view><text>实时</text></view>
+      </view>
+      <text class="notice">{{finance.notice}}</text>
+
+      <view class="balance-block {{finance.balanceTone}}">
+        <text class="balance-label">当前净额</text>
+        <text class="balance-number">{{finance.balanceCopy}}</text>
+        <text class="balance-helper">收入减去支出，最终结算前可能继续变化</text>
+      </view>
+    </view>
+
+    <view class="metrics">
+      <view class="metric credit"><label>累计收入</label><text>{{finance.creditCopy}}</text></view>
+      <view class="metric debit"><label>累计支出</label><text>{{finance.debitCopy}}</text></view>
+    </view>
+
+    <view wx:if="{{finance.seasonId === null}}" class="archive-notice">
+      <text class="archive-title">历史未归档</text>
+      <text>当前共有 {{finance.uncategorizedEntryCount}} 条流水未归入具体赛季。</text>
+    </view>
+
+    <view class="ledger-head">
+      <view>
+        <text class="section-index">01 / 结算流水</text>
+        <text class="section-title">收支明细</text>
+      </view>
+      <text class="entry-count">{{finance.entries.length}} 条</text>
+    </view>
+
+    <view wx:if="{{!finance.entries.length}}" class="panel empty-panel">
+      <text class="empty-title">暂无财务明细</text>
+      <text class="muted">交易、税费和联赛调整产生后会记录在这里。</text>
+    </view>
+
+    <view wx:else class="entry-list">
+      <view class="entry" wx:for="{{finance.entries}}" wx:key="id">
+        <view class="entry-accent {{item.direction === 'DEBIT' ? 'is-debit' : ''}}"></view>
+        <view class="entry-body">
+          <view class="entry-topline">
+            <view>
+              <text class="entry-type">{{item.typeLabel}}</text>
+              <text class="entry-direction {{item.direction === 'DEBIT' ? 'is-debit' : ''}}">{{item.directionLabel}}</text>
+            </view>
+            <text class="amount {{item.direction === 'DEBIT' ? 'is-debit' : ''}}">{{item.amountCopy}}</text>
+          </view>
+          <text class="entry-note">{{item.noteCopy}}</text>
+          <view class="entry-meta">
+            <text>{{item.originCopy}}</text>
+            <text>{{item.dateCopy}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

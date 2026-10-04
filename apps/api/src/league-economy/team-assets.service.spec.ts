@@ -7,6 +7,7 @@ function harness() {
   const team = {
     id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', teamNumber: 7,
     name: '海港竞技', logoUrl: null, shellValueMinor: 5000,
+    league: { currentSeasonId: 'season-1' },
     owner: { displayName: '小宣', publicUserNo: '100069', avatarUrl: null }
   };
   const ownerships = [
@@ -35,6 +36,13 @@ function harness() {
       currentPlayerCard: { cardName: '传奇卡', imageUrl: null, position: 'GK', attributes: null }
     }
   ];
+  const seasonEntry = {
+    id: 'entry-1',
+    competitionParticipants: [{
+      competition: { competitionType: 'DIVISION_LEAGUE' },
+      stageMemberships: [{ stage: { displayName: '冠军 A 组' } }]
+    }]
+  };
   const prisma = {
     leagueTeam: { findUnique: jest.fn(async () => team) },
     leaguePlayerOwnership: { findMany: jest.fn(async () => ownerships) },
@@ -42,7 +50,9 @@ function harness() {
       { footballPlayerId: 'player-1', currentValueMinor: 8000, effectiveAt: at },
       { footballPlayerId: 'player-3', currentValueMinor: 9999, effectiveAt: at }
     ]) },
-    seasonEntry: { findFirst: jest.fn<() => Promise<{ id: string } | null>>(async () => ({ id: 'entry-1' })) },
+    seasonEntry: {
+      findFirst: jest.fn<() => Promise<typeof seasonEntry | null>>(async () => seasonEntry)
+    },
     footballPlayer: { findUnique: jest.fn(async () => ({ id: 'player-1', nameZh: '有效球员', nameEn: null, shortName: null })) },
     playerValuationHistory: { findMany: jest.fn(async () => [{ id: 'history-1', previousValueMinor: null, newValueMinor: 8000, effectiveAt: at }]) }
   };
@@ -56,6 +66,7 @@ describe('TeamAssetsService', () => {
 
     expect(result).toMatchObject({
       teamName: '海港竞技', teamNumber: 7, ownerDisplayName: '小宣', shellValueMinor: 5000,
+      divisionName: '冠军 A 组',
       activePlayerCount: 2, activeSalaryMinor: 1200, knownPlayerValueMinor: 8000,
       totalKnownValueMinor: 13_000, missingValuationCount: 1, valuationCompleteness: 'INCOMPLETE'
     });
