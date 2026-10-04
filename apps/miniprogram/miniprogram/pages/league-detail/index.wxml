@@ -94,10 +94,25 @@
         <view><text class="workspace-metric__label">下一场</text><text class="workspace-next">{{workspaceView.nextMatch}}</text><text class="workspace-metric__meta">{{workspaceView.nextMatchTime}}</text></view>
       </view>
       <view class="module-grid">
-        <view wx:if="{{workspace.capabilities.canViewStandings}}" bindtap="openStandings"><text>积分榜</text><text>排名与数据 →</text></view>
-        <view wx:if="{{workspace.capabilities.canViewAssets}}" bindtap="openAssets"><text>球队资产</text><text>阵容与价值 →</text></view>
-        <view wx:if="{{workspace.capabilities.canViewFinance}}" bindtap="openFinance"><text>球队财务</text><text>流水与余额 →</text></view>
-        <view wx:if="{{workspace.capabilities.canManageValuations}}" bindtap="openValuations"><text>身价管理</text><text>窗口内填报 →</text></view>
+        <view
+          wx:for="{{workspaceModules}}"
+          wx:key="key"
+          class="module-tile {{item.enabled ? '' : 'is-locked'}} {{item.wide ? 'is-wide' : ''}} {{item.tone === 'personal' ? 'is-personal' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onWorkspaceModuleTap"
+          role="button"
+          aria-disabled="{{!item.enabled}}"
+        >
+          <view class="module-topline">
+            <text class="module-marker">{{item.marker}}</text>
+            <text class="module-state">{{item.stateLabel}}</text>
+          </view>
+          <text class="module-title">{{item.label}}</text>
+          <view class="module-footer">
+            <text class="module-description">{{item.description}}</text>
+            <text class="module-arrow">{{item.enabled ? '→' : '锁定'}}</text>
+          </view>
+        </view>
       </view>
     </view>
 

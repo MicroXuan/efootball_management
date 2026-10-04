@@ -1,5 +1,6 @@
 import type { LeagueSeasonSummary, LeagueWorkspaceResponse, SeasonEntryResponse } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
+import * as detailViewModel from './detail.viewmodel'
 import {
   entryStatusCopy,
   leagueDetailErrorMessage,
@@ -9,6 +10,22 @@ import {
   standingsAccess,
   workspaceSummary,
 } from './detail.viewmodel'
+
+const workspaceFixture = (overrides: Partial<LeagueWorkspaceResponse> = {}): LeagueWorkspaceResponse => ({
+  leagueId: 'league-1',
+  seasonId: 'season-1',
+  team: { leagueTeamId: 'team-1', name: '海港', shortName: '海港', logoUrl: null },
+  division: { stageId: 'stage-a', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
+  currentRank: { rank: 2, points: 13, played: 6, tiePending: true },
+  nextMatch: { id: 'match-1', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
+  capabilities: {
+    canViewStandings: true,
+    canViewAssets: true,
+    canViewFinance: true,
+    canManageValuations: true,
+  },
+  ...overrides,
+})
 
 const season = (overrides: Partial<LeagueSeasonSummary> = {}): LeagueSeasonSummary => ({
   id: 'season-1', leagueId: 'league-1', seasonNumber: 1, displayName: 'S1', previousSeasonId: null,
@@ -71,15 +88,53 @@ describe('league detail view model', () => {
   })
 
   it('presents enrolled workspace data and stable empty states', () => {
-    const workspace: LeagueWorkspaceResponse = {
-      leagueId: 'league-1', seasonId: 'season-1', team: { leagueTeamId: 'team-1', name: '海港', shortName: '海港', logoUrl: null },
-      division: { stageId: 'stage-a', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
-      currentRank: { rank: 2, points: 13, played: 6, tiePending: true },
-      nextMatch: { id: 'match-1', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
-      capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true },
-    }
+    const workspace = workspaceFixture()
     expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2*', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
     expect(workspaceSummary({ ...workspace, division: null, currentRank: null, nextMatch: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', nextMatch: '暂无待进行比赛' })
+  })
+
+  it('exposes the complete Chinese league operations matrix without hiding a closed valuation window', () => {
+    const buildModules = (detailViewModel as unknown as {
+      workspaceModules?: (workspace: LeagueWorkspaceResponse) => unknown
+    }).workspaceModules
+    const workspace = workspaceFixture({
+      capabilities: {
+        canViewStandings: true,
+        canViewAssets: true,
+        canViewFinance: true,
+        canManageValuations: false,
+      },
+    })
+
+    expect(buildModules?.(workspace)).toEqual([
+      expect.objectContaining({ key: 'standings', label: '积分榜', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'assets', label: '球队资产', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'transactions', label: '交易记录', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'finance', label: '球队财务', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'valuations', label: '身价管理', stateLabel: '窗口未开放', enabled: false }),
+      expect.objectContaining({ key: 'cups', label: '杯赛中心', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'favorites', label: '我的收藏', stateLabel: '个人球探簿', enabled: true, wide: true }),
+    ])
+  })
+
+  it('builds stable module routes and refuses navigation into a closed valuation window', () => {
+    const routeFor = (detailViewModel as unknown as {
+      workspaceModuleRoute?: (key: string, workspace: LeagueWorkspaceResponse) => string | null
+    }).workspaceModuleRoute
+    const workspace = workspaceFixture({
+      capabilities: {
+        canViewStandings: true,
+        canViewAssets: true,
+        canViewFinance: true,
+        canManageValuations: false,
+      },
+    })
+
+    expect(routeFor?.('transactions', workspace)).toBe('/pages/league-transactions/index?leagueId=league-1')
+    expect(routeFor?.('finance', workspace)).toBe('/pages/team-finance/index?teamId=team-1&seasonId=season-1')
+    expect(routeFor?.('cups', workspace)).toBe('/pages/competitions/index')
+    expect(routeFor?.('favorites', workspace)).toBe('/pages/favorites/index')
+    expect(routeFor?.('valuations', workspace)).toBeNull()
   })
 
   it.each([
