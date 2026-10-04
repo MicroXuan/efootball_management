@@ -1,16 +1,18 @@
 import type {
   CompetitionDetail,
   CupBracketView,
+  CupRegistrationResponse,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
   GameAccountResponse,
+  SeasonEntryResponse,
   StandingsSnapshotResponse,
 } from '@efm/contracts'
 import { ApiError, api } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
 import { session } from '../../services/session'
 import { competitionErrorMessage, formatLocalDate, lifecycleLabel } from '../competitions/competitions.viewmodel'
-import { eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type EligibleAccount } from './detail.viewmodel'
+import { cupRegistrationAvailability, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type EligibleAccount } from './detail.viewmodel'
 
 type DetailTab = 'overview' | 'schedule' | 'standings' | 'bracket'
 
@@ -23,10 +25,13 @@ Page({
     standings: null as StandingsSnapshotResponse | null,
     bracket: null as CupBracketView | null,
     showBracket: false,
+    isCup: false,
     standingsIsEmpty: true,
     accounts: [] as EligibleAccount[],
     selectedAccountId: '',
     registration: null as CompetitionRegistrationResponse | null,
+    cupRegistration: null as CupRegistrationResponse | null,
+    seasonEntry: null as SeasonEntryResponse | null,
     registrationEnabled: false,
     registrationReason: '',
     loggedIn: false,
@@ -66,16 +71,28 @@ Page({
         : publicDetail
       let accounts: GameAccountResponse[] = []
       let registration: CompetitionRegistrationResponse | null = null
+      let cupRegistration: CupRegistrationResponse | null = null
+      let seasonEntry: SeasonEntryResponse | null = null
       if (session.getAccessToken()) {
-        const [rawAccounts, mine] = await Promise.all([
-          api.request<GameAccountResponse[]>({ path: '/me/game-accounts' }), competitionsApi.mine(undefined, 100),
-        ])
-        accounts = rawAccounts
-        registration = mine.items.find((item) => item.competition.id === detail.id)?.registration ?? null
+        if (showBracket) {
+          [cupRegistration, seasonEntry] = await Promise.all([
+            competitionsApi.cupRegistration(detail.id),
+            detail.seasonId ? competitionsApi.seasonEntry(detail.seasonId) : Promise.resolve(null),
+          ])
+        } else {
+          const [rawAccounts, mine] = await Promise.all([
+            api.request<GameAccountResponse[]>({ path: '/me/game-accounts' }), competitionsApi.mine(undefined, 100),
+          ])
+          accounts = rawAccounts
+          const mineRegistration = mine.items.find((item) => item.competition.id === detail.id)?.registration
+          registration = mineRegistration && 'gameAccountId' in mineRegistration ? mineRegistration : null
+        }
       }
       const completeDetail = { ...detail, currentRegistration: registration }
       const displayAccounts = eligibleAccounts(accounts, completeDetail)
-      const availability = registrationAvailability(completeDetail, displayAccounts.filter(({ eligible }) => eligible).length)
+      const availability = showBracket
+        ? cupRegistrationAvailability(completeDetail, seasonEntry, cupRegistration)
+        : registrationAvailability(completeDetail, displayAccounts.filter(({ eligible }) => eligible).length)
       this.setData({
         detail: completeDetail,
         lifecycleName: lifecycleLabel(detail.status),
@@ -85,10 +102,13 @@ Page({
         standings,
         bracket,
         showBracket,
+        isCup: showBracket,
         standingsIsEmpty: standingsEmpty(standings),
         accounts: displayAccounts,
         selectedAccountId: displayAccounts.find(({ eligible }) => eligible)?.id ?? '',
         registration,
+        cupRegistration,
+        seasonEntry,
         registrationEnabled: availability.enabled,
         registrationReason: availability.reason,
       })
@@ -100,14 +120,23 @@ Page({
   },
 
   async register() {
-    if (!this.data.detail || !this.data.selectedAccountId || this.data.acting) return
+    if (!this.data.detail || this.data.acting) return
     if (!session.getAccessToken()) {
       wx.navigateTo({ url: '/pages/login/index' })
       return
     }
+    if (this.data.isCup ? !this.data.seasonEntry : !this.data.selectedAccountId) return
     this.setData({ acting: true, errorMessage: '' })
     try {
-      await competitionsApi.register(this.data.detail.id, this.data.selectedAccountId, this.data.detail.activeRuleVersion)
+      if (this.data.isCup) {
+        await competitionsApi.registerCup(
+          this.data.detail.id,
+          this.data.seasonEntry!.id,
+          this.data.detail.activeRuleVersion,
+        )
+      } else {
+        await competitionsApi.register(this.data.detail.id, this.data.selectedAccountId, this.data.detail.activeRuleVersion)
+      }
       wx.showToast({ title: '报名已提交', icon: 'success' })
       await this.load()
     } catch (error) {
@@ -116,7 +145,7 @@ Page({
   },
 
   withdraw() {
-    const registration = this.data.registration
+    const registration = this.data.isCup ? this.data.cupRegistration : this.data.registration
     if (!registration || this.data.acting) return
     wx.showModal({
       title: '撤回报名', content: '撤回后如仍在报名期，可重新提交。', confirmText: '确认撤回',
@@ -124,10 +153,11 @@ Page({
     })
   },
 
-  async performWithdraw(registration: CompetitionRegistrationResponse) {
+  async performWithdraw(registration: CompetitionRegistrationResponse | CupRegistrationResponse) {
     this.setData({ acting: true, errorMessage: '' })
     try {
-      await competitionsApi.withdraw(this.data.id, registration.version)
+      if (this.data.isCup) await competitionsApi.withdrawCup(this.data.id, registration.version)
+      else await competitionsApi.withdraw(this.data.id, registration.version)
       wx.showToast({ title: '报名已撤回', icon: 'success' })
       await this.load()
     } catch (error) {

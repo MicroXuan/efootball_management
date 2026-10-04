@@ -23,7 +23,9 @@ import {
   CreateCompetitionRequestSchema,
   CreateSeasonCupRequestSchema,
   RegisterSeasonCupRequestSchema,
+  WithdrawSeasonCupRequestSchema,
   CupRegistrationResponseSchema,
+  MyCompetitionResponseSchema,
   GenerateCupGroupProposalRequestSchema,
   ConfirmCupGroupProposalRequestSchema,
   CupGroupProposalSchema,
@@ -1369,6 +1371,49 @@ describe('cup center contracts', () => {
       updatedAt: registrationOpensAt
     });
     assert.equal(response.teamName, '上海海港');
+    assert.deepEqual(WithdrawSeasonCupRequestSchema.parse({ expectedVersion: 2 }), { expectedVersion: 2 });
+  });
+
+  it('includes the season and team registration in a cup entry on my competitions', () => {
+    const item = MyCompetitionResponseSchema.parse({
+      competition: {
+        id: competitionId,
+        seasonId: entryId,
+        competitionType: 'KNOCKOUT_CUP',
+        name: 'S3 足总杯',
+        description: '赛季球队杯赛',
+        platform: 'MOBILE',
+        serverRegion: '国际服',
+        participantType: 'TEAM',
+        format: 'SINGLE_ELIMINATION',
+        status: 'REGISTRATION_OPEN',
+        registrationOpensAt,
+        registrationClosesAt,
+        startsAt,
+        endsAt,
+        participantLimit: 16,
+        participantCount: 1,
+        version: 1,
+        activeRuleVersion: 1,
+        createdAt: registrationOpensAt,
+        updatedAt: registrationOpensAt
+      },
+      registration: {
+        id: registrationId,
+        competitionId,
+        seasonEntryId: entryId,
+        applicantId: userId,
+        teamName: '上海海港',
+        status: 'APPROVED',
+        withdrawnAt: null,
+        version: 1,
+        createdAt: registrationOpensAt,
+        updatedAt: registrationOpensAt
+      },
+      nextMatch: null
+    });
+    assert.equal(item.competition.seasonId, entryId);
+    assert.equal('teamName' in item.registration && item.registration.teamName, '上海海港');
   });
 
   it('validates versioned group proposal generation, overrides, and response rows', () => {

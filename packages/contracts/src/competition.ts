@@ -171,6 +171,10 @@ export const RegisterSeasonCupRequestSchema = z.object({
   acceptedRuleVersion: z.number().int().positive()
 });
 
+export const WithdrawSeasonCupRequestSchema = z.object({
+  expectedVersion: ExpectedVersionSchema
+});
+
 export const CupRegistrationResponseSchema = z.object({
   id: ResourceIdSchema,
   competitionId: ResourceIdSchema,
@@ -462,6 +466,7 @@ export const CompetitionRegistrationResponseSchema = z.object({
 
 export const CompetitionSummarySchema = z.object({
   id: ResourceIdSchema,
+  seasonId: ResourceIdSchema.nullable().optional(),
   competitionType: CompetitionTypeSchema.optional(),
   name: z.string(),
   description: z.string(),
@@ -601,7 +606,7 @@ export const CompetitionMatchListResponseSchema = z.object({
 
 export const MyCompetitionResponseSchema = z.object({
   competition: CompetitionSummarySchema,
-  registration: CompetitionRegistrationResponseSchema,
+  registration: z.union([CompetitionRegistrationResponseSchema, CupRegistrationResponseSchema]),
   nextMatch: CompetitionMatchResponseSchema.nullable()
 });
 
@@ -638,6 +643,7 @@ export type ParsedCreateCompetitionRequest = z.output<typeof CreateCompetitionRe
 export type CreateSeasonCupRequest = z.input<typeof CreateSeasonCupRequestSchema>;
 export type ParsedCreateSeasonCupRequest = z.output<typeof CreateSeasonCupRequestSchema>;
 export type RegisterSeasonCupRequest = z.input<typeof RegisterSeasonCupRequestSchema>;
+export type WithdrawSeasonCupRequest = z.infer<typeof WithdrawSeasonCupRequestSchema>;
 export type CupRegistrationResponse = z.infer<typeof CupRegistrationResponseSchema>;
 export type SeasonCupSummary = z.infer<typeof SeasonCupSummarySchema>;
 export type SeasonCupListResponse = z.infer<typeof SeasonCupListResponseSchema>;

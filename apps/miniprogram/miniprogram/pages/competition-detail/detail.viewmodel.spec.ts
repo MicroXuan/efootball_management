@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CompetitionDetail, GameAccountResponse, StandingsSnapshotResponse } from '@efm/contracts'
-import { eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty } from './detail.viewmodel'
+import { cupRegistrationAvailability, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty } from './detail.viewmodel'
 
 const detail = {
   id: 'competition-1', platform: 'MOBILE', serverRegion: 'GLOBAL', status: 'REGISTRATION_OPEN',
@@ -41,5 +41,13 @@ describe('competition detail view model', () => {
     expect(isCupCompetition({ ...detail, competitionType: 'KNOCKOUT_CUP' })).toBe(true)
     expect(isCupCompetition({ ...detail, competitionType: 'GROUP_KNOCKOUT_CUP' })).toBe(true)
     expect(isCupCompetition({ ...detail, competitionType: 'OPEN_EVENT' })).toBe(false)
+  })
+
+  it('requires an approved owned season team when registering for a cup', () => {
+    const cup = { ...detail, competitionType: 'KNOCKOUT_CUP' as const }
+    expect(cupRegistrationAvailability(cup, { status: 'APPROVED' }, null)).toEqual({ enabled: true, reason: '' })
+    expect(cupRegistrationAvailability(cup, null, null).reason).toBe('你还没有本赛季的参赛球队')
+    expect(cupRegistrationAvailability(cup, { status: 'PENDING' }, null).reason).toBe('赛季球队尚未通过审核')
+    expect(cupRegistrationAvailability(cup, { status: 'APPROVED' }, { status: 'APPROVED' }).reason).toBe('球队已经报名')
   })
 })

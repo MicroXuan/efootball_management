@@ -1,4 +1,4 @@
-import type { CompetitionDetail, GameAccountResponse, StandingsSnapshotResponse } from '@efm/contracts'
+import type { CompetitionDetail, CupRegistrationResponse, GameAccountResponse, SeasonEntryResponse, StandingsSnapshotResponse } from '@efm/contracts'
 
 export type EligibleAccount = GameAccountResponse & {
   eligible: boolean
@@ -24,6 +24,19 @@ export function registrationAvailability(competition: CompetitionDetail, eligibl
     return { enabled: false, reason: competition.currentRegistration.status === 'PENDING' ? '报名正在审核' : '已经报名' }
   }
   if (eligibleAccountCount === 0) return { enabled: false, reason: '没有符合平台和区服要求的游戏账号' }
+  return { enabled: true, reason: '' }
+}
+
+export function cupRegistrationAvailability(
+  competition: CompetitionDetail,
+  seasonEntry: Pick<SeasonEntryResponse, 'status'> | null,
+  registration: Pick<CupRegistrationResponse, 'status'> | null,
+) {
+  if (competition.status !== 'REGISTRATION_OPEN') return { enabled: false, reason: '当前不在报名时间内' }
+  if (competition.participantCount >= competition.participantLimit) return { enabled: false, reason: '报名名额已满' }
+  if (registration?.status === 'APPROVED') return { enabled: false, reason: '球队已经报名' }
+  if (!seasonEntry) return { enabled: false, reason: '你还没有本赛季的参赛球队' }
+  if (seasonEntry.status !== 'APPROVED') return { enabled: false, reason: '赛季球队尚未通过审核' }
   return { enabled: true, reason: '' }
 }
 

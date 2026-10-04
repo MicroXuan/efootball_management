@@ -3,6 +3,7 @@ import type {
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
   CompetitionSummary,
+  CupRegistrationResponse,
   MatchResultVersionResponse,
   MyCompetitionListQuery,
   MyCompetitionListResponse,
@@ -15,8 +16,8 @@ import { PrismaService } from '../database/prisma.service.js';
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } };
-    homeParticipant: true;
-    awayParticipant: true;
+    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } };
+    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } };
     officialResultVersion: true;
     resultVersions: true;
   };
@@ -31,7 +32,10 @@ export class MyCompetitionsService {
   async listCompetitions(userId: string, query: MyCompetitionListQuery): Promise<MyCompetitionListResponse> {
     const registrations = await this.prisma.competitionRegistration.findMany({
       where: { applicantId: userId },
-      include: { competition: { include: { _count: { select: { participants: true } } } } },
+      include: {
+        competition: { include: { _count: { select: { participants: true } } } },
+        seasonEntry: { select: { teamNameSnapshot: true } }
+      },
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }]
     });
     const { items, nextCursor } = this.page(registrations, query.cursor, query.limit);
@@ -58,13 +62,15 @@ export class MyCompetitionsService {
         stage: { status: 'PUBLISHED', competition: { status: { not: 'CANCELLED' } } },
         OR: [
           { homeParticipant: { individualUserId: userId } },
-          { awayParticipant: { individualUserId: userId } }
+          { awayParticipant: { individualUserId: userId } },
+          { homeParticipant: { seasonEntry: { ownerUserId: userId } } },
+          { awayParticipant: { seasonEntry: { ownerUserId: userId } } }
         ]
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: true,
-        awayParticipant: true,
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -74,6 +80,7 @@ export class MyCompetitionsService {
     return {
       items: items.map((record) => {
         const myParticipantId = record.homeParticipant.individualUserId === userId
+          || record.homeParticipant.seasonEntry?.ownerUserId === userId
           ? record.homeParticipantId
           : record.awayParticipantId;
         const opponentProposal = record.resultVersions.find(({ submittedById }) => submittedById !== userId) ?? null;
@@ -108,8 +115,8 @@ export class MyCompetitionsService {
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: true,
-        awayParticipant: true,
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -180,10 +187,25 @@ export class MyCompetitionsService {
     };
   }
 
-  private registration(value: CompetitionRegistration): CompetitionRegistrationResponse {
-    if (!value.gameAccountId) {
-      throw new Error('Individual competition registration has no game account');
+  private registration(
+    value: CompetitionRegistration & { seasonEntry?: { teamNameSnapshot: string } | null }
+  ): CompetitionRegistrationResponse | CupRegistrationResponse {
+    if (value.seasonEntryId) {
+      if (!value.seasonEntry) throw new Error('Cup registration has no season entry');
+      return {
+        id: value.id,
+        competitionId: value.competitionId,
+        seasonEntryId: value.seasonEntryId,
+        applicantId: value.applicantId,
+        teamName: value.seasonEntry.teamNameSnapshot,
+        status: value.status,
+        withdrawnAt: value.withdrawnAt?.toISOString() ?? null,
+        version: value.version,
+        createdAt: value.createdAt.toISOString(),
+        updatedAt: value.updatedAt.toISOString()
+      };
     }
+    if (!value.gameAccountId) throw new Error('Individual competition registration has no game account');
     return {
       id: value.id,
       competitionId: value.competitionId,
@@ -203,6 +225,7 @@ export class MyCompetitionsService {
   private summary(value: Competition, participantCount: number): CompetitionSummary {
     return {
       id: value.id,
+      seasonId: value.seasonId,
       competitionType: value.competitionType,
       name: value.name,
       description: value.description,

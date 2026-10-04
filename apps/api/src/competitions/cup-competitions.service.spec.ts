@@ -22,7 +22,7 @@ function input() {
   };
 }
 
-function harness(options: { entryStatus?: string; ownerUserId?: string; participantCount?: number } = {}) {
+function harness(options: { entryStatus?: string; ownerUserId?: string; participantCount?: number; existingStatus?: string } = {}) {
   const competition = {
     id: 'cup-1', seasonId: 'season-1', name: 'S3 足总杯', description: '赛季杯赛',
     competitionType: 'GROUP_KNOCKOUT_CUP', format: 'GROUP_KNOCKOUT', participantType: 'TEAM',
@@ -37,6 +37,12 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
   const entry = {
     id: 'entry-1', seasonId: 'season-1', ownerUserId: options.ownerUserId ?? 'user-1',
     status: options.entryStatus ?? 'APPROVED', teamNameSnapshot: '上海海港'
+  };
+  const registration = {
+    id: 'registration-1', competitionId: 'cup-1', applicantId: 'user-1', gameAccountId: null,
+    seasonEntryId: 'entry-1', acceptedRuleVersion: 1, status: options.existingStatus ?? 'APPROVED', reviewReason: null,
+    reviewedById: null, reviewedAt: now, withdrawnAt: null, version: 1, createdAt: now, updatedAt: now,
+    seasonEntry: entry
   };
   const transaction = {
     $queryRaw: jest.fn(async () => []),
@@ -54,15 +60,23 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
     },
     seasonEntry: { findUnique: jest.fn(async () => entry) },
     competitionRegistration: {
-      findUnique: jest.fn(async () => null),
+      findUnique: jest.fn(async () => options.existingStatus ? registration : null),
+      findFirst: jest.fn(async () => registration),
       count: jest.fn(async () => options.participantCount ?? 0),
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'registration-1', version: 1, withdrawnAt: null, createdAt: now, updatedAt: now, ...data
+      })),
+      update: jest.fn(async ({ data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => ({
+        ...registration, ...data,
+        status: data.status as string,
+        withdrawnAt: data.withdrawnAt === null ? null : now,
+        version: 2
       }))
     },
     competitionParticipant: {
       aggregate: jest.fn(async () => ({ _max: { admissionSequence: 2 } })),
-      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'participant-1', ...data }))
+      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'participant-1', ...data })),
+      deleteMany: jest.fn(async (input: { where: Record<string, unknown> }) => { void input; return { count: 1 }; })
     }
   };
   const execute = jest.fn(async (
@@ -148,5 +162,41 @@ describe('CupCompetitionsService', () => {
       seasonEntryId: 'entry-1', acceptedRuleVersion: 1
     }, `register-${entryStatus}-${ownerUserId}`)).rejects.toMatchObject({ code });
     expect(transaction.competitionRegistration.create).not.toHaveBeenCalled();
+  });
+
+  it('reads and withdraws my team registration while the cup registration window is open', async () => {
+    const { service, transaction, audit } = harness();
+
+    await expect(service.getMine('user-1', 'cup-1')).resolves.toMatchObject({
+      seasonEntryId: 'entry-1', teamName: '上海海港', status: 'APPROVED'
+    });
+    const withdrawn = await service.withdraw('user-1', 'cup-1', { expectedVersion: 1 }, 'withdraw-cup');
+
+    expect(transaction.competitionParticipant.deleteMany).toHaveBeenCalledWith({
+      where: { registrationId: 'registration-1' }
+    });
+    expect(transaction.competitionRegistration.update).toHaveBeenCalledWith({
+      where: { id: 'registration-1' },
+      data: { status: 'WITHDRAWN', withdrawnAt: now, version: { increment: 1 } }
+    });
+    expect(audit.record).toHaveBeenCalledWith(transaction, expect.objectContaining({
+      action: 'cup.registration.withdraw', resourceId: 'registration-1'
+    }));
+    expect(withdrawn).toMatchObject({ status: 'WITHDRAWN', version: 2 });
+  });
+
+  it('allows a withdrawn team to register again while the window remains open', async () => {
+    const { service, transaction } = harness({ existingStatus: 'WITHDRAWN' });
+
+    const result = await service.register('user-1', 'cup-1', {
+      seasonEntryId: 'entry-1', acceptedRuleVersion: 1
+    }, 'register-again');
+
+    expect(transaction.competitionRegistration.update).toHaveBeenCalledWith({
+      where: { id: 'registration-1' },
+      data: expect.objectContaining({ status: 'APPROVED', withdrawnAt: null, version: { increment: 1 } })
+    });
+    expect(transaction.competitionParticipant.create).toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'APPROVED', version: 2 });
   });
 });

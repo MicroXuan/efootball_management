@@ -337,6 +337,7 @@ export class CompetitionsService {
   private summary(record: Competition, participantCount: number) {
     return {
       id: record.id,
+      seasonId: record.seasonId,
       competitionType: record.competitionType,
       name: record.name,
       description: record.description,

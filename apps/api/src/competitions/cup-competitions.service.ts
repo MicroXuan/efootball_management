@@ -4,14 +4,15 @@ import type {
   ParsedCreateSeasonCupRequest,
   RegisterSeasonCupRequest,
   SeasonCupListResponse,
-  SeasonCupSummary
+  SeasonCupSummary,
+  WithdrawSeasonCupRequest
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import type { Competition, CompetitionRegistration, CupCompetitionConfig } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
-import { CompetitionError } from './competition.errors.js';
+import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { COMPETITION_CLOCK, type CompetitionClock } from './registrations.service.js';
 
@@ -172,21 +173,32 @@ export class CupCompetitionsService {
       if (activeCount >= competition.participantLimit) {
         throw new CompetitionError('REGISTRATION_FULL', '杯赛报名人数已满', 409);
       }
-      if (existing) {
+      if (existing && existing.status !== 'WITHDRAWN') {
         throw new CompetitionError('CUP_REGISTRATION_STATE_INVALID', '当前报名记录不能重新报名', 409);
       }
 
-      const registration = await transaction.competitionRegistration.create({
-        data: {
-          competitionId,
-          applicantId: userId,
-          gameAccountId: null,
-          seasonEntryId: entry.id,
-          acceptedRuleVersion: input.acceptedRuleVersion,
-          status: 'APPROVED',
-          reviewedAt: this.clock.now()
-        }
-      });
+      const registration = existing
+        ? await transaction.competitionRegistration.update({
+          where: { id: existing.id },
+          data: {
+            acceptedRuleVersion: input.acceptedRuleVersion,
+            status: 'APPROVED',
+            withdrawnAt: null,
+            reviewedAt: this.clock.now(),
+            version: { increment: 1 }
+          }
+        })
+        : await transaction.competitionRegistration.create({
+          data: {
+            competitionId,
+            applicantId: userId,
+            gameAccountId: null,
+            seasonEntryId: entry.id,
+            acceptedRuleVersion: input.acceptedRuleVersion,
+            status: 'APPROVED',
+            reviewedAt: this.clock.now()
+          }
+        });
       const latest = await transaction.competitionParticipant.aggregate({
         where: { competitionId }, _max: { admissionSequence: true }
       });
@@ -209,6 +221,64 @@ export class CupCompetitionsService {
         metadata: { competitionId, seasonEntryId: entry.id }
       });
       return this.registration(registration, entry.teamNameSnapshot);
+    });
+  }
+
+  async getMine(userId: string, competitionId: string): Promise<CupRegistrationResponse | null> {
+    const registration = await this.prisma.competitionRegistration.findFirst({
+      where: {
+        competitionId,
+        applicantId: userId,
+        competition: { competitionType: { in: ['GROUP_KNOCKOUT_CUP', 'KNOCKOUT_CUP'] } }
+      },
+      include: { seasonEntry: { select: { teamNameSnapshot: true } } }
+    });
+    if (!registration) return null;
+    if (!registration.seasonEntry) throw new Error('Cup registration has no season entry');
+    return this.registration(registration, registration.seasonEntry.teamNameSnapshot);
+  }
+
+  withdraw(
+    userId: string,
+    competitionId: string,
+    input: WithdrawSeasonCupRequest,
+    key: string
+  ): Promise<CupRegistrationResponse> {
+    return this.userReceipts.execute(userId, `cup.withdraw:${competitionId}`, key, async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competitions WHERE id = ${competitionId} FOR UPDATE`;
+      const competition = await transaction.competition.findUnique({
+        where: { id: competitionId },
+        include: { cupConfig: true }
+      });
+      if (!competition || !competition.cupConfig || !this.isCup(competition.competitionType)) {
+        throw new CompetitionError('CUP_NOT_FOUND', '杯赛不存在', 404);
+      }
+      this.assertRegistrationOpen(competition);
+      const registration = await transaction.competitionRegistration.findFirst({
+        where: { competitionId, applicantId: userId },
+        include: { seasonEntry: { select: { teamNameSnapshot: true } } }
+      });
+      if (!registration || !registration.seasonEntry) {
+        throw new CompetitionError('CUP_REGISTRATION_NOT_FOUND', '未找到杯赛报名记录', 404);
+      }
+      assertExpectedVersion(registration.version, input.expectedVersion, 'Cup registration');
+      if (registration.status !== 'APPROVED') {
+        throw new CompetitionError('CUP_REGISTRATION_STATE_INVALID', '当前杯赛报名不能撤回', 409);
+      }
+      await transaction.competitionParticipant.deleteMany({ where: { registrationId: registration.id } });
+      const updated = await transaction.competitionRegistration.update({
+        where: { id: registration.id },
+        data: { status: 'WITHDRAWN', withdrawnAt: this.clock.now(), version: { increment: 1 } }
+      });
+      await this.audit.record(transaction, {
+        actorUserId: userId,
+        leagueId: null,
+        action: 'cup.registration.withdraw',
+        resourceType: 'CompetitionRegistration',
+        resourceId: registration.id,
+        metadata: { competitionId, seasonEntryId: registration.seasonEntryId }
+      });
+      return this.registration(updated, registration.seasonEntry.teamNameSnapshot);
     });
   }
 

@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import {
   RegisterSeasonCupRequestSchema,
   ResourceIdSchema,
-  type RegisterSeasonCupRequest
+  WithdrawSeasonCupRequestSchema,
+  type RegisterSeasonCupRequest,
+  type WithdrawSeasonCupRequest
 } from '@efm/contracts';
 import { CurrentUser, type CurrentUser as AuthenticatedUser } from '../common/auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard.js';
@@ -37,5 +39,29 @@ export class CupCompetitionsController {
       throw new CompetitionError('IDEMPOTENCY_KEY_REQUIRED', '必须提供 Idempotency-Key 请求头', 400);
     }
     return this.cups.register(user.id, competitionId, body, key);
+  }
+
+  @Get(':competitionId/registration/me')
+  @UseGuards(JwtAuthGuard)
+  mine(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
+  ) {
+    return this.cups.getMine(user.id, competitionId);
+  }
+
+  @Delete(':competitionId/registration/me')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  withdraw(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(WithdrawSeasonCupRequestSchema)) body: WithdrawSeasonCupRequest
+  ) {
+    if (!key?.trim()) {
+      throw new CompetitionError('IDEMPOTENCY_KEY_REQUIRED', '必须提供 Idempotency-Key 请求头', 400);
+    }
+    return this.cups.withdraw(user.id, competitionId, body, key);
   }
 }

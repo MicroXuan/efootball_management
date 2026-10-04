@@ -28,6 +28,9 @@ page { background: #0e1417; color: #f4f7f8; }
 .account.is-disabled { opacity: .45; }
 .account-name, .account-meta { display: block; }
 .account-name { color: #f4f7f8; font-size: 24rpx; }.account-meta { margin-top: 5rpx; font-size: 18rpx; }
+.team-entry-hint { padding: 24rpx; display: grid; gap: 8rpx; border: 1rpx dashed #46545b; border-radius: 20rpx; color: #7e8b91; }
+.team-entry-hint text:first-child { color: #f4f7f8; font-weight: 700; }
+.registered-team { border-color: rgba(182,241,58,.34); background: linear-gradient(145deg, rgba(182,241,58,.08), #151d21); }
 .primary-button, .danger-button, .outline-button, .manager-button { min-height: 88rpx; border-radius: 16rpx; font-size: 24rpx; font-weight: 700; }
 .primary-button { background: #b6f13a; color: #0e1417; }.primary-button[disabled] { background: #263238; color: #7e8b91; }
 .danger-button { border: 2rpx solid #aab5ba; background: transparent; color: #aab5ba; }
