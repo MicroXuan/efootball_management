@@ -33,6 +33,76 @@ const detail = (overrides: Partial<PlayerCardDetail> = {}): PlayerCardDetail => 
 })
 
 describe('player card detail view model', () => {
+  it('builds a Chinese scouting profile from card and imported physical metadata', () => {
+    const view = toCardDetailViewModel(detail({
+      nationality: '阿根廷',
+      club: '迈阿密国际',
+      playStyle: '创意指挥官',
+      pack: {
+        id: '44444444-4444-4444-8444-444444444444',
+        nameZh: 'POTW 26',
+        nameEn: null,
+        season: '2026',
+        releaseDate: '2026-09-20',
+        coverUrl: null,
+      },
+      attributes: {
+        age: 39,
+        heightCm: 170,
+        preferredFoot: 'LEFT',
+        atRating: 103,
+        speed: 94,
+        passing: 96,
+      },
+    }))
+
+    expect(Object.fromEntries(view.profileFacts.map(({ key, value }) => [key, value])))
+      .toEqual({
+        position: '中前卫',
+        nationality: '阿根廷',
+        club: '迈阿密国际',
+        age: '39 岁',
+        height: '170 cm',
+        foot: '左脚',
+        atRating: '103',
+        playStyle: '创意指挥官',
+        cardType: '精选',
+        pack: 'POTW 26 · 2026',
+        publishedAt: '2026.09.24',
+        status: '可用',
+      })
+    expect(view.attributes.map(({ key }) => key)).toEqual(['speed', 'passing'])
+  })
+
+  it('makes elite ratings distinct and safely caps their visual bar width', () => {
+    const view = toCardDetailViewModel(detail({
+      attributes: { finishing: 104, speed: 94, stamina: 89 },
+    }))
+
+    expect(view.attributes).toEqual([
+      expect.objectContaining({ key: 'speed', value: 94, tone: 'elite', barWidth: 94 }),
+      expect.objectContaining({ key: 'finishing', value: 104, tone: 'elite', barWidth: 100 }),
+      expect.objectContaining({ key: 'stamina', value: 89, tone: 'standard', barWidth: 89 }),
+    ])
+  })
+
+  it('uses explicit Chinese fallbacks when scouting metadata is missing', () => {
+    const facts = Object.fromEntries(
+      toCardDetailViewModel(detail()).profileFacts.map(({ key, value }) => [key, value]),
+    )
+
+    expect(facts).toMatchObject({
+      nationality: '未记录',
+      club: '未记录',
+      age: '未记录',
+      height: '未记录',
+      foot: '未记录',
+      atRating: '未记录',
+      playStyle: '未记录',
+      pack: '未记录',
+    })
+  })
+
   it('uses fixed attribute order and appends unknown keys alphabetically', () => {
     expect(toCardDetailViewModel(detail()).attributes.map(({ key }) => key))
       .toEqual(['speed', 'passing', 'agility', 'zebra'])

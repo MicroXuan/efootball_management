@@ -19,13 +19,16 @@
     <view class="hero">
       <view class="hero-card"><player-card card="{{card}}" /></view>
       <view class="hero-copy">
-        <text class="hero-kicker">球员档案</text>
+        <text class="hero-kicker">球探报告</text>
+        <view class="hero-scoreline">
+          <text class="hero-score">{{card.overallRating}}</text>
+          <view class="hero-position">
+            <text class="hero-position-code">{{card.position}}</text>
+            <text class="hero-position-label">{{card.positionLabel}}</text>
+          </view>
+        </view>
         <text class="hero-name">{{card.displayName}}</text>
         <text class="hero-card-name">{{card.cardName}}</text>
-        <view class="hero-rule"></view>
-        <text class="hero-meta">{{card.nationality || '国籍未记录'}}</text>
-        <text class="hero-meta">{{card.club || '俱乐部未记录'}}</text>
-        <text wx:if="{{card.packName}}" class="pack-badge">{{card.packName}}</text>
         <button class="favorite-action {{isFavorite ? 'is-active' : ''}}" loading="{{favoriteBusy}}" bindtap="toggleFavorite">
           {{isFavorite ? '★ 已收藏' : '☆ 收藏球员'}}
         </button>
@@ -34,14 +37,37 @@
 
     <view class="detail-section">
       <view class="section-head">
-        <text class="section-index">01</text>
-        <text class="section-title">能力数据</text>
+        <view>
+          <text class="section-kicker">球探档案</text>
+          <text class="section-title">基础资料</text>
+        </view>
+        <text class="section-note">已发布数据</text>
+      </view>
+      <view class="profile-grid">
+        <view
+          wx:for="{{card.profileFacts}}"
+          wx:key="key"
+          class="profile-fact {{item.wide ? 'is-wide' : ''}}"
+        >
+          <text class="fact-label">{{item.label}}</text>
+          <text class="fact-value {{item.value === '未记录' ? 'is-muted' : ''}}">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-section ability-section">
+      <view class="section-head">
+        <view>
+          <text class="section-kicker">数据分析</text>
+          <text class="section-title">能力面板</text>
+        </view>
+        <text class="section-note">90+ 高亮</text>
       </view>
       <view wx:if="{{card.attributes.length}}" class="attribute-grid">
-        <view wx:for="{{card.attributes}}" wx:key="key" class="attribute-row">
+        <view wx:for="{{card.attributes}}" wx:key="key" class="attribute-row {{item.tone === 'elite' ? 'is-elite' : ''}}">
           <text class="attribute-label">{{item.label}}</text>
           <text class="attribute-value">{{item.value}}</text>
-          <view class="attribute-track"><view class="attribute-fill" style="width: {{item.value}}%;"></view></view>
+          <view class="attribute-track"><view class="attribute-fill" style="width: {{item.barWidth}}%;"></view></view>
         </view>
       </view>
       <text wx:else class="empty-copy">暂无能力数据</text>
@@ -49,8 +75,11 @@
 
     <view class="detail-section">
       <view class="section-head">
-        <text class="section-index">02</text>
-        <text class="section-title">球员技能</text>
+        <view>
+          <text class="section-kicker">技能清单</text>
+          <text class="section-title">球员技能</text>
+        </view>
+        <text class="section-note">{{card.skills.length}} 项</text>
       </view>
       <view wx:if="{{card.skills.length}}" class="skill-list">
         <text wx:for="{{card.skills}}" wx:key="code" class="skill-chip">{{item.nameZh || item.nameEn || item.code}}</text>
@@ -60,19 +89,27 @@
 
     <view wx:if="{{card.siblings.length}}" class="detail-section">
       <view class="section-head">
-        <text class="section-index">03</text>
-        <text class="section-title">同球员其他卡片</text>
+        <view>
+          <text class="section-kicker">卡片版本</text>
+          <text class="section-title">同球员其他卡片</text>
+        </view>
+        <text class="section-note">{{card.siblings.length}} 张</text>
       </view>
-      <view
-        wx:for="{{card.siblings}}"
-        wx:key="id"
-        class="sibling-row"
-        data-id="{{item.id}}"
-        bindtap="onSiblingTap"
-      >
-        <text class="sibling-rating">{{item.overallRating}}</text>
-        <text class="sibling-title">{{item.title}}</text>
-        <text class="sibling-arrow">›</text>
+      <view class="sibling-list">
+        <view
+          wx:for="{{card.siblings}}"
+          wx:key="id"
+          class="sibling-row"
+          data-id="{{item.id}}"
+          bindtap="onSiblingTap"
+        >
+          <text class="sibling-rating">{{item.overallRating}}</text>
+          <view class="sibling-copy">
+            <text class="sibling-title">{{item.title}}</text>
+            <text class="sibling-meta">{{item.cardTypeLabel}} · {{item.positionLabel}}</text>
+          </view>
+          <text class="sibling-arrow">›</text>
+        </view>
       </view>
     </view>
   </block>
