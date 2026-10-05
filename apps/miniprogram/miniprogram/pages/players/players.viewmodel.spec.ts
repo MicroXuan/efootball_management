@@ -2,11 +2,12 @@ import type { PlayerCardSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   buildPlayerQuery,
-  favoriteLookup,
+  cardTypeOptions,
   groupCardsByPack,
   isLatestPlayerRequest,
   mergeUniqueCards,
   nextPlayerPageState,
+  positionOptions,
   toPackOptions,
   toCardViewModel,
 } from './players.viewmodel'
@@ -58,16 +59,28 @@ describe('player list view model', () => {
       coverUrl: null,
       cardCount: 11,
     }])).toEqual([
-      { value: '', label: '全部球员包' },
+      { value: '', label: '球员包' },
       { value: '44444444-4444-4444-8444-444444444444', label: '每周精选 · 11 张' },
     ])
   })
 
-  it('maps favorite status by player id instead of card id', () => {
-    const samePlayerCard = card({ id: '99999999-9999-4999-8999-999999999999' })
-    const lookup = favoriteLookup([samePlayerCard], [samePlayerCard.playerId])
-    expect(lookup[samePlayerCard.playerId]).toBe(true)
-    expect(lookup[samePlayerCard.id]).toBeUndefined()
+  it('offers every supported position and card type as explicit selector options', () => {
+    expect(positionOptions).toEqual([
+      { value: '', label: '位置' },
+      ...['CF', 'SS', 'LWF', 'RWF', 'LMF', 'RMF', 'AMF', 'CMF', 'DMF', 'LB', 'RB', 'CB', 'GK']
+        .map((value) => ({ value, label: value })),
+    ])
+    expect(cardTypeOptions).toEqual([
+      { value: '', label: '球员类别' },
+      { value: 'STANDARD', label: '普通球员' },
+      { value: 'LEGENDARY', label: '普通传奇' },
+      { value: 'EPIC', label: '史诗epic' },
+      { value: 'BIG_TIME', label: 'BigTime' },
+      { value: 'TRENDING', label: '状态火热' },
+      { value: 'FEATURED', label: '精选球员' },
+      { value: 'HIGHLIGHT', label: '高光球员' },
+      { value: 'SHOW_TIME', label: 'ShowTime' },
+    ])
   })
 
   it('accepts only the latest outstanding player request', () => {
@@ -109,8 +122,14 @@ describe('player list view model', () => {
       usesFallbackArtwork: true,
       fallbackInitials: '亚历',
       positionLabel: '中前卫',
-      cardTypeLabel: '精选',
+      cardTypeLabel: '精选球员',
     })
+  })
+
+  it('keeps the original PESDATA artwork URL so lists and details share the same cached image', () => {
+    const original = 'https://img.pesdata.net/images/playerCard/52912386607527_l.webp'
+
+    expect(toCardViewModel(card({ imageUrl: original })).imageUrl).toBe(original)
   })
 
   it('replaces on refresh, appends uniquely, stops at an empty cursor, and preserves content on error', () => {

@@ -21,7 +21,7 @@
       <view class="hero-copy">
         <text class="hero-kicker">球探报告</text>
         <view class="hero-scoreline">
-          <text class="hero-score">{{card.overallRating}}</text>
+          <text class="hero-score {{autoApplied ? 'is-boosted' : ''}}">{{presentation.overallRating}}</text>
           <view class="hero-position">
             <text class="hero-position-code">{{card.position}}</text>
             <text class="hero-position-label">{{card.positionLabel}}</text>
@@ -32,6 +32,73 @@
         <button class="favorite-action {{isFavorite ? 'is-active' : ''}}" loading="{{favoriteBusy}}" bindtap="toggleFavorite">
           {{isFavorite ? '★ 已收藏' : '☆ 收藏球员'}}
         </button>
+      </view>
+    </view>
+
+    <view class="detail-section progression-section {{autoApplied ? 'is-applied' : ''}}">
+      <view class="section-head">
+        <view>
+          <text class="section-kicker">智能加点</text>
+          <text class="section-title">自动成长方案</text>
+        </view>
+        <text class="section-note">{{buildPanel.note}}</text>
+      </view>
+
+      <block wx:if="{{card.autoBuild.available}}">
+        <view class="build-summary">
+          <view><text class="build-label">基础总评</text><text class="build-value">{{card.overallRating}}</text></view>
+          <text class="build-arrow">→</text>
+          <view><text class="build-label">方案总评</text><text class="build-value is-accent">{{card.autoBuild.maxOverall}}</text></view>
+          <view wx:if="{{card.autoBuild.dtRating}}"><text class="build-label">DT 评分</text><text class="build-value">{{card.autoBuild.dtRating}}</text></view>
+        </view>
+        <view class="allocation-list">
+          <view wx:for="{{card.autoBuild.allocationRows}}" wx:key="key" class="allocation-chip">
+            <text>{{item.label}}</text><text class="allocation-points">+{{item.points}}</text>
+          </view>
+        </view>
+      </block>
+      <view wx:else class="build-unavailable">
+        <text>{{card.autoBuild.unavailableReason}}</text>
+      </view>
+
+      <button
+        class="auto-build-button {{autoApplied ? 'is-reset' : ''}} {{!card.autoBuild.available ? 'is-unavailable' : ''}}"
+        disabled="{{!card.autoBuild.available}}"
+        bindtap="toggleAutomaticBuild"
+      >
+        {{buildPanel.buttonLabel}}
+      </button>
+
+      <view class="build-visuals">
+        <view class="visual-card radar-card">
+          <text class="visual-title">能力雷达</text>
+          <view class="radar-stage">
+            <view class="radar-plot">
+              <view wx:for="{{presentation.radarChart.axes}}" wx:key="key" class="radar-axis" style="{{item.style}}"></view>
+              <block wx:for="{{presentation.radarChart.rings}}" wx:key="key" wx:for-item="ring">
+                <view wx:for="{{ring.segments}}" wx:key="key" wx:for-item="segment" class="radar-grid-line" style="{{segment.style}}"></view>
+              </block>
+              <view class="radar-area" style="-webkit-clip-path: polygon({{presentation.radarChart.polygon}}); clip-path: polygon({{presentation.radarChart.polygon}});"></view>
+              <view wx:for="{{presentation.radarChart.outline}}" wx:key="key" class="radar-outline" style="{{item.style}}"></view>
+              <view wx:for="{{presentation.radarChart.dots}}" wx:key="key" class="radar-dot" style="{{item.style}}"></view>
+            </view>
+          </view>
+          <view class="radar-legend">
+            <view wx:for="{{presentation.radarMetrics}}" wx:key="key" class="legend-item">
+              <text>{{item.label}}</text><text>{{item.value === null ? '—' : item.value}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="visual-card">
+          <text class="visual-title">位置适配</text>
+          <text class="visual-note">主位置为卡片总评，其余为能力适配值</text>
+          <view class="position-map">
+            <view wx:for="{{presentation.positions}}" wx:key="code" class="position-cell {{item.isPrimary ? 'is-primary' : ''}} {{item.rating ? 'has-rating' : ''}}">
+              <text class="position-rating">{{item.rating || '—'}}</text>
+              <text class="position-code">{{item.code}}</text>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -63,10 +130,10 @@
         </view>
         <text class="section-note">90+ 高亮</text>
       </view>
-      <view wx:if="{{card.attributes.length}}" class="attribute-grid">
-        <view wx:for="{{card.attributes}}" wx:key="key" class="attribute-row {{item.tone === 'elite' ? 'is-elite' : ''}}">
+      <view wx:if="{{presentation.attributes.length}}" class="attribute-grid">
+        <view wx:for="{{presentation.attributes}}" wx:key="key" class="attribute-row {{item.tone === 'elite' ? 'is-elite' : ''}}">
           <text class="attribute-label">{{item.label}}</text>
-          <text class="attribute-value">{{item.value}}</text>
+          <text class="attribute-value">{{item.value}}<text wx:if="{{item.delta}}" class="attribute-delta"> +{{item.delta}}</text></text>
           <view class="attribute-track"><view class="attribute-fill" style="width: {{item.barWidth}}%;"></view></view>
         </view>
       </view>

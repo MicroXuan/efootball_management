@@ -16,7 +16,6 @@ export type PlayerCardViewModel = PlayerCardSummary & {
   packName: string | null
   usesFallbackArtwork: boolean
   fallbackInitials: string
-  isFavorite: boolean
 }
 
 export type PackOption = { value: string; label: string }
@@ -53,14 +52,28 @@ const positionLabels: Record<PlayerPosition, string> = {
 }
 
 const cardTypeLabels: Record<PlayerCardType, string> = {
-  STANDARD: '基础卡',
-  FEATURED: '精选',
+  STANDARD: '普通球员',
+  LEGENDARY: '普通传奇',
+  EPIC: '史诗epic',
+  BIG_TIME: 'BigTime',
   TRENDING: '状态火热',
-  HIGHLIGHT: '高光',
-  EPIC: '史诗',
-  BIG_TIME: '时刻',
+  FEATURED: '精选球员',
+  HIGHLIGHT: '高光球员',
+  SHOW_TIME: 'ShowTime',
   OTHER: '其他',
 }
+
+export const positionOptions: Array<{ value: '' | PlayerPosition; label: string }> = [
+  { value: '', label: '位置' },
+  ...(['CF', 'SS', 'LWF', 'RWF', 'LMF', 'RMF', 'AMF', 'CMF', 'DMF', 'LB', 'RB', 'CB', 'GK'] as PlayerPosition[])
+    .map((value) => ({ value, label: value })),
+]
+
+export const cardTypeOptions: Array<{ value: '' | PlayerCardType; label: string }> = [
+  { value: '', label: '球员类别' },
+  ...(['STANDARD', 'LEGENDARY', 'EPIC', 'BIG_TIME', 'TRENDING', 'FEATURED', 'HIGHLIGHT', 'SHOW_TIME'] as PlayerCardType[])
+    .map((value) => ({ value, label: cardTypeLabels[value] })),
+]
 
 function fallbackInitials(name: string): string {
   if (/[^\u0000-\u00ff]/.test(name)) return [...name].slice(0, 2).join('')
@@ -106,22 +119,12 @@ export function toPackOptions(
   packs: Array<CardPackSummary & { cardCount: number }>,
 ): PackOption[] {
   return [
-    { value: '', label: '全部球员包' },
+    { value: '', label: '球员包' },
     ...packs.map((pack) => ({
       value: pack.id,
       label: `${pack.nameZh ?? pack.nameEn ?? '未命名球员包'} · ${pack.cardCount} 张`,
     })),
   ]
-}
-
-export function favoriteLookup(
-  cards: PlayerCardSummary[],
-  favoritePlayerIds: string[],
-): Record<string, boolean> {
-  const favoriteIds = new Set(favoritePlayerIds)
-  return Object.fromEntries(
-    [...new Set(cards.map(({ playerId }) => playerId))].map((playerId) => [playerId, favoriteIds.has(playerId)]),
-  )
 }
 
 export function isLatestPlayerRequest(
@@ -134,31 +137,30 @@ export function isLatestPlayerRequest(
 
 export function toCardViewModel(
   card: PlayerCardSummary,
-  favorites: Record<string, boolean> = {},
 ): PlayerCardViewModel {
   const displayName = card.playerNameZh ?? card.playerNameEn ?? '未知球员'
+  const imageUrl = card.imageUrl
   return {
     ...card,
+    imageUrl,
     displayName,
     positionLabel: positionLabels[card.position],
     cardTypeLabel: cardTypeLabels[card.cardType],
     packName: card.pack?.nameZh ?? card.pack?.nameEn ?? null,
-    usesFallbackArtwork: !card.imageUrl,
+    usesFallbackArtwork: !imageUrl,
     fallbackInitials: fallbackInitials(displayName),
-    isFavorite: favorites[card.playerId] === true,
   }
 }
 
 export function groupCardsByPack(
   cards: PlayerCardSummary[],
-  favorites: Record<string, boolean> = {},
 ): PlayerCardGroup[] {
   const groups = new Map<string, PlayerCardGroup>()
   for (const card of cards) {
     const id = card.pack?.id ?? 'other'
     const title = card.pack?.nameZh ?? card.pack?.nameEn ?? '其他球员卡'
     const group = groups.get(id) ?? { id, title, cards: [] }
-    group.cards.push(toCardViewModel(card, favorites))
+    group.cards.push(toCardViewModel(card))
     groups.set(id, group)
   }
   return [...groups.values()]

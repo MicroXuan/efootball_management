@@ -10,13 +10,13 @@ const positions = new Set<PlayerPosition>([
 
 const cardTypes: Record<number, PlayerCardType> = {
   1: 'STANDARD',
-  2: 'OTHER',
+  2: 'LEGENDARY',
   3: 'EPIC',
   4: 'BIG_TIME',
   5: 'TRENDING',
   6: 'FEATURED',
   7: 'HIGHLIGHT',
-  8: 'HIGHLIGHT'
+  8: 'SHOW_TIME'
 };
 
 export class PesdataMappingError extends Error {
@@ -155,7 +155,7 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
   const packName = requiredText(detail.agentTitle, 'agentTitle');
   const releaseDate = validDate(detail.agentDate);
   const updatedAt = sourceTimestamp(detail.created_at);
-  const imageUrl = text(detail.player_big) ?? text(detail.bigFace) ?? text(detail.player_small);
+  const imageUrl = text(detail.player_big) ?? text(detail.player_small) ?? text(detail.bigFace);
   const attributes = {
     speed: finiteNumber(detail.Speed, 'Speed'),
     acceleration: finiteNumber(detail.Acceleration, 'Acceleration'),

@@ -88,6 +88,8 @@ describe('PlayerCatalogService', () => {
     const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
     const cardIds = cards.map(({ id }) => id);
     const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
+    if (cardIds.length) await prisma.footballPlayerBestCard.deleteMany({ where: { playerCardId: { in: cardIds } } });
+    if (cardIds.length) await prisma.playerCardAutoBuild.deleteMany({ where: { playerCardId: { in: cardIds } } });
     if (cardIds.length) await prisma.playerCardVersion.deleteMany({ where: { playerCardId: { in: cardIds } } });
     await prisma.catalogRelease.deleteMany({ where: { batch: { sourceId } } });
     await prisma.importBatch.deleteMany({ where: { sourceId } });
@@ -180,5 +182,24 @@ describe('PlayerCatalogService', () => {
     expect(detail.otherCards).toEqual(expect.any(Array));
     expect(pack.cards).toHaveLength(2);
     await expect(catalog.getCard(randomUUID())).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('returns the newest persisted automatic build with a public card detail', async () => {
+    await importAndPublish([card(3, {
+      autoBuildAllocation: { shooting: 8, passing: 4, dribbling: 12 },
+      autoBuildMaxOverall: 101,
+      dtRating: 99,
+      algorithmVersion: 'pesdata-auto-v1',
+    })]);
+    const [summary] = (await catalog.search({ keyword: sourceCode, limit: 20 })).items;
+
+    await expect(catalog.getCard(summary!.id)).resolves.toMatchObject({
+      autoBuild: {
+        allocation: { shooting: 8, passing: 4, dribbling: 12 },
+        maxOverall: 101,
+        dtRating: 99,
+        algorithmVersion: 'pesdata-auto-v1',
+      },
+    });
   });
 });

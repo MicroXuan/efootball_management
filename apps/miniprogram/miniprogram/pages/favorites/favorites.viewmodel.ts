@@ -46,7 +46,7 @@ export function nextFavoritePageState(
     : response.items
   return {
     items,
-    cards: items.map(({ card }) => toCardViewModel(card, { [card.playerId]: true })),
+    cards: items.map(({ card }) => toCardViewModel(card)),
     nextCursor: response.nextCursor,
     hasMore: Boolean(response.nextCursor),
     errorMessage: '',

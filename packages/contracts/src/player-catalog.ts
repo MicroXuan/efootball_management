@@ -19,11 +19,13 @@ export const PlayerPositionSchema = z.enum([
 
 export const PlayerCardTypeSchema = z.enum([
   'STANDARD',
-  'FEATURED',
-  'TRENDING',
-  'HIGHLIGHT',
+  'LEGENDARY',
   'EPIC',
   'BIG_TIME',
+  'TRENDING',
+  'FEATURED',
+  'HIGHLIGHT',
+  'SHOW_TIME',
   'OTHER'
 ]);
 
@@ -90,13 +92,21 @@ export const PlayerDetailSchema = z.object({
   cards: z.array(PlayerCardSummarySchema)
 });
 
+export const PlayerAutoBuildSchema = z.object({
+  allocation: z.record(z.string(), z.number().int().nonnegative()),
+  maxOverall: z.number().int().min(1).max(110),
+  dtRating: z.number().int().min(1).max(120).nullable(),
+  algorithmVersion: z.string().min(1).max(64)
+});
+
 export const PlayerCardDetailSchema = PlayerCardSummarySchema.extend({
   nationality: z.string().nullable(),
   club: z.string().nullable(),
   status: PlayerCardStatusSchema,
   skills: z.array(SkillSummarySchema),
   attributes: PlayerAttributesSchema,
-  otherCards: z.array(PlayerCardSummarySchema)
+  otherCards: z.array(PlayerCardSummarySchema),
+  autoBuild: PlayerAutoBuildSchema.nullable()
 });
 
 export const CardPackListResponseSchema = z.object({
@@ -148,6 +158,7 @@ export type PlayerCardSummary = z.infer<typeof PlayerCardSummarySchema>;
 export type PlayerSearchResponse = z.infer<typeof PlayerSearchResponseSchema>;
 export type PlayerDetail = z.infer<typeof PlayerDetailSchema>;
 export type PlayerCardDetail = z.infer<typeof PlayerCardDetailSchema>;
+export type PlayerAutoBuild = z.infer<typeof PlayerAutoBuildSchema>;
 export type CardPackSummary = z.infer<typeof CardPackSummarySchema>;
 export type CardPackListResponse = z.infer<typeof CardPackListResponseSchema>;
 export type CardPackDetail = z.infer<typeof CardPackDetailSchema>;

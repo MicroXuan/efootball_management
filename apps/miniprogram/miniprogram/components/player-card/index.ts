@@ -8,17 +8,21 @@ Component({
     },
   },
 
-  data: { imageFailed: false },
+  data: { imageFailed: false, imageLoaded: false },
 
   observers: {
     card() {
-      this.setData({ imageFailed: false })
+      this.setData({ imageFailed: false, imageLoaded: false })
     },
   },
 
   methods: {
+    onImageLoad() {
+      this.setData({ imageLoaded: true })
+    },
+
     onImageError() {
-      this.setData({ imageFailed: true })
+      this.setData({ imageFailed: true, imageLoaded: false })
     },
 
     onTap() {
