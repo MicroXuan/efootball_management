@@ -1,12 +1,17 @@
+import type { PlayerCardDetail } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { catalogApi } from '../../services/catalog'
 import { favoritesApi } from '../../services/favorites'
 import { session } from '../../services/session'
 import {
+  automaticBuildPanelState,
   favoriteMutationState,
   favoritePlayerId,
+  playerCardDetailWithAutomaticBuild,
+  playerCardPresentation,
   toCardDetailViewModel,
   type PlayerCardDetailViewModel,
+  type PlayerCardPresentation,
 } from './detail.viewmodel'
 
 type DetailOptions = { id?: string }
@@ -14,6 +19,7 @@ type SiblingTapEvent = { currentTarget: { dataset: { id?: string } } }
 
 let detailRequestToken = 0
 let detailUnloaded = false
+let currentDetail: PlayerCardDetail | null = null
 
 Page({
   data: {
@@ -21,6 +27,9 @@ Page({
     errorMessage: '',
     cardId: '',
     card: null as PlayerCardDetailViewModel | null,
+    presentation: null as PlayerCardPresentation | null,
+    autoApplied: false,
+    buildPanel: automaticBuildPanelState(false, false),
     isFavorite: false,
     favoriteBusy: false,
   },
@@ -38,6 +47,7 @@ Page({
 
   onUnload() {
     detailUnloaded = true
+    currentDetail = null
     detailRequestToken += 1
   },
 
@@ -52,6 +62,18 @@ Page({
   onSiblingTap(event: SiblingTapEvent) {
     const id = event.currentTarget.dataset.id
     if (id) wx.redirectTo({ url: `/pages/player-card-detail/index?id=${encodeURIComponent(id)}` })
+  },
+
+  toggleAutomaticBuild() {
+    if (!currentDetail || !this.data.card) return
+    if (!this.data.card.autoBuild.available) {
+      wx.showToast({ title: this.data.card.autoBuild.unavailableReason, icon: 'none' })
+      return
+    }
+    const autoApplied = !this.data.autoApplied
+    const presentation = playerCardPresentation(currentDetail, autoApplied)
+    const buildPanel = automaticBuildPanelState(this.data.card.autoBuild.available, autoApplied)
+    this.setData({ autoApplied, presentation, buildPanel })
   },
 
   async toggleFavorite() {
@@ -83,8 +105,16 @@ Page({
     try {
       const detail = await catalogApi.getPlayerCard(this.data.cardId)
       if (detailUnloaded || token !== detailRequestToken) return
-      const card = toCardDetailViewModel(detail)
-      this.setData({ state: 'loaded', card })
+      const presentationDetail = playerCardDetailWithAutomaticBuild(detail)
+      const card = toCardDetailViewModel(presentationDetail)
+      currentDetail = presentationDetail
+      this.setData({
+        state: 'loaded',
+        card,
+        autoApplied: false,
+        buildPanel: automaticBuildPanelState(card.autoBuild.available, false),
+        presentation: playerCardPresentation(presentationDetail, false),
+      })
       void this.loadFavoriteStatus(card.playerId)
     } catch (error) {
       if (detailUnloaded || token !== detailRequestToken) return

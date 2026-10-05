@@ -49,6 +49,7 @@ import {
   NormalizedPlayerCardRecordSchema,
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
+  PlayerCardDetailSchema,
   PlayerFavoriteListQuerySchema,
   PlayerFavoriteStatusQuerySchema,
   PublicUserLookupSchema,
@@ -558,6 +559,11 @@ describe('shared API contracts', () => {
     assert.throws(() => PlayerSearchQuerySchema.parse({ limit: 101 }));
   });
 
+  it('accepts every PESDATA-specific player category', () => {
+    assert.equal(PlayerSearchQuerySchema.parse({ cardType: 'LEGENDARY' }).cardType, 'LEGENDARY');
+    assert.equal(PlayerSearchQuerySchema.parse({ cardType: 'SHOW_TIME' }).cardType, 'SHOW_TIME');
+  });
+
   it('validates player favorite requests and bounded list queries', () => {
     const playerId = '11111111-1111-4111-8111-111111111111';
     assert.equal(CreatePlayerFavoriteRequestSchema.parse({ playerId }).playerId, playerId);
@@ -659,6 +665,44 @@ describe('shared API contracts', () => {
       ...base,
       autoBuildMaxOverall: 98
     }));
+  });
+
+  it('exposes a complete automatic build on a public player card detail', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const parsed = PlayerCardDetailSchema.parse({
+      id,
+      playerId: '22222222-2222-4222-8222-222222222222',
+      playerNameZh: '古利特',
+      playerNameEn: 'Ruud Gullit',
+      cardName: '史诗卡',
+      position: 'SS',
+      overallRating: 88,
+      cardType: 'EPIC',
+      playStyle: '影子前锋',
+      imageUrl: null,
+      pack: null,
+      publishedAt: '2026-10-01T00:00:00.000Z',
+      nationality: '荷兰',
+      club: 'AC 米兰',
+      status: 'ACTIVE',
+      skills: [],
+      attributes: {},
+      otherCards: [],
+      autoBuild: {
+        allocation: { shooting: 8, passing: 4, dribbling: 12 },
+        maxOverall: 101,
+        dtRating: 99,
+        algorithmVersion: 'pesdata-auto-v1',
+      },
+    });
+
+    assert.deepEqual(parsed.autoBuild, {
+      allocation: { shooting: 8, passing: 4, dribbling: 12 },
+      maxOverall: 101,
+      dtRating: 99,
+      algorithmVersion: 'pesdata-auto-v1',
+    });
+    assert.equal(PlayerCardDetailSchema.parse({ ...parsed, autoBuild: null }).autoBuild, null);
   });
 
   it('accepts the first-release individual round-robin competition shape', () => {

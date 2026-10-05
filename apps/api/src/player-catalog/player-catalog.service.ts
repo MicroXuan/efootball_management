@@ -19,6 +19,13 @@ function dateOnly(value: Date | null): string | null {
   return value?.toISOString().slice(0, 10) ?? null;
 }
 
+function numericRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(
+    (entry): entry is [string, number] => Number.isInteger(entry[1]) && Number(entry[1]) >= 0
+  ));
+}
+
 function compareSnapshot(
   left: Pick<PlayerCardVersion, 'publishedAt' | 'overallRating' | 'playerCardId'>,
   right: { publishedAt: Date; overallRating: number; playerCardId: string }
@@ -103,6 +110,10 @@ export class PlayerCatalogService {
     const card = all.find((version) => version.playerCardId === id && version.status === 'ACTIVE');
     if (!card) throw new NotFoundException({ code: 'PLAYER_CARD_NOT_FOUND' });
     const skills = Array.isArray(card.skillsJson) ? card.skillsJson : [];
+    const autoBuild = await this.prisma.playerCardAutoBuild.findFirst({
+      where: { playerCardId: id },
+      orderBy: [{ calculatedAt: 'desc' }, { createdAt: 'desc' }]
+    });
     return {
       ...this.summary(card),
       nationality: card.nationality,
@@ -114,6 +125,12 @@ export class PlayerCatalogService {
         nameEn: code
       })),
       attributes: card.attributesJson as Record<string, number>,
+      autoBuild: autoBuild ? {
+        allocation: numericRecord(autoBuild.allocationJson),
+        maxOverall: autoBuild.maxOverall,
+        dtRating: autoBuild.dtRating,
+        algorithmVersion: autoBuild.algorithmVersion
+      } : null,
       otherCards: all
         .filter((version) =>
           version.playerId === card.playerId

@@ -8,9 +8,11 @@
     </view>
     <image
       wx:if="{{!card.usesFallbackArtwork && !imageFailed}}"
-      class="player-image"
+      class="player-image {{imageLoaded ? 'is-loaded' : ''}}"
       src="{{card.imageUrl}}"
       mode="aspectFill"
+      lazy-load="{{true}}"
+      bindload="onImageLoad"
       binderror="onImageError"
     />
     <view wx:else class="fallback-art">

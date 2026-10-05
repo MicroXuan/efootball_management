@@ -48,15 +48,21 @@ describe('PESDATA player mapping', () => {
     expect(() => normalizeImportRow(row)).not.toThrow();
   });
 
+  it('falls back to the small artwork only when PESDATA has no large card image', () => {
+    expect(mapPesdataPlayer({ ...detail, player_big: undefined }).imageUrl).toBe(
+      'https://img.pesdata.net/images/playerCard/88045755859255_.webp'
+    );
+  });
+
   it.each([
     [1, 'STANDARD'],
-    [2, 'OTHER'],
+    [2, 'LEGENDARY'],
     [3, 'EPIC'],
     [4, 'BIG_TIME'],
     [5, 'TRENDING'],
     [6, 'FEATURED'],
     [7, 'HIGHLIGHT'],
-    [8, 'HIGHLIGHT'],
+    [8, 'SHOW_TIME'],
     [99, 'OTHER']
   ])('maps card type %s to %s', (source, expected) => {
     expect(mapPesdataCardType(source)).toBe(expected);

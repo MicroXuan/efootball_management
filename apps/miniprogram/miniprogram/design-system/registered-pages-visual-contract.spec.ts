@@ -65,4 +65,23 @@ describe('registered browsing pages visual boundary', () => {
     expect(styles).toContain('#344047')
     expect(styles).not.toContain('rgba(85, 239, 139')
   })
+
+  it('keeps the ability radar in the normal page layer during navigation', () => {
+    const markup = readFileSync(
+      resolve(miniRoot, 'pages/player-card-detail/index.wxml'),
+      'utf8',
+    )
+
+    expect(markup).toContain('class="radar-stage"')
+    expect(markup).toContain('presentation.radarChart')
+    expect(markup).not.toContain('<canvas')
+  })
+
+  it('loads original player artwork lazily and reveals it only after decoding', () => {
+    const markup = readFileSync(resolve(miniRoot, 'components/player-card/index.wxml'), 'utf8')
+
+    expect(markup).toContain('lazy-load="{{true}}"')
+    expect(markup).toContain('bindload="onImageLoad"')
+    expect(markup).toContain("imageLoaded ? 'is-loaded' : ''")
+  })
 })
