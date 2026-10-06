@@ -66,4 +66,49 @@ describe('TeamCatalogService', () => {
       await prisma.adminAccount.delete({ where: { id: admin.id } });
     }
   });
+
+  it('publishes or rejects staged PESDATA team differences explicitly', async () => {
+    const suffix = randomUUID();
+    const admin = await prisma.adminAccount.create({ data: {
+      username: `catalog-review-${suffix}`, displayName: '目录审核员', passwordHash: 'unused', platformRole: 'PLATFORM_ADMIN'
+    } });
+    const run = await prisma.teamCatalogSyncRun.create({ data: {
+      actorAdminId: admin.id, mode: 'SAMPLE', status: 'READY', completedAt: new Date()
+    } });
+    const candidate = {
+      sourceExternalId: `ajax-${suffix}`, sourceLeagueExternalId: 'eredivisie', sourceLeagueName: '荷甲',
+      nameZh: '阿贾克斯', nameEn: 'Ajax', nameJa: null, shortName: 'AJA',
+      remoteLogoUrl: 'https://images.example/ajax.png', storedLogoUrl: 'https://assets.example/ajax.png',
+      sourceUpdatedAt: null
+    };
+    const [publishItem, rejectItem] = await Promise.all([
+      prisma.teamCatalogSyncItem.create({ data: {
+        runId: run.id, sourceExternalId: candidate.sourceExternalId, summaryChecksum: 'a'.repeat(64),
+        detailChecksum: 'b'.repeat(64), changeType: 'ADDED', candidateJson: candidate
+      } }),
+      prisma.teamCatalogSyncItem.create({ data: {
+        runId: run.id, sourceExternalId: `reject-${suffix}`, summaryChecksum: 'c'.repeat(64),
+        changeType: 'ADDED', candidateJson: { ...candidate, sourceExternalId: `reject-${suffix}` }
+      } })
+    ]);
+    const service = new TeamCatalogService(prisma, new AuditLogService(prisma));
+
+    try {
+      await service.publishSyncItem(admin.id, publishItem.id);
+      await service.rejectSyncItem(admin.id, rejectItem.id);
+      await expect(prisma.teamCatalogItem.findUnique({ where: {
+        sourceType_sourceExternalId: { sourceType: 'PESDATA', sourceExternalId: candidate.sourceExternalId }
+      } })).resolves.toMatchObject({ nameZh: '阿贾克斯', status: 'ACTIVE', storedLogoUrl: candidate.storedLogoUrl });
+      await expect(prisma.teamCatalogSyncItem.findUnique({ where: { id: rejectItem.id } })).resolves.toMatchObject({ reviewStatus: 'REJECTED' });
+      await expect(prisma.auditLog.findMany({ where: { actorAdminId: admin.id }, orderBy: { createdAt: 'asc' } })).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ action: 'PUBLISH_TEAM_CATALOG_SYNC_ITEM' }),
+        expect.objectContaining({ action: 'REJECT_TEAM_CATALOG_SYNC_ITEM' })
+      ]));
+    } finally {
+      await prisma.auditLog.deleteMany({ where: { actorAdminId: admin.id } });
+      await prisma.teamCatalogSyncRun.delete({ where: { id: run.id } });
+      await prisma.teamCatalogItem.deleteMany({ where: { sourceExternalId: { in: [candidate.sourceExternalId, `reject-${suffix}`] } } });
+      await prisma.adminAccount.delete({ where: { id: admin.id } });
+    }
+  });
 });
