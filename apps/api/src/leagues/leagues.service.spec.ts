@@ -132,10 +132,15 @@ describe('LeaguesService', () => {
       name: '显式当前赛季联赛'
     }, `current-season-${suffix}`);
     leagueIds.push(created.id);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '测试球队', shortName: '测试' }
+    });
     const team = await prisma.leagueTeam.create({
       data: {
         leagueId: created.id,
         ownerUserId: actorId,
+        ownerAlias: '测试用户',
+        catalogTeamId: shell.id,
         teamNumber: 3,
         name: '测试球队',
         shortName: '测试'

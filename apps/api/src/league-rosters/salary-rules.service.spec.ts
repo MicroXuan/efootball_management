@@ -104,8 +104,11 @@ describe('SalaryRulesService', () => {
   it('previews recalculated team salary and cap violations without changing ownership', async () => {
     const { admin, user, league } = await fixture();
     const current = await createRule(admin.id, league.id, 1_000, 200);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: 'One', shortName: 'ONE' }
+    });
     const team = await prisma.leagueTeam.create({
-      data: { leagueId: league.id, ownerUserId: user.id, teamNumber: 1, name: 'One', shortName: 'ONE' }
+      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'One', shortName: 'ONE' }
     });
     const source = await prisma.dataSource.create({
       data: { code: `salary-source-${randomUUID()}`, name: 'Salary source' }
@@ -158,8 +161,11 @@ describe('SalaryRulesService', () => {
   it('marks a team over cap when an immediately-effective cap is lowered', async () => {
     const { admin, user, league } = await fixture();
     const current = await createRule(admin.id, league.id, 1_000, 200);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: 'Cap team', shortName: 'CAP' }
+    });
     const team = await prisma.leagueTeam.create({
-      data: { leagueId: league.id, ownerUserId: user.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP' }
+      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP' }
     });
     const source = await prisma.dataSource.create({
       data: { code: `cap-source-${randomUUID()}`, name: 'Cap source' }

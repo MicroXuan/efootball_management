@@ -87,8 +87,11 @@ describe('player valuation end-to-end flow', () => {
     });
     seasonId = season.id;
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: seasonId } });
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '身价验收队', shortName: '验收队' }
+    });
     const team = await prisma.leagueTeam.create({
-      data: { leagueId, ownerUserId: ownerId, teamNumber: 1, name: '身价验收队', shortName: '验收队' }
+      data: { leagueId, ownerUserId: ownerId, ownerAlias: '验收用户', catalogTeamId: shell.id, teamNumber: 1, name: '身价验收队', shortName: '验收队' }
     });
     teamId = team.id;
     await prisma.seasonEntry.create({

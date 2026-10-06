@@ -121,10 +121,15 @@ describe('SeasonEntriesService', () => {
     name = `${owner.user.displayName}球队`,
     teamNumber = 1
   ) {
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: name, shortName: owner.user.displayName }
+    });
     return prisma.leagueTeam.create({
       data: {
         leagueId,
         ownerUserId: owner.user.id,
+        ownerAlias: owner.user.displayName,
+        catalogTeamId: shell.id,
         teamNumber,
         name,
         shortName: owner.user.displayName,

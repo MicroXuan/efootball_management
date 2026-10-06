@@ -178,10 +178,15 @@ describe('league foundation lifecycle API', () => {
         logoUrl: null,
         defaultGameAccountId: account.body.id
       }).expect(201);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '上海申花', shortName: '申花' }
+    });
     const leagueTeam = await prisma.leagueTeam.create({
       data: {
         leagueId: createdLeague.body.id as string,
         ownerUserId: userIds[2]!,
+        ownerAlias: '上海玩家',
+        catalogTeamId: shell.id,
         teamNumber: 44,
         name: '上海申花',
         shortName: '申花',

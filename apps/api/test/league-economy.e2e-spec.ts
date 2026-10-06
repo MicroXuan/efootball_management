@@ -83,13 +83,20 @@ describe('league economy end-to-end flow', () => {
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: seasonId } });
 
     for (const [index, userId] of userIds.slice(0, 2).entries()) {
+      const teamName = index === 0 ? '卖方球队' : '买方球队';
+      const teamShortName = index === 0 ? '卖方' : '买方';
+      const shell = await prisma.teamCatalogItem.create({
+        data: { sourceType: 'CUSTOM', nameZh: teamName, shortName: teamShortName }
+      });
       const team = await prisma.leagueTeam.create({
         data: {
           leagueId,
           ownerUserId: userId,
+          ownerAlias: teamShortName,
+          catalogTeamId: shell.id,
           teamNumber: index + 1,
-          name: index === 0 ? '卖方球队' : '买方球队',
-          shortName: index === 0 ? '卖方' : '买方',
+          name: teamName,
+          shortName: teamShortName,
           shellValueMinor: 5_000
         }
       });

@@ -144,15 +144,20 @@ describe('RosterTransactionsService', () => {
         createdById: users[0]!.id
       }
     });
-    const teams = await Promise.all(users.map((user, index) => prisma.leagueTeam.create({
-      data: {
+    const teams = await Promise.all(users.map(async (user, index) => {
+      const shell = await prisma.teamCatalogItem.create({
+        data: { sourceType: 'CUSTOM', nameZh: `Team ${index + 1}`, shortName: `T${index + 1}` }
+      });
+      return prisma.leagueTeam.create({ data: {
         leagueId: league.id,
         ownerUserId: user.id,
+        ownerAlias: user.displayName,
+        catalogTeamId: shell.id,
         teamNumber: index + 1,
         name: `Team ${index + 1}`,
         shortName: `T${index + 1}`
-      }
-    })));
+      } });
+    }));
     await salaryRules.createVersion(admin.id, league.id, {
       salaryCapMinor: options.cap ?? 10_000,
       tiers: defaultSalaryTiers(),

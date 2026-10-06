@@ -120,15 +120,20 @@ describe('atomic league roster API', () => {
         createdById: users[0]!.id
       }
     });
-    const teams = await Promise.all(users.map((user, index) => prisma.leagueTeam.create({
-      data: {
+    const teams = await Promise.all(users.map(async (user, index) => {
+      const name = `${label} Team ${index + 1}`;
+      const shortName = `${label}${index + 1}`;
+      const shell = await prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: name, shortName } });
+      return prisma.leagueTeam.create({ data: {
         leagueId: league.id,
         ownerUserId: user.id,
+        ownerAlias: user.displayName,
+        catalogTeamId: shell.id,
         teamNumber: index + 1,
-        name: `${label} Team ${index + 1}`,
-        shortName: `${label}${index + 1}`
-      }
-    })));
+        name,
+        shortName
+      } });
+    }));
     await prisma.leagueSalaryRuleVersion.create({
       data: {
         leagueId: league.id,

@@ -154,9 +154,13 @@ describe('MyCompetitionsService', () => {
       startsAt: new Date('2026-08-11'), endsAt: new Date('2026-12-01'),
       superCapacity: 2, championCapacity: 2, promotionCount: 1, status: 'IN_PROGRESS', createdById: managerId
     } });
+    const [myShell, otherShell] = await Promise.all([
+      prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: '上海海港', shortName: '海港' } }),
+      prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: '北京国安', shortName: '国安' } })
+    ]);
     const [myTeam, otherTeam] = await Promise.all([
-      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: userId, name: '上海海港', shortName: '海港' } }),
-      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: opponentId, name: '北京国安', shortName: '国安' } })
+      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: userId, ownerAlias: '我的玩家', catalogTeamId: myShell.id, name: '上海海港', shortName: '海港' } }),
+      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: opponentId, ownerAlias: '对手玩家', catalogTeamId: otherShell.id, name: '北京国安', shortName: '国安' } })
     ]);
     const [myEntry, otherEntry] = await Promise.all([
       prisma.seasonEntry.create({ data: {

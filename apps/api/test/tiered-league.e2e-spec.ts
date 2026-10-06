@@ -67,10 +67,13 @@ describe('tiered league lifecycle API', () => {
     seasonId = season.id;
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: seasonId } });
     for (let index = 0; index < 19; index += 1) {
+      const name = `分级球队 ${index + 1}`;
+      const shortName = `球队${index + 1}`;
+      const shell = await prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: name, shortName } });
       const team = await prisma.leagueTeam.create({
         data: {
           leagueId, ownerUserId: userIds[index]!, teamNumber: index + 1,
-          name: `分级球队 ${index + 1}`, shortName: `球队${index + 1}`
+          ownerAlias: `用户${index + 1}`, catalogTeamId: shell.id, name, shortName
         }
       });
       await prisma.seasonEntry.create({
