@@ -226,6 +226,52 @@ enum ExternalSyncItemStatus {
   FAILED
 }
 
+enum TeamCatalogSourceType {
+  PESDATA
+  CUSTOM
+}
+
+enum TeamCatalogStatus {
+  ACTIVE
+  SOURCE_UNCONFIRMED
+  DISABLED
+}
+
+enum TeamShellChangeType {
+  ASSIGN
+  CHANGE
+  TRANSFER
+  SWAP
+  REFRESH
+}
+
+enum TeamCatalogSyncMode {
+  SAMPLE
+  FULL
+  INCREMENTAL
+  RESUME
+}
+
+enum TeamCatalogSyncStatus {
+  PENDING
+  RUNNING
+  READY
+  FAILED
+}
+
+enum TeamCatalogSyncChangeType {
+  ADDED
+  UPDATED
+  SOURCE_MISSING
+}
+
+enum TeamCatalogSyncReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  FAILED
+}
+
 enum CompetitionStatus {
   DRAFT
   REGISTRATION_OPEN
@@ -477,6 +523,8 @@ model AdminAccount {
   allocationDecisions          SeasonAllocationDecision[]        @relation("AllocationDecisionActor")
   createdCompetitions          Competition[]                     @relation("CompetitionAdminCreator")
   createdCompetitionRules      CompetitionRuleVersion[]          @relation("CompetitionRuleAdminCreator")
+  teamShellChanges             LeagueTeamShellHistory[]          @relation("TeamShellHistoryActor")
+  teamCatalogSyncRuns          TeamCatalogSyncRun[]              @relation("TeamCatalogSyncActor")
   cupGroupProposals            CupGroupProposal[]                @relation("CupGroupProposalCreator")
   cupBracketProposals          CupBracketProposal[]              @relation("CupBracketProposalCreator")
 
@@ -548,6 +596,7 @@ model League {
   teams                   LeagueTeam[]
   adminRoles              AdminLeagueRole[]
   auditLogs               AuditLog[]
+  teamShellHistory        LeagueTeamShellHistory[]
   salaryRuleVersions      LeagueSalaryRuleVersion[]
   playerOwnerships        LeaguePlayerOwnership[]
   rosterTransactions      RosterTransaction[]
@@ -585,6 +634,8 @@ model LeagueTeam {
   id                         String                    @id @default(uuid()) @db.Char(36)
   leagueId                   String                    @map("league_id") @db.Char(36)
   ownerUserId                String                    @map("owner_user_id") @db.Char(36)
+  ownerAlias                 String                    @map("owner_alias") @db.VarChar(32)
+  catalogTeamId              String                    @map("catalog_team_id") @db.Char(36)
   teamNumber                 Int?                      @map("team_number") @db.UnsignedSmallInt
   name                       String                    @db.VarChar(64)
   shortName                  String                    @map("short_name") @db.VarChar(24)
@@ -598,6 +649,7 @@ model LeagueTeam {
   updatedAt                  DateTime                  @updatedAt @map("updated_at")
   league                     League                    @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   owner                      User                      @relation("LeagueTeamOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  catalogTeam                TeamCatalogItem           @relation(fields: [catalogTeamId], references: [id], onDelete: Restrict)
   defaultGameAccount         GameAccount?              @relation(fields: [defaultGameAccountId], references: [id], onDelete: SetNull)
   seasonEntries              SeasonEntry[]
   playerOwnerships           LeaguePlayerOwnership[]
@@ -606,12 +658,121 @@ model LeagueTeam {
   financeLedgerEntries       FinanceLedgerEntry[]
   valuationSnapshots         ValuationRosterSnapshot[]
   valuationSubmissions       ValuationSubmission[]
+  shellHistory               LeagueTeamShellHistory[]  @relation("ShellHistoryTeam")
+  relatedShellHistory        LeagueTeamShellHistory[]  @relation("ShellHistoryRelatedTeam")
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
   @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
+  @@unique([leagueId, catalogTeamId], map: "league_teams_catalog_unique")
+  @@index([catalogTeamId], map: "league_teams_catalog_idx")
   @@index([defaultGameAccountId], map: "league_teams_default_account_idx")
   @@index([leagueId, status, createdAt], map: "league_teams_status_idx")
   @@map("league_teams")
+}
+
+model TeamCatalogItem {
+  id                     String                   @id @default(uuid()) @db.Char(36)
+  sourceType             TeamCatalogSourceType    @map("source_type")
+  sourceExternalId       String?                  @map("source_external_id") @db.VarChar(128)
+  sourceLeagueExternalId String?                  @map("source_league_external_id") @db.VarChar(128)
+  sourceLeagueName       String?                  @map("source_league_name") @db.VarChar(128)
+  nameZh                 String?                  @map("name_zh") @db.VarChar(64)
+  nameEn                 String?                  @map("name_en") @db.VarChar(64)
+  nameJa                 String?                  @map("name_ja") @db.VarChar(64)
+  shortName              String                   @map("short_name") @db.VarChar(24)
+  remoteLogoUrl          String?                  @map("remote_logo_url") @db.VarChar(2048)
+  storedLogoUrl          String?                  @map("stored_logo_url") @db.VarChar(2048)
+  logoChecksum           String?                  @map("logo_checksum") @db.Char(64)
+  sourceChecksum         String?                  @map("source_checksum") @db.Char(64)
+  status                 TeamCatalogStatus        @default(ACTIVE)
+  sourceUpdatedAt        DateTime?                @map("source_updated_at")
+  lastSyncedAt           DateTime?                @map("last_synced_at")
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+  leagueTeams            LeagueTeam[]
+  historyFrom            LeagueTeamShellHistory[] @relation("ShellHistoryFromCatalog")
+  historyTo              LeagueTeamShellHistory[] @relation("ShellHistoryToCatalog")
+  syncItems              TeamCatalogSyncItem[]    @relation("TeamCatalogSyncCurrentItem")
+
+  @@unique([sourceType, sourceExternalId], map: "team_catalog_source_external_unique")
+  @@index([status, sourceLeagueName, nameZh], map: "team_catalog_browse_idx")
+  @@map("team_catalog_items")
+}
+
+model LeagueTeamShellHistory {
+  id                  String              @id @default(uuid()) @db.Char(36)
+  leagueId            String              @map("league_id") @db.Char(36)
+  leagueTeamId        String              @map("league_team_id") @db.Char(36)
+  relatedLeagueTeamId String?             @map("related_league_team_id") @db.Char(36)
+  changeType          TeamShellChangeType @map("change_type")
+  fromCatalogTeamId   String?             @map("from_catalog_team_id") @db.Char(36)
+  toCatalogTeamId     String              @map("to_catalog_team_id") @db.Char(36)
+  actorAdminId        String              @map("actor_admin_id") @db.Char(36)
+  reason              String?             @db.VarChar(512)
+  createdAt           DateTime            @default(now()) @map("created_at")
+  league              League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueTeam          LeagueTeam          @relation("ShellHistoryTeam", fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  relatedLeagueTeam   LeagueTeam?         @relation("ShellHistoryRelatedTeam", fields: [relatedLeagueTeamId], references: [id], onDelete: Restrict)
+  fromCatalogTeam     TeamCatalogItem?    @relation("ShellHistoryFromCatalog", fields: [fromCatalogTeamId], references: [id], onDelete: Restrict)
+  toCatalogTeam       TeamCatalogItem     @relation("ShellHistoryToCatalog", fields: [toCatalogTeamId], references: [id], onDelete: Restrict)
+  actorAdmin          AdminAccount        @relation("TeamShellHistoryActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
+
+  @@index([leagueTeamId, createdAt], map: "team_shell_history_team_idx")
+  @@index([relatedLeagueTeamId], map: "team_shell_history_related_idx")
+  @@index([actorAdminId], map: "team_shell_history_actor_idx")
+  @@map("league_team_shell_history")
+}
+
+model TeamCatalogSyncRun {
+  id             String                @id @default(uuid()) @db.Char(36)
+  actorAdminId   String                @map("actor_admin_id") @db.Char(36)
+  mode           TeamCatalogSyncMode
+  status         TeamCatalogSyncStatus @default(PENDING)
+  activeLeaseKey String?               @unique @map("active_lease_key") @db.VarChar(64)
+  requestedLimit Int?                  @map("requested_limit") @db.UnsignedInt
+  scannedCount   Int                   @default(0) @map("scanned_count") @db.UnsignedInt
+  addedCount     Int                   @default(0) @map("added_count") @db.UnsignedInt
+  updatedCount   Int                   @default(0) @map("updated_count") @db.UnsignedInt
+  missingCount   Int                   @default(0) @map("missing_count") @db.UnsignedInt
+  failedCount    Int                   @default(0) @map("failed_count") @db.UnsignedInt
+  currentOffset  Int                   @default(0) @map("current_offset") @db.UnsignedInt
+  errorCode      String?               @map("error_code") @db.VarChar(128)
+  errorMessage   String?               @map("error_message") @db.VarChar(512)
+  startedAt      DateTime?             @map("started_at")
+  completedAt    DateTime?             @map("completed_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  actorAdmin     AdminAccount          @relation("TeamCatalogSyncActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
+  items          TeamCatalogSyncItem[]
+
+  @@index([status, createdAt], map: "team_catalog_sync_runs_status_idx")
+  @@index([actorAdminId], map: "team_catalog_sync_runs_actor_idx")
+  @@map("team_catalog_sync_runs")
+}
+
+model TeamCatalogSyncItem {
+  id                   String                      @id @default(uuid()) @db.Char(36)
+  runId                String                      @map("run_id") @db.Char(36)
+  sourceExternalId     String                      @map("source_external_id") @db.VarChar(128)
+  summaryChecksum      String                      @map("summary_checksum") @db.Char(64)
+  detailChecksum       String?                     @map("detail_checksum") @db.Char(64)
+  changeType           TeamCatalogSyncChangeType   @map("change_type")
+  reviewStatus         TeamCatalogSyncReviewStatus @default(PENDING) @map("review_status")
+  currentCatalogItemId String?                     @map("current_catalog_item_id") @db.Char(36)
+  candidateJson        Json?                       @map("candidate_json")
+  rawDetail            Json?                       @map("raw_detail")
+  attempts             Int                         @default(0) @db.UnsignedSmallInt
+  errorCode            String?                     @map("error_code") @db.VarChar(128)
+  errorMessage         String?                     @map("error_message") @db.VarChar(512)
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  updatedAt            DateTime                    @updatedAt @map("updated_at")
+  run                  TeamCatalogSyncRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  currentCatalogItem   TeamCatalogItem?            @relation("TeamCatalogSyncCurrentItem", fields: [currentCatalogItemId], references: [id], onDelete: SetNull)
+
+  @@unique([runId, sourceExternalId], map: "team_catalog_sync_items_run_source_unique")
+  @@index([runId, reviewStatus], map: "team_catalog_sync_items_review_idx")
+  @@index([sourceExternalId, updatedAt], map: "team_catalog_sync_items_source_idx")
+  @@map("team_catalog_sync_items")
 }
 
 /// The service locks the parent League row before starting a season and rejects an existing IN_PROGRESS sibling.
@@ -1594,10 +1755,10 @@ model CompetitionParticipant {
   standingsRows        StandingsRow[]
   stageMemberships     StageParticipant[]
   cupGroupProposalRows CupGroupProposalRow[]
-  bracketHomeSlots     CupBracketPairing[]      @relation("CupBracketHomeParticipant")
-  bracketAwaySlots     CupBracketPairing[]      @relation("CupBracketAwayParticipant")
-  bracketByes          CupBracketPairing[]      @relation("CupBracketByeParticipant")
-  bracketWins          CupBracketPairing[]      @relation("CupBracketWinnerParticipant")
+  bracketHomeSlots     CupBracketPairing[]        @relation("CupBracketHomeParticipant")
+  bracketAwaySlots     CupBracketPairing[]        @relation("CupBracketAwayParticipant")
+  bracketByes          CupBracketPairing[]        @relation("CupBracketByeParticipant")
+  bracketWins          CupBracketPairing[]        @relation("CupBracketWinnerParticipant")
 
   @@unique([competitionId, admissionSequence], map: "competition_participants_sequence_unique")
   @@unique([competitionId, individualUserId], map: "competition_participants_user_unique")
@@ -1682,14 +1843,14 @@ model CupBracketProposal {
 }
 
 model CupBracketRound {
-  id            String              @id @default(uuid()) @db.Char(36)
-  proposalId    String              @map("proposal_id") @db.Char(36)
-  roundNumber   Int                 @map("round_number") @db.UnsignedSmallInt
-  stageCode     String              @map("stage_code") @db.VarChar(32)
-  displayName   String              @map("display_name") @db.VarChar(64)
-  createdAt     DateTime            @default(now()) @map("created_at")
-  proposal      CupBracketProposal  @relation(fields: [proposalId], references: [id], onDelete: Restrict)
-  pairings      CupBracketPairing[]
+  id          String              @id @default(uuid()) @db.Char(36)
+  proposalId  String              @map("proposal_id") @db.Char(36)
+  roundNumber Int                 @map("round_number") @db.UnsignedSmallInt
+  stageCode   String              @map("stage_code") @db.VarChar(32)
+  displayName String              @map("display_name") @db.VarChar(64)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  proposal    CupBracketProposal  @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  pairings    CupBracketPairing[]
 
   @@unique([proposalId, roundNumber], map: "cup_bracket_rounds_number_unique")
   @@unique([proposalId, stageCode], map: "cup_bracket_rounds_stage_unique")
@@ -1697,28 +1858,28 @@ model CupBracketRound {
 }
 
 model CupBracketPairing {
-  id                    String                  @id @default(uuid()) @db.Char(36)
-  roundId               String                  @map("round_id") @db.Char(36)
-  pairingNumber         Int                     @map("pairing_number") @db.UnsignedSmallInt
-  homeParticipantId     String?                 @map("home_participant_id") @db.Char(36)
-  awayParticipantId     String?                 @map("away_participant_id") @db.Char(36)
-  homeSourcePairingId   String?                 @map("home_source_pairing_id") @db.Char(36)
-  awaySourcePairingId   String?                 @map("away_source_pairing_id") @db.Char(36)
-  byeParticipantId      String?                 @map("bye_participant_id") @db.Char(36)
-  matchId               String?                 @unique @map("match_id") @db.Char(36)
-  winnerParticipantId   String?                 @map("winner_participant_id") @db.Char(36)
-  createdAt             DateTime                @default(now()) @map("created_at")
-  updatedAt             DateTime                @updatedAt @map("updated_at")
-  round                 CupBracketRound         @relation(fields: [roundId], references: [id], onDelete: Restrict)
-  homeParticipant       CompetitionParticipant? @relation("CupBracketHomeParticipant", fields: [homeParticipantId], references: [id], onDelete: Restrict)
-  awayParticipant       CompetitionParticipant? @relation("CupBracketAwayParticipant", fields: [awayParticipantId], references: [id], onDelete: Restrict)
-  byeParticipant        CompetitionParticipant? @relation("CupBracketByeParticipant", fields: [byeParticipantId], references: [id], onDelete: Restrict)
-  winnerParticipant     CompetitionParticipant? @relation("CupBracketWinnerParticipant", fields: [winnerParticipantId], references: [id], onDelete: Restrict)
-  match                 CompetitionMatch?       @relation(fields: [matchId], references: [id], onDelete: Restrict)
-  homeSourcePairing     CupBracketPairing?       @relation("CupBracketHomeSource", fields: [homeSourcePairingId], references: [id], onDelete: Restrict)
-  homeTargetPairings    CupBracketPairing[]      @relation("CupBracketHomeSource")
-  awaySourcePairing     CupBracketPairing?       @relation("CupBracketAwaySource", fields: [awaySourcePairingId], references: [id], onDelete: Restrict)
-  awayTargetPairings    CupBracketPairing[]      @relation("CupBracketAwaySource")
+  id                  String                  @id @default(uuid()) @db.Char(36)
+  roundId             String                  @map("round_id") @db.Char(36)
+  pairingNumber       Int                     @map("pairing_number") @db.UnsignedSmallInt
+  homeParticipantId   String?                 @map("home_participant_id") @db.Char(36)
+  awayParticipantId   String?                 @map("away_participant_id") @db.Char(36)
+  homeSourcePairingId String?                 @map("home_source_pairing_id") @db.Char(36)
+  awaySourcePairingId String?                 @map("away_source_pairing_id") @db.Char(36)
+  byeParticipantId    String?                 @map("bye_participant_id") @db.Char(36)
+  matchId             String?                 @unique @map("match_id") @db.Char(36)
+  winnerParticipantId String?                 @map("winner_participant_id") @db.Char(36)
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  round               CupBracketRound         @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  homeParticipant     CompetitionParticipant? @relation("CupBracketHomeParticipant", fields: [homeParticipantId], references: [id], onDelete: Restrict)
+  awayParticipant     CompetitionParticipant? @relation("CupBracketAwayParticipant", fields: [awayParticipantId], references: [id], onDelete: Restrict)
+  byeParticipant      CompetitionParticipant? @relation("CupBracketByeParticipant", fields: [byeParticipantId], references: [id], onDelete: Restrict)
+  winnerParticipant   CompetitionParticipant? @relation("CupBracketWinnerParticipant", fields: [winnerParticipantId], references: [id], onDelete: Restrict)
+  match               CompetitionMatch?       @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  homeSourcePairing   CupBracketPairing?      @relation("CupBracketHomeSource", fields: [homeSourcePairingId], references: [id], onDelete: Restrict)
+  homeTargetPairings  CupBracketPairing[]     @relation("CupBracketHomeSource")
+  awaySourcePairing   CupBracketPairing?      @relation("CupBracketAwaySource", fields: [awaySourcePairingId], references: [id], onDelete: Restrict)
+  awayTargetPairings  CupBracketPairing[]     @relation("CupBracketAwaySource")
 
   @@unique([roundId, pairingNumber], map: "cup_bracket_pairings_number_unique")
   @@index([homeParticipantId], map: "cup_bracket_pairings_home_idx")
@@ -1957,4 +2118,13 @@ model AdminMutationReceipt {
 
   @@unique([adminId, operation, key], map: "admin_mutation_receipts_request_unique")
   @@map("admin_mutation_receipts")
+}
+
+model PlatformPresentation {
+  id                    String   @id @db.VarChar(32)
+  leagueCenterBannerUrl String?  @map("league_center_banner_url") @db.VarChar(2048)
+  version               Int      @default(1) @db.UnsignedInt
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_presentations")
 }

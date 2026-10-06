@@ -43,6 +43,73 @@ describe('PrismaService', () => {
     expect(prisma.externalSyncRunBatch).toBeDefined();
   });
 
+  it('exposes team shell catalog and synchronization delegates', () => {
+    expect(prisma.teamCatalogItem).toBeDefined();
+    expect(prisma.leagueTeamShellHistory).toBeDefined();
+    expect(prisma.teamCatalogSyncRun).toBeDefined();
+    expect(prisma.teamCatalogSyncItem).toBeDefined();
+  });
+
+  it('enforces one use of a shell per league while allowing cross-league reuse', async () => {
+    const suffix = randomUUID();
+    const [firstOwner, secondOwner] = await Promise.all([
+      prisma.user.create({ data: { wechatOpenId: `shell-owner-a-${suffix}`, displayName: '队壳甲' } }),
+      prisma.user.create({ data: { wechatOpenId: `shell-owner-b-${suffix}`, displayName: '队壳乙' } })
+    ]);
+    const [firstLeague, secondLeague] = await Promise.all([
+      prisma.league.create({
+        data: { name: `队壳联赛甲-${suffix}`, shortName: '队壳甲', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL', createdById: firstOwner.id }
+      }),
+      prisma.league.create({
+        data: { name: `队壳联赛乙-${suffix}`, shortName: '队壳乙', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL', createdById: firstOwner.id }
+      })
+    ]);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '阿贾克斯', shortName: '阿贾克斯', status: 'ACTIVE' }
+    });
+
+    try {
+      await prisma.leagueTeam.create({
+        data: {
+          leagueId: firstLeague.id,
+          ownerUserId: firstOwner.id,
+          ownerAlias: '甲',
+          catalogTeamId: shell.id,
+          teamNumber: 1,
+          name: '阿贾克斯',
+          shortName: '阿贾克斯'
+        }
+      });
+      await expect(prisma.leagueTeam.create({
+        data: {
+          leagueId: firstLeague.id,
+          ownerUserId: secondOwner.id,
+          ownerAlias: '乙',
+          catalogTeamId: shell.id,
+          teamNumber: 2,
+          name: '阿贾克斯',
+          shortName: '阿贾克斯'
+        }
+      })).rejects.toMatchObject({ code: 'P2002' });
+      await expect(prisma.leagueTeam.create({
+        data: {
+          leagueId: secondLeague.id,
+          ownerUserId: secondOwner.id,
+          ownerAlias: '乙',
+          catalogTeamId: shell.id,
+          teamNumber: 1,
+          name: '阿贾克斯',
+          shortName: '阿贾克斯'
+        }
+      })).resolves.toMatchObject({ catalogTeamId: shell.id });
+    } finally {
+      await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: [firstLeague.id, secondLeague.id] } } });
+      await prisma.teamCatalogItem.delete({ where: { id: shell.id } });
+      await prisma.league.deleteMany({ where: { id: { in: [firstLeague.id, secondLeague.id] } } });
+      await prisma.user.deleteMany({ where: { id: { in: [firstOwner.id, secondOwner.id] } } });
+    }
+  });
+
   it('exposes competition aggregate and idempotency delegates', () => {
     expect(prisma.competition).toBeDefined();
     expect(prisma.competitionRuleVersion).toBeDefined();
@@ -179,12 +246,22 @@ describe('PrismaService', () => {
         createdById: owner.id
       }
     });
+    const [firstShell, secondShell] = await Promise.all([
+      prisma.teamCatalogItem.create({
+        data: { sourceType: 'CUSTOM', nameZh: '第一联赛球队', shortName: '一队' }
+      }),
+      prisma.teamCatalogItem.create({
+        data: { sourceType: 'CUSTOM', nameZh: '备用球队', shortName: '备用' }
+      })
+    ]);
 
     try {
       await prisma.leagueTeam.create({
         data: {
           leagueId: firstLeague.id,
           ownerUserId: owner.id,
+          ownerAlias: '联赛球队测试玩家',
+          catalogTeamId: firstShell.id,
           teamNumber: 0,
           name: '第一联赛球队',
           shortName: '一队'
@@ -195,6 +272,8 @@ describe('PrismaService', () => {
         data: {
           leagueId: firstLeague.id,
           ownerUserId: owner.id,
+          ownerAlias: '联赛球队测试玩家',
+          catalogTeamId: secondShell.id,
           teamNumber: 1,
           name: '重复用户球队',
           shortName: '重复用户'
@@ -205,6 +284,8 @@ describe('PrismaService', () => {
         data: {
           leagueId: firstLeague.id,
           ownerUserId: secondOwner.id,
+          ownerAlias: '第二位测试玩家',
+          catalogTeamId: secondShell.id,
           teamNumber: 0,
           name: '重复编号球队',
           shortName: '重复编号'
@@ -215,6 +296,8 @@ describe('PrismaService', () => {
         data: {
           leagueId: secondLeague.id,
           ownerUserId: owner.id,
+          ownerAlias: '联赛球队测试玩家',
+          catalogTeamId: firstShell.id,
           teamNumber: 0,
           name: '第二联赛球队',
           shortName: '二队'
@@ -234,6 +317,7 @@ describe('PrismaService', () => {
       await prisma.leagueTeam.deleteMany({
         where: { leagueId: { in: [firstLeague.id, secondLeague.id] } }
       });
+      await prisma.teamCatalogItem.deleteMany({ where: { id: { in: [firstShell.id, secondShell.id] } } });
       await prisma.league.deleteMany({
         where: { id: { in: [firstLeague.id, secondLeague.id] } }
       });
@@ -368,10 +452,15 @@ describe('PrismaService', () => {
         createdById: owner.id
       }
     });
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '免账号球队', shortName: '免账号' }
+    });
     const team = await prisma.leagueTeam.create({
       data: {
         leagueId: league.id,
         ownerUserId: owner.id,
+        ownerAlias: '免账号参赛用户',
+        catalogTeamId: shell.id,
         teamNumber: 1,
         name: '免账号球队',
         shortName: '免账号'
@@ -421,6 +510,7 @@ describe('PrismaService', () => {
       await prisma.seasonEntry.deleteMany({ where: { seasonId: season.id } });
       await prisma.leagueSeason.delete({ where: { id: season.id } });
       await prisma.leagueTeam.delete({ where: { id: team.id } });
+      await prisma.teamCatalogItem.delete({ where: { id: shell.id } });
       await prisma.league.delete({ where: { id: league.id } });
       await prisma.user.delete({ where: { id: owner.id } });
     }
