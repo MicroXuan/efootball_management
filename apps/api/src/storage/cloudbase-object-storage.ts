@@ -24,6 +24,13 @@ export class CloudBaseObjectStorage implements ObjectStorage {
     };
   }
 
+  async putNamed(scope: StorageScope, name: string, file: StoredUploadInput): Promise<StoredObject> {
+    if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(name)) throw new Error('Invalid storage object name');
+    const cloudPath = `${scope}--${name}.${file.extension}`;
+    const result = await this.client.uploadFile({ cloudPath, fileContent: file.buffer });
+    return { key: result.fileID, url: result.fileID, mimeType: file.mimeType, size: file.size };
+  }
+
   async delete(key: string): Promise<void> {
     await this.client.deleteFile({ fileList: [key] });
   }

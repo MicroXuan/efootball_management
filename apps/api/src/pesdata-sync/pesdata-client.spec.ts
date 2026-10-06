@@ -142,4 +142,21 @@ describe('PesdataClient', () => {
       code: 'PESDATA_CONFIG_MISSING'
     });
   });
+
+  it('uses the signed team league, list, and detail protocols', async () => {
+    const fetchImplementation = mockFetch([
+      async () => success({ list: [{ league_id: 'eredivisie', league_name: '荷甲' }], count: 1 }),
+      async () => success({ list: [{ team_id: '42', team_name: 'Ajax' }], count: 1 }),
+      async () => success([{ team_id: '42', team_name: 'Ajax', team_logo: 'https://images.example/ajax.png' }])
+    ]);
+    const client = createClient(fetchImplementation);
+
+    await expect(client.listLeagues()).resolves.toEqual([{ leagueId: 'eredivisie', leagueName: '荷甲' }]);
+    await expect(client.listTeams({ start: 0, limit: 10, order: 'ASC', leagueId: 'eredivisie' }))
+      .resolves.toMatchObject({ count: 1, list: [{ teamId: '42' }] });
+    await expect(client.getTeamDetail('42')).resolves.toMatchObject({ teamId: '42', teamLogo: 'https://images.example/ajax.png' });
+    expect(fetchImplementation.calls.map(([request]) => new URL(String(request)).pathname)).toEqual([
+      '/api/league/list', '/api/team/list', '/api/team/detail'
+    ]);
+  });
 });

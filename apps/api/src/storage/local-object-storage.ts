@@ -38,6 +38,18 @@ export class LocalObjectStorage implements ObjectStorage {
     };
   }
 
+  async putNamed(scope: StorageScope, name: string, file: StoredUploadInput): Promise<StoredObject> {
+    if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(name)) throw new Error('Invalid storage object name');
+    await mkdir(this.directory, { recursive: true });
+    const key = `${scope}--${name}.${file.extension}`;
+    try {
+      await writeFile(this.pathFor(key), file.buffer, { flag: 'wx' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    return { key, url: `${this.publicBaseUrl}/v1/media/${key}`, mimeType: file.mimeType, size: file.size };
+  }
+
   async delete(key: string): Promise<void> {
     await rm(this.pathFor(key), { force: true });
   }
