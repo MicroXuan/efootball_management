@@ -84,4 +84,27 @@ describe('registered browsing pages visual boundary', () => {
     expect(markup).toContain('bindload="onImageLoad"')
     expect(markup).toContain("imageLoaded ? 'is-loaded' : ''")
   })
+
+  it('uses a configurable image-led league banner without the retired masthead copy', () => {
+    const markup = readFileSync(resolve(miniRoot, 'pages/leagues/index.wxml'), 'utf8')
+
+    expect(markup).toContain('class="league-banner')
+    expect(markup).toContain('mode="aspectFill"')
+    expect(markup).toContain('binderror="onBannerError"')
+    expect(markup).not.toContain('联赛中心')
+    expect(markup).not.toContain('发现公开联赛')
+  })
+
+  it.each(['my-league-teams', 'profile', 'league-team-detail'])(
+    '%s renders team crests through the shared artwork fallback',
+    (page) => {
+      const markup = readFileSync(resolve(miniRoot, `pages/${page}/index.wxml`), 'utf8')
+      const config = JSON.parse(readFileSync(resolve(miniRoot, `pages/${page}/index.json`), 'utf8')) as {
+        usingComponents?: Record<string, string>
+      }
+
+      expect(markup).toContain('<entity-artwork')
+      expect(config.usingComponents?.['entity-artwork']).toBe('/components/entity-artwork/index')
+    },
+  )
 })

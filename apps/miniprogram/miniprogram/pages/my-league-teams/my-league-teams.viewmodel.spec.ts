@@ -4,6 +4,7 @@ import { formatPublicUserNo, presentLeagueTeams } from './my-league-teams.viewmo
 
 const team = (id: string, leagueId: string, name: string): LeagueTeamSummary => ({
   id, leagueId, ownerUserId: '33333333-3333-4333-8333-333333333333', ownerPublicUserNo: '000123',
+  ownerAlias: 'tidus', catalogTeamId: '44444444-4444-4444-8444-444444444444',
   teamNumber: 7, name, shortName: name, logoUrl: null, status: 'ACTIVE', rosterStatus: 'COMPLIANT',
   activePlayerCount: 2, salaryTotalMinor: 300, salaryCapMinor: 2_000, version: 1,
   shellValueMinor: 0,
@@ -17,5 +18,14 @@ describe('my league teams viewmodel', () => {
 
   it('preserves the copyable six-digit public user number', () => {
     expect(formatPublicUserNo('000123')).toEqual({ display: '000 123', copyValue: '000123' })
+  })
+
+  it('presents the numbered shell identity, league alias, and a stable crest fallback', () => {
+    expect(presentLeagueTeams([team('a', 'league-a', '阿贾克斯')])[0]).toMatchObject({
+      identityCopy: '7-阿贾克斯',
+      ownerAliasCopy: '（tidus）',
+      logoUrl: null,
+      logoFallback: '阿贾',
+    })
   })
 })

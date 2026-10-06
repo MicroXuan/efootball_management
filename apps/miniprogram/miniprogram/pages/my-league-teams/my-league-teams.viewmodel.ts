@@ -4,6 +4,9 @@ export type LeagueTeamListItem = LeagueTeamSummary & {
   rosterCopy: string
   salaryCopy: string
   statusCopy: string
+  identityCopy: string
+  ownerAliasCopy: string
+  logoFallback: string
 }
 
 export function presentLeagueTeams(teams: readonly LeagueTeamSummary[]): LeagueTeamListItem[] {
@@ -12,6 +15,9 @@ export function presentLeagueTeams(teams: readonly LeagueTeamSummary[]): LeagueT
     rosterCopy: `${team.activePlayerCount}/25`,
     salaryCopy: `${team.salaryTotalMinor}/${team.salaryCapMinor}`,
     statusCopy: team.rosterStatus === 'OVER_CAP' ? '工资超帽' : '阵容合规',
+    identityCopy: `${team.teamNumber === null ? '—' : team.teamNumber}-${team.name}`,
+    ownerAliasCopy: `（${team.ownerAlias}）`,
+    logoFallback: (team.shortName.trim() || team.name.trim() || '球队').slice(0, 2),
   }))
 }
 

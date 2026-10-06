@@ -2,7 +2,10 @@
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取球队档案" />
   <view wx:elif="{{state === 'error'}}" class="panel"><text class="headline">暂时无法读取</text><text class="muted">{{errorMessage}}</text></view>
   <block wx:else>
-    <view class="hero"><text class="kicker">{{overview.leagueName}}</text><text class="title">{{overview.team.teamNumber}} · {{overview.team.name}}</text><text class="muted">用户编号 {{overview.team.ownerPublicUserNo}}</text></view>
+    <view class="hero team-hero">
+      <entity-artwork class="team-hero__crest" src="{{overview.team.logoUrl}}" fallback="{{overview.team.shortName}}" shape="square" />
+      <view class="team-hero__copy"><text class="kicker">{{overview.leagueName}}</text><text class="title">{{overview.team.teamNumber}}-{{overview.team.name}}</text><text class="muted">（{{overview.team.ownerAlias}}） · 用户编号 {{overview.team.ownerPublicUserNo}}</text></view>
+    </view>
     <view class="metrics"><view><text class="value">{{overview.team.activePlayerCount}}/25</text><text class="label">阵容</text></view><view><text class="value {{overCap ? 'danger' : ''}}">{{overview.team.salaryTotalMinor}}/{{overview.team.salaryCapMinor}}</text><text class="label">工资 / 工资帽</text></view></view>
     <button class="valuation-entry" bindtap="openValuation">进入身价管理</button>
     <view class="economy-links"><button bindtap="openAssets">球队资产</button><button bindtap="openTransactions">交易记录</button><button bindtap="openFinance">球队财务</button></view>
