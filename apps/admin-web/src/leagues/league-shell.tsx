@@ -16,13 +16,13 @@ export function LeagueShell() {
       <nav aria-label="联赛工作区导航"><Tabs activeKey={activeKey} items={[
         { key: 'teams', label: <Link aria-current={activeKey === 'teams' ? 'page' : undefined} to={`/leagues/${leagueId}/teams`}><AdminIcon name="teams" />用户与球队</Link> },
         { key: 'seasons', label: <Link aria-current={activeKey === 'seasons' ? 'page' : undefined} to={`/leagues/${leagueId}/seasons`}><AdminIcon name="seasons" />赛季管理</Link> },
-        { key: 'allocation', label: <Link aria-current={activeKey === 'allocation' ? 'page' : undefined} to={`/leagues/${leagueId}/allocation`}>分组与赛程</Link> },
-        { key: 'cups', label: <Link aria-current={activeKey === 'cups' ? 'page' : undefined} to={`/leagues/${leagueId}/cups`}>杯赛中心</Link> },
-        { key: 'salary', label: <Link aria-current={activeKey === 'salary' ? 'page' : undefined} to={`/leagues/${leagueId}/salary-rules`}>工资规则</Link> },
-        { key: 'windows', label: <Link aria-current={activeKey === 'windows' ? 'page' : undefined} to={`/leagues/${leagueId}/transfer-windows`}>转会窗口</Link> },
+        { key: 'allocation', label: <Link aria-current={activeKey === 'allocation' ? 'page' : undefined} to={`/leagues/${leagueId}/allocation`}><AdminIcon name="allocation" />分组与赛程</Link> },
+        { key: 'cups', label: <Link aria-current={activeKey === 'cups' ? 'page' : undefined} to={`/leagues/${leagueId}/cups`}><AdminIcon name="cup" />杯赛中心</Link> },
+        { key: 'salary', label: <Link aria-current={activeKey === 'salary' ? 'page' : undefined} to={`/leagues/${leagueId}/salary-rules`}><AdminIcon name="salary" />工资规则</Link> },
+        { key: 'windows', label: <Link aria-current={activeKey === 'windows' ? 'page' : undefined} to={`/leagues/${leagueId}/transfer-windows`}><AdminIcon name="transfer" />转会窗口</Link> },
         { key: 'valuation-windows', label: <Link aria-current={activeKey === 'valuation-windows' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-windows`}><AdminIcon name="valuation" />身价窗口</Link> },
         { key: 'valuation-reviews', label: <Link aria-current={activeKey === 'valuation-reviews' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-reviews`}><AdminIcon name="review" />身价审核</Link> },
-        { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}>财务与交易</Link> }
+        { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}><AdminIcon name="finance" />财务与交易</Link> }
       ]} /></nav>
     </div>
     <Outlet />

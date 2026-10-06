@@ -1,9 +1,11 @@
 import type { LeagueSummary, MyLeagueTeamSummary } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
+import { platformPresentationApi } from '../../services/platform-presentation'
 import { session } from '../../services/session'
 import {
   leagueCardView,
+  leagueBannerView,
   leagueListErrorMessage,
   myLeagueCardView,
   selectLeagueCards,
@@ -24,6 +26,8 @@ Page({
     leagues: [] as LeagueCardView[],
     hasLeagues: false,
     loggedIn: false,
+    bannerUrl: '',
+    bannerFailed: false,
   },
 
   onShow() {
@@ -39,16 +43,18 @@ Page({
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     try {
       const loggedIn = Boolean(session.getAccessToken())
-      const [allResponse, mineResponse] = await Promise.all([
+      const [allResponse, mineResponse, presentation] = await Promise.all([
         leaguesApi.list(undefined, 100),
         loggedIn ? leaguesApi.mine() : Promise.resolve({ items: [], nextCursor: null }),
+        platformPresentationApi.get().catch(() => ({ leagueCenterBannerUrl: null, version: 0 })),
       ])
+      const banner = leagueBannerView(presentation)
       const allLeagues = allResponse.items.map((league: LeagueSummary) => leagueCardView(league))
       const myLeagues = mineResponse.items.map((team: MyLeagueTeamSummary) => myLeagueCardView(team))
       const leagues = selectLeagueCards(this.data.activeTab, allLeagues, myLeagues)
       this.setData({
         state: 'loaded', errorMessage: '', loggedIn, allLeagues, myLeagues, leagues,
-        hasLeagues: leagues.length > 0,
+        hasLeagues: leagues.length > 0, bannerUrl: banner.imageUrl, bannerFailed: false,
       })
     } catch (error) {
       this.setData({
@@ -58,6 +64,10 @@ Page({
           : leagueListErrorMessage('UNKNOWN'),
       })
     }
+  },
+
+  onBannerError() {
+    this.setData({ bannerFailed: true })
   },
 
   switchTab(event: TabTapEvent) {

@@ -28,6 +28,7 @@ it('loads accounts and protected leagues for account creation and grants', async
   render(<AdminAccountsPage api={{ request } as unknown as AdminApi} />);
 
   expect(await screen.findByText('manager01')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '账号管理' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '创建管理员' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '添加授权' })).toBeInTheDocument();
   expect(request).toHaveBeenCalledWith('/v1/admin/platform/leagues', expect.any(Object));

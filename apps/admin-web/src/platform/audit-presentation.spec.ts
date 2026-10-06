@@ -27,6 +27,62 @@ it('presents a season switch as a Chinese business event', () => {
   });
 });
 
-it('uses a safe Chinese fallback for unknown actions', () => {
-  expect(presentAuditLog({ ...base, action: 'future.action' }).action).toBe('其他后台操作');
+it('presents a season rename as a specific operation', () => {
+  expect(presentAuditLog({
+    ...base,
+    action: 'admin.league-season.rename',
+    metadata: { displayName: 'S2 正式赛季' },
+  })).toMatchObject({
+    action: '修改赛季名称',
+    subject: 'S2',
+    summary: '平台管理员“小宣”对 S2 执行了“修改赛季名称”',
+  });
+});
+
+it('presents a configured league center banner update explicitly', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'admin.platform-presentation.update',
+    resourceType: 'PlatformPresentation',
+    resourceId: 'global',
+    subjectDisplayName: null,
+    metadata: { leagueCenterBannerUrl: 'https://media.example.com/banner.webp' },
+  })).toMatchObject({
+    action: '更新联赛中心 Banner',
+    subject: '联赛中心 Banner',
+    summary: '平台管理员“小宣”更新了联赛中心 Banner',
+  });
+});
+
+it('presents restoring the default league center background explicitly', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'admin.platform-presentation.update',
+    resourceType: 'PlatformPresentation',
+    resourceId: 'global',
+    subjectDisplayName: null,
+    metadata: { leagueCenterBannerUrl: null },
+  })).toMatchObject({
+    action: '恢复联赛中心默认背景',
+    subject: '联赛中心 Banner',
+    summary: '平台管理员“小宣”恢复了联赛中心默认背景',
+  });
+});
+
+it('shows exact technical identifiers instead of vague copy for a future action', () => {
+  expect(presentAuditLog({
+    ...base,
+    action: 'future.action',
+    resourceType: 'FutureResource',
+    subjectDisplayName: null,
+    leagueName: null,
+  })).toMatchObject({
+    action: 'future.action',
+    subject: 'FutureResource',
+    summary: '平台管理员“小宣”对 FutureResource 执行了“future.action”',
+  });
 });

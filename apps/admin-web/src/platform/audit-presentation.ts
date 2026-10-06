@@ -10,10 +10,23 @@ const ACTION_LABELS: Record<string, string> = {
   'admin.league.update': '更新联赛',
   'admin.league-season.create': '创建赛季',
   'admin.league-season.update': '更新赛季',
+  'admin.league-season.rename': '修改赛季名称',
   'admin.league-season.set-current': '设置当前赛季',
   'admin.league-season.enroll-teams': '录入参赛球队',
   'league-team.create': '创建联赛球队',
   'league-team.update': '更新联赛球队',
+  'admin.cup.create': '创建杯赛',
+  'cup.registration.create': '报名杯赛',
+  'cup.registration.withdraw': '撤回杯赛报名',
+  'admin.cup-group-proposal.generate': '生成杯赛分组方案',
+  'admin.cup-group-proposal.confirm': '确认杯赛分组方案',
+  'admin.cup-bracket.generate': '生成杯赛淘汰赛签表',
+  'admin.cup-bracket.confirm': '确认杯赛淘汰赛签表',
+  'admin.competition-stage.schedule.publish': '发布赛事阶段赛程',
+  'admin.league-allocation.generate': '生成赛季分组方案',
+  'admin.league-allocation.confirm': '确认赛季分组方案',
+  'admin.league-allocation.reopen': '重新打开赛季分组',
+  'admin.platform-presentation.update': '更新联赛中心 Banner',
   SALARY_RULE_VERSION_CREATED: '发布工资规则',
   TRANSFER_WINDOW_CREATED: '创建交易窗口',
   TRANSFER_WINDOW_UPDATED: '更新交易窗口',
@@ -22,6 +35,7 @@ const ACTION_LABELS: Record<string, string> = {
   ROSTER_PLAYER_SOLD: '出售球员',
   ROSTER_PLAYER_TRANSFERRED: '转会球员',
   ROSTER_PLAYER_CARD_UPGRADED: '升级球员卡片',
+  ROSTER_PLAYER_LIFECYCLE_UPDATED: '更新球员阵容状态',
   ROSTER_EMERGENCY_CORRECTED: '紧急修正阵容',
   ROSTER_SALARIES_RECALCULATED: '重新计算阵容工资',
   VALUATION_WINDOW_CREATED: '创建身价窗口',
@@ -36,7 +50,8 @@ const ACTION_LABELS: Record<string, string> = {
   ROSTER_PLAYER_STATUS_UPDATED: '更新球员状态',
   TRANSACTION_FEE_RULE_CREATED: '发布交易手续费规则',
   TRANSACTION_FEE_CALCULATED: '计算交易手续费',
-  FINANCE_ENTRY_CREATED: '登记财务流水'
+  FINANCE_ENTRY_CREATED: '登记财务流水',
+  FINANCE_MANUAL_ENTRY_CREATED: '登记手工财务流水'
 };
 
 const RESOURCE_LABELS: Record<string, string> = {
@@ -45,12 +60,21 @@ const RESOURCE_LABELS: Record<string, string> = {
   League: '联赛',
   LeagueSeason: '赛季',
   LeagueTeam: '球队',
+  Competition: '赛事',
+  CompetitionRegistration: '赛事报名',
+  CompetitionStage: '赛事阶段',
+  CupGroupProposal: '杯赛分组方案',
+  CupBracketProposal: '杯赛淘汰赛签表',
+  SeasonAllocationProposal: '赛季分组方案',
+  PlatformPresentation: '联赛中心 Banner',
   LEAGUE_PLAYER_OWNERSHIP: '球员阵容记录',
   LEAGUE_SALARY_RULE_VERSION: '工资规则',
+  LEAGUE_TRANSACTION_FEE_RULE_VERSION: '交易手续费规则',
   TRANSFER_WINDOW: '交易窗口',
   ValuationWindow: '身价窗口',
   ValuationSubmission: '身价申报',
-  FinanceLedgerEntry: '财务流水'
+  FinanceLedgerEntry: '财务流水',
+  FINANCE_LEDGER_ENTRY: '财务流水'
 };
 
 export type PresentedAuditLog = {
@@ -63,14 +87,22 @@ export type PresentedAuditLog = {
 
 export function presentAuditLog(log: AuditLog): PresentedAuditLog {
   const actor = log.actorDisplayName ?? '未知管理员';
-  const action = ACTION_LABELS[log.action] ?? '其他后台操作';
+  const isBannerUpdate = log.action === 'admin.platform-presentation.update';
+  const isBannerRestore = isBannerUpdate && log.metadata.leagueCenterBannerUrl === null;
+  const action = isBannerRestore
+    ? '恢复联赛中心默认背景'
+    : ACTION_LABELS[log.action] ?? log.action;
   const subject = log.subjectDisplayName
     ?? log.leagueName
     ?? RESOURCE_LABELS[log.resourceType]
-    ?? '后台资源';
+    ?? log.resourceType;
   const result = log.reason ? `已完成 · ${log.reason}` : '已完成';
   const summary = log.action === 'admin.league-season.set-current' && log.leagueName && log.subjectDisplayName
     ? `平台管理员“${actor}”将 ${log.leagueName}的当前赛季设置为“${log.subjectDisplayName}”`
-    : `平台管理员“${actor}”对${subject}执行了“${action}”`;
+    : isBannerUpdate
+      ? isBannerRestore
+        ? `平台管理员“${actor}”恢复了联赛中心默认背景`
+        : `平台管理员“${actor}”更新了联赛中心 Banner`
+      : `平台管理员“${actor}”对 ${subject} 执行了“${action}”`;
   return { actor, action, subject, result, summary };
 }

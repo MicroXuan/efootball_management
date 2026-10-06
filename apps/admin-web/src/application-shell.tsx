@@ -11,7 +11,8 @@ export function ApplicationShell() {
   const admin = session.identity?.admin;
   const platformItems = session.identity?.platformAdmin ? [
     { key: '/platform/leagues', icon: <AdminIcon name="league" />, label: <Link aria-current={location.pathname === '/platform/leagues' ? 'page' : undefined} to="/platform/leagues">联赛管理</Link> },
-    { key: '/platform/admins', icon: <AdminIcon name="administrators" />, label: <Link aria-current={location.pathname === '/platform/admins' ? 'page' : undefined} to="/platform/admins">管理员账号</Link> },
+    { key: '/platform/presentation', icon: <AdminIcon name="league" />, label: <Link aria-current={location.pathname === '/platform/presentation' ? 'page' : undefined} to="/platform/presentation">前台展示</Link> },
+    { key: '/platform/admins', icon: <AdminIcon name="administrators" />, label: <Link aria-current={location.pathname === '/platform/admins' ? 'page' : undefined} to="/platform/admins">账号管理</Link> },
     { key: '/platform/audit', icon: <AdminIcon name="audit" />, label: <Link aria-current={location.pathname === '/platform/audit' ? 'page' : undefined} to="/platform/audit">审计日志</Link> }
   ] : [];
   const leagueItems = (session.identity?.leagueGrants ?? []).map((grant) => ({

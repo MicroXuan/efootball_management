@@ -26,6 +26,34 @@ it('loads the protected platform league collection and renders an empty state', 
   expect(screen.getByText('支持 JPG、PNG、WebP，图片大小不超过 2MB')).toBeInTheDocument();
 });
 
+it('shows active leagues by default and separates archived leagues into their own tab', async () => {
+  const archived = {
+    ...league('历史归档联赛', 2),
+    id: '33333333-3333-4333-8333-333333333333',
+    shortName: 'OLD',
+    status: 'ARCHIVED' as const,
+  };
+  const request = vi.fn().mockResolvedValue({
+    items: [league('正在运营联赛', 1), archived],
+    nextCursor: null,
+  });
+  render(<MemoryRouter><LeaguesPage api={{ request } as unknown as AdminApi} /></MemoryRouter>);
+
+  expect(await screen.findByRole('heading', { name: '正在运营联赛' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '历史归档联赛' })).not.toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: '启用联赛（1）' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByText('共 2 个联赛')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('tab', { name: '已归档（1）' }));
+
+  expect(screen.getByRole('heading', { name: '历史归档联赛' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '正在运营联赛' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '查看历史' })).toHaveAttribute(
+    'href',
+    '/leagues/33333333-3333-4333-8333-333333333333/teams',
+  );
+});
+
 it('uploads a validated league image before creating the league', async () => {
   const request = vi.fn().mockResolvedValueOnce({ items: [], nextCursor: null })
     .mockResolvedValueOnce({ ...league('新联赛', 1), logoUrl: 'https://media.example/league.png' })
@@ -106,7 +134,7 @@ it('reloads the latest league and version after an edit conflict', async () => {
     .mockResolvedValueOnce({ items: [league('其他管理员的新名称', 2)], nextCursor: null });
   render(<MemoryRouter><LeaguesPage api={{ request } as unknown as AdminApi} /></MemoryRouter>);
 
-  await userEvent.click(await screen.findByRole('button', { name: '编辑' }));
+  await userEvent.click(await screen.findByRole('button', { name: '编辑 旧名称' }));
   const name = screen.getByLabelText('联赛名称');
   await userEvent.clear(name);
   await userEvent.type(name, '我的修改');
@@ -117,6 +145,29 @@ it('reloads the latest league and version after an edit conflict', async () => {
   expect(request).toHaveBeenNthCalledWith(2, '/v1/admin/platform/leagues/22222222-2222-4222-8222-222222222222', expect.objectContaining({
     method: 'PATCH', body: expect.objectContaining({ expectedVersion: 1 })
   }));
+});
+
+it('brings the editor into view when editing a later league', async () => {
+  const first = league('第一联赛', 1);
+  const second = {
+    ...league('第二联赛', 1),
+    id: '33333333-3333-4333-8333-333333333333',
+    shortName: 'NEXT',
+  };
+  const request = vi.fn().mockResolvedValue({ items: [first, second], nextCursor: null });
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  render(<MemoryRouter><LeaguesPage api={{ request } as unknown as AdminApi} /></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole('button', { name: '编辑 第二联赛' }));
+
+  await waitFor(() => expect(screen.getByLabelText('联赛名称')).toHaveValue('第二联赛'));
+  const heading = screen.getByRole('heading', { name: '编辑联赛 · 第二联赛' });
+  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+  expect(heading).toHaveFocus();
 });
 
 it('renders a resilient league card with clear season and primary actions', async () => {
