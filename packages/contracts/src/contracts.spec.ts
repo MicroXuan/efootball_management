@@ -15,6 +15,7 @@ import {
   ConfirmSeasonAllocationRequestSchema,
   DivisionStandingsResponseSchema,
   LeagueWorkspaceResponseSchema,
+  PlatformPresentationSchema,
   GenerateSeasonAllocationRequestSchema,
   GenerateStageScheduleRequestSchema,
   SeasonAllocationDecisionSchema,
@@ -39,6 +40,7 @@ import {
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
   CreateLeagueTeamRequestSchema,
+  CreateCustomTeamCatalogItemRequestSchema,
   CreateSalaryRuleVersionRequestSchema,
   CreateTeamProfileRequestSchema,
   EmergencyCorrectRosterRequestSchema,
@@ -66,6 +68,9 @@ import {
   StandingsSnapshotResponseSchema,
   SubmitMatchResultRequestSchema,
   TeamNumberSchema,
+  TeamCatalogListResponseSchema,
+  TeamCatalogSyncDifferenceSchema,
+  TeamCatalogSyncRunSummarySchema,
   TransferWindowSchema,
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
@@ -79,7 +84,12 @@ import {
   SetCurrentSeasonRequestSchema,
   SeasonEntryListQuerySchema,
   UpdateLeagueRequestSchema,
+  UpdatePlatformPresentationRequestSchema,
   UpdateLeagueTeamRequestSchema,
+  ChangeTeamShellRequestSchema,
+  RefreshTeamShellRequestSchema,
+  SwapTeamShellRequestSchema,
+  TransferTeamShellRequestSchema,
   UpdateLeagueSeasonRequestSchema,
   UpdateRosterLifecycleRequestSchema,
   UpdateTeamProfileRequestSchema,
@@ -289,9 +299,60 @@ describe('league economy contracts', () => {
     assert.equal(audit.leagueName, 'CELL 传奇联赛');
     assert.equal(audit.subjectDisplayName, '海港竞技季前身价申报');
   });
+
+  it('accepts an opaque identifier for a singleton audit resource', () => {
+    const audit = AuditLogSchema.parse({
+      id: ids.submission,
+      actorAdminId: ids.admin,
+      actorDisplayName: '平台管理员',
+      leagueId: null,
+      leagueName: null,
+      action: 'admin.platform-presentation.update',
+      resourceType: 'PlatformPresentation',
+      resourceId: 'global',
+      subjectDisplayName: null,
+      reason: null,
+      metadata: { leagueCenterBannerUrl: null },
+      createdAt: startsAt
+    });
+    assert.equal(audit.resourceId, 'global');
+  });
 });
 
 describe('shared API contracts', () => {
+  it('validates the public league banner presentation and versioned administrator update', () => {
+    assert.deepEqual(PlatformPresentationSchema.parse({
+      leagueCenterBannerUrl: null,
+      version: 0,
+    }), {
+      leagueCenterBannerUrl: null,
+      version: 0,
+    });
+    assert.deepEqual(UpdatePlatformPresentationRequestSchema.parse({
+      leagueCenterBannerUrl: 'https://media.example.com/league-center.webp',
+      expectedVersion: 3,
+    }), {
+      leagueCenterBannerUrl: 'https://media.example.com/league-center.webp',
+      expectedVersion: 3,
+    });
+    assert.equal(UpdatePlatformPresentationRequestSchema.parse({
+      leagueCenterBannerUrl: 'cloud://production/league-center-banners--opaque.webp',
+      expectedVersion: 3,
+    }).leagueCenterBannerUrl, 'cloud://production/league-center-banners--opaque.webp');
+    assert.equal(UpdatePlatformPresentationRequestSchema.parse({
+      leagueCenterBannerUrl: 'http://127.0.0.1:3000/v1/media/league-center-banners--local.webp',
+      expectedVersion: 3,
+    }).leagueCenterBannerUrl, 'http://127.0.0.1:3000/v1/media/league-center-banners--local.webp');
+    assert.throws(() => UpdatePlatformPresentationRequestSchema.parse({
+      leagueCenterBannerUrl: 'http://media.example.com/league-center.webp',
+      expectedVersion: 3,
+    }));
+    assert.throws(() => UpdatePlatformPresentationRequestSchema.parse({
+      leagueCenterBannerUrl: null,
+      expectedVersion: -1,
+    }));
+  });
+
   it('exposes the current user public number for administrator binding', () => {
     const user = CurrentUserSchema.parse({
       id: '11111111-1111-4111-8111-111111111111',
@@ -463,9 +524,9 @@ describe('shared API contracts', () => {
   it('strips the retired default game account when creating a league team', () => {
     const parsed = CreateLeagueTeamRequestSchema.parse({
       ownerUserId: '11111111-1111-4111-8111-111111111111',
+      ownerAlias: '申花经理',
       teamNumber: 1,
-      name: '上海申花',
-      shortName: '申花',
+      catalogTeamId: '33333333-3333-4333-8333-333333333333',
       defaultGameAccountId: '22222222-2222-4222-8222-222222222222'
     });
 
@@ -935,6 +996,139 @@ describe('league team administration contracts', () => {
     assert.throws(() => TeamNumberSchema.parse(1.5));
   });
 
+  it('requires a catalog shell and league-specific alias when creating a team', () => {
+    const parsed = CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: '  tidus  ',
+      teamNumber: 3,
+      catalogTeamId: ids.card
+    });
+
+    assert.equal(parsed.ownerAlias, 'tidus');
+    assert.equal(parsed.catalogTeamId, ids.card);
+    assert.throws(() => CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: 'tidus',
+      teamNumber: 3
+    }));
+    assert.throws(() => CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: 'x'.repeat(33),
+      teamNumber: 3,
+      catalogTeamId: ids.card
+    }));
+  });
+
+  it('keeps shell identity out of general team updates', () => {
+    const parsed = UpdateLeagueTeamRequestSchema.parse({ ownerAlias: ' 新称呼 ', expectedVersion: 2 });
+    assert.equal(parsed.ownerAlias, '新称呼');
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
+      name: '绕过目录改名',
+      expectedVersion: 2
+    }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
+      logoUrl: 'https://outside.example/logo.png',
+      expectedVersion: 2
+    }));
+  });
+
+  it('parses published catalog items independently from league assignment', () => {
+    const item = {
+      id: ids.card,
+      sourceType: 'PESDATA' as const,
+      sourceExternalId: 'team-101',
+      sourceLeagueExternalId: 'league-7',
+      sourceLeagueName: '荷兰足球甲级联赛',
+      nameZh: '阿贾克斯',
+      nameEn: 'Ajax',
+      nameJa: null,
+      shortName: '阿贾克斯',
+      remoteLogoUrl: 'https://img.pesdata.net/ajax.png',
+      storedLogoUrl: 'https://media.example/team-crests/ajax.webp',
+      status: 'ACTIVE' as const,
+      sourceUpdatedAt: null,
+      lastSyncedAt: createdAt,
+      createdAt,
+      updatedAt: createdAt,
+      isAssigned: true,
+      assignedLeagueTeamId: ids.team
+    };
+    const response = TeamCatalogListResponseSchema.parse({ items: [item], nextCursor: null });
+    assert.equal(response.items[0]?.nameZh, '阿贾克斯');
+    assert.equal(response.items[0]?.isAssigned, true);
+    assert.equal(CreateCustomTeamCatalogItemRequestSchema.parse({
+      nameZh: '自定义球队',
+      shortName: '自定义',
+      storedLogoUrl: 'https://media.example/team-crests/custom.webp'
+    }).shortName, '自定义');
+  });
+
+  it('parses staged team catalog synchronization differences', () => {
+    const run = TeamCatalogSyncRunSummarySchema.parse({
+      id: ids.transaction,
+      mode: 'INCREMENTAL',
+      status: 'READY',
+      scannedCount: 12,
+      addedCount: 2,
+      updatedCount: 1,
+      missingCount: 1,
+      failedCount: 0,
+      createdAt,
+      completedAt: createdAt,
+      errorCode: null
+    });
+    const difference = TeamCatalogSyncDifferenceSchema.parse({
+      id: ids.ledger,
+      runId: run.id,
+      sourceExternalId: 'team-101',
+      changeType: 'UPDATED',
+      reviewStatus: 'PENDING',
+      currentCatalogItemId: ids.card,
+      candidate: {
+        sourceExternalId: 'team-101',
+        sourceLeagueExternalId: 'league-7',
+        sourceLeagueName: '荷兰足球甲级联赛',
+        nameZh: '阿贾克斯',
+        nameEn: 'Ajax',
+        nameJa: null,
+        shortName: '阿贾克斯',
+        remoteLogoUrl: 'https://img.pesdata.net/ajax.png',
+        storedLogoUrl: 'https://media.example/team-crests/ajax-v2.webp',
+        sourceUpdatedAt: null
+      },
+      errorCode: null
+    });
+    assert.equal(difference.changeType, 'UPDATED');
+  });
+
+  it('requires complete and distinct shell operation requests', () => {
+    assert.equal(ChangeTeamShellRequestSchema.parse({
+      catalogTeamId: ids.card,
+      expectedVersion: 1
+    }).catalogTeamId, ids.card);
+    assert.throws(() => TransferTeamShellRequestSchema.parse({
+      targetTeamId: ids.team,
+      expectedSourceVersion: 1,
+      expectedTargetVersion: 1
+    }));
+    assert.equal(TransferTeamShellRequestSchema.parse({
+      targetTeamId: ids.team,
+      sourceReplacementCatalogTeamId: ids.card,
+      expectedSourceVersion: 1,
+      expectedTargetVersion: 1
+    }).sourceReplacementCatalogTeamId, ids.card);
+    assert.throws(() => SwapTeamShellRequestSchema.parse({
+      sourceTeamId: ids.team,
+      otherTeamId: ids.team,
+      expectedSourceVersion: 1,
+      expectedOtherVersion: 1
+    }));
+    assert.equal(RefreshTeamShellRequestSchema.parse({
+      catalogTeamId: ids.card,
+      expectedVersion: 1
+    }).catalogTeamId, ids.card);
+  });
+
   it('requires positive integer minor units for transaction amounts', () => {
     assert.equal(MoneyMinorSchema.parse(1), 1);
     assert.equal(MoneyMinorSchema.parse(4_294_967_295), 4_294_967_295);
@@ -1087,6 +1281,8 @@ describe('league team administration contracts', () => {
       ownerUserId: ids.user,
       ownerPublicUserNo: '100069',
       ownerDisplayName: '小宣',
+      ownerAlias: 'tidus',
+      catalogTeamId: ids.card,
       teamNumber: 0,
       name: '巴西红牛',
       shortName: '红牛',
