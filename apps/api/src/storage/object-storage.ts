@@ -1,6 +1,6 @@
 export const OBJECT_STORAGE = Symbol('OBJECT_STORAGE');
 
-export type StorageScope = 'league-images';
+export type StorageScope = 'league-images' | 'league-center-banners' | 'team-crests';
 
 export interface StoredUploadInput {
   buffer: Buffer;

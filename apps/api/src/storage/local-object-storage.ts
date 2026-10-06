@@ -9,7 +9,7 @@ import type {
   StoredUploadInput
 } from './object-storage.js';
 
-const SAFE_KEY = /^league-images--[0-9a-f-]+\.(?:jpg|png|webp)$/;
+const SAFE_KEY = /^(?:league-images|league-center-banners|team-crests)--[0-9a-f-]+\.(?:jpg|png|webp)$/;
 const MIME_BY_EXTENSION: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
