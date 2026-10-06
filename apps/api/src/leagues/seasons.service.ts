@@ -87,7 +87,9 @@ export class SeasonsService {
       await this.lockSeason(transaction, seasonId);
       const existing = await transaction.leagueSeason.findUnique({ where: { id: seasonId } });
       if (!existing) throw this.notFound();
-      if (existing.status !== 'DRAFT') {
+      const changedFields = Object.keys(input).filter((name) => name !== 'expectedVersion');
+      const isRenameOnly = changedFields.length === 1 && input.displayName !== undefined;
+      if (existing.status !== 'DRAFT' && !isRenameOnly) {
         throw new LeagueError(
           'SEASON_FIELDS_LOCKED',
           'Season fields are locked after registration opens',

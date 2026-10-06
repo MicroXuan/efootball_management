@@ -51,6 +51,45 @@ it('marks the current season and switches it with the league version', async () 
   ));
 });
 
+it('renames a current non-draft season without exposing locked timeline fields', async () => {
+  const opened = { ...season(firstId, 1, '经营验收赛季'), status: 'IN_PROGRESS' as const };
+  const openedLeague = {
+    ...league,
+    currentSeason: { ...league.currentSeason, displayName: opened.displayName, status: 'IN_PROGRESS' as const },
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: unknown }) => {
+    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return openedLeague;
+    if (path === `/v1/admin/leagues/${leagueId}/seasons` && !options?.method) {
+      return { items: [opened], nextCursor: null };
+    }
+    if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
+    if (path === `/v1/admin/leagues/${leagueId}/seasons/${firstId}` && options?.method === 'PATCH') {
+      return { ...opened, displayName: '经营正式赛季', version: 2 };
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/seasons`]}><Routes>
+    <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  const row = (await screen.findByRole('cell', { name: '经营验收赛季' })).closest('tr') as HTMLElement;
+  await userEvent.click(within(row).getByRole('button', { name: '修改名称' }));
+  const dialog = screen.getByRole('dialog', { name: '修改赛季名称' });
+  const input = within(dialog).getByLabelText('新赛季名称');
+  await userEvent.clear(input);
+  await userEvent.type(input, '经营正式赛季');
+  expect(within(dialog).queryByLabelText('赛季开始')).not.toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: '保存名称' }));
+
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${firstId}`,
+    expect.objectContaining({
+      method: 'PATCH',
+      body: { displayName: '经营正式赛季', expectedVersion: 1 },
+    }),
+  ));
+});
+
 it('does not preselect every existing team when enrolling teams', async () => {
   const request = vi.fn(async (path: string) => {
     if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;

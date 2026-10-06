@@ -107,7 +107,9 @@ export class AdminLeagueSeasonsService {
       key,
       async (transaction) => {
         const existing = await this.seasonInLeague(transaction, leagueId, seasonId);
-        if (existing.status !== 'DRAFT') {
+        const changedFields = Object.keys(input).filter((name) => name !== 'expectedVersion');
+        const isRenameOnly = changedFields.length === 1 && input.displayName !== undefined;
+        if (existing.status !== 'DRAFT' && !isRenameOnly) {
           throw new AdminError('SEASON_FIELDS_LOCKED', 'Season fields are locked after registration opens', 409);
         }
         const result = await transaction.leagueSeason.updateMany({
@@ -129,7 +131,7 @@ export class AdminLeagueSeasonsService {
         await this.audit.record(transaction, {
           actorAdminId,
           leagueId,
-          action: 'admin.league-season.update',
+          action: isRenameOnly ? 'admin.league-season.rename' : 'admin.league-season.update',
           resourceType: 'LeagueSeason',
           resourceId: seasonId,
           metadata: Object.fromEntries(Object.entries(input).filter(([name]) => name !== 'expectedVersion'))
