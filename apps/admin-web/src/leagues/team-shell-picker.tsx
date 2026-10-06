@@ -11,12 +11,14 @@ export function TeamShellPicker({
   api = adminApi,
   leagueId,
   value,
-  onChange
+  onChange,
+  onSelectItem
 }: {
   api?: AdminApi;
   leagueId: string;
   value?: string | null;
   onChange?: (catalogTeamId: string) => void;
+  onSelectItem?: (item: TeamCatalogItem) => void;
 }) {
   const [items, setItems] = useState<TeamCatalogItem[]>([]);
   const [keyword, setKeyword] = useState('');
@@ -93,7 +95,7 @@ export function TeamShellPicker({
               type={selected ? 'primary' : 'default'}
               disabled={unavailable}
               aria-label={`选择${name}`}
-              onClick={() => onChange?.(item.id)}
+              onClick={() => { onChange?.(item.id); onSelectItem?.(item); }}
             >{selected ? '已选择' : '选择'}</Button>
           </div>
         </article>;
