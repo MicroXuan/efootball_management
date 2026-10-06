@@ -75,7 +75,7 @@ export class PesdataTeamSyncService {
     if (run.status === 'READY') return this.result(run, run.scannedCount - run.addedCount - run.updatedCount - run.failedCount);
     if (run.activeLeaseKey) throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'This team synchronization run is active');
     await this.prisma.teamCatalogSyncRun.update({ where: { id: runId }, data: {
-      status: 'RUNNING', mode: 'RESUME', activeLeaseKey: 'pesdata-team-catalog', errorCode: null, errorMessage: null, completedAt: null
+      status: 'RUNNING', activeLeaseKey: 'pesdata-team-catalog', errorCode: null, errorMessage: null, completedAt: null
     } });
     try {
       return await this.execute(runId, run.mode === 'SAMPLE' ? 'sample' : run.mode === 'FULL' ? 'full' : 'incremental', run.requestedLimit ?? undefined);
