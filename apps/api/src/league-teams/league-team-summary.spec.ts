@@ -6,6 +6,8 @@ describe('LeagueTeamsService roster summary', () => {
       id: '22222222-2222-4222-8222-222222222222',
       leagueId: '11111111-1111-4111-8111-111111111111',
       ownerUserId: '33333333-3333-4333-8333-333333333333',
+      ownerAlias: 'tidus',
+      catalogTeamId: '44444444-4444-4444-8444-444444444444',
       teamNumber: 7,
       name: '测试球队',
       shortName: '测试',
@@ -34,6 +36,8 @@ describe('LeagueTeamsService roster summary', () => {
 
     expect(result.items[0]).toMatchObject({
       ownerDisplayName: '用户一',
+      ownerAlias: 'tidus',
+      catalogTeamId: '44444444-4444-4444-8444-444444444444',
       activePlayerCount: 3,
       salaryTotalMinor: 1_200,
       salaryCapMinor: 2_000
