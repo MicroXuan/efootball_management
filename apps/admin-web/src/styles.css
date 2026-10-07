@@ -195,6 +195,31 @@ select { font: inherit; }
 .platform-banner-hint { max-width: 760px; margin: 18px 0; color: var(--admin-text-secondary); line-height: 1.6; }
 .platform-banner-actions { margin-top: 18px; }
 .platform-banner-recrop { margin-left: 10px; }
+.data-sync-page { display: grid; gap: 20px; }
+.data-sync-page__title { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.data-sync-page__legend { padding-bottom: 4px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px 18px; color: var(--admin-text-secondary); font-size: 12px; }
+.data-sync-page__legend span { display: inline-flex; align-items: center; gap: 7px; }
+.data-sync-page__legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--admin-border-strong); }
+.data-sync-page__legend i.is-live { background: #719b19; box-shadow: 0 0 0 4px rgba(182,241,58,.2); }
+.data-sync-tabs > .ant-tabs-nav { margin-bottom: 20px; }
+.sync-run-card .ant-card-body { padding: 0; }
+.sync-run-card__head { padding: 22px 24px 16px; display: flex; align-items: start; justify-content: space-between; gap: 18px; }
+.sync-run-card__head h2 { margin: 7px 0 0; color: var(--admin-text); font-size: 24px; letter-spacing: -.03em; }
+.sync-run-card__pulse { height: 28px; padding: 0 24px; display: flex; align-items: center; gap: 5px; background: #172126; }
+.sync-run-card__pulse span { height: 2px; flex: 1; background: #344248; }
+.sync-run-card__pulse span:nth-child(2) { flex: .2; background: var(--admin-accent); }
+.sync-run-card__pulse span:nth-child(3) { flex: .06; background: #819594; }
+.sync-run-card--active .sync-run-card__pulse span:nth-child(2) { box-shadow: 0 0 10px rgba(182,241,58,.65); }
+.sync-run-card__metrics { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sync-run-card__metrics div { padding: 19px 24px; border-right: 1px solid var(--admin-border); border-bottom: 1px solid var(--admin-border); }
+.sync-run-card__metrics div:last-child { border-right: 0; }
+.sync-run-card__metrics dt { color: var(--admin-text-secondary); font-size: 12px; font-weight: 700; }
+.sync-run-card__metrics dd { margin: 6px 0 0; color: var(--admin-text); font-size: 24px; font-weight: 800; }
+.sync-run-card__status { padding: 18px 24px 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; color: var(--admin-text-secondary); }
+.sync-run-card__status strong { color: var(--admin-text); }
+.sync-run-card__status small { grid-column: 2; color: var(--admin-danger); }
+.sync-run-card__empty { margin: 0; padding: 18px 24px 0; color: var(--admin-text-secondary); }
+.sync-run-card__actions { padding: 20px 24px 24px; }
 .banner-cropper__intro { margin: 0 0 16px; color: var(--admin-text-secondary); line-height: 1.6; }
 .banner-cropper__viewport { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 1; border: 1px solid #334147; border-radius: 14px; background: #10171b; }
 .banner-cropper__source { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
@@ -403,6 +428,10 @@ select { font: inherit; }
   .league-card__main { padding: 16px; }
   .league-card__season { padding-inline: 16px; grid-template-columns: 1fr; gap: 5px; }
   .league-card__actions { padding-inline: 16px; grid-template-columns: 1fr; }
+  .data-sync-page__title { align-items: flex-start; flex-direction: column; }
+  .data-sync-page__legend { justify-content: flex-start; }
+  .sync-run-card__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sync-run-card__metrics div:nth-child(2) { border-right: 0; }
 }
 
 @media (max-width: 640px) {
@@ -416,6 +445,11 @@ select { font: inherit; }
   .cup-group-team { grid-template-columns: 1fr; }
   .cup-group-stage__actions, .cup-group-schedules__heading { align-items: stretch; flex-direction: column; }
   .cup-group-stage__actions { padding-right: 18px; padding-left: 18px; }
+  .sync-run-card__head { align-items: flex-start; flex-direction: column; }
+  .sync-run-card__metrics { grid-template-columns: 1fr; }
+  .sync-run-card__metrics div { border-right: 0; }
+  .sync-run-card__status { grid-template-columns: 1fr; }
+  .sync-run-card__status small { grid-column: 1; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -33,6 +33,7 @@ describe('role-aware administration navigation', () => {
     expect(screen.getByRole('link', { name: 'GOK 联赛' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '账号管理' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '审计日志' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '数据同步' })).not.toBeInTheDocument();
   });
 
   it('shows platform navigation to platform administrators', async () => {
@@ -42,6 +43,8 @@ describe('role-aware administration navigation', () => {
     expect(await screen.findByRole('link', { name: '账号管理' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '联赛管理' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '审计日志' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '数据同步' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '数据同步' }).closest('.ant-menu-item')?.querySelector('.admin-icon')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '联赛管理' })).toHaveAttribute('aria-current', 'page');
   });
 
