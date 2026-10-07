@@ -21,7 +21,7 @@ const items = ids.map((id, index) => ({
   errorCode: index === 2 ? 'CREST_INVALID' : null, errorMessage: index === 2 ? '队徽校验失败' : null
 }));
 
-function fixture() {
+function fixture({ resumableRun = false } = {}) {
   const request = vi.fn(async (path: string, options?: { method?: string; body?: { ids?: string[] } }) => {
     if (path.endsWith('/publish') && options?.method === 'POST') return {
       requestedCount: options.body?.ids?.length ?? 0,
@@ -33,7 +33,11 @@ function fixture() {
       if (path.includes('status=') && decodeURIComponent(path).includes('PUBLISHED')) return { items: [{ ...items[0], reviewStatus: 'PUBLISHED' }], page: 1, pageSize: 20, total: 1, summary: { pending: 19, failed: 1, published: 1, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
       return { items, page: 1, pageSize: path.includes('pageSize=50') ? 50 : 20, total: 981, summary: { pending: 19, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
     }
-    if (path.includes('/runs')) return { items: [run], page: 1, pageSize: 20, total: 1, summary: { pending: 0, running: 0, ready: 1, paused: 0, failed: 0 } };
+    if (path.includes('/runs')) return {
+      items: [{ ...run, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      page: 1, pageSize: 20, total: 1,
+      summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
+    };
     throw new Error(`Unexpected path: ${path}`);
   });
   return { api: { request } as unknown as AdminApi, request };
@@ -42,7 +46,7 @@ function fixture() {
 describe('TeamSyncPanel', () => {
   it('shows only the current server page and applies exception-first filters', async () => {
     const { api, request } = fixture();
-    render(<TeamSyncPanel api={api} onChanged={vi.fn()} />);
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
 
     expect(await screen.findByText('共 981 条')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '查看详情' })).toHaveLength(20);
@@ -64,7 +68,7 @@ describe('TeamSyncPanel', () => {
 
   it('reports partial batch results and shows readable old/new detail without raw JSON', async () => {
     const { api } = fixture();
-    render(<TeamSyncPanel api={api} onChanged={vi.fn()} />);
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
     await screen.findByText('共 981 条');
     for (const id of ids.slice(0, 3)) await userEvent.click(screen.getByRole('checkbox', { name: `选择 ${id}` }));
     await userEvent.click(screen.getByRole('button', { name: '批量发布' }));
@@ -83,5 +87,14 @@ describe('TeamSyncPanel', () => {
     expect(within(drawer).getByText('https://media.example.com/new.png')).toBeInTheDocument();
     expect(within(drawer).getByText(/CREST_INVALID/)).toBeInTheDocument();
     expect(within(drawer).queryByText(/rawDetail/)).not.toBeInTheDocument();
+  });
+
+  it('offers an explicit recovery action for an interrupted run', async () => {
+    const { api } = fixture({ resumableRun: true });
+    const onResumeRun = vi.fn().mockResolvedValue(undefined);
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={onResumeRun} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: '继续任务' }));
+    expect(onResumeRun).toHaveBeenCalledWith(runId);
   });
 });

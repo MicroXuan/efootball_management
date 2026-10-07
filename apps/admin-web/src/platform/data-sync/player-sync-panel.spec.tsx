@@ -28,7 +28,7 @@ const record = {
   validationErrors: [{ code: 'IMAGE_INVALID', path: 'imageUrl', message: '图片无效' }], targetPlayerId: null, targetCardId: null
 };
 
-function fixture({ publishFails = false } = {}) {
+function fixture({ publishFails = false, resumableRun = false } = {}) {
   const request = vi.fn(async (path: string) => {
     if (path.includes('/publish')) {
       if (publishFails) throw new ApiError({ status: 409, code: 'IMPORT_BATCH_NOT_READY' });
@@ -36,7 +36,11 @@ function fixture({ publishFails = false } = {}) {
     }
     if (path.includes('/records')) return { items: [record], page: 1, pageSize: 20, total: 43000, summary: { create: 100, update: 20, unchanged: 42880, invalid: 0 } };
     if (path.includes('/batches')) return { items: [batch], page: path.includes('page=2') ? 2 : 1, pageSize: 20, total: 43000, summary: { uploaded: 0, validated: 0, ready: 1, published: 0, failed: 0, cancelled: 0 } };
-    if (path.includes('/runs')) return { items: [run], page: 1, pageSize: 20, total: 1, summary: { pending: 0, running: 0, ready: 1, paused: 0, failed: 0 } };
+    if (path.includes('/runs')) return {
+      items: [{ ...run, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      page: 1, pageSize: 20, total: 1,
+      summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
+    };
     throw new Error(`Unexpected path: ${path}`);
   });
   return { api: { request } as unknown as AdminApi, request };
@@ -45,7 +49,7 @@ function fixture({ publishFails = false } = {}) {
 describe('PlayerSyncPanel', () => {
   it('uses server pagination, default exception filters, and only 20/50 page sizes', async () => {
     const { api, request } = fixture();
-    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} />);
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
 
     expect(await screen.findByText('共 43000 条')).toBeInTheDocument();
     expect(request).toHaveBeenCalledWith(expect.stringContaining('status=READY%2CVALIDATED%2CFAILED'), expect.anything());
@@ -62,7 +66,7 @@ describe('PlayerSyncPanel', () => {
 
   it('shows record differences and keeps a specific publish error visible', async () => {
     const { api } = fixture({ publishFails: true });
-    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} />);
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: '查看记录' }));
     fireEvent.click(await screen.findByRole('button', { name: '查看详情' }));
@@ -75,5 +79,15 @@ describe('PlayerSyncPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认发布' }));
     expect(await screen.findByText(/IMPORT_BATCH_NOT_READY/)).toBeInTheDocument();
     expect(screen.getAllByText('共 43000 条').length).toBeGreaterThan(0);
+  });
+
+  it('offers an explicit recovery action for an interrupted run', async () => {
+    const { api } = fixture({ resumableRun: true });
+    const onResumeRun = vi.fn().mockResolvedValue(undefined);
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={onResumeRun} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '继续任务' }));
+    await waitFor(() => expect(onResumeRun).toHaveBeenCalledWith(runId));
+    await waitFor(() => expect(screen.getByText('继续任务').closest('button')).not.toHaveClass('ant-btn-loading'));
   });
 });

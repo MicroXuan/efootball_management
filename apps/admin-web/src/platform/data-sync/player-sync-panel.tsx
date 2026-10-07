@@ -22,7 +22,11 @@ const diffCopy: Record<ImportRecordResponse['diffType'], string> = {
 const runModeCopy = { SAMPLE: '抽样', INCREMENTAL: '增量', FULL: '全量', RESUME: '继续' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '待审核', PAUSED: '已暂停', FAILED: '失败' } as const;
 
-export function PlayerSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi; onChanged: () => Promise<unknown> | unknown }) {
+export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
+  api?: AdminApi;
+  onChanged: () => Promise<unknown> | unknown;
+  onResumeRun: (runId: string) => Promise<unknown>;
+}) {
   const [runs, setRuns] = useState<PlatformSyncRunSummary[]>([]);
   const [runPage, setRunPage] = useState(1);
   const [runTotal, setRunTotal] = useState(0);
@@ -41,6 +45,7 @@ export function PlayerSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi;
   const [selectedRecord, setSelectedRecord] = useState<ImportRecordResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
+  const [resumingRunId, setResumingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadRuns = useCallback(async () => {
@@ -90,6 +95,13 @@ export function PlayerSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi;
     finally { setMutatingId(null); }
   };
 
+  const resumeRun = async (runId: string) => {
+    if (resumingRunId) return;
+    setResumingRunId(runId);
+    try { await onResumeRun(runId); await loadRuns(); }
+    finally { setResumingRunId(null); }
+  };
+
   const batchColumns = useMemo(() => [
     { title: '导入批次', dataIndex: 'fileName', key: 'fileName', render: (value: string, item: ImportBatchResponse) => <div className="sync-table-identity"><strong>{value}</strong><small>{item.id}</small></div> },
     { title: '变化', key: 'changes', render: (_: unknown, item: ImportBatchResponse) => <span>新增 {item.createCount} · 更新 {item.updateCount} · 无效 {item.invalidCount}</span> },
@@ -129,7 +141,12 @@ export function PlayerSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi;
           { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
           { title: '模式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
           { title: '状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
-          { title: '扫描', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed }
+          { title: '扫描', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
+          { title: '操作', render: (_, item) => item.resumable ? <Button
+            loading={resumingRunId === item.id}
+            disabled={Boolean(resumingRunId)}
+            onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
+          >继续任务</Button> : '—' }
         ]}
         pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
       />

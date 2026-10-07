@@ -306,7 +306,10 @@ describe('PlatformDataSyncService mutations', () => {
     }));
     const schedulePlayer = jest.fn();
     const scheduleTeam = jest.fn();
-    const record = jest.fn(async (_client: unknown, _input: { action: string }) => ({}));
+    const record = jest.fn(async (...args: [unknown, { action: string }]) => {
+      void args;
+      return {};
+    });
     const service = new PlatformDataSyncService(
       {} as never,
       { requirePlatformAdmin } as never,

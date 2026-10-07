@@ -51,9 +51,8 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
     } catch { setError('同步任务启动失败，请确认没有同类任务正在执行'); }
     finally { setMutating(false); }
   };
-  const resume = async () => {
-    const runId = section?.activeRun?.id;
-    if (!runId || mutating) return;
+  const resume = async (runId: string) => {
+    if (mutating) return;
     setMutating(true); setError(null);
     try {
       await api.request(`/v1/admin/data-sync/${activeTab}/runs/${runId}/resume`, { method: 'POST', schema: QueuedSyncRunSchema });
@@ -72,10 +71,10 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       published={section.published}
       busy={mutating}
       onStart={start}
-      onResume={resume}
+      onResume={() => section.activeRun ? resume(section.activeRun.id) : Promise.resolve()}
     /> : null}
-    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} /> : null}
-    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} /> : null}
+    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} /> : null}
+    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} /> : null}
   </>;
 
   return <div className="data-sync-page">

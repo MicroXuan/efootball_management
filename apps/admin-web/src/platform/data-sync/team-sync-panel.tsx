@@ -18,7 +18,11 @@ const changeCopy = { ADDED: '新增', UPDATED: '更新', SOURCE_MISSING: '来源
 const runModeCopy = { SAMPLE: '抽样', INCREMENTAL: '增量', FULL: '全量', RESUME: '继续' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '待审核', PAUSED: '已暂停', FAILED: '失败' } as const;
 
-export function TeamSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi; onChanged: () => Promise<unknown> | unknown }) {
+export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
+  api?: AdminApi;
+  onChanged: () => Promise<unknown> | unknown;
+  onResumeRun: (runId: string) => Promise<unknown>;
+}) {
   const [runs, setRuns] = useState<PlatformSyncRunSummary[]>([]);
   const [runPage, setRunPage] = useState(1);
   const [runTotal, setRunTotal] = useState(0);
@@ -38,6 +42,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi; o
   const [result, setResult] = useState<BatchMutationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [mutating, setMutating] = useState(false);
+  const [resumingRunId, setResumingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadRuns = useCallback(async () => {
@@ -81,6 +86,13 @@ export function TeamSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi; o
     finally { setMutating(false); }
   };
 
+  const resumeRun = async (runId: string) => {
+    if (resumingRunId) return;
+    setResumingRunId(runId);
+    try { await onResumeRun(runId); await loadRuns(); }
+    finally { setResumingRunId(null); }
+  };
+
   const columns = useMemo(() => [
     { title: '球队队壳', key: 'team', render: (_: unknown, item: TeamSyncItem) => <div className="sync-team-cell">
       {item.candidate?.storedLogoUrl ? <Image preview={false} src={item.candidate.storedLogoUrl} alt="" /> : <span>{item.candidate?.shortName.slice(0, 2) ?? '队'}</span>}
@@ -109,7 +121,12 @@ export function TeamSyncPanel({ api = adminApi, onChanged }: { api?: AdminApi; o
           { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
           { title: '模式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
           { title: '状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
-          { title: '扫描', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed }
+          { title: '扫描', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
+          { title: '操作', render: (_, item) => item.resumable ? <Button
+            loading={resumingRunId === item.id}
+            disabled={Boolean(resumingRunId)}
+            onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
+          >继续任务</Button> : '—' }
         ]}
         pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
       />

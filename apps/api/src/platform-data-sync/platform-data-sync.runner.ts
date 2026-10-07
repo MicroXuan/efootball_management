@@ -4,7 +4,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PesdataSyncService } from '../pesdata-sync/pesdata-sync.service.js';
 import { PesdataTeamSyncService } from '../pesdata-sync/pesdata-team-sync.service.js';
-import { SYNC_LEASE_MS, SYNC_RECONCILE_INTERVAL_MS } from './platform-data-sync.constants.js';
+import { SYNC_RECONCILE_INTERVAL_MS } from './platform-data-sync.constants.js';
 
 export { SYNC_LEASE_MS } from './platform-data-sync.constants.js';
 
