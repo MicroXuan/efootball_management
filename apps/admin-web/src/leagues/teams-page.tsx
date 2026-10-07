@@ -118,7 +118,7 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         <Form.Item label="球队队壳" name="catalogTeamId" rules={[{ required: true, message: '请选择球队队壳' }]}>
           <TeamShellPicker api={api} leagueId={leagueId} />
         </Form.Item>
-        <Button type="primary" htmlType="submit" loading={submitting} disabled={!owner || submitting}>创建球队</Button>
+        <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>创建球队</Button>
       </Form>
     </Card>
   </div>;

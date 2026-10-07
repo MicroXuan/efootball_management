@@ -150,6 +150,22 @@ describe('league teams page', () => {
     expect(request).toHaveBeenCalledWith(`/v1/admin/leagues/${leagueId}/users/000123`, expect.any(Object));
   });
 
+  it('keeps the create action available and explains that the entered user must be confirmed', async () => {
+    const request = mockRoutes({ catalog: [ajaxCatalogItem] });
+    renderPage(request);
+    await screen.findByText('暂无球队');
+    await userEvent.type(screen.getByLabelText('用户编号'), '000123');
+    await userEvent.type(screen.getByLabelText('球队编号'), '8');
+    await userEvent.type(screen.getByLabelText('联赛称呼'), 'tidus');
+    await userEvent.click(screen.getByRole('button', { name: '选择阿贾克斯' }));
+
+    const createButton = screen.getByRole('button', { name: '创建球队' });
+    expect(createButton).toBeEnabled();
+    await userEvent.click(createButton);
+
+    expect(await screen.findByText('请先查找并确认用户')).toBeInTheDocument();
+  });
+
   it('submits only the owner, alias, number, and selected shell and reports duplicate numbers', async () => {
     const request = mockRoutes({
       catalog: [ajaxCatalogItem],
