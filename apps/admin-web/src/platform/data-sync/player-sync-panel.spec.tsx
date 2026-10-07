@@ -47,6 +47,17 @@ function fixture({ publishFails = false, resumableRun = false } = {}) {
 }
 
 describe('PlayerSyncPanel', () => {
+  it('puts work that needs attention before a collapsed history section', async () => {
+    const { api } = fixture();
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    const reviewTitle = await screen.findByText('需要确认的球员卡');
+    const historyTitle = screen.getByText('历史同步记录');
+    expect(reviewTitle.compareDocumentPosition(historyTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(historyTitle.closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByText(/当前显示.*增量更新任务/)).toBeInTheDocument();
+  });
+
   it('uses server pagination, default exception filters, and only 20/50 page sizes', async () => {
     const { api, request } = fixture();
     render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
@@ -105,6 +116,7 @@ describe('PlayerSyncPanel', () => {
     const onResumeRun = vi.fn().mockResolvedValue(undefined);
     render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={onResumeRun} />);
 
+    fireEvent.click(await screen.findByText('历史同步记录'));
     fireEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     await waitFor(() => expect(onResumeRun).toHaveBeenCalledWith(runId));
     await waitFor(() => expect(screen.getByText('继续任务').closest('button')).not.toHaveClass('ant-btn-loading'));

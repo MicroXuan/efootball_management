@@ -50,6 +50,17 @@ function fixture({ resumableRun = false } = {}) {
 }
 
 describe('TeamSyncPanel', () => {
+  it('puts team shells needing attention before a collapsed history section', async () => {
+    const { api } = fixture();
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    const reviewTitle = await screen.findByText('需要确认的球队队壳');
+    const historyTitle = screen.getByText('历史同步记录');
+    expect(reviewTitle.compareDocumentPosition(historyTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(historyTitle.closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByText(/当前显示.*增量更新任务/)).toBeInTheDocument();
+  });
+
   it('shows only the current server page and applies exception-first filters', async () => {
     const { api, request } = fixture();
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
@@ -100,6 +111,7 @@ describe('TeamSyncPanel', () => {
     const onResumeRun = vi.fn().mockResolvedValue(undefined);
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={onResumeRun} />);
 
+    await userEvent.click(await screen.findByText('历史同步记录'));
     await userEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     expect(onResumeRun).toHaveBeenCalledWith(runId);
   });

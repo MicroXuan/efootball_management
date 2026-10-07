@@ -91,8 +91,8 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       activeKey={activeTab}
       onChange={(key) => setParams({ tab: key }, { replace: false })}
       items={[
-        { key: 'players', label: `球员卡${overview ? ` · ${overview.players.pendingReview + overview.players.failedReview}` : ''}`, children: activeTab === 'players' ? panel : null },
-        { key: 'teams', label: `球队队壳${overview ? ` · ${overview.teams.pendingReview + overview.teams.failedReview}` : ''}`, children: activeTab === 'teams' ? panel : null }
+        { key: 'players', label: `球员卡${overview ? `（${overview.players.pendingReview + overview.players.failedReview} 项待处理）` : ''}`, children: activeTab === 'players' ? panel : null },
+        { key: 'teams', label: `球队队壳${overview ? `（${overview.teams.pendingReview + overview.teams.failedReview} 项待处理）` : ''}`, children: activeTab === 'teams' ? panel : null }
       ]}
     />
   </div>;

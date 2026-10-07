@@ -14,13 +14,13 @@ import { ApiError, adminApi, type AdminApi } from '../../lib/api';
 const DEFAULT_BATCH_STATUSES = ['READY', 'VALIDATED', 'FAILED'];
 const pageSizeOptions = [20, 50];
 const batchStatusCopy: Record<ImportBatchResponse['status'], string> = {
-  UPLOADED: '已上传', VALIDATED: '有无效记录', READY: '待发布', PUBLISHED: '已发布', FAILED: '同步失败', CANCELLED: '已驳回'
+  UPLOADED: '等待校验', VALIDATED: '存在异常', READY: '等待确认', PUBLISHED: '已发布', FAILED: '同步失败', CANCELLED: '已驳回'
 };
 const diffCopy: Record<ImportRecordResponse['diffType'], string> = {
   CREATE: '新增', UPDATE: '更新', UNCHANGED: '无变化', INVALID: '无效'
 };
-const runModeCopy = { SAMPLE: '抽样', INCREMENTAL: '增量', FULL: '全量', RESUME: '继续' } as const;
-const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '待审核', PAUSED: '已暂停', FAILED: '失败' } as const;
+const runModeCopy = { SAMPLE: '抽样检查', INCREMENTAL: '增量更新', FULL: '全部检查', RESUME: '继续执行' } as const;
+const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '同步完成', PAUSED: '已暂停', FAILED: '同步失败' } as const;
 
 export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {
   api?: AdminApi;
@@ -150,31 +150,14 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refres
     { title: '操作', key: 'action', render: (_: unknown, item: ImportRecordResponse) => <Button onClick={() => setSelectedRecord(item)}>查看详情</Button> }
   ], []);
 
+  const selectedRun = runs.find((item) => item.id === selectedRunId) ?? null;
+
   return <div className="player-sync-panel">
     {error ? <Alert role="alert" type="error" showIcon closable onClose={() => setError(null)} title={error} /> : null}
-    <Card title="同步任务历史" className="data-card sync-history-card">
-      <Table<PlatformSyncRunSummary>
-        rowKey="id" size="small" dataSource={runs}
-        rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
-        onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setBatchPage(1); } })}
-        columns={[
-          { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
-          { title: '模式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
-          { title: '状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
-          { title: '扫描', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
-          { title: '操作', render: (_, item) => item.resumable ? <Button
-            loading={resumingRunId === item.id}
-            disabled={Boolean(resumingRunId)}
-            onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
-          >继续任务</Button> : '—' }
-        ]}
-        pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
-      />
-    </Card>
-    <Card title="待审核批次" className="data-card">
+    <Card title={<div className="sync-section-title"><strong>需要确认的球员卡</strong><small>{selectedRun ? selectedRunDescription(selectedRun) : '同步完成后，需要确认的数据会显示在这里。'}</small></div>} className="data-card">
       <div className="sync-filter-bar">
         <Select mode="multiple" aria-label="批次状态" value={batchStatuses} onChange={(values) => { setBatchStatuses(values.length ? values : DEFAULT_BATCH_STATUSES); setBatchPage(1); }} options={[
-          { value: 'READY', label: '待发布' }, { value: 'VALIDATED', label: '有无效记录' }, { value: 'FAILED', label: '同步失败' },
+          { value: 'READY', label: '等待确认' }, { value: 'VALIDATED', label: '存在异常' }, { value: 'FAILED', label: '同步失败' },
           { value: 'PUBLISHED', label: '已发布' }, { value: 'CANCELLED', label: '已驳回' }
         ]} />
         <Input.Search aria-label="搜索批次" allowClear placeholder="批次文件名或 ID" onSearch={(value) => { setQuery(value.trim()); setBatchPage(1); }} />
@@ -217,6 +200,28 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refres
         }}
       />
     </Card> : null}
+    <details className="sync-history-disclosure">
+      <summary><span>历史同步记录</span><small>查看以前执行过的任务，共 {runTotal} 次</small></summary>
+      <Card className="data-card sync-history-card">
+        <Table<PlatformSyncRunSummary>
+          rowKey="id" size="small" dataSource={runs}
+          rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
+          onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setBatchPage(1); } })}
+          columns={[
+            { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+            { title: '同步方式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
+            { title: '任务状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
+            { title: '已检查', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
+            { title: '操作', render: (_, item) => item.resumable ? <Button
+              loading={resumingRunId === item.id}
+              disabled={Boolean(resumingRunId)}
+              onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
+            >继续任务</Button> : '—' }
+          ]}
+          pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
+        />
+      </Card>
+    </details>
     <Drawer size="large" open={Boolean(selectedRecord)} title="球员卡差异详情" onClose={() => setSelectedRecord(null)}>
       {selectedRecord ? <div className="sync-record-detail">
         <Descriptions column={1} size="small" bordered items={[
@@ -229,6 +234,10 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refres
       </div> : null}
     </Drawer>
   </div>;
+}
+
+function selectedRunDescription(run: PlatformSyncRunSummary) {
+  return `当前显示 ${new Date(run.createdAt).toLocaleString('zh-CN')} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
 }
 
 function displayValue(value: unknown) {

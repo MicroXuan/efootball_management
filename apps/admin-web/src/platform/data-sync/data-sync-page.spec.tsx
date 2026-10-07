@@ -14,7 +14,22 @@ function LocationProbe() {
 }
 
 const api = {
-  request: vi.fn().mockResolvedValue(overview)
+  request: vi.fn(async (path: string) => {
+    if (path === '/v1/admin/data-sync/overview') return overview;
+    if (path.includes('/runs?')) return {
+      items: [], page: 1, pageSize: 20, total: 0,
+      summary: { pending: 0, running: 0, ready: 0, paused: 0, failed: 0 }
+    };
+    if (path.includes('/batches?')) return {
+      items: [], page: 1, pageSize: 20, total: 0,
+      summary: { uploaded: 0, validated: 0, ready: 0, published: 0, failed: 0, cancelled: 0 }
+    };
+    if (path.includes('/items?')) return {
+      items: [], page: 1, pageSize: 20, total: 0,
+      summary: { pending: 0, failed: 0, published: 0, rejected: 0, errors: [] }
+    };
+    throw new Error(`Unexpected path: ${path}`);
+  })
 } as unknown as AdminApi;
 
 describe('DataSyncPage', () => {
@@ -25,8 +40,8 @@ describe('DataSyncPage', () => {
     </MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '数据同步' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /球员卡/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /球队队壳/ })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: '球员卡（4 项待处理）' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('tab', { name: '球队队壳（7 项待处理）' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: /球队队壳/ }));
     await waitFor(() => expect(screen.getByLabelText('current location')).toHaveTextContent('/platform/data-sync?tab=teams'));
     expect(screen.getByRole('tab', { name: /球队队壳/ })).toHaveAttribute('aria-selected', 'true');

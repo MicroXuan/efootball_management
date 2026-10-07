@@ -13,10 +13,10 @@ import { ApiError, adminApi, type AdminApi } from '../../lib/api';
 type TeamSyncItem = TeamSyncItemPage['items'][number];
 const DEFAULT_STATUSES = ['PENDING', 'FAILED'];
 const pageSizeOptions = [20, 50];
-const statusCopy = { PENDING: '待审核', FAILED: '失败', PUBLISHED: '已发布', REJECTED: '已驳回' } as const;
+const statusCopy = { PENDING: '等待确认', FAILED: '同步失败', PUBLISHED: '已发布', REJECTED: '已驳回' } as const;
 const changeCopy = { ADDED: '新增', UPDATED: '更新', SOURCE_MISSING: '来源缺失' } as const;
-const runModeCopy = { SAMPLE: '抽样', INCREMENTAL: '增量', FULL: '全量', RESUME: '继续' } as const;
-const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '待审核', PAUSED: '已暂停', FAILED: '失败' } as const;
+const runModeCopy = { SAMPLE: '抽样检查', INCREMENTAL: '增量更新', FULL: '全部检查', RESUME: '继续执行' } as const;
+const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '同步完成', PAUSED: '已暂停', FAILED: '同步失败' } as const;
 
 export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {
   api?: AdminApi;
@@ -125,6 +125,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
   ], []);
 
   const selectedSummary = selectedIds.join('、');
+  const selectedRun = runs.find((item) => item.id === selectedRunId) ?? null;
   return <div className="team-sync-panel">
     {error ? <Alert role="alert" type="error" showIcon closable onClose={() => setError(null)} title={error} /> : null}
     {result ? <Alert
@@ -132,29 +133,10 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
       title={`成功 ${result.succeededIds.length} 条，失败 ${result.failed.length} 条`}
       description={result.failed.length ? result.failed.map((failure) => `${failure.id} · ${failure.code}`).join('；') : '所选队壳已处理'}
     /> : null}
-    <Card title="同步任务历史" className="data-card sync-history-card">
-      <Table<PlatformSyncRunSummary>
-        rowKey="id" size="small" dataSource={runs}
-        rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
-        onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setPage(1); setSelectedIds([]); } })}
-        columns={[
-          { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
-          { title: '模式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
-          { title: '状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
-          { title: '扫描', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
-          { title: '操作', render: (_, item) => item.resumable ? <Button
-            loading={resumingRunId === item.id}
-            disabled={Boolean(resumingRunId)}
-            onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
-          >继续任务</Button> : '—' }
-        ]}
-        pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
-      />
-    </Card>
-    <Card title="队壳审核" className="data-card">
+    <Card title={<div className="sync-section-title"><strong>需要确认的球队队壳</strong><small>{selectedRun ? selectedRunDescription(selectedRun) : '同步完成后，需要确认的队壳会显示在这里。'}</small></div>} className="data-card">
       <div className="sync-filter-grid">
         <Select mode="multiple" aria-label="审核状态" value={statuses} onChange={(values) => { setStatuses(values.length ? values : DEFAULT_STATUSES); setPage(1); }} options={[
-          { value: 'PENDING', label: '待审核' }, { value: 'FAILED', label: '失败' }, { value: 'PUBLISHED', label: '已发布' }, { value: 'REJECTED', label: '已驳回' }
+          { value: 'PENDING', label: '等待确认' }, { value: 'FAILED', label: '同步失败' }, { value: 'PUBLISHED', label: '已发布' }, { value: 'REJECTED', label: '已驳回' }
         ]} />
         <Select mode="multiple" aria-label="变化类型" value={changeTypes} placeholder="全部变化类型" allowClear onChange={(values) => { setChangeTypes(values); setPage(1); }} options={[
           { value: 'ADDED', label: '新增' }, { value: 'UPDATED', label: '更新' }, { value: 'SOURCE_MISSING', label: '来源缺失' }
@@ -189,6 +171,28 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
         }}
       />
     </Card>
+    <details className="sync-history-disclosure">
+      <summary><span>历史同步记录</span><small>查看以前执行过的任务，共 {runTotal} 次</small></summary>
+      <Card className="data-card sync-history-card">
+        <Table<PlatformSyncRunSummary>
+          rowKey="id" size="small" dataSource={runs}
+          rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
+          onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setPage(1); setSelectedIds([]); } })}
+          columns={[
+            { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+            { title: '同步方式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
+            { title: '任务状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
+            { title: '已检查', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
+            { title: '操作', render: (_, item) => item.resumable ? <Button
+              loading={resumingRunId === item.id}
+              disabled={Boolean(resumingRunId)}
+              onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
+            >继续任务</Button> : '—' }
+          ]}
+          pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
+        />
+      </Card>
+    </details>
     <Drawer size="large" open={Boolean(detail)} title="队壳差异详情" onClose={() => setDetail(null)}>
       {detail ? <div className="team-sync-detail">
         <Descriptions column={1} bordered size="small" items={[
@@ -208,6 +212,10 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
       </div> : null}
     </Drawer>
   </div>;
+}
+
+function selectedRunDescription(run: PlatformSyncRunSummary) {
+  return `当前显示 ${new Date(run.createdAt).toLocaleString('zh-CN')} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
 }
 
 function TeamSnapshot({ title, value }: { title: string; value: TeamSyncItem['current'] }) {
