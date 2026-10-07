@@ -20,6 +20,7 @@ describe('league economy end-to-end flow', () => {
   let leagueId: string;
   let seasonId: string;
   const teamIds: string[] = [];
+  const catalogIds: string[] = [];
   let sourceId: string;
   let playerId: string;
   let ownershipId: string;
@@ -88,6 +89,7 @@ describe('league economy end-to-end flow', () => {
       const shell = await prisma.teamCatalogItem.create({
         data: { sourceType: 'CUSTOM', nameZh: teamName, shortName: teamShortName }
       });
+      catalogIds.push(shell.id);
       const team = await prisma.leagueTeam.create({
         data: {
           leagueId,
@@ -187,6 +189,7 @@ describe('league economy end-to-end flow', () => {
     await prisma.leagueSalaryTier.deleteMany({ where: { salaryRuleVersion: { leagueId } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: null } });
     await prisma.leagueSeason.delete({ where: { id: seasonId } });
     await prisma.league.delete({ where: { id: leagueId } });

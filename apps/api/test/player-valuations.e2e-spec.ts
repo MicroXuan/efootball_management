@@ -22,6 +22,7 @@ describe('player valuation end-to-end flow', () => {
   let leagueId: string;
   let seasonId: string;
   let teamId: string;
+  let catalogId: string;
   let sourceId: string;
   let playerId: string;
 
@@ -90,6 +91,7 @@ describe('player valuation end-to-end flow', () => {
     const shell = await prisma.teamCatalogItem.create({
       data: { sourceType: 'CUSTOM', nameZh: '身价验收队', shortName: '验收队' }
     });
+    catalogId = shell.id;
     const team = await prisma.leagueTeam.create({
       data: { leagueId, ownerUserId: ownerId, ownerAlias: '验收用户', catalogTeamId: shell.id, teamNumber: 1, name: '身价验收队', shortName: '验收队' }
     });
@@ -164,6 +166,7 @@ describe('player valuation end-to-end flow', () => {
     await prisma.leagueSalaryTier.deleteMany({ where: { salaryRuleVersion: { leagueId } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId } });
+    await prisma.teamCatalogItem.delete({ where: { id: catalogId } });
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: null } });
     await prisma.leagueSeason.delete({ where: { id: seasonId } });
     await prisma.league.delete({ where: { id: leagueId } });

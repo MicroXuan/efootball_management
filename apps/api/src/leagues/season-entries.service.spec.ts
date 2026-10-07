@@ -15,6 +15,7 @@ describe('SeasonEntriesService', () => {
   const userIds: string[] = [];
   const accountIds: string[] = [];
   const profileIds: string[] = [];
+  const catalogIds: string[] = [];
   let actorId: string;
 
   beforeAll(async () => {
@@ -48,6 +49,7 @@ describe('SeasonEntriesService', () => {
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { id: { in: profileIds } } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -124,6 +126,7 @@ describe('SeasonEntriesService', () => {
     const shell = await prisma.teamCatalogItem.create({
       data: { sourceType: 'CUSTOM', nameZh: name, shortName: owner.user.displayName }
     });
+    catalogIds.push(shell.id);
     return prisma.leagueTeam.create({
       data: {
         leagueId,

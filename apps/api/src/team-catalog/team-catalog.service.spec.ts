@@ -24,9 +24,12 @@ describe('TeamCatalogService', () => {
       prisma.league.create({ data: { name: `荷甲测试-${suffix}`, shortName: '荷甲', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL', createdByAdminId: admin.id } }),
       prisma.league.create({ data: { name: `跨联赛测试-${suffix}`, shortName: '跨联赛', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL', createdByAdminId: admin.id } })
     ]);
-    const [ajax, disabled] = await Promise.all([
+    const [ajax, englishClub, disabled] = await Promise.all([
       prisma.teamCatalogItem.create({
         data: { sourceType: 'PESDATA', sourceExternalId: `ajax-${suffix}`, sourceLeagueName: '荷兰足球甲级联赛', nameZh: '阿贾克斯', nameEn: 'Ajax', shortName: '阿贾克斯', storedLogoUrl: 'https://media.example/ajax.webp' }
+      }),
+      prisma.teamCatalogItem.create({
+        data: { sourceType: 'PESDATA', sourceExternalId: `english-${suffix}`, sourceLeagueName: '英格兰联赛', nameZh: '阿森纳', nameEn: 'Arsenal', shortName: '阿森纳', storedLogoUrl: 'https://media.example/arsenal.webp' }
       }),
       prisma.teamCatalogItem.create({
         data: { sourceType: 'CUSTOM', nameZh: '停用球队', shortName: '停用', status: 'DISABLED' }
@@ -38,12 +41,18 @@ describe('TeamCatalogService', () => {
     const service = new TeamCatalogService(prisma, new AuditLogService(prisma));
 
     try {
-      await expect(service.listAvailable(firstLeague.id, { keyword: 'ajax' })).resolves.toMatchObject({
-        items: [{ id: ajax.id, isAssigned: true, assignedLeagueTeamId: team.id }]
-      });
-      await expect(service.listAvailable(secondLeague.id, { sourceLeagueName: '荷兰足球甲级联赛' })).resolves.toMatchObject({
-        items: [{ id: ajax.id, isAssigned: false, assignedLeagueTeamId: null }]
-      });
+      const ajaxSearch = await service.listAvailable(firstLeague.id, { keyword: 'ajax' });
+      expect(ajaxSearch.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: ajax.id, isAssigned: true, assignedLeagueTeamId: team.id })
+      ]));
+      const dutchLeagueSearch = await service.listAvailable(secondLeague.id, { sourceLeagueName: '荷兰足球甲级联赛' });
+      expect(dutchLeagueSearch.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: ajax.id, isAssigned: false, assignedLeagueTeamId: null })
+      ]));
+      const premierLeagueSearch = await service.listAvailable(secondLeague.id, { sourceLeagueName: '英超' });
+      expect(premierLeagueSearch.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: englishClub.id, nameZh: '阿森纳' })
+      ]));
       await expect(service.listAvailable(firstLeague.id, { keyword: '停用' })).resolves.toMatchObject({ items: [] });
       await expect(service.listAvailable(firstLeague.id, { keyword: '停用', includeDisabled: true })).resolves.toMatchObject({
         items: [{ id: disabled.id, status: 'DISABLED' }]
@@ -59,7 +68,7 @@ describe('TeamCatalogService', () => {
       await prisma.teamCatalogItem.delete({ where: { id: custom.id } });
     } finally {
       await prisma.leagueTeam.delete({ where: { id: team.id } });
-      await prisma.teamCatalogItem.deleteMany({ where: { id: { in: [ajax.id, disabled.id] } } });
+      await prisma.teamCatalogItem.deleteMany({ where: { id: { in: [ajax.id, englishClub.id, disabled.id] } } });
       await prisma.league.deleteMany({ where: { id: { in: [firstLeague.id, secondLeague.id] } } });
       await prisma.user.delete({ where: { id: owner.id } });
       await prisma.auditLog.deleteMany({ where: { actorAdminId: admin.id } });

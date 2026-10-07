@@ -19,6 +19,15 @@ export type TeamCatalogListQuery = {
   includeDisabled?: boolean;
 };
 
+const sourceLeagueAliases: Readonly<Record<string, readonly string[]>> = {
+  '英超': ['英超', '英格兰联赛'],
+  '西甲': ['西甲', '西班牙联赛'],
+  '意甲': ['意甲', '意大利甲组联赛'],
+  '法甲': ['法甲', '法国足球甲级联赛'],
+  '荷甲': ['荷甲', '荷兰足球甲级联赛'],
+  '葡超': ['葡超', '葡萄牙足球超级联赛']
+};
+
 @Injectable()
 export class TeamCatalogService {
   constructor(
@@ -29,19 +38,26 @@ export class TeamCatalogService {
   async listAvailable(leagueId: string, query: TeamCatalogListQuery = {}): Promise<TeamCatalogListResponse> {
     const keyword = query.keyword?.trim();
     const sourceLeagueName = query.sourceLeagueName?.trim();
+    const sourceLeagueTerms = sourceLeagueName
+      ? sourceLeagueAliases[sourceLeagueName] ?? [sourceLeagueName]
+      : [];
     const records = await this.prisma.teamCatalogItem.findMany({
       where: {
         ...(query.includeDisabled ? {} : { status: 'ACTIVE' }),
-        ...(sourceLeagueName ? { sourceLeagueName: { contains: sourceLeagueName } } : {}),
-        ...(keyword ? {
-          OR: [
-            { nameZh: { contains: keyword } },
-            { nameEn: { contains: keyword } },
-            { nameJa: { contains: keyword } },
-            { shortName: { contains: keyword } },
-            { sourceLeagueName: { contains: keyword } }
-          ]
-        } : {})
+        AND: [
+          ...(sourceLeagueTerms.length ? [{
+            OR: sourceLeagueTerms.map((term) => ({ sourceLeagueName: { contains: term } }))
+          }] : []),
+          ...(keyword ? [{
+            OR: [
+              { nameZh: { contains: keyword } },
+              { nameEn: { contains: keyword } },
+              { nameJa: { contains: keyword } },
+              { shortName: { contains: keyword } },
+              { sourceLeagueName: { contains: keyword } }
+            ]
+          }] : [])
+        ]
       },
       include: {
         leagueTeams: {

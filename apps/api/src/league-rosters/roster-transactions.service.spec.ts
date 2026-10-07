@@ -57,6 +57,7 @@ describe('RosterTransactionsService', () => {
   const createdAdminIds: string[] = [];
   const createdUserIds: string[] = [];
   const createdSourceIds: string[] = [];
+  const createdCatalogIds: string[] = [];
 
   beforeAll(() => prisma.$connect());
 
@@ -87,6 +88,7 @@ describe('RosterTransactionsService', () => {
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.adminLeagueRole.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: createdCatalogIds } } });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: createdLeagueIds } } });
     const cards = await prisma.playerCard.findMany({
@@ -102,7 +104,7 @@ describe('RosterTransactionsService', () => {
     await prisma.dataSource.deleteMany({ where: { id: { in: createdSourceIds } } });
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.adminAccount.deleteMany({ where: { id: { in: createdAdminIds } } });
-    createdLeagueIds.length = createdAdminIds.length = createdUserIds.length = createdSourceIds.length = 0;
+    createdLeagueIds.length = createdAdminIds.length = createdUserIds.length = createdSourceIds.length = createdCatalogIds.length = 0;
   });
 
   afterAll(() => prisma.$disconnect());
@@ -148,6 +150,7 @@ describe('RosterTransactionsService', () => {
       const shell = await prisma.teamCatalogItem.create({
         data: { sourceType: 'CUSTOM', nameZh: `Team ${index + 1}`, shortName: `T${index + 1}` }
       });
+      createdCatalogIds.push(shell.id);
       return prisma.leagueTeam.create({ data: {
         leagueId: league.id,
         ownerUserId: user.id,

@@ -129,7 +129,7 @@ export class PesdataClient {
 
   getTeamDetail(teamId: string): Promise<PesdataTeam> {
     return this.enqueue(async () => {
-      const envelope = await this.request('team-detail', '/api/team/detail', { id: teamId }, PesdataTeamDetailEnvelopeSchema);
+      const envelope = await this.request('team-detail', '/api/team/detail', { team_id: teamId }, PesdataTeamDetailEnvelopeSchema);
       if (envelope.data.length !== 1) throw this.protocolError('team-detail', 1);
       return envelope.data[0] as PesdataTeam;
     });

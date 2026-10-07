@@ -147,7 +147,7 @@ describe('PesdataClient', () => {
     const fetchImplementation = mockFetch([
       async () => success({ list: [{ league_id: 'eredivisie', league_name: '荷甲' }], count: 1 }),
       async () => success({ list: [{ team_id: '42', team_name: 'Ajax' }], count: 1 }),
-      async () => success([{ team_id: '42', team_name: 'Ajax', team_logo: 'https://images.example/ajax.png' }])
+      async () => success({ team_id: '42', team: 'Ajax', team_cn: '阿贾克斯', team_logo: 'https://images.example/ajax.png' })
     ]);
     const client = createClient(fetchImplementation);
 
@@ -158,5 +158,6 @@ describe('PesdataClient', () => {
     expect(fetchImplementation.calls.map(([request]) => new URL(String(request)).pathname)).toEqual([
       '/api/league/list', '/api/team/list', '/api/team/detail'
     ]);
+    expect(new URL(String(fetchImplementation.calls[2]?.[0])).searchParams.get('team_id')).toBe('42');
   });
 });

@@ -19,6 +19,7 @@ describe('atomic league roster API', () => {
   const leagueIds: string[] = [];
   const userIds: string[] = [];
   const sourceIds: string[] = [];
+  const catalogIds: string[] = [];
   let app: INestApplication;
   let adminId: string;
   let adminToken: string;
@@ -64,6 +65,7 @@ describe('atomic league roster API', () => {
     await prisma.transferWindow.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     const cards = await prisma.playerCard.findMany({
@@ -124,6 +126,7 @@ describe('atomic league roster API', () => {
       const name = `${label} Team ${index + 1}`;
       const shortName = `${label}${index + 1}`;
       const shell = await prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: name, shortName } });
+      catalogIds.push(shell.id);
       return prisma.leagueTeam.create({ data: {
         leagueId: league.id,
         ownerUserId: user.id,

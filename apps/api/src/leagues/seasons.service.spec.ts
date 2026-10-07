@@ -17,6 +17,7 @@ describe('SeasonsService', () => {
   const leagueIds: string[] = [];
   const userIds: string[] = [];
   const accountIds: string[] = [];
+  const catalogIds: string[] = [];
   let actorId: string;
   let teamOwnerId: string;
   let teamProfileId: string;
@@ -77,6 +78,7 @@ describe('SeasonsService', () => {
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { id: teamProfileId } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -228,6 +230,7 @@ describe('SeasonsService', () => {
     const shell = await prisma.teamCatalogItem.create({
       data: { sourceType: 'CUSTOM', nameZh: '续赛球队', shortName: '续赛' }
     });
+    catalogIds.push(shell.id);
     const team = await prisma.leagueTeam.create({
       data: {
         leagueId: league.id,

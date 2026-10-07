@@ -109,7 +109,11 @@ export class PesdataTeamSyncService {
         const summaryChecksum = pesdataValueChecksum(summary);
         try {
           const detail = await this.client.getTeamDetail(externalId);
-          let candidate = mapPesdataTeam(detail);
+          let candidate = mapPesdataTeam({
+            ...detail,
+            leagueId: detail.leagueId ?? summary.leagueId,
+            leagueName: detail.leagueName ?? summary.leagueName
+          });
           if (candidate.remoteLogoUrl) candidate = { ...candidate, ...(await this.crestLoader.load(candidate)) };
           const detailChecksum = pesdataValueChecksum(candidate);
           const current = await this.prisma.teamCatalogItem.findUnique({
