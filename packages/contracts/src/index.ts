@@ -12,5 +12,6 @@ export * from './team-catalog.js';
 export * from './player-valuation.js';
 export * from './player-catalog.js';
 export * from './player-import.js';
+export * from './platform-data-sync.js';
 export * from './platform-presentation.js';
 export * from './user.js';

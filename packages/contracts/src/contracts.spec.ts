@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   AdminAccountSummarySchema,
   AdminAuthResponseSchema,
   AdminLeagueGrantSchema,
   AdminLoginRequestSchema,
+  BatchMutationRequestSchema,
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionListQuerySchema,
@@ -16,6 +18,7 @@ import {
   DivisionStandingsResponseSchema,
   LeagueWorkspaceResponseSchema,
   PlatformPresentationSchema,
+  PlatformPageRequestSchema,
   GenerateSeasonAllocationRequestSchema,
   GenerateStageScheduleRequestSchema,
   SeasonAllocationDecisionSchema,
@@ -71,6 +74,7 @@ import {
   TeamCatalogListResponseSchema,
   TeamCatalogSyncDifferenceSchema,
   TeamCatalogSyncRunSummarySchema,
+  TeamSyncItemPageSchema,
   TransferWindowSchema,
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
@@ -93,7 +97,8 @@ import {
   UpdateLeagueSeasonRequestSchema,
   UpdateRosterLifecycleRequestSchema,
   UpdateTeamProfileRequestSchema,
-  WechatLoginRequestSchema
+  WechatLoginRequestSchema,
+  StartPlatformSyncRequestSchema
 } from './index.js';
 import {
   AuditLogSchema,
@@ -107,6 +112,30 @@ import {
   ValuationWindowSchema,
   ValuationWorkspaceSchema
 } from './index.js';
+
+describe('platform data sync contracts', () => {
+  it('accepts supported sync modes and bounded pagination', () => {
+    assert.equal(StartPlatformSyncRequestSchema.parse({ mode: 'sample', limit: 2 }).mode, 'sample');
+    assert.throws(() => PlatformPageRequestSchema.parse({ page: 1, pageSize: 100 }));
+  });
+
+  it('rejects batch mutations larger than one hundred unique resources', () => {
+    assert.throws(() => BatchMutationRequestSchema.parse({
+      ids: Array.from({ length: 101 }, () => randomUUID())
+    }));
+  });
+
+  it('parses paginated team sync results without loading all records', () => {
+    const result = TeamSyncItemPageSchema.parse({
+      items: [],
+      page: 1,
+      pageSize: 20,
+      total: 981,
+      summary: { pending: 0, failed: 70, published: 911, rejected: 0 }
+    });
+    assert.equal(result.total, 981);
+  });
+});
 
 describe('league economy contracts', () => {
   const ids = {
