@@ -53,6 +53,7 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
           mode: 'INCREMENTAL',
           status,
           activeLeaseKey: `player-${randomUUID()}`,
+          leaseOwnerToken: randomUUID(),
           leaseExpiresAt: expiredAt,
           currentOffset: 40,
           scannedCount: 40,
@@ -65,6 +66,7 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
           mode: 'INCREMENTAL',
           status,
           activeLeaseKey: `team-${randomUUID()}`,
+          leaseOwnerToken: randomUUID(),
           leaseExpiresAt: expiredAt,
           currentOffset: 80,
           scannedCount: 80,
@@ -79,6 +81,7 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
       await expect(prisma.externalSyncRun.findUnique({ where: { id: player.id } })).resolves.toMatchObject({
         status: 'FAILED',
         activeLeaseKey: null,
+        leaseOwnerToken: null,
         errorCode: 'PROCESS_INTERRUPTED',
         currentOffset: 40,
         scannedCount: 40,
@@ -87,6 +90,7 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
       await expect(prisma.teamCatalogSyncRun.findUnique({ where: { id: team.id } })).resolves.toMatchObject({
         status: 'FAILED',
         activeLeaseKey: null,
+        leaseOwnerToken: null,
         errorCode: 'PROCESS_INTERRUPTED',
         currentOffset: 80,
         scannedCount: 80,

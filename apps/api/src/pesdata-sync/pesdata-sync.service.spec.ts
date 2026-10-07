@@ -3,8 +3,10 @@ import { config } from 'dotenv';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
 import { PesdataClientError } from './pesdata-client.js';
+import { mapPesdataPlayer } from './pesdata-mapper.js';
 import type { PesdataPlayerDetail, PesdataPlayerSummary } from './pesdata.schemas.js';
 import { PesdataSyncService } from './pesdata-sync.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -45,6 +47,9 @@ describe('PesdataSyncService', () => {
     await prisma.user.create({
       data: { id: actorId, wechatOpenId: `pesdata-sync-${actorId}`, displayName: '同步测试员' }
     });
+    await prisma.adminAccount.create({
+      data: { id: adminId, username: `pesdata-admin-${adminId}`, displayName: '同步管理员', passwordHash: 'unused', platformRole: 'PLATFORM_ADMIN' }
+    });
     await prisma.dataSource.upsert({
       where: { code: 'pesdata' },
       update: { isEnabled: true },
@@ -56,6 +61,7 @@ describe('PesdataSyncService', () => {
     const source = await prisma.dataSource.findUniqueOrThrow({ where: { code: 'pesdata' } });
     await prisma.importBatch.deleteMany({ where: { sourceId: source.id, createdBy: actorId } });
     await prisma.externalSyncRun.deleteMany({ where: { sourceId: source.id, actorId: { in: [actorId, adminId] } } });
+    await prisma.auditLog.deleteMany({ where: { actorAdminId: adminId } });
   });
 
   it('queues a platform run, reserves one lease, and renews progress while executing', async () => {
@@ -89,8 +95,148 @@ describe('PesdataSyncService', () => {
     expect(run.heartbeatAt).toBeInstanceOf(Date);
   });
 
+  it('renews the lease independently while an upstream request is still pending', async () => {
+    let releaseRequest!: () => void;
+    let requestStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseRequest = resolve; });
+    const started = new Promise<void>((resolve) => { requestStarted = resolve; });
+    const client = {
+      listPlayers: async () => {
+        requestStarted();
+        await blocked;
+        return { list: [], count: 0 };
+      },
+      getPlayerDetail: async (id: string) => detail(id)
+    };
+    const sync = new PesdataSyncService(prisma, importService, client as never, {
+      pageSize: 1,
+      heartbeatIntervalMs: 5
+    });
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+    const execution = sync.executePlatformRun(queued.runId);
+    await started;
+    const before = await prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const during = await prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } });
+    releaseRequest();
+    await execution;
+
+    expect(during.heartbeatAt!.getTime()).toBeGreaterThan(before.heartbeatAt!.getTime());
+    expect(during.leaseOwnerToken).not.toBeNull();
+  });
+
+  it('stops a pending worker after its heartbeat detects lease ownership loss', async () => {
+    let releaseRequest!: () => void;
+    let requestStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseRequest = resolve; });
+    const started = new Promise<void>((resolve) => { requestStarted = resolve; });
+    const client = {
+      listPlayers: async () => {
+        requestStarted();
+        await blocked;
+        return { list: [], count: 0 };
+      },
+      getPlayerDetail: async (id: string) => detail(id)
+    };
+    const sync = new PesdataSyncService(prisma, importService, client as never, {
+      pageSize: 1,
+      heartbeatIntervalMs: 5
+    });
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+    const execution = sync.executePlatformRun(queued.runId);
+    const outcome = execution.then((value) => ({ value }), (error: unknown) => ({ error }));
+    await started;
+    await prisma.externalSyncRun.update({ where: { id: queued.runId }, data: {
+      status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null, leaseExpiresAt: null
+    } });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    releaseRequest();
+    const settled = await outcome;
+
+    expect(settled).toMatchObject({ error: { code: 'PESDATA_SYNC_LEASE_LOST' } });
+  });
+
+  it('creates the queued platform run and its concrete audit record atomically', async () => {
+    const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
+    const sync = new PesdataSyncService(prisma, importService, client as never, {}, new AuditLogService(prisma));
+
+    const queued = await sync.createPlatformRun(adminId, { mode: 'full' });
+
+    await expect(prisma.auditLog.findFirst({ where: { actorAdminId: adminId, resourceId: queued.runId } }))
+      .resolves.toMatchObject({ action: 'START_PLAYER_CARD_FULL_SYNC', resourceType: 'ExternalSyncRun' });
+  });
+
+  it('does not reserve a platform lease when the start audit cannot be written', async () => {
+    const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
+    const audit = { record: async () => { throw new Error('audit unavailable'); } };
+    const sync = new PesdataSyncService(prisma, importService, client as never, {}, audit as never);
+
+    await expect(sync.createPlatformRun(adminId, { mode: 'full' })).rejects.toThrow('audit unavailable');
+
+    await expect(prisma.externalSyncRun.count({ where: { actorId: adminId } })).resolves.toBe(0);
+  });
+
+  it('allows only one worker to claim a queued platform run', async () => {
+    let listCalls = 0;
+    const client = {
+      listPlayers: async () => {
+        listCalls += 1;
+        return { list: [], count: 0 };
+      },
+      getPlayerDetail: async (id: string) => detail(id)
+    };
+    const sync = new PesdataSyncService(prisma, importService, client as never);
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+
+    const outcomes = await Promise.allSettled([
+      sync.executePlatformRun(queued.runId),
+      sync.executePlatformRun(queued.runId)
+    ]);
+
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter(({ status }) => status === 'rejected')).toHaveLength(1);
+    expect(listCalls).toBe(1);
+  });
+
+  it('fences an expired worker before it can persist details or overwrite reconciliation', async () => {
+    let releaseDetail!: () => void;
+    let detailStarted!: () => void;
+    const started = new Promise<void>((resolve) => { detailStarted = resolve; });
+    const client = {
+      listPlayers: async () => ({ list: [summary(990)], count: 1 }),
+      getPlayerDetail: async (id: string) => {
+        detailStarted();
+        await new Promise<void>((resolve) => { releaseDetail = resolve; });
+        return detail(id);
+      }
+    };
+    const sync = new PesdataSyncService(prisma, importService, client as never, { pageSize: 1 });
+    const queued = await sync.createPlatformRun(adminId, { mode: 'sample', limit: 1 });
+    const execution = sync.executePlatformRun(queued.runId);
+    await started;
+    await prisma.externalSyncRun.update({
+      where: { id: queued.runId },
+      data: {
+        status: 'FAILED',
+        activeLeaseKey: null,
+        leaseOwnerToken: null,
+        currentPhase: 'INTERRUPTED',
+        errorCode: 'PROCESS_INTERRUPTED'
+      }
+    });
+    releaseDetail();
+
+    await expect(execution).rejects.toMatchObject({ code: 'PESDATA_SYNC_LEASE_LOST' });
+    await expect(prisma.externalSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(0);
+    await expect(prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } }))
+      .resolves.toMatchObject({ status: 'FAILED', errorCode: 'PROCESS_INTERRUPTED', leaseOwnerToken: null });
+  });
+
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { id: actorId } });
+    await prisma.adminAccount.delete({ where: { id: adminId } });
     await prisma.$disconnect();
   });
 
@@ -229,6 +375,45 @@ describe('PesdataSyncService', () => {
       ['2', 'FETCHED'],
       ['3', 'FETCHED']
     ]);
+  });
+
+  it('removes a newly created unlinked batch when ownership is lost before linking', async () => {
+    const source = await prisma.dataSource.findUniqueOrThrow({ where: { code: 'pesdata' } });
+    const leaseOwnerToken = randomUUID();
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId: source.id,
+      actorId: adminId,
+      mode: 'INCREMENTAL',
+      status: 'RUNNING',
+      activeLeaseKey: 'pesdata',
+      leaseOwnerToken,
+      currentPhase: 'IMPORTING',
+      leaseExpiresAt: new Date(Date.now() + 60_000)
+    } });
+    const losingImport = {
+      createBatchForPlatformAdmin: async (actor: string, input: Parameters<PlayerImportService['createBatchForPlatformAdmin']>[1]) => {
+        const outcome = await importService.createBatchForPlatformAdmin(actor, input);
+        await prisma.externalSyncRun.update({ where: { id: run.id }, data: {
+          status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null, leaseExpiresAt: null
+        } });
+        return outcome;
+      }
+    };
+    const service = new PesdataSyncService(prisma, losingImport as never, {} as never);
+
+    await expect(service.createImportBatches(
+      adminId,
+      run.id,
+      [mapPesdataPlayer(detail('991001'))],
+      true,
+      true,
+      leaseOwnerToken
+    )).rejects.toMatchObject({ code: 'PESDATA_SYNC_LEASE_LOST' });
+
+    await expect(prisma.importBatch.count({ where: {
+      createdBy: adminId,
+      fileName: `pesdata-${run.id}-001.json`
+    } })).resolves.toBe(0);
   });
 
   it('resumes at the checkpoint without refetching successful details', async () => {

@@ -20,6 +20,12 @@ const items = ids.map((id, index) => ({
   candidateLogoChecksum: 'c'.repeat(64), candidateSourceChecksum: 'd'.repeat(64),
   errorCode: index === 2 ? 'CREST_INVALID' : null, errorMessage: index === 2 ? '队徽校验失败' : null
 }));
+const secondPageItems = items.map((item, index) => ({
+  ...item,
+  id: `${String(index + 40).padStart(8, '0')}-1111-4111-8111-111111111111`,
+  sourceExternalId: `team-page-2-${index + 1}`,
+  candidate: { ...item.candidate, sourceExternalId: `team-page-2-${index + 1}`, nameZh: `第二页球队 ${index + 1}` }
+}));
 
 function fixture({ resumableRun = false } = {}) {
   const request = vi.fn(async (path: string, options?: { method?: string; body?: { ids?: string[] } }) => {
@@ -31,7 +37,7 @@ function fixture({ resumableRun = false } = {}) {
     if (path.endsWith('/reject') || path.endsWith('/retry')) return { requestedCount: 0, succeededIds: [], failed: [] };
     if (path.includes('/items')) {
       if (path.includes('status=') && decodeURIComponent(path).includes('PUBLISHED')) return { items: [{ ...items[0], reviewStatus: 'PUBLISHED' }], page: 1, pageSize: 20, total: 1, summary: { pending: 19, failed: 1, published: 1, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
-      return { items, page: 1, pageSize: path.includes('pageSize=50') ? 50 : 20, total: 981, summary: { pending: 19, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
+      return { items: path.includes('page=2') ? secondPageItems : items, page: path.includes('page=2') ? 2 : 1, pageSize: path.includes('pageSize=50') ? 50 : 20, total: 981, summary: { pending: 19, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
     }
     if (path.includes('/runs')) return {
       items: [{ ...run, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
@@ -96,5 +102,45 @@ describe('TeamSyncPanel', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     expect(onResumeRun).toHaveBeenCalledWith(runId);
+  });
+
+  it('keeps eligible selections when paging through a large review list', async () => {
+    const { api } = fixture();
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+    await screen.findByText('共 981 条');
+    await userEvent.click(screen.getByRole('checkbox', { name: `选择 ${ids[0]}` }));
+    expect(screen.getByText('已选 1 条（最多 100 条）')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle('2'));
+
+    expect(await screen.findByText('第二页球队 1')).toBeInTheDocument();
+    expect(screen.getByText('已选 1 条（最多 100 条）')).toBeInTheDocument();
+  });
+
+  it('switches review data to the newest run after a terminal refresh', async () => {
+    const newerRunId = 'aaaaaaaa-1111-4111-8111-111111111111';
+    let completed = false;
+    const request = vi.fn(async (path: string) => {
+      if (path.includes('/runs?')) return {
+        items: completed ? [{ ...run, id: newerRunId, createdAt: '2026-10-07T01:00:00.000Z' }, run] : [run],
+        page: path.includes('page=2') ? 2 : 1, pageSize: 20, total: completed ? 22 : 21,
+        summary: { pending: 0, running: 0, ready: completed ? 2 : 1, paused: 0, failed: 0 }
+      };
+      if (path.includes('/items')) return {
+        items: [], page: 1, pageSize: 20, total: 0,
+        summary: { pending: 0, failed: 0, published: 0, rejected: 0, errors: [] }
+      };
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const api = { request } as unknown as AdminApi;
+    const view = render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} refreshKey="run:RUNNING" />);
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining(`/runs/${runId}/items`), expect.anything()));
+    fireEvent.click(screen.getByTitle('2'));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('/runs?page=2'), expect.anything()));
+
+    completed = true;
+    view.rerender(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} refreshKey="idle:READY:2026-10-07T01:00:00.000Z" />);
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining(`/runs/${newerRunId}/items`), expect.anything()));
   });
 });

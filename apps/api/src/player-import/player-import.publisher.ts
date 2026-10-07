@@ -12,6 +12,7 @@ import type { PlayerCardStatus } from '../generated/prisma/enums.js';
 import { normalizeSearchText } from './record-normalizer.js';
 import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 
 type Transaction = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
 
@@ -37,14 +38,15 @@ export class PlayerImportPublisher {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
     @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService,
-    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService
+    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService,
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
   ) {}
 
   async publish(actorId: string, batchId: string): Promise<ImportBatchResponse> {
     if (!(await this.authorization.can(actorId, 'catalog.import.publish'))) {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Permission denied' });
     }
-    return this.publishUnchecked(actorId, batchId);
+    return this.publishUnchecked(actorId, batchId, false);
   }
 
   async publishForPlatformAdmin(actorAdminId: string, batchId: string): Promise<ImportBatchResponse> {
@@ -52,10 +54,10 @@ export class PlayerImportPublisher {
       throw new ForbiddenException({ code: 'ADMIN_PLATFORM_ACCESS_DENIED', message: 'Platform administrator access is required' });
     }
     await this.adminAuthorization.requirePlatformAdmin(actorAdminId);
-    return this.publishUnchecked(actorAdminId, batchId);
+    return this.publishUnchecked(actorAdminId, batchId, true);
   }
 
-  private async publishUnchecked(actorId: string, batchId: string): Promise<ImportBatchResponse> {
+  private async publishUnchecked(actorId: string, batchId: string, platformAdmin: boolean): Promise<ImportBatchResponse> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT id FROM import_batches WHERE id = ${batchId} FOR UPDATE`);
@@ -107,6 +109,20 @@ export class PlayerImportPublisher {
           data: { status: 'PUBLISHED', publishedAt: release.publishedAt },
           include: { source: true, release: true }
         });
+        if (platformAdmin && this.audit) {
+          await this.audit.record(tx, {
+            actorAdminId: actorId,
+            action: 'PUBLISH_PLAYER_CARD_IMPORT_BATCH',
+            resourceType: 'ImportBatch',
+            resourceId: batchId,
+            metadata: {
+              batchId,
+              status: published.status,
+              createCount: published.createCount,
+              updateCount: published.updateCount
+            }
+          });
+        }
         return this.toResponse(published);
       }, { timeout: 30_000 });
     } catch (error) {

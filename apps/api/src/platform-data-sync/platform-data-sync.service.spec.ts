@@ -117,8 +117,19 @@ describe('PlatformDataSyncService queries', () => {
 
   function service() {
     const imports = new PlayerImportService(prisma, userAuthorization as never, adminAuthorization as never);
-    const catalog = new TeamCatalogService(prisma, new AuditLogService(prisma));
-    return new PlatformDataSyncService(prisma, adminAuthorization as never, imports, catalog);
+    const audit = new AuditLogService(prisma);
+    const catalog = new TeamCatalogService(prisma, audit);
+    return new PlatformDataSyncService(
+      prisma,
+      adminAuthorization as never,
+      imports,
+      catalog,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      audit
+    );
   }
 
   it('paginates large team review results and aggregates error reasons', async () => {
@@ -255,6 +266,17 @@ describe('PlatformDataSyncService queries', () => {
     expect(await prisma.teamCatalogItem.count({
       where: { sourceType: 'PESDATA', sourceExternalId: pending.sourceExternalId }
     })).toBe(1);
+    const operation = await prisma.auditLog.findFirstOrThrow({
+      where: { actorAdminId: adminId, action: 'BATCH_PUBLISH_TEAM_SHELLS' },
+      orderBy: { createdAt: 'asc' }
+    });
+    expect(operation.metadata).toMatchObject({
+      status: 'COMPLETED', requestedCount: 3, succeededCount: 1, failedCount: 2,
+      failures: expect.arrayContaining([
+        expect.objectContaining({ id: stale.id, code: 'TEAM_SYNC_ITEM_NOT_PENDING' }),
+        expect.objectContaining({ id: missingId, code: 'TEAM_SYNC_ITEM_NOT_FOUND' })
+      ])
+    });
   });
 
   it('serializes concurrent publication of the same team shell', async () => {
@@ -293,7 +315,7 @@ describe('PlatformDataSyncService mutations', () => {
   const runId = '22222222-2222-4222-8222-222222222222';
   const batchId = '33333333-3333-4333-8333-333333333333';
 
-  function fixture() {
+  function fixture(audit?: { record: jest.Mock; updateMetadata: jest.Mock }) {
     const requirePlatformAdmin = jest.fn(async () => ({ id: adminId }));
     const cancelBatchForPlatformAdmin = jest.fn(async () => ({ id: batchId, status: 'CANCELLED' }));
     const publishForPlatformAdmin = jest.fn(async () => ({
@@ -306,10 +328,6 @@ describe('PlatformDataSyncService mutations', () => {
     }));
     const schedulePlayer = jest.fn();
     const scheduleTeam = jest.fn();
-    const record = jest.fn(async (...args: [unknown, { action: string }]) => {
-      void args;
-      return {};
-    });
     const service = new PlatformDataSyncService(
       {} as never,
       { requirePlatformAdmin } as never,
@@ -319,15 +337,15 @@ describe('PlatformDataSyncService mutations', () => {
       { createPlatformRun: createPlayerRun } as never,
       { createPlatformRun: createTeamRun, retryPlatformItems } as never,
       { schedulePlayer, scheduleTeam } as never,
-      { record } as never
+      audit as never
     );
     return {
       service, createPlayerRun, createTeamRun, schedulePlayer, scheduleTeam,
-      publishForPlatformAdmin, cancelBatchForPlatformAdmin, retryPlatformItems, record
+      publishForPlatformAdmin, cancelBatchForPlatformAdmin, retryPlatformItems
     };
   }
 
-  it('queues browser syncs, records the exact mode, and schedules background execution', async () => {
+  it('queues browser syncs with the exact mode and schedules background execution', async () => {
     const value = fixture();
 
     await expect(value.service.startPlayerRun(adminId, { mode: 'incremental' })).resolves.toEqual({ runId, status: 'PENDING' });
@@ -337,12 +355,9 @@ describe('PlatformDataSyncService mutations', () => {
     expect(value.createTeamRun).toHaveBeenCalledWith(adminId, { mode: 'full' });
     expect(value.schedulePlayer).toHaveBeenCalledWith(runId);
     expect(value.scheduleTeam).toHaveBeenCalledWith(runId);
-    expect(value.record.mock.calls.map((call) => call[1].action)).toEqual([
-      'START_PLAYER_CARD_INCREMENTAL_SYNC', 'START_TEAM_SHELL_FULL_SYNC'
-    ]);
   });
 
-  it('publishes or rejects whole player batches and audits retry outcomes', async () => {
+  it('delegates whole player batches and team retries to their transactional domain services', async () => {
     const value = fixture();
     const itemId = '44444444-4444-4444-8444-444444444444';
 
@@ -355,8 +370,28 @@ describe('PlatformDataSyncService mutations', () => {
     expect(value.publishForPlatformAdmin).toHaveBeenCalledWith(adminId, batchId);
     expect(value.cancelBatchForPlatformAdmin).toHaveBeenCalledWith(adminId, batchId);
     expect(value.retryPlatformItems).toHaveBeenCalledWith(adminId, [itemId]);
-    expect(value.record.mock.calls.map((call) => call[1].action)).toEqual([
-      'PUBLISH_PLAYER_CARD_IMPORT_BATCH', 'REJECT_PLAYER_CARD_IMPORT_BATCH', 'RETRY_TEAM_SHELL_SYNC_ITEMS'
-    ]);
+  });
+
+  it('retries a transient batch-audit finalization failure before returning success', async () => {
+    const updateMetadata = jest.fn<() => Promise<unknown>>()
+      .mockRejectedValueOnce(new Error('temporary audit failure'))
+      .mockResolvedValueOnce({ id: 'audit-1' });
+    const audit = {
+      record: jest.fn(async () => ({ id: 'audit-1' })),
+      updateMetadata
+    };
+    const value = fixture(audit);
+    const itemId = '55555555-5555-4555-8555-555555555555';
+
+    await expect(value.service.retryTeamItems(adminId, [itemId])).resolves.toMatchObject({
+      requestedCount: 1, succeededIds: [itemId], failed: []
+    });
+
+    expect(updateMetadata).toHaveBeenCalledTimes(2);
+    expect(updateMetadata).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'audit-1',
+      expect.objectContaining({ status: 'COMPLETED', requestedCount: 1, succeededCount: 1, failedCount: 0 })
+    );
   });
 });

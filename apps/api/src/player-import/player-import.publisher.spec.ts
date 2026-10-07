@@ -5,6 +5,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { PlayerImportPublisher } from './player-import.publisher.js';
 import { PlayerImportService } from './player-import.service.js';
 import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -61,6 +62,9 @@ describe('PlayerImportPublisher', () => {
     await prisma.user.create({
       data: { id: actorId, wechatOpenId: `publisher-test-${actorId}`, displayName: '发布测试员' }
     });
+    await prisma.adminAccount.create({
+      data: { id: adminId, username: `publisher-admin-${adminId}`, displayName: '发布管理员', passwordHash: 'unused', platformRole: 'PLATFORM_ADMIN' }
+    });
   });
 
   beforeEach(async () => {
@@ -72,6 +76,7 @@ describe('PlayerImportPublisher', () => {
   });
 
   afterEach(async () => {
+    await prisma.auditLog.deleteMany({ where: { actorAdminId: adminId } });
     const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
     const cardIds = cards.map(({ id }) => id);
     const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
@@ -91,6 +96,7 @@ describe('PlayerImportPublisher', () => {
 
   afterAll(async () => {
     await prisma.user.delete({ where: { id: actorId } });
+    await prisma.adminAccount.delete({ where: { id: adminId } });
     await prisma.$disconnect();
   });
 
@@ -220,5 +226,71 @@ describe('PlayerImportPublisher', () => {
 
     expect(left.releaseId).toBe(right.releaseId);
     await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(1);
+  });
+
+  it('serializes concurrent publish and cancellation without leaving contradictory data', async () => {
+    const batch = await createBatch([card('publish-cancel-race')]);
+
+    const outcomes = await Promise.allSettled([
+      publisher.publish(actorId, batch.id),
+      service.cancelBatch(actorId, batch.id)
+    ]);
+    const stored = await prisma.importBatch.findUniqueOrThrow({
+      where: { id: batch.id },
+      include: { release: true }
+    });
+    const cardCount = await prisma.playerCard.count({
+      where: { sourceId, externalId: 'publish-cancel-race' }
+    });
+
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    if (stored.status === 'PUBLISHED') {
+      expect(stored.release).not.toBeNull();
+      expect(cardCount).toBe(1);
+    } else {
+      expect(stored.status).toBe('CANCELLED');
+      expect(stored.release).toBeNull();
+      expect(cardCount).toBe(0);
+    }
+  });
+
+  it('commits platform publication and rejection audits in their domain transactions', async () => {
+    const audit = new AuditLogService(prisma);
+    const auditedPublisher = new PlayerImportPublisher(prisma, authorization as never, builds, adminAuthorization as never, audit);
+    const auditedService = new PlayerImportService(prisma, authorization as never, adminAuthorization as never, audit);
+    const publishBatch = await createBatch([card('audited-publish')]);
+    const rejectBatch = await createBatch([card('audited-reject')]);
+
+    await auditedPublisher.publishForPlatformAdmin(adminId, publishBatch.id);
+    await auditedService.cancelBatchForPlatformAdmin(adminId, rejectBatch.id);
+
+    const actions = await prisma.auditLog.findMany({
+      where: { actorAdminId: adminId, resourceId: { in: [publishBatch.id, rejectBatch.id] } },
+      orderBy: { createdAt: 'asc' },
+      select: { action: true }
+    });
+    expect(actions.map(({ action }) => action)).toEqual(expect.arrayContaining([
+      'PUBLISH_PLAYER_CARD_IMPORT_BATCH',
+      'REJECT_PLAYER_CARD_IMPORT_BATCH'
+    ]));
+    expect(actions).toHaveLength(2);
+  });
+
+  it('rolls back platform publication and rejection when their audit write fails', async () => {
+    const failingAudit = { record: async () => { throw new Error('audit unavailable'); } };
+    const auditedPublisher = new PlayerImportPublisher(prisma, authorization as never, builds, adminAuthorization as never, failingAudit as never);
+    const auditedService = new PlayerImportService(prisma, authorization as never, adminAuthorization as never, failingAudit as never);
+    const publishBatch = await createBatch([card('audit-rollback-publish')]);
+    const rejectBatch = await createBatch([card('audit-rollback-reject')]);
+
+    await expect(auditedPublisher.publishForPlatformAdmin(adminId, publishBatch.id)).rejects.toThrow('audit unavailable');
+    await expect(auditedService.cancelBatchForPlatformAdmin(adminId, rejectBatch.id)).rejects.toThrow('audit unavailable');
+
+    await expect(prisma.importBatch.findUnique({ where: { id: publishBatch.id }, select: { status: true } }))
+      .resolves.toEqual({ status: 'READY' });
+    await expect(prisma.catalogRelease.count({ where: { batchId: publishBatch.id } })).resolves.toBe(0);
+    await expect(prisma.playerCard.count({ where: { sourceId, externalId: 'audit-rollback-publish' } })).resolves.toBe(0);
+    await expect(prisma.importBatch.findUnique({ where: { id: rejectBatch.id }, select: { status: true } }))
+      .resolves.toEqual({ status: 'READY' });
   });
 });

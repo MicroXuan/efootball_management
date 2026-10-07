@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Descriptions, Drawer, Empty, Image, Input, Popconfirm, Select, Space, Table, Tag } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BatchMutationResultSchema,
   PlatformSyncRunPageSchema,
@@ -18,10 +18,11 @@ const changeCopy = { ADDED: '新增', UPDATED: '更新', SOURCE_MISSING: '来源
 const runModeCopy = { SAMPLE: '抽样', INCREMENTAL: '增量', FULL: '全量', RESUME: '继续' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '待审核', PAUSED: '已暂停', FAILED: '失败' } as const;
 
-export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
+export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {
   api?: AdminApi;
   onChanged: () => Promise<unknown> | unknown;
   onResumeRun: (runId: string) => Promise<unknown>;
+  refreshKey?: string;
 }) {
   const [runs, setRuns] = useState<PlatformSyncRunSummary[]>([]);
   const [runPage, setRunPage] = useState(1);
@@ -44,14 +45,28 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
   const [mutating, setMutating] = useState(false);
   const [resumingRunId, setResumingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const loadedRefreshKey = useRef<string | null>(null);
+  const runRequestSequence = useRef(0);
+  const selectNewestOnNextRunLoad = useRef(false);
 
   const loadRuns = useCallback(async () => {
     try {
-      const response = await api.request(`/v1/admin/data-sync/teams/runs?page=${runPage}&pageSize=20`, { schema: PlatformSyncRunPageSchema });
+      const refreshChanged = loadedRefreshKey.current !== refreshKey;
+      loadedRefreshKey.current = refreshKey;
+      if (refreshChanged) selectNewestOnNextRunLoad.current = true;
+      const requestedPage = refreshChanged ? 1 : runPage;
+      if (refreshChanged && runPage !== 1) setRunPage(1);
+      const requestSequence = ++runRequestSequence.current;
+      const response = await api.request(`/v1/admin/data-sync/teams/runs?page=${requestedPage}&pageSize=20`, { schema: PlatformSyncRunPageSchema });
+      if (requestSequence !== runRequestSequence.current) return;
+      const selectNewest = selectNewestOnNextRunLoad.current && requestedPage === 1;
+      if (selectNewest) selectNewestOnNextRunLoad.current = false;
       setRuns(response.items); setRunTotal(response.total);
-      setSelectedRunId((current) => current && response.items.some(({ id }) => id === current) ? current : response.items[0]?.id ?? null);
+      setSelectedRunId((current) => selectNewest
+        ? response.items[0]?.id ?? null
+        : current && response.items.some(({ id }) => id === current) ? current : response.items[0]?.id ?? null);
     } catch (caught) { setError(errorCopy(caught, '队壳同步历史加载失败')); }
-  }, [api, runPage]);
+  }, [api, refreshKey, runPage]);
 
   const loadItems = useCallback(async () => {
     if (!selectedRunId) { setItems([]); setTotal(0); return; }
@@ -64,14 +79,18 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
       if (errorCode) params.set('errorCode', errorCode);
       const response = await api.request(`/v1/admin/data-sync/teams/runs/${selectedRunId}/items?${params}`, { schema: TeamSyncItemPageSchema });
       setItems(response.items); setTotal(response.total); setErrorReasons(response.summary.errors); setError(null);
-      const eligible = new Set(response.items.filter(({ reviewStatus }) => reviewStatus === 'PENDING' || reviewStatus === 'FAILED').map(({ id }) => id));
-      setSelectedIds((current) => current.filter((id) => eligible.has(id)));
+      const visible = new Map(response.items.map((item) => [item.id, item.reviewStatus]));
+      setSelectedIds((current) => current.filter((id) => {
+        const status = visible.get(id);
+        return status === undefined || status === 'PENDING' || status === 'FAILED';
+      }));
     } catch (caught) { setError(errorCopy(caught, '队壳审核列表加载失败')); }
     finally { setLoading(false); }
-  }, [api, changeTypes, errorCode, page, pageSize, query, selectedRunId, sourceLeagueId, statuses]);
+  }, [api, changeTypes, errorCode, page, pageSize, query, refreshKey, selectedRunId, sourceLeagueId, statuses]);
 
   useEffect(() => { void loadRuns(); }, [loadRuns]);
   useEffect(() => { void loadItems(); }, [loadItems]);
+  useEffect(() => { setSelectedIds([]); }, [changeTypes, errorCode, query, selectedRunId, sourceLeagueId, statuses]);
 
   const mutate = async (action: 'publish' | 'reject' | 'retry') => {
     if (!selectedIds.length || mutating) return;
@@ -81,6 +100,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
         method: 'POST', body: { ids: selectedIds }, schema: BatchMutationResultSchema
       });
       setResult(response);
+      setSelectedIds([]);
       await Promise.all([loadItems(), onChanged()]);
     } catch (caught) { setError(errorCopy(caught, '批量操作失败')); }
     finally { setMutating(false); }

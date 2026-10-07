@@ -39,6 +39,9 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
   useEffect(() => { void loadOverview(); }, [loadOverview]);
 
   const section = overview?.[activeTab] ?? null;
+  const refreshKey = section
+    ? `${section.activeRun?.id ?? 'idle'}:${section.activeRun?.status ?? 'idle'}:${section.lastCompletedAt ?? 'never'}`
+    : 'loading';
   const { refreshAfterMutation } = useSyncRun({ status: section?.activeRun?.status ?? null, refresh: loadOverview });
   const start = async (mode: 'sample' | 'incremental' | 'full') => {
     if (mutating) return;
@@ -73,8 +76,8 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       onStart={start}
       onResume={() => section.activeRun ? resume(section.activeRun.id) : Promise.resolve()}
     /> : null}
-    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} /> : null}
-    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} /> : null}
+    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
+    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
   </>;
 
   return <div className="data-sync-page">

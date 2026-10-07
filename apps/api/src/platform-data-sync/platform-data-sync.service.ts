@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import {
   BatchMutationResultSchema,
   ImportBatchSchema,
@@ -22,7 +22,7 @@ import {
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
-import type { ExternalSyncRun, TeamCatalogSyncRun } from '../generated/prisma/client.js';
+import type { ExternalSyncRun, Prisma, TeamCatalogSyncRun } from '../generated/prisma/client.js';
 import type { ExternalSyncStatus, ImportBatchStatus, TeamCatalogSyncStatus } from '../generated/prisma/enums.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
 import { PlayerImportPublisher } from '../player-import/player-import.publisher.js';
@@ -35,6 +35,8 @@ type PlayerRunWithCount = ExternalSyncRun & { _count: { batchLinks: number } };
 
 @Injectable()
 export class PlatformDataSyncService {
+  private readonly logger = new Logger(PlatformDataSyncService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
@@ -44,29 +46,27 @@ export class PlatformDataSyncService {
     @Inject(PesdataSyncService) private readonly playerSync?: PesdataSyncService,
     @Inject(PesdataTeamSyncService) private readonly teamSync?: PesdataTeamSyncService,
     @Inject(PlatformDataSyncRunner) private readonly runner?: PlatformDataSyncRunner,
-    @Inject(AuditLogService) private readonly audit?: AuditLogService
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
   ) {}
 
   async startPlayerRun(adminId: string, input: StartPlatformSyncRequest): Promise<QueuedSyncRun> {
     await this.authorization.requirePlatformAdmin(adminId);
     const sync = this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE');
+    const runner = this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE');
     const queued = QueuedSyncRunSchema.parse(await sync.createPlatformRun(adminId, {
       mode: input.mode, ...(input.limit === undefined ? {} : { limit: input.limit })
     }));
-    await this.recordAudit(adminId, `START_PLAYER_CARD_${input.mode.toUpperCase()}_SYNC`, 'ExternalSyncRun', queued.runId, {
-      mode: input.mode, limit: input.limit ?? null
-    });
-    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').schedulePlayer(queued.runId);
+    runner.schedulePlayer(queued.runId);
     return queued;
   }
 
   async resumePlayerRun(adminId: string, runId: string): Promise<QueuedSyncRun> {
     await this.authorization.requirePlatformAdmin(adminId);
+    const runner = this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE');
     const queued = QueuedSyncRunSchema.parse(
       await this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE').resumePlatformRun(adminId, runId)
     );
-    await this.recordAudit(adminId, 'RESUME_PLAYER_CARD_SYNC', 'ExternalSyncRun', runId, { runId });
-    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').schedulePlayer(runId);
+    runner.schedulePlayer(runId);
     return queued;
   }
 
@@ -74,59 +74,62 @@ export class PlatformDataSyncService {
     await this.authorization.requirePlatformAdmin(adminId);
     const result = await this.required(this.publisher, 'PLAYER_IMPORT_PUBLISHER_UNAVAILABLE')
       .publishForPlatformAdmin(adminId, batchId);
-    await this.recordAudit(adminId, 'PUBLISH_PLAYER_CARD_IMPORT_BATCH', 'ImportBatch', batchId, {
-      batchId, status: result.status, createCount: result.createCount, updateCount: result.updateCount
-    });
     return result;
   }
 
   async rejectPlayerBatch(adminId: string, batchId: string): Promise<ImportBatchResponse> {
     await this.authorization.requirePlatformAdmin(adminId);
     const result = await this.imports.cancelBatchForPlatformAdmin(adminId, batchId);
-    await this.recordAudit(adminId, 'REJECT_PLAYER_CARD_IMPORT_BATCH', 'ImportBatch', batchId, {
-      batchId, status: result.status
-    });
     return result;
   }
 
   async startTeamRun(adminId: string, input: StartPlatformSyncRequest): Promise<QueuedSyncRun> {
     await this.authorization.requirePlatformAdmin(adminId);
+    const runner = this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE');
     const queued = QueuedSyncRunSchema.parse(
       await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').createPlatformRun(adminId, {
         mode: input.mode, ...(input.limit === undefined ? {} : { limit: input.limit })
       })
     );
-    await this.recordAudit(adminId, `START_TEAM_SHELL_${input.mode.toUpperCase()}_SYNC`, 'TeamCatalogSyncRun', queued.runId, {
-      mode: input.mode, limit: input.limit ?? null
-    });
-    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').scheduleTeam(queued.runId);
+    runner.scheduleTeam(queued.runId);
     return queued;
   }
 
   async resumeTeamRun(adminId: string, runId: string): Promise<QueuedSyncRun> {
     await this.authorization.requirePlatformAdmin(adminId);
+    const runner = this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE');
     const queued = QueuedSyncRunSchema.parse(
       await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').resumePlatformRun(adminId, runId)
     );
-    await this.recordAudit(adminId, 'RESUME_TEAM_SHELL_SYNC', 'TeamCatalogSyncRun', runId, { runId });
-    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').scheduleTeam(runId);
+    runner.scheduleTeam(runId);
     return queued;
   }
 
   publishTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
-    return this.mutateTeamItems(adminId, ids, 'BATCH_PUBLISH_TEAM_SHELLS', (id) => this.catalog.publishSyncItem(adminId, id));
+    return this.mutateTeamItems(
+      adminId,
+      ids,
+      'BATCH_PUBLISH_TEAM_SHELLS',
+      (id) => this.catalog.publishSyncItem(adminId, id)
+    );
   }
 
   rejectTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
-    return this.mutateTeamItems(adminId, ids, 'BATCH_REJECT_TEAM_SHELLS', (id) => this.catalog.rejectSyncItem(adminId, id));
+    return this.mutateTeamItems(
+      adminId,
+      ids,
+      'BATCH_REJECT_TEAM_SHELLS',
+      (id) => this.catalog.rejectSyncItem(adminId, id)
+    );
   }
 
   async retryTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
     await this.authorization.requirePlatformAdmin(adminId);
+    const operationId = await this.beginBatchAudit(adminId, 'RETRY_TEAM_SHELL_SYNC_ITEMS', ids);
     const result = BatchMutationResultSchema.parse(
       await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').retryPlatformItems(adminId, ids)
     );
-    await this.recordBatchAudit(adminId, 'RETRY_TEAM_SHELL_SYNC_ITEMS', result);
+    await this.finalizeBatchAudit(operationId, adminId, 'RETRY_TEAM_SHELL_SYNC_ITEMS', ids, result);
     return result;
   }
 
@@ -179,11 +182,12 @@ export class PlatformDataSyncService {
     await this.authorization.requirePlatformAdmin(adminId);
     const statuses = this.playerStatuses(query.status);
     const where = statuses ? { status: { in: statuses } } : {};
+    const orderBy = this.playerRunOrder(query.sortBy, query.sortOrder);
     const [runs, total, groups] = await Promise.all([
       this.prisma.externalSyncRun.findMany({
         where,
         include: { _count: { select: { batchLinks: true } } },
-        orderBy: [{ createdAt: query.sortOrder ?? 'desc' }, { id: query.sortOrder ?? 'desc' }],
+        orderBy,
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize
       }),
@@ -218,11 +222,12 @@ export class PlatformDataSyncService {
       status: { in: statuses },
       ...(query.query ? { OR: [{ fileName: { contains: query.query } }, { id: { contains: query.query } }] } : {})
     };
+    const orderBy = this.playerBatchOrder(query.sortBy, query.sortOrder);
     const [batches, total, groups] = await Promise.all([
       this.prisma.importBatch.findMany({
         where,
         include: { source: true, release: true },
-        orderBy: [{ createdAt: query.sortOrder ?? 'desc' }, { id: query.sortOrder ?? 'desc' }],
+        orderBy,
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize
       }),
@@ -331,7 +336,7 @@ export class PlatformDataSyncService {
       currentPhase: run.currentPhase,
       heartbeatAt: run.heartbeatAt?.toISOString() ?? null,
       leaseExpiresAt: run.leaseExpiresAt?.toISOString() ?? null,
-      resumable: run.status === 'FAILED' && run.activeLeaseKey === null,
+      resumable: run.status === 'FAILED' && run.activeLeaseKey === null && run.leaseOwnerToken === null,
       counters: {
         sourceTotal: run.sourceTotal,
         scanned: run.scannedCount,
@@ -362,7 +367,7 @@ export class PlatformDataSyncService {
       currentPhase: run.currentPhase,
       heartbeatAt: run.heartbeatAt?.toISOString() ?? null,
       leaseExpiresAt: run.leaseExpiresAt?.toISOString() ?? null,
-      resumable: run.status === 'FAILED' && run.activeLeaseKey === null,
+      resumable: run.status === 'FAILED' && run.activeLeaseKey === null && run.leaseOwnerToken === null,
       counters: {
         sourceTotal: null,
         scanned: run.scannedCount,
@@ -402,6 +407,28 @@ export class PlatformDataSyncService {
     return this.enumValues(values, ['PENDING', 'RUNNING', 'READY', 'FAILED']);
   }
 
+  private playerRunOrder(
+    sortBy: string | undefined,
+    sortOrder: 'asc' | 'desc' | undefined
+  ): Prisma.ExternalSyncRunOrderByWithRelationInput[] {
+    const order = sortOrder ?? 'desc';
+    if (!sortBy || sortBy === 'createdAt') return [{ createdAt: order }, { id: order }];
+    if (sortBy === 'updatedAt') return [{ updatedAt: order }, { id: order }];
+    if (sortBy === 'status') return [{ status: order }, { id: order }];
+    throw new BadRequestException({ code: 'INVALID_SYNC_SORT', message: 'Unknown player run sort field' });
+  }
+
+  private playerBatchOrder(
+    sortBy: string | undefined,
+    sortOrder: 'asc' | 'desc' | undefined
+  ): Prisma.ImportBatchOrderByWithRelationInput[] {
+    const order = sortOrder ?? 'desc';
+    if (!sortBy || sortBy === 'createdAt') return [{ createdAt: order }, { id: order }];
+    if (sortBy === 'status') return [{ status: order }, { id: order }];
+    if (sortBy === 'fileName') return [{ fileName: order }, { id: order }];
+    throw new BadRequestException({ code: 'INVALID_SYNC_SORT', message: 'Unknown player batch sort field' });
+  }
+
   private batchStatuses(values?: string[]): ImportBatchStatus[] | undefined {
     return this.enumValues(values, ['UPLOADED', 'VALIDATED', 'READY', 'PUBLISHED', 'FAILED', 'CANCELLED']);
   }
@@ -423,6 +450,7 @@ export class PlatformDataSyncService {
     mutate: (id: string) => Promise<unknown>
   ): Promise<BatchMutationResult> {
     await this.authorization.requirePlatformAdmin(adminId);
+    const operationId = await this.beginBatchAudit(adminId, action, ids);
     const succeededIds: string[] = [];
     const failed: BatchMutationResult['failed'] = [];
     for (const id of ids) {
@@ -434,29 +462,53 @@ export class PlatformDataSyncService {
       }
     }
     const result = BatchMutationResultSchema.parse({ requestedCount: ids.length, succeededIds, failed });
-    await this.recordBatchAudit(adminId, action, result);
+    await this.finalizeBatchAudit(operationId, adminId, action, ids, result);
     return result;
   }
 
-  private recordBatchAudit(adminId: string, action: string, result: BatchMutationResult) {
-    return this.recordAudit(adminId, action, 'TeamCatalogSyncItemBatch', null, {
-      requestedCount: result.requestedCount,
-      succeededCount: result.succeededIds.length,
-      succeededIds: result.succeededIds,
-      failedCount: result.failed.length,
-      failed: result.failed.map(({ id, code }) => ({ id, code }))
+  private async beginBatchAudit(adminId: string, action: string, ids: string[]): Promise<string | null> {
+    if (!this.audit) return null;
+    const log = await this.audit.record(this.prisma, {
+      actorAdminId: adminId,
+      action,
+      resourceType: 'TeamCatalogSyncItemBatch',
+      metadata: { status: 'PROCESSING', requestedCount: ids.length, requestedIds: ids }
     });
+    return log.id;
   }
 
-  private async recordAudit(
+  private async finalizeBatchAudit(
+    operationId: string | null,
     adminId: string,
     action: string,
-    resourceType: string,
-    resourceId: string | null,
-    metadata: Record<string, unknown>
+    ids: string[],
+    result: BatchMutationResult
   ): Promise<void> {
-    if (!this.audit) return;
-    await this.audit.record(this.prisma, { actorAdminId: adminId, action, resourceType, resourceId, metadata });
+    if (!this.audit || !operationId) return;
+    const metadata = {
+        status: 'COMPLETED',
+        requestedCount: result.requestedCount,
+        requestedIds: ids,
+        succeededCount: result.succeededIds.length,
+        succeededIds: result.succeededIds,
+        failedCount: result.failed.length,
+        failures: result.failed.map(({ id, code }) => ({ id, code }))
+    };
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await this.audit.updateMetadata(this.prisma, operationId, metadata);
+        return;
+      } catch (error) {
+        lastError = error;
+        this.logger.error(
+          `Failed to finalize ${action} audit operation ${operationId} for ${adminId} (attempt ${attempt}/3)`,
+          error
+        );
+        if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+      }
+    }
+    throw lastError;
   }
 
   private required<T>(value: T | undefined, code: string): T {

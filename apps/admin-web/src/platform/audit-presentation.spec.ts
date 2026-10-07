@@ -102,3 +102,35 @@ it('presents data synchronization actions with concrete Chinese business labels'
     summary: '平台管理员“小宣”批量发布球队队壳：成功 1 条，失败 2 条',
   });
 });
+
+it('does not present an unfinished team batch audit as completed', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'BATCH_REJECT_TEAM_SHELLS',
+    resourceType: 'TeamCatalogSyncItemBatch',
+    subjectDisplayName: null,
+    metadata: { status: 'PROCESSING', requestedCount: 3 },
+  })).toMatchObject({
+    action: '批量驳回球队队壳',
+    result: '处理中',
+    summary: '平台管理员“小宣”批量驳回球队队壳已开始，结果待确认',
+  });
+});
+
+it('presents a retried team-shell item as a concrete operation', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'RETRY_TEAM_SHELL_SYNC_ITEM',
+    resourceType: 'TeamCatalogSyncItem',
+    subjectDisplayName: null,
+    metadata: { runId: 'run-1', sourceExternalId: 'team-1' },
+  })).toMatchObject({
+    action: '重试球队队壳同步失败项',
+    subject: '球队队壳同步项目',
+    summary: '平台管理员“小宣”对 球队队壳同步项目 执行了“重试球队队壳同步失败项”',
+  });
+});

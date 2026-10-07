@@ -729,6 +729,7 @@ model TeamCatalogSyncRun {
   mode           TeamCatalogSyncMode
   status         TeamCatalogSyncStatus @default(PENDING)
   activeLeaseKey String?               @unique @map("active_lease_key") @db.VarChar(64)
+  leaseOwnerToken String?              @map("lease_owner_token") @db.Char(36)
   requestedLimit Int?                  @map("requested_limit") @db.UnsignedInt
   scannedCount   Int                   @default(0) @map("scanned_count") @db.UnsignedInt
   addedCount     Int                   @default(0) @map("added_count") @db.UnsignedInt
@@ -1489,6 +1490,7 @@ model ExternalSyncRun {
   mode           ExternalSyncMode
   status         ExternalSyncStatus     @default(PENDING)
   activeLeaseKey String?                @unique @map("active_lease_key") @db.VarChar(64)
+  leaseOwnerToken String?               @map("lease_owner_token") @db.Char(36)
   requestedLimit Int?                   @map("requested_limit") @db.UnsignedInt
   sourceTotal    Int?                   @map("source_total") @db.UnsignedInt
   scannedCount   Int                    @default(0) @map("scanned_count") @db.UnsignedInt

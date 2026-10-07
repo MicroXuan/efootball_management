@@ -62,6 +62,7 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
     const interrupted = {
       status: 'FAILED' as const,
       activeLeaseKey: null,
+      leaseOwnerToken: null,
       leaseExpiresAt: null,
       heartbeatAt: now,
       currentPhase: 'INTERRUPTED',

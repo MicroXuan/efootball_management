@@ -267,3 +267,58 @@ describe('PlayerImportService', () => {
     expect(authorizationCalls).toContainEqual([actorId, 'catalog.import.create']);
   });
 });
+
+describe('PlayerImportService cancellation locking', () => {
+  it('locks the batch row and cancels it in the same transaction', async () => {
+    const batchId = randomUUID();
+    const calls: string[] = [];
+    const batch = {
+      id: batchId,
+      source: { code: 'pesdata' },
+      fileName: 'players.json',
+      format: 'JSON' as const,
+      checksum: 'a'.repeat(64),
+      status: 'READY',
+      totalCount: 1,
+      createCount: 1,
+      updateCount: 0,
+      unchangedCount: 0,
+      invalidCount: 0,
+      failureReason: null,
+      createdBy: randomUUID(),
+      createdAt: new Date('2026-10-07T00:00:00.000Z'),
+      publishedAt: null,
+      release: null
+    };
+    const tx = {
+      $queryRaw: async () => {
+        calls.push('lock');
+        return [];
+      },
+      importBatch: {
+        findUnique: async () => {
+          calls.push('read');
+          return batch;
+        },
+        update: async () => {
+          calls.push('update');
+          return { ...batch, status: 'CANCELLED' };
+        }
+      }
+    };
+    const fakePrisma = {
+      importBatch: tx.importBatch,
+      $transaction: async (callback: (client: typeof tx) => unknown) => {
+        calls.push('transaction');
+        return callback(tx);
+      }
+    };
+    const authorization = { can: async () => true };
+    const service = new PlayerImportService(fakePrisma as never, authorization as never);
+
+    const cancelled = await service.cancelBatch('actor', batchId);
+
+    expect(cancelled.status).toBe('CANCELLED');
+    expect(calls).toEqual(['transaction', 'lock', 'read', 'update']);
+  });
+});

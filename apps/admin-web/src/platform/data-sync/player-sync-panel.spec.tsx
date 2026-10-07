@@ -81,6 +81,25 @@ describe('PlayerSyncPanel', () => {
     expect(screen.getAllByText('共 43000 条').length).toBeGreaterThan(0);
   });
 
+  it('filters large batch records by difference type and search text', async () => {
+    const { api, request } = fixture();
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '查看记录' }));
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '记录差异类型' }));
+    fireEvent.click(await screen.findByText('无效'));
+    const search = screen.getByRole('searchbox', { name: '搜索球员卡记录' });
+    fireEvent.change(search, { target: { value: '梅西' } });
+    fireEvent.keyDown(search, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      expect.stringContaining('diffType=INVALID'), expect.anything()
+    ));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      expect.stringContaining('query=%E6%A2%85%E8%A5%BF'), expect.anything()
+    ));
+  });
+
   it('offers an explicit recovery action for an interrupted run', async () => {
     const { api } = fixture({ resumableRun: true });
     const onResumeRun = vi.fn().mockResolvedValue(undefined);
@@ -89,5 +108,45 @@ describe('PlayerSyncPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     await waitFor(() => expect(onResumeRun).toHaveBeenCalledWith(runId));
     await waitFor(() => expect(screen.getByText('继续任务').closest('button')).not.toHaveClass('ant-btn-loading'));
+  });
+
+  it('refreshes history and review batches when the overview run state changes', async () => {
+    const { api, request } = fixture();
+    const view = render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} refreshKey="run:RUNNING" />);
+    await screen.findByText('共 43000 条');
+    const before = request.mock.calls.length;
+
+    view.rerender(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} refreshKey="idle:READY:2026-10-07" />);
+
+    await waitFor(() => expect(request.mock.calls.length).toBeGreaterThan(before));
+    expect(request.mock.calls.filter(([path]) => String(path).includes('/runs?')).length).toBeGreaterThanOrEqual(2);
+    expect(request.mock.calls.filter(([path]) => String(path).includes('/batches?')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('switches review data to the newest run after a terminal refresh', async () => {
+    const newerRunId = 'aaaaaaaa-1111-4111-8111-111111111111';
+    let completed = false;
+    const request = vi.fn(async (path: string) => {
+      if (path.includes('/runs?')) return {
+        items: completed ? [{ ...run, id: newerRunId, createdAt: '2026-10-07T01:00:00.000Z' }, run] : [run],
+        page: path.includes('page=2') ? 2 : 1, pageSize: 20, total: completed ? 22 : 21,
+        summary: { pending: 0, running: 0, ready: completed ? 2 : 1, paused: 0, failed: 0 }
+      };
+      if (path.includes('/batches')) return {
+        items: [], page: 1, pageSize: 20, total: 0,
+        summary: { uploaded: 0, validated: 0, ready: 0, published: 0, failed: 0, cancelled: 0 }
+      };
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const api = { request } as unknown as AdminApi;
+    const view = render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} refreshKey="run:RUNNING" />);
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining(`/runs/${runId}/batches`), expect.anything()));
+    fireEvent.click(screen.getByTitle('2'));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('/runs?page=2'), expect.anything()));
+
+    completed = true;
+    view.rerender(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} refreshKey="idle:READY:2026-10-07T01:00:00.000Z" />);
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining(`/runs/${newerRunId}/batches`), expect.anything()));
   });
 });

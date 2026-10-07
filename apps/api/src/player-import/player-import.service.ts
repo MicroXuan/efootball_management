@@ -12,6 +12,7 @@ import {
   type PlatformPageRequest
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { ImportFormat, PlayerCardStatus } from '../generated/prisma/enums.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
@@ -106,7 +107,8 @@ export class PlayerImportService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
-    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService
+    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService,
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
   ) {}
 
   async createBatch(actorId: string, input: CreateImportBatchRequest): Promise<ImportBatchResponse> {
@@ -341,17 +343,37 @@ export class PlayerImportService {
 
   async cancelBatchForPlatformAdmin(actorAdminId: string, batchId: string): Promise<ImportBatchResponse> {
     await this.requirePlatformAdmin(actorAdminId);
-    return this.cancelBatchUnchecked(batchId);
+    return this.cancelBatchUnchecked(batchId, actorAdminId);
   }
 
-  private async cancelBatchUnchecked(batchId: string): Promise<ImportBatchResponse> {
-    const batch = await this.ensureBatch(batchId);
-    if (batch.status === 'CANCELLED') return this.getBatchUnchecked(batchId);
-    if (!['UPLOADED', 'VALIDATED', 'READY'].includes(batch.status)) {
-      throw new ImportDomainError('IMPORT_BATCH_NOT_CANCELLABLE', 'Import batch cannot be cancelled');
-    }
-    await this.prisma.importBatch.update({ where: { id: batchId }, data: { status: 'CANCELLED' } });
-    return this.getBatchUnchecked(batchId);
+  private async cancelBatchUnchecked(batchId: string, actorAdminId?: string): Promise<ImportBatchResponse> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM import_batches WHERE id = ${batchId} FOR UPDATE`);
+      const batch = await tx.importBatch.findUnique({
+        where: { id: batchId },
+        include: { source: true, release: true }
+      });
+      if (!batch) throw new NotFoundException({ code: 'IMPORT_BATCH_NOT_FOUND' });
+      if (batch.status === 'CANCELLED') return this.batchResponse(batch);
+      if (!['UPLOADED', 'VALIDATED', 'READY'].includes(batch.status)) {
+        throw new ImportDomainError('IMPORT_BATCH_NOT_CANCELLABLE', 'Import batch cannot be cancelled');
+      }
+      const cancelled = await tx.importBatch.update({
+        where: { id: batchId },
+        data: { status: 'CANCELLED' },
+        include: { source: true, release: true }
+      });
+      if (actorAdminId && this.audit) {
+        await this.audit.record(tx, {
+          actorAdminId,
+          action: 'REJECT_PLAYER_CARD_IMPORT_BATCH',
+          resourceType: 'ImportBatch',
+          resourceId: batchId,
+          metadata: { batchId, status: cancelled.status }
+        });
+      }
+      return this.batchResponse(cancelled);
+    });
   }
 
   private adapterFor(format: CreateImportBatchRequest['format']) {

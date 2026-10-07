@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Descriptions, Drawer, Empty, Image, Input, Popconfirm, Select, Space, Table, Tag } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ImportBatchSchema,
   PlayerImportRecordPageSchema,
@@ -22,10 +22,11 @@ const diffCopy: Record<ImportRecordResponse['diffType'], string> = {
 const runModeCopy = { SAMPLE: '抽样', INCREMENTAL: '增量', FULL: '全量', RESUME: '继续' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '待审核', PAUSED: '已暂停', FAILED: '失败' } as const;
 
-export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
+export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {
   api?: AdminApi;
   onChanged: () => Promise<unknown> | unknown;
   onResumeRun: (runId: string) => Promise<unknown>;
+  refreshKey?: string;
 }) {
   const [runs, setRuns] = useState<PlatformSyncRunSummary[]>([]);
   const [runPage, setRunPage] = useState(1);
@@ -42,19 +43,35 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
   const [recordPage, setRecordPage] = useState(1);
   const [recordPageSize, setRecordPageSize] = useState<20 | 50>(20);
   const [recordTotal, setRecordTotal] = useState(0);
+  const [recordDiffType, setRecordDiffType] = useState('');
+  const [recordQuery, setRecordQuery] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<ImportRecordResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [resumingRunId, setResumingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const loadedRefreshKey = useRef<string | null>(null);
+  const runRequestSequence = useRef(0);
+  const selectNewestOnNextRunLoad = useRef(false);
 
   const loadRuns = useCallback(async () => {
     try {
-      const result = await api.request(`/v1/admin/data-sync/players/runs?page=${runPage}&pageSize=20`, { schema: PlatformSyncRunPageSchema });
+      const refreshChanged = loadedRefreshKey.current !== refreshKey;
+      loadedRefreshKey.current = refreshKey;
+      if (refreshChanged) selectNewestOnNextRunLoad.current = true;
+      const requestedPage = refreshChanged ? 1 : runPage;
+      if (refreshChanged && runPage !== 1) setRunPage(1);
+      const requestSequence = ++runRequestSequence.current;
+      const result = await api.request(`/v1/admin/data-sync/players/runs?page=${requestedPage}&pageSize=20`, { schema: PlatformSyncRunPageSchema });
+      if (requestSequence !== runRequestSequence.current) return;
+      const selectNewest = selectNewestOnNextRunLoad.current && requestedPage === 1;
+      if (selectNewest) selectNewestOnNextRunLoad.current = false;
       setRuns(result.items); setRunTotal(result.total);
-      setSelectedRunId((current) => current && result.items.some(({ id }) => id === current) ? current : result.items[0]?.id ?? null);
+      setSelectedRunId((current) => selectNewest
+        ? result.items[0]?.id ?? null
+        : current && result.items.some(({ id }) => id === current) ? current : result.items[0]?.id ?? null);
     } catch (caught) { setError(errorCopy(caught, '球员卡同步历史加载失败')); }
-  }, [api, runPage]);
+  }, [api, refreshKey, runPage]);
 
   const loadBatches = useCallback(async () => {
     if (!selectedRunId) { setBatches([]); setBatchTotal(0); return; }
@@ -68,18 +85,21 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
       setBatches(result.items); setBatchTotal(result.total); setError(null);
     } catch (caught) { setError(errorCopy(caught, '待审核批次加载失败')); }
     finally { setLoading(false); }
-  }, [api, batchPage, batchPageSize, batchStatuses, query, selectedRunId]);
+  }, [api, batchPage, batchPageSize, batchStatuses, query, refreshKey, selectedRunId]);
 
   const loadRecords = useCallback(async () => {
     if (!selectedBatch) { setRecords([]); setRecordTotal(0); return; }
     try {
+      const params = new URLSearchParams({ page: String(recordPage), pageSize: String(recordPageSize) });
+      if (recordDiffType) params.set('diffType', recordDiffType);
+      if (recordQuery) params.set('query', recordQuery);
       const result = await api.request(
-        `/v1/admin/data-sync/players/batches/${selectedBatch.id}/records?page=${recordPage}&pageSize=${recordPageSize}`,
+        `/v1/admin/data-sync/players/batches/${selectedBatch.id}/records?${params}`,
         { schema: PlayerImportRecordPageSchema }
       );
       setRecords(result.items); setRecordTotal(result.total);
     } catch (caught) { setError(errorCopy(caught, '球员卡明细加载失败')); }
-  }, [api, recordPage, recordPageSize, selectedBatch]);
+  }, [api, recordDiffType, recordPage, recordPageSize, recordQuery, selectedBatch]);
 
   useEffect(() => { void loadRuns(); }, [loadRuns]);
   useEffect(() => { void loadBatches(); }, [loadBatches]);
@@ -107,7 +127,7 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
     { title: '变化', key: 'changes', render: (_: unknown, item: ImportBatchResponse) => <span>新增 {item.createCount} · 更新 {item.updateCount} · 无效 {item.invalidCount}</span> },
     { title: '状态', dataIndex: 'status', key: 'status', render: (value: ImportBatchResponse['status']) => <Tag color={value === 'READY' ? 'success' : value === 'FAILED' || value === 'VALIDATED' ? 'error' : 'default'}>{batchStatusCopy[value]}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, item: ImportBatchResponse) => <Space wrap>
-      <Button onClick={() => { setSelectedBatch(item); setRecordPage(1); }}>查看记录</Button>
+      <Button onClick={() => { setSelectedBatch(item); setRecordPage(1); setRecordDiffType(''); setRecordQuery(''); }}>查看记录</Button>
       <Popconfirm title="将发布整个导入批次" description={`共 ${item.totalCount} 条记录，不能只发布单条球员卡。`} okText="确认发布" cancelText="取消" onConfirm={() => mutateBatch(item, 'publish')}>
         <Button type="primary" loading={mutatingId === item.id} disabled={item.status !== 'READY' || item.invalidCount > 0}>发布批次</Button>
       </Popconfirm>
@@ -171,6 +191,22 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun }: {
       />
     </Card>
     {selectedBatch ? <Card title={`批次记录 · ${selectedBatch.fileName}`} className="data-card">
+      <div className="sync-filter-bar">
+        <Select
+          aria-label="记录差异类型"
+          value={recordDiffType || undefined}
+          placeholder="全部差异类型"
+          allowClear
+          onChange={(value) => { setRecordDiffType(value ?? ''); setRecordPage(1); }}
+          options={Object.entries(diffCopy).map(([value, label]) => ({ value, label }))}
+        />
+        <Input.Search
+          aria-label="搜索球员卡记录"
+          allowClear
+          placeholder="球员名、卡片名或来源 ID"
+          onSearch={(value) => { setRecordQuery(value.trim()); setRecordPage(1); }}
+        />
+      </div>
       <Table<ImportRecordResponse>
         rowKey="id" dataSource={records} columns={recordColumns} scroll={{ x: 980 }}
         pagination={{

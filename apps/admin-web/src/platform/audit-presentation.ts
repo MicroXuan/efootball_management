@@ -41,6 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
   BATCH_REJECT_TEAM_SHELLS: '批量驳回球队队壳',
   PUBLISH_TEAM_SHELL_SYNC_ITEM: '发布球队队壳',
   REJECT_TEAM_SHELL_SYNC_ITEM: '驳回球队队壳',
+  RETRY_TEAM_SHELL_SYNC_ITEM: '重试球队队壳同步失败项',
   RETRY_TEAM_SHELL_SYNC_ITEMS: '重试球队队壳同步失败项',
   SALARY_RULE_VERSION_CREATED: '发布工资规则',
   TRANSFER_WINDOW_CREATED: '创建交易窗口',
@@ -116,8 +117,9 @@ export function presentAuditLog(log: AuditLog): PresentedAuditLog {
     ?? log.leagueName
     ?? RESOURCE_LABELS[log.resourceType]
     ?? log.resourceType;
-  const result = log.reason ? `已完成 · ${log.reason}` : '已完成';
   const isTeamBatchAction = ['BATCH_PUBLISH_TEAM_SHELLS', 'BATCH_REJECT_TEAM_SHELLS', 'RETRY_TEAM_SHELL_SYNC_ITEMS'].includes(log.action);
+  const isBatchProcessing = isTeamBatchAction && log.metadata.status === 'PROCESSING';
+  const result = isBatchProcessing ? '处理中' : log.reason ? `已完成 · ${log.reason}` : '已完成';
   const succeededCount = typeof log.metadata.succeededCount === 'number' ? log.metadata.succeededCount : 0;
   const failedCount = typeof log.metadata.failedCount === 'number' ? log.metadata.failedCount : 0;
   const summary = log.action === 'admin.league-season.set-current' && log.leagueName && log.subjectDisplayName
@@ -127,7 +129,9 @@ export function presentAuditLog(log: AuditLog): PresentedAuditLog {
         ? `平台管理员“${actor}”恢复了联赛中心默认背景`
         : `平台管理员“${actor}”更新了联赛中心 Banner`
       : isTeamBatchAction
-        ? `平台管理员“${actor}”${action}：成功 ${succeededCount} 条，失败 ${failedCount} 条`
+        ? isBatchProcessing
+          ? `平台管理员“${actor}”${action}已开始，结果待确认`
+          : `平台管理员“${actor}”${action}：成功 ${succeededCount} 条，失败 ${failedCount} 条`
         : `平台管理员“${actor}”对 ${subject} 执行了“${action}”`;
   return { actor, action, subject, result, summary };
 }

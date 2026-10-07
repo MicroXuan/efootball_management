@@ -8,9 +8,10 @@ import { PesdataClient, type PesdataClientConfig } from './pesdata-client.js';
 import { PesdataCrestLoader } from './pesdata-crest-loader.js';
 import { PESDATA_SYNC_OPTIONS, PesdataSyncService } from './pesdata-sync.service.js';
 import { PESDATA_TEAM_SYNC_OPTIONS, PesdataTeamSyncService } from './pesdata-team-sync.service.js';
+import { AdminModule } from '../admin/admin.module.js';
 
 @Module({
-  imports: [DatabaseModule, PlayerImportModule, StorageModule],
+  imports: [AdminModule, DatabaseModule, PlayerImportModule, StorageModule],
   providers: [
     {
       provide: PesdataClient,
