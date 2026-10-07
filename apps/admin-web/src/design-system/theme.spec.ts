@@ -40,4 +40,9 @@ describe('premium admin theme', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     expect(styles).toContain('.ant-input-affix-wrapper .ant-input:focus-visible');
   });
+
+  it('does not apply the global control height twice inside an input wrapper', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    expect(styles).toMatch(/\.ant-input-affix-wrapper\s*>\s*\.ant-input\s*\{[^}]*min-height:\s*0/);
+  });
 });

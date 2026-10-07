@@ -180,6 +180,7 @@ select { font: inherit; }
 .ant-input-number,
 .ant-select-selector,
 .ant-picker { min-height: 44px; }
+.ant-input-affix-wrapper > .ant-input { min-height: 0; }
 .inline-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .detail-card { max-width: 900px; }
 .platform-presentation-card { max-width: 960px; }
