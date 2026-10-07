@@ -9,6 +9,7 @@ import {
 import { adminApi, type AdminApi } from '../../lib/api';
 import { SyncRunCard } from './sync-run-card';
 import { useSyncRun } from './use-sync-run';
+import { PlayerSyncPanel } from './player-sync-panel';
 
 type SyncTab = 'players' | 'teams';
 
@@ -72,6 +73,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       onStart={start}
       onResume={resume}
     /> : null}
+    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} /> : null}
   </>;
 
   return <div className="data-sync-page">
