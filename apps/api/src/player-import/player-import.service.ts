@@ -346,6 +346,7 @@ export class PlayerImportService {
 
   private async cancelBatchUnchecked(batchId: string): Promise<ImportBatchResponse> {
     const batch = await this.ensureBatch(batchId);
+    if (batch.status === 'CANCELLED') return this.getBatchUnchecked(batchId);
     if (!['UPLOADED', 'VALIDATED', 'READY'].includes(batch.status)) {
       throw new ImportDomainError('IMPORT_BATCH_NOT_CANCELLABLE', 'Import batch cannot be cancelled');
     }

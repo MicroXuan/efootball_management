@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateCustomTeamCatalogItemRequest,
   TeamCatalogCandidate,
@@ -240,12 +240,16 @@ export class TeamCatalogService {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM team_catalog_sync_items WHERE id = ${itemId} FOR UPDATE`;
       const item = await tx.teamCatalogSyncItem.findUnique({ where: { id: itemId } });
-      if (!item) throw new Error('TEAM_CATALOG_SYNC_ITEM_NOT_FOUND');
+      if (!item) throw new NotFoundException({ code: 'TEAM_SYNC_ITEM_NOT_FOUND', message: 'Team sync item was not found' });
       if (item.reviewStatus === 'PUBLISHED') return { ok: true as const };
-      if (item.reviewStatus !== 'PENDING') throw new Error('TEAM_CATALOG_SYNC_ITEM_NOT_PENDING');
+      if (item.reviewStatus !== 'PENDING') {
+        throw new ConflictException({ code: 'TEAM_SYNC_ITEM_NOT_PENDING', message: 'Only pending team sync items can be published' });
+      }
       let resourceId = item.currentCatalogItemId;
       if (item.changeType === 'SOURCE_MISSING') {
-        if (!item.currentCatalogItemId) throw new Error('TEAM_CATALOG_SYNC_ITEM_INVALID');
+        if (!item.currentCatalogItemId) {
+          throw new ConflictException({ code: 'TEAM_SYNC_ITEM_INVALID', message: 'Source-missing item has no catalog record' });
+        }
         await tx.teamCatalogItem.update({ where: { id: item.currentCatalogItemId }, data: { status: 'SOURCE_UNCONFIRMED' } });
       } else {
         const candidate = TeamCatalogCandidateSchema.parse(item.candidateJson) as TeamCatalogCandidate;
@@ -279,19 +283,36 @@ export class TeamCatalogService {
         }
       }
       await tx.teamCatalogSyncItem.update({ where: { id: item.id }, data: { reviewStatus: 'PUBLISHED', currentCatalogItemId: resourceId } });
-      await this.audit.record(tx, { actorAdminId, action: 'PUBLISH_TEAM_CATALOG_SYNC_ITEM', resourceType: 'TeamCatalogSyncItem', resourceId: item.id, metadata: { changeType: item.changeType, catalogTeamId: resourceId } });
+      await this.audit.record(tx, {
+        actorAdminId,
+        action: 'PUBLISH_TEAM_SHELL_SYNC_ITEM',
+        resourceType: 'TeamCatalogSyncItem',
+        resourceId: item.id,
+        metadata: { changeType: item.changeType, catalogTeamId: resourceId }
+      });
       return { ok: true as const };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
 
   rejectSyncItem(actorAdminId: string, itemId: string) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM team_catalog_sync_items WHERE id = ${itemId} FOR UPDATE`;
       const item = await tx.teamCatalogSyncItem.findUnique({ where: { id: itemId } });
-      if (!item) throw new Error('TEAM_CATALOG_SYNC_ITEM_NOT_FOUND');
+      if (!item) throw new NotFoundException({ code: 'TEAM_SYNC_ITEM_NOT_FOUND', message: 'Team sync item was not found' });
+      if (item.reviewStatus === 'REJECTED') return { ok: true as const };
+      if (item.reviewStatus !== 'PENDING') {
+        throw new ConflictException({ code: 'TEAM_SYNC_ITEM_NOT_PENDING', message: 'Only pending team sync items can be rejected' });
+      }
       await tx.teamCatalogSyncItem.update({ where: { id: itemId }, data: { reviewStatus: 'REJECTED' } });
-      await this.audit.record(tx, { actorAdminId, action: 'REJECT_TEAM_CATALOG_SYNC_ITEM', resourceType: 'TeamCatalogSyncItem', resourceId: item.id, metadata: { changeType: item.changeType } });
+      await this.audit.record(tx, {
+        actorAdminId,
+        action: 'REJECT_TEAM_SHELL_SYNC_ITEM',
+        resourceType: 'TeamCatalogSyncItem',
+        resourceId: item.id,
+        metadata: { changeType: item.changeType }
+      });
       return { ok: true as const };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
 
   private logoChecksum(value: Prisma.JsonValue | null) {

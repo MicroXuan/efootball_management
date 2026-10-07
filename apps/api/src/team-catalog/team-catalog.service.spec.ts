@@ -110,8 +110,8 @@ describe('TeamCatalogService', () => {
       } })).resolves.toMatchObject({ nameZh: '阿贾克斯', status: 'ACTIVE', storedLogoUrl: candidate.storedLogoUrl });
       await expect(prisma.teamCatalogSyncItem.findUnique({ where: { id: rejectItem.id } })).resolves.toMatchObject({ reviewStatus: 'REJECTED' });
       await expect(prisma.auditLog.findMany({ where: { actorAdminId: admin.id }, orderBy: { createdAt: 'asc' } })).resolves.toEqual(expect.arrayContaining([
-        expect.objectContaining({ action: 'PUBLISH_TEAM_CATALOG_SYNC_ITEM' }),
-        expect.objectContaining({ action: 'REJECT_TEAM_CATALOG_SYNC_ITEM' })
+        expect.objectContaining({ action: 'PUBLISH_TEAM_SHELL_SYNC_ITEM' }),
+        expect.objectContaining({ action: 'REJECT_TEAM_SHELL_SYNC_ITEM' })
       ]));
     } finally {
       await prisma.auditLog.deleteMany({ where: { actorAdminId: admin.id } });

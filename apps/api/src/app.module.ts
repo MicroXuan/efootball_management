@@ -18,6 +18,7 @@ import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerFavoritesModule } from './player-favorites/player-favorites.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
 import { PlatformPresentationModule } from './platform-presentation/platform-presentation.module.js';
+import { PlatformDataSyncModule } from './platform-data-sync/platform-data-sync.module.js';
 import { PlayerValuationsModule } from './player-valuations/player-valuations.module.js';
 import { PlayerBuildsModule } from './player-builds/player-builds.module.js';
 import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
@@ -49,6 +50,7 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
     PlayerFavoritesModule,
     PlayerBuildsModule,
     PlayerImportModule,
+    PlatformDataSyncModule,
     PlatformPresentationModule,
     PlayerValuationsModule,
     PesdataSyncModule,

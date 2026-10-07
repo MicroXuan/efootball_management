@@ -1,9 +1,13 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  BatchMutationResultSchema,
   ImportBatchSchema,
   PlatformDataSyncOverviewSchema,
   PlatformSyncRunPageSchema,
   PlatformSyncRunSummarySchema,
+  QueuedSyncRunSchema,
+  type BatchMutationResult,
+  type ImportBatchResponse,
   PlayerSyncBatchPageSchema,
   type PlatformDataSyncOverview,
   type PlatformPageRequest,
@@ -11,14 +15,21 @@ import {
   type PlatformSyncRunSummary,
   type PlayerImportRecordPage,
   type PlayerSyncBatchPage,
+  type QueuedSyncRun,
+  type StartPlatformSyncRequest,
   type TeamSyncItemPage
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import type { ExternalSyncRun, TeamCatalogSyncRun } from '../generated/prisma/client.js';
 import type { ExternalSyncStatus, ImportBatchStatus, TeamCatalogSyncStatus } from '../generated/prisma/enums.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
+import { PlayerImportPublisher } from '../player-import/player-import.publisher.js';
+import { PesdataSyncService } from '../pesdata-sync/pesdata-sync.service.js';
+import { PesdataTeamSyncService } from '../pesdata-sync/pesdata-team-sync.service.js';
 import { TeamCatalogService } from '../team-catalog/team-catalog.service.js';
+import { PlatformDataSyncRunner } from './platform-data-sync.runner.js';
 
 type PlayerRunWithCount = ExternalSyncRun & { _count: { batchLinks: number } };
 
@@ -28,8 +39,96 @@ export class PlatformDataSyncService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(PlayerImportService) private readonly imports: PlayerImportService,
-    @Inject(TeamCatalogService) private readonly catalog: TeamCatalogService
+    @Inject(TeamCatalogService) private readonly catalog: TeamCatalogService,
+    @Inject(PlayerImportPublisher) private readonly publisher?: PlayerImportPublisher,
+    @Inject(PesdataSyncService) private readonly playerSync?: PesdataSyncService,
+    @Inject(PesdataTeamSyncService) private readonly teamSync?: PesdataTeamSyncService,
+    @Inject(PlatformDataSyncRunner) private readonly runner?: PlatformDataSyncRunner,
+    @Inject(AuditLogService) private readonly audit?: AuditLogService
   ) {}
+
+  async startPlayerRun(adminId: string, input: StartPlatformSyncRequest): Promise<QueuedSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const sync = this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE');
+    const queued = QueuedSyncRunSchema.parse(await sync.createPlatformRun(adminId, {
+      mode: input.mode, ...(input.limit === undefined ? {} : { limit: input.limit })
+    }));
+    await this.recordAudit(adminId, `START_PLAYER_CARD_${input.mode.toUpperCase()}_SYNC`, 'ExternalSyncRun', queued.runId, {
+      mode: input.mode, limit: input.limit ?? null
+    });
+    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').schedulePlayer(queued.runId);
+    return queued;
+  }
+
+  async resumePlayerRun(adminId: string, runId: string): Promise<QueuedSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const queued = QueuedSyncRunSchema.parse(
+      await this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE').resumePlatformRun(adminId, runId)
+    );
+    await this.recordAudit(adminId, 'RESUME_PLAYER_CARD_SYNC', 'ExternalSyncRun', runId, { runId });
+    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').schedulePlayer(runId);
+    return queued;
+  }
+
+  async publishPlayerBatch(adminId: string, batchId: string): Promise<ImportBatchResponse> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const result = await this.required(this.publisher, 'PLAYER_IMPORT_PUBLISHER_UNAVAILABLE')
+      .publishForPlatformAdmin(adminId, batchId);
+    await this.recordAudit(adminId, 'PUBLISH_PLAYER_CARD_IMPORT_BATCH', 'ImportBatch', batchId, {
+      batchId, status: result.status, createCount: result.createCount, updateCount: result.updateCount
+    });
+    return result;
+  }
+
+  async rejectPlayerBatch(adminId: string, batchId: string): Promise<ImportBatchResponse> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const result = await this.imports.cancelBatchForPlatformAdmin(adminId, batchId);
+    await this.recordAudit(adminId, 'REJECT_PLAYER_CARD_IMPORT_BATCH', 'ImportBatch', batchId, {
+      batchId, status: result.status
+    });
+    return result;
+  }
+
+  async startTeamRun(adminId: string, input: StartPlatformSyncRequest): Promise<QueuedSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const queued = QueuedSyncRunSchema.parse(
+      await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').createPlatformRun(adminId, {
+        mode: input.mode, ...(input.limit === undefined ? {} : { limit: input.limit })
+      })
+    );
+    await this.recordAudit(adminId, `START_TEAM_SHELL_${input.mode.toUpperCase()}_SYNC`, 'TeamCatalogSyncRun', queued.runId, {
+      mode: input.mode, limit: input.limit ?? null
+    });
+    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').scheduleTeam(queued.runId);
+    return queued;
+  }
+
+  async resumeTeamRun(adminId: string, runId: string): Promise<QueuedSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const queued = QueuedSyncRunSchema.parse(
+      await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').resumePlatformRun(adminId, runId)
+    );
+    await this.recordAudit(adminId, 'RESUME_TEAM_SHELL_SYNC', 'TeamCatalogSyncRun', runId, { runId });
+    this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE').scheduleTeam(runId);
+    return queued;
+  }
+
+  publishTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
+    return this.mutateTeamItems(adminId, ids, 'BATCH_PUBLISH_TEAM_SHELLS', (id) => this.catalog.publishSyncItem(adminId, id));
+  }
+
+  rejectTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
+    return this.mutateTeamItems(adminId, ids, 'BATCH_REJECT_TEAM_SHELLS', (id) => this.catalog.rejectSyncItem(adminId, id));
+  }
+
+  async retryTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const result = BatchMutationResultSchema.parse(
+      await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').retryPlatformItems(adminId, ids)
+    );
+    await this.recordBatchAudit(adminId, 'RETRY_TEAM_SHELL_SYNC_ITEMS', result);
+    return result;
+  }
 
   async getOverview(adminId: string): Promise<PlatformDataSyncOverview> {
     await this.authorization.requirePlatformAdmin(adminId);
@@ -315,5 +414,70 @@ export class PlatformDataSyncService {
       throw new BadRequestException({ code: 'INVALID_SYNC_FILTER', message: 'Unknown synchronization filter value' });
     }
     return accepted;
+  }
+
+  private async mutateTeamItems(
+    adminId: string,
+    ids: string[],
+    action: string,
+    mutate: (id: string) => Promise<unknown>
+  ): Promise<BatchMutationResult> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    const succeededIds: string[] = [];
+    const failed: BatchMutationResult['failed'] = [];
+    for (const id of ids) {
+      try {
+        await mutate(id);
+        succeededIds.push(id);
+      } catch (error) {
+        failed.push({ id, code: this.errorCode(error), message: this.errorMessage(error) });
+      }
+    }
+    const result = BatchMutationResultSchema.parse({ requestedCount: ids.length, succeededIds, failed });
+    await this.recordBatchAudit(adminId, action, result);
+    return result;
+  }
+
+  private recordBatchAudit(adminId: string, action: string, result: BatchMutationResult) {
+    return this.recordAudit(adminId, action, 'TeamCatalogSyncItemBatch', null, {
+      requestedCount: result.requestedCount,
+      succeededCount: result.succeededIds.length,
+      succeededIds: result.succeededIds,
+      failedCount: result.failed.length,
+      failed: result.failed.map(({ id, code }) => ({ id, code }))
+    });
+  }
+
+  private async recordAudit(
+    adminId: string,
+    action: string,
+    resourceType: string,
+    resourceId: string | null,
+    metadata: Record<string, unknown>
+  ): Promise<void> {
+    if (!this.audit) return;
+    await this.audit.record(this.prisma, { actorAdminId: adminId, action, resourceType, resourceId, metadata });
+  }
+
+  private required<T>(value: T | undefined, code: string): T {
+    if (!value) throw new Error(code);
+    return value;
+  }
+
+  private errorCode(error: unknown): string {
+    if (error && typeof error === 'object') {
+      if ('code' in error && typeof error.code === 'string') return error.code;
+      if ('getResponse' in error && typeof error.getResponse === 'function') {
+        const response = error.getResponse();
+        if (response && typeof response === 'object' && 'code' in response && typeof response.code === 'string') {
+          return response.code;
+        }
+      }
+    }
+    return 'TEAM_SYNC_ITEM_MUTATION_FAILED';
+  }
+
+  private errorMessage(error: unknown): string {
+    return (error instanceof Error ? error.message : String(error)).slice(0, 512);
   }
 }

@@ -86,3 +86,19 @@ it('shows exact technical identifiers instead of vague copy for a future action'
     summary: '平台管理员“小宣”对 FutureResource 执行了“future.action”',
   });
 });
+
+it('presents data synchronization actions with concrete Chinese business labels', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'BATCH_PUBLISH_TEAM_SHELLS',
+    resourceType: 'TeamCatalogSyncItemBatch',
+    subjectDisplayName: null,
+    metadata: { requestedCount: 3, succeededCount: 1, failedCount: 2 },
+  })).toMatchObject({
+    action: '批量发布球队队壳',
+    subject: '球队队壳同步项目',
+    summary: '平台管理员“小宣”批量发布球队队壳：成功 1 条，失败 2 条',
+  });
+});

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { TeamCatalogService } from '../team-catalog/team-catalog.service.js';
@@ -100,12 +101,16 @@ describe('PlatformDataSyncService queries', () => {
 
   afterEach(async () => {
     await prisma.teamCatalogSyncRun.deleteMany({ where: { actorAdminId: adminId } });
+    await prisma.teamCatalogItem.deleteMany({
+      where: { sourceType: 'PESDATA', sourceExternalId: { startsWith: 'platform-mutation-' } }
+    });
   });
 
   afterAll(async () => {
     await prisma.externalSyncRun.deleteMany({ where: { sourceId } });
     await prisma.importBatch.deleteMany({ where: { sourceId } });
     await prisma.dataSource.delete({ where: { id: sourceId } });
+    await prisma.auditLog.deleteMany({ where: { actorAdminId: adminId } });
     await prisma.adminAccount.delete({ where: { id: adminId } });
     await prisma.$disconnect();
   });
@@ -204,5 +209,151 @@ describe('PlatformDataSyncService queries', () => {
       failedReview: baselinePlayerReview.failed,
       published: baselinePlayerReview.published
     });
+  });
+
+  it('reports partial team publish failures and keeps repeated publication idempotent', async () => {
+    const mutationRun = await prisma.teamCatalogSyncRun.create({ data: {
+      actorAdminId: adminId, mode: 'INCREMENTAL', status: 'READY'
+    } });
+    const pendingExternalId = `platform-mutation-${randomUUID()}`;
+    const staleExternalId = `platform-mutation-${randomUUID()}`;
+    const [pending, stale] = await Promise.all([
+      prisma.teamCatalogSyncItem.create({ data: {
+        runId: mutationRun.id,
+        sourceExternalId: pendingExternalId,
+        summaryChecksum: '1'.repeat(64),
+        detailChecksum: '2'.repeat(64),
+        changeType: 'ADDED',
+        reviewStatus: 'PENDING',
+        candidateJson: {
+          sourceExternalId: pendingExternalId,
+          sourceLeagueExternalId: 'league-1', sourceLeagueName: '测试联赛',
+          nameZh: '待发布队壳', nameEn: null, nameJa: null, shortName: 'PUB',
+          remoteLogoUrl: null, storedLogoUrl: 'https://media.example.com/team.webp', sourceUpdatedAt: null
+        }
+      } }),
+      prisma.teamCatalogSyncItem.create({ data: {
+        runId: mutationRun.id,
+        sourceExternalId: staleExternalId,
+        summaryChecksum: '3'.repeat(64), detailChecksum: null,
+        changeType: 'ADDED', reviewStatus: 'FAILED',
+        errorCode: 'CREST_INVALID', errorMessage: '队徽无效'
+      } })
+    ]);
+    const missingId = randomUUID();
+
+    const first = await service().publishTeamItems(adminId, [pending.id, stale.id, missingId]);
+    const second = await service().publishTeamItems(adminId, [pending.id]);
+
+    expect(first.requestedCount).toBe(3);
+    expect(first.succeededIds).toEqual([pending.id]);
+    expect(first.failed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: stale.id, code: 'TEAM_SYNC_ITEM_NOT_PENDING' }),
+      expect.objectContaining({ id: missingId, code: 'TEAM_SYNC_ITEM_NOT_FOUND' })
+    ]));
+    expect(second).toMatchObject({ requestedCount: 1, succeededIds: [pending.id], failed: [] });
+    expect(await prisma.teamCatalogItem.count({
+      where: { sourceType: 'PESDATA', sourceExternalId: pending.sourceExternalId }
+    })).toBe(1);
+  });
+
+  it('serializes concurrent publication of the same team shell', async () => {
+    const mutationRun = await prisma.teamCatalogSyncRun.create({ data: {
+      actorAdminId: adminId, mode: 'INCREMENTAL', status: 'READY'
+    } });
+    const externalId = `platform-mutation-${randomUUID()}`;
+    const item = await prisma.teamCatalogSyncItem.create({ data: {
+      runId: mutationRun.id,
+      sourceExternalId: externalId,
+      summaryChecksum: '4'.repeat(64), detailChecksum: '5'.repeat(64),
+      changeType: 'ADDED', reviewStatus: 'PENDING',
+      candidateJson: {
+        sourceExternalId: externalId,
+        sourceLeagueExternalId: 'league-1', sourceLeagueName: '测试联赛',
+        nameZh: '并发发布队壳', nameEn: null, nameJa: null, shortName: 'LOCK',
+        remoteLogoUrl: null, storedLogoUrl: 'https://media.example.com/concurrent.webp', sourceUpdatedAt: null
+      }
+    } });
+
+    const [left, right] = await Promise.all([
+      service().publishTeamItems(adminId, [item.id]),
+      service().publishTeamItems(adminId, [item.id])
+    ]);
+
+    expect(left.failed).toEqual([]);
+    expect(right.failed).toEqual([]);
+    expect(await prisma.teamCatalogItem.count({
+      where: { sourceType: 'PESDATA', sourceExternalId: externalId }
+    })).toBe(1);
+  });
+});
+
+describe('PlatformDataSyncService mutations', () => {
+  const adminId = '11111111-1111-4111-8111-111111111111';
+  const runId = '22222222-2222-4222-8222-222222222222';
+  const batchId = '33333333-3333-4333-8333-333333333333';
+
+  function fixture() {
+    const requirePlatformAdmin = jest.fn(async () => ({ id: adminId }));
+    const cancelBatchForPlatformAdmin = jest.fn(async () => ({ id: batchId, status: 'CANCELLED' }));
+    const publishForPlatformAdmin = jest.fn(async () => ({
+      id: batchId, status: 'PUBLISHED', createCount: 2, updateCount: 1
+    }));
+    const createPlayerRun = jest.fn(async () => ({ runId, status: 'PENDING' as const }));
+    const createTeamRun = jest.fn(async () => ({ runId, status: 'PENDING' as const }));
+    const retryPlatformItems = jest.fn(async (_actor: string, ids: string[]) => ({
+      requestedCount: ids.length, succeededIds: ids, failed: []
+    }));
+    const schedulePlayer = jest.fn();
+    const scheduleTeam = jest.fn();
+    const record = jest.fn(async (_client: unknown, _input: { action: string }) => ({}));
+    const service = new PlatformDataSyncService(
+      {} as never,
+      { requirePlatformAdmin } as never,
+      { cancelBatchForPlatformAdmin } as never,
+      {} as never,
+      { publishForPlatformAdmin } as never,
+      { createPlatformRun: createPlayerRun } as never,
+      { createPlatformRun: createTeamRun, retryPlatformItems } as never,
+      { schedulePlayer, scheduleTeam } as never,
+      { record } as never
+    );
+    return {
+      service, createPlayerRun, createTeamRun, schedulePlayer, scheduleTeam,
+      publishForPlatformAdmin, cancelBatchForPlatformAdmin, retryPlatformItems, record
+    };
+  }
+
+  it('queues browser syncs, records the exact mode, and schedules background execution', async () => {
+    const value = fixture();
+
+    await expect(value.service.startPlayerRun(adminId, { mode: 'incremental' })).resolves.toEqual({ runId, status: 'PENDING' });
+    await expect(value.service.startTeamRun(adminId, { mode: 'full' })).resolves.toEqual({ runId, status: 'PENDING' });
+
+    expect(value.createPlayerRun).toHaveBeenCalledWith(adminId, { mode: 'incremental' });
+    expect(value.createTeamRun).toHaveBeenCalledWith(adminId, { mode: 'full' });
+    expect(value.schedulePlayer).toHaveBeenCalledWith(runId);
+    expect(value.scheduleTeam).toHaveBeenCalledWith(runId);
+    expect(value.record.mock.calls.map((call) => call[1].action)).toEqual([
+      'START_PLAYER_CARD_INCREMENTAL_SYNC', 'START_TEAM_SHELL_FULL_SYNC'
+    ]);
+  });
+
+  it('publishes or rejects whole player batches and audits retry outcomes', async () => {
+    const value = fixture();
+    const itemId = '44444444-4444-4444-8444-444444444444';
+
+    await value.service.publishPlayerBatch(adminId, batchId);
+    await value.service.rejectPlayerBatch(adminId, batchId);
+    await expect(value.service.retryTeamItems(adminId, [itemId])).resolves.toMatchObject({
+      requestedCount: 1, succeededIds: [itemId], failed: []
+    });
+
+    expect(value.publishForPlatformAdmin).toHaveBeenCalledWith(adminId, batchId);
+    expect(value.cancelBatchForPlatformAdmin).toHaveBeenCalledWith(adminId, batchId);
+    expect(value.retryPlatformItems).toHaveBeenCalledWith(adminId, [itemId]);
+    expect(value.record.mock.calls.map((call) => call[1].action)).toEqual([
+      'PUBLISH_PLAYER_CARD_IMPORT_BATCH', 'REJECT_PLAYER_CARD_IMPORT_BATCH', 'RETRY_TEAM_SHELL_SYNC_ITEMS'
+    ]);
   });
 });
