@@ -131,9 +131,10 @@ describe('platform data sync contracts', () => {
       page: 1,
       pageSize: 20,
       total: 981,
-      summary: { pending: 0, failed: 70, published: 911, rejected: 0 }
+      summary: { pending: 0, failed: 70, published: 911, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 70 }] }
     });
     assert.equal(result.total, 981);
+    assert.deepEqual(result.summary.errors, [{ code: 'CREST_INVALID', count: 70 }]);
   });
 });
 

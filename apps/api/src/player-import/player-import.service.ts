@@ -272,20 +272,54 @@ export class PlayerImportService {
   ): Promise<PlayerImportRecordPage> {
     await this.requirePlatformAdmin(actorAdminId);
     const batch = await this.ensureBatch(batchId);
-    const where = {
+    const where: Prisma.ImportRecordWhereInput = {
       batchId,
-      ...(query.diffType ? { diffType: query.diffType } : {}),
-      ...(query.query ? { externalId: { contains: query.query } } : {})
+      ...(query.diffType ? { diffType: query.diffType } : {})
     };
-    const [records, total] = await this.prisma.$transaction([
-      this.prisma.importRecord.findMany({
-        where,
-        orderBy: { rowNumber: 'asc' },
-        skip: (query.page - 1) * query.pageSize,
-        take: query.pageSize
-      }),
-      this.prisma.importRecord.count({ where })
-    ]);
+    let records;
+    let total: number;
+    if (query.query) {
+      const pattern = `%${query.query}%`;
+      const conditions: Prisma.Sql[] = [Prisma.sql`batch_id = ${batchId}`];
+      if (query.diffType) conditions.push(Prisma.sql`diff_type = ${query.diffType}`);
+      conditions.push(Prisma.sql`(
+        external_id LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.playerNameZh')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.playerNameEn')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.playerShortName')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.cardName')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.packName')) LIKE ${pattern}
+      )`);
+      const whereSql = Prisma.join(conditions, ' AND ');
+      const offset = (query.page - 1) * query.pageSize;
+      const [ids, counts] = await this.prisma.$transaction([
+        this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id FROM import_records
+          WHERE ${whereSql}
+          ORDER BY \`row_number\` ASC, id ASC
+          LIMIT ${query.pageSize} OFFSET ${offset}
+        `),
+        this.prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+          SELECT COUNT(*) AS total FROM import_records WHERE ${whereSql}
+        `)
+      ]);
+      const rows = ids.length ? await this.prisma.importRecord.findMany({
+        where: { id: { in: ids.map(({ id }) => id) } }
+      }) : [];
+      const positions = new Map(ids.map(({ id }, index) => [id, index]));
+      records = rows.sort((left, right) => (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0));
+      total = Number(counts[0]?.total ?? 0);
+    } else {
+      [records, total] = await this.prisma.$transaction([
+        this.prisma.importRecord.findMany({
+          where,
+          orderBy: { rowNumber: 'asc' },
+          skip: (query.page - 1) * query.pageSize,
+          take: query.pageSize
+        }),
+        this.prisma.importRecord.count({ where })
+      ]);
+    }
     return {
       items: records.map((record) => this.recordResponse(record)),
       page: query.page,

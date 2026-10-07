@@ -139,7 +139,11 @@ export const TeamSyncItemSummarySchema = z.object({
   pending: NonNegativeCountSchema,
   failed: NonNegativeCountSchema,
   published: NonNegativeCountSchema,
-  rejected: NonNegativeCountSchema
+  rejected: NonNegativeCountSchema,
+  errors: z.array(z.object({
+    code: z.string().trim().min(1).max(128),
+    count: NonNegativeCountSchema
+  }))
 });
 
 export const TeamSyncItemPageSchema = z.object({

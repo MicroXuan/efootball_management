@@ -1,11 +1,13 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type {
   CreateCustomTeamCatalogItemRequest,
   TeamCatalogCandidate,
   TeamCatalogSyncDifference,
   TeamCatalogSyncRunSummary,
   TeamCatalogItem,
-  TeamCatalogListResponse
+  TeamCatalogListResponse,
+  PlatformPageRequest,
+  TeamSyncItemPage
 } from '@efm/contracts';
 import { TeamCatalogCandidateSchema } from '@efm/contracts';
 import { Prisma } from '../generated/prisma/client.js';
@@ -125,6 +127,115 @@ export class TeamCatalogService {
     })) };
   }
 
+  async listSyncDifferencesPage(
+    runId: string,
+    query: PlatformPageRequest
+  ): Promise<TeamSyncItemPage> {
+    const statuses = this.reviewStatuses(query.status);
+    const changeTypes = this.changeTypes(query.changeType);
+    const baseWhere: Prisma.TeamCatalogSyncItemWhereInput = {
+      runId,
+      reviewStatus: { in: statuses },
+      ...(changeTypes ? { changeType: { in: changeTypes } } : {}),
+      ...(query.errorCode ? { errorCode: query.errorCode } : {})
+    };
+    const needsJsonSearch = Boolean(query.query || query.sourceLeagueId);
+    let records;
+    let total: number;
+    if (needsJsonSearch) {
+      const conditions: Prisma.Sql[] = [
+        Prisma.sql`run_id = ${runId}`,
+        Prisma.sql`review_status IN (${Prisma.join(statuses)})`
+      ];
+      if (changeTypes) conditions.push(Prisma.sql`change_type IN (${Prisma.join(changeTypes)})`);
+      if (query.errorCode) conditions.push(Prisma.sql`error_code = ${query.errorCode}`);
+      if (query.sourceLeagueId) {
+        conditions.push(Prisma.sql`JSON_UNQUOTE(JSON_EXTRACT(candidate_json, '$.sourceLeagueExternalId')) = ${query.sourceLeagueId}`);
+      }
+      if (query.query) {
+        const pattern = `%${query.query}%`;
+        conditions.push(Prisma.sql`(
+          source_external_id LIKE ${pattern}
+          OR JSON_UNQUOTE(JSON_EXTRACT(candidate_json, '$.nameZh')) LIKE ${pattern}
+          OR JSON_UNQUOTE(JSON_EXTRACT(candidate_json, '$.nameEn')) LIKE ${pattern}
+          OR JSON_UNQUOTE(JSON_EXTRACT(candidate_json, '$.nameJa')) LIKE ${pattern}
+          OR JSON_UNQUOTE(JSON_EXTRACT(candidate_json, '$.shortName')) LIKE ${pattern}
+        )`);
+      }
+      const whereSql = Prisma.join(conditions, ' AND ');
+      const sortColumn = query.sortBy === 'sourceExternalId'
+        ? Prisma.sql`source_external_id`
+        : query.sortBy === 'status'
+          ? Prisma.sql`review_status`
+          : query.sortBy === 'createdAt'
+            ? Prisma.sql`created_at`
+            : Prisma.sql`updated_at`;
+      const direction = query.sortOrder === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+      const offset = (query.page - 1) * query.pageSize;
+      const [ids, counts] = await this.prisma.$transaction([
+        this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id FROM team_catalog_sync_items
+          WHERE ${whereSql}
+          ORDER BY ${sortColumn} ${direction}, id ${direction}
+          LIMIT ${query.pageSize} OFFSET ${offset}
+        `),
+        this.prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+          SELECT COUNT(*) AS total FROM team_catalog_sync_items WHERE ${whereSql}
+        `)
+      ]);
+      const rows = ids.length ? await this.prisma.teamCatalogSyncItem.findMany({
+        where: { id: { in: ids.map(({ id }) => id) } }
+      }) : [];
+      const positions = new Map(ids.map(({ id }, index) => [id, index]));
+      records = rows.sort((left, right) => (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0));
+      total = Number(counts[0]?.total ?? 0);
+    } else {
+      [records, total] = await this.prisma.$transaction([
+        this.prisma.teamCatalogSyncItem.findMany({
+          where: baseWhere,
+          orderBy: this.syncItemOrder(query.sortBy, query.sortOrder),
+          skip: (query.page - 1) * query.pageSize,
+          take: query.pageSize
+        }),
+        this.prisma.teamCatalogSyncItem.count({ where: baseWhere })
+      ]);
+    }
+    const [statusGroups, errorGroups] = await Promise.all([
+      this.prisma.teamCatalogSyncItem.groupBy({
+        by: ['reviewStatus'], where: { runId }, orderBy: { reviewStatus: 'asc' }, _count: { reviewStatus: true }
+      }),
+      this.prisma.teamCatalogSyncItem.groupBy({
+        by: ['errorCode'], where: { runId, errorCode: { not: null } }, _count: { errorCode: true }, orderBy: { errorCode: 'asc' }
+      })
+    ]);
+    const statusCount = new Map(statusGroups.map((entry) => [entry.reviewStatus, entry._count.reviewStatus]));
+    return {
+      items: records.map((item) => ({
+        id: item.id,
+        runId: item.runId,
+        sourceExternalId: item.sourceExternalId,
+        changeType: item.changeType,
+        reviewStatus: item.reviewStatus,
+        currentCatalogItemId: item.currentCatalogItemId,
+        candidate: item.candidateJson ? TeamCatalogCandidateSchema.parse(item.candidateJson) : null,
+        errorCode: item.errorCode,
+        errorMessage: item.errorMessage
+      })),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      summary: {
+        pending: statusCount.get('PENDING') ?? 0,
+        failed: statusCount.get('FAILED') ?? 0,
+        published: statusCount.get('PUBLISHED') ?? 0,
+        rejected: statusCount.get('REJECTED') ?? 0,
+        errors: errorGroups.flatMap((entry) => entry.errorCode
+          ? [{ code: entry.errorCode, count: entry._count.errorCode }]
+          : [])
+      }
+    };
+  }
+
   publishSyncItem(actorAdminId: string, itemId: string) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM team_catalog_sync_items WHERE id = ${itemId} FOR UPDATE`;
@@ -187,6 +298,42 @@ export class TeamCatalogService {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const checksum = (value as Record<string, Prisma.JsonValue>).logoChecksum;
     return typeof checksum === 'string' && /^[a-f0-9]{64}$/.test(checksum) ? checksum : null;
+  }
+
+  private reviewStatuses(values: string[] | undefined) {
+    const allowed = new Set(['PENDING', 'PUBLISHED', 'REJECTED', 'FAILED'] as const);
+    const requested = values ?? ['PENDING', 'FAILED'];
+    const accepted = requested.filter((value): value is 'PENDING' | 'PUBLISHED' | 'REJECTED' | 'FAILED' =>
+      allowed.has(value as 'PENDING' | 'PUBLISHED' | 'REJECTED' | 'FAILED')
+    );
+    if (accepted.length !== requested.length || accepted.length === 0) {
+      throw new BadRequestException({ code: 'INVALID_SYNC_FILTER', message: 'Unknown team sync review status' });
+    }
+    return accepted;
+  }
+
+  private changeTypes(values: string[] | undefined) {
+    if (!values?.length) return undefined;
+    const allowed = new Set(['ADDED', 'UPDATED', 'SOURCE_MISSING'] as const);
+    const accepted = values.filter((value): value is 'ADDED' | 'UPDATED' | 'SOURCE_MISSING' =>
+      allowed.has(value as 'ADDED' | 'UPDATED' | 'SOURCE_MISSING')
+    );
+    if (accepted.length !== values.length || accepted.length === 0) {
+      throw new BadRequestException({ code: 'INVALID_SYNC_FILTER', message: 'Unknown team sync change type' });
+    }
+    return accepted;
+  }
+
+  private syncItemOrder(sortBy?: string, sortOrder?: 'asc' | 'desc'): Prisma.TeamCatalogSyncItemOrderByWithRelationInput[] {
+    const direction = sortOrder ?? 'desc';
+    const first: Prisma.TeamCatalogSyncItemOrderByWithRelationInput = sortBy === 'sourceExternalId'
+      ? { sourceExternalId: direction }
+      : sortBy === 'status'
+        ? { reviewStatus: direction }
+        : sortBy === 'createdAt'
+          ? { createdAt: direction }
+          : { updatedAt: direction };
+    return [first, { id: direction }];
   }
 
   private present(record: TeamCatalogRecord, assignedLeagueTeamId: string | null): TeamCatalogItem {
