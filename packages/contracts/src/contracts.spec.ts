@@ -126,14 +126,40 @@ describe('platform data sync contracts', () => {
   });
 
   it('parses paginated team sync results without loading all records', () => {
+    const itemId = randomUUID();
+    const runId = randomUUID();
+    const catalogItemId = randomUUID();
     const result = TeamSyncItemPageSchema.parse({
-      items: [],
+      items: [{
+        id: itemId,
+        runId,
+        sourceExternalId: 'team-101',
+        changeType: 'UPDATED',
+        reviewStatus: 'PENDING',
+        currentCatalogItemId: catalogItemId,
+        current: {
+          nameZh: '阿贾克斯', nameEn: 'Ajax', shortName: 'AJA',
+          remoteLogoUrl: 'https://img.pesdata.net/ajax-v1.png',
+          storedLogoUrl: 'https://media.example/ajax-v1.webp',
+          logoChecksum: 'a'.repeat(64), sourceChecksum: 'b'.repeat(64)
+        },
+        candidate: {
+          sourceExternalId: 'team-101', sourceLeagueExternalId: 'league-7', sourceLeagueName: '荷甲',
+          nameZh: '阿贾克斯', nameEn: 'Ajax', nameJa: null, shortName: 'AJA',
+          remoteLogoUrl: 'https://img.pesdata.net/ajax-v2.png',
+          storedLogoUrl: 'https://media.example/ajax-v2.webp', sourceUpdatedAt: null
+        },
+        candidateLogoChecksum: 'c'.repeat(64), candidateSourceChecksum: 'd'.repeat(64),
+        errorCode: null, errorMessage: null
+      }],
       page: 1,
       pageSize: 20,
       total: 981,
       summary: { pending: 0, failed: 70, published: 911, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 70 }] }
     });
     assert.equal(result.total, 981);
+    assert.equal(result.items[0]?.current?.storedLogoUrl, 'https://media.example/ajax-v1.webp');
+    assert.equal(result.items[0]?.candidateLogoChecksum, 'c'.repeat(64));
     assert.deepEqual(result.summary.errors, [{ code: 'CREST_INVALID', count: 70 }]);
   });
 });

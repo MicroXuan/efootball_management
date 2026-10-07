@@ -106,6 +106,14 @@ function renderPage(request: ReturnType<typeof vi.fn>) {
 }
 
 describe('league teams page', () => {
+  it('keeps PESDATA synchronization out of the league workspace', async () => {
+    const request = mockRoutes();
+    renderPage(request);
+    expect(await screen.findByText('暂无球队')).toBeInTheDocument();
+    expect(screen.queryByText('PESDATA 队壳同步')).not.toBeInTheDocument();
+    expect(request.mock.calls.map(([path]) => String(path)).join(' ')).not.toContain('/sync-runs');
+  });
+
   it('filters by team identity, number, owner, and normalized keyword', () => {
     const teams = [baseTeam, secondTeam];
 

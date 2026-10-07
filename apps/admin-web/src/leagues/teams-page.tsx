@@ -5,7 +5,6 @@ import { LeagueTeamDetailSchema, LeagueTeamListResponseSchema, PublicUserLookupS
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 import { TeamShellPicker } from './team-shell-picker';
-import { TeamCatalogSyncCard } from './team-catalog-sync-card';
 
 type CreateFields = { publicUserNo: string; teamNumber: number; ownerAlias: string; catalogTeamId: string };
 
@@ -82,7 +81,6 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
   };
 
   return <div className="page-grid page-grid--teams">
-    <TeamCatalogSyncCard api={api} />
     <Card title="联赛球队" className="data-card">
       {loadError ? <Alert role="alert" type="error" showIcon title="球队列表加载失败" action={<Button onClick={() => void load()}>重新加载</Button>} /> : null}
       {loading ? <div className="loading-block"><Spin /></div> : teams.length === 0 && !loadError ? <Empty description="暂无球队" /> : null}

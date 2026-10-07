@@ -132,6 +132,17 @@ export const PlayerImportRecordPageSchema = z.object({
 });
 
 export const PlatformTeamSyncItemSchema = TeamCatalogSyncDifferenceSchema.extend({
+  current: z.object({
+    nameZh: z.string().max(64).nullable(),
+    nameEn: z.string().max(64).nullable(),
+    shortName: z.string().max(24),
+    remoteLogoUrl: z.url().max(2_048).nullable(),
+    storedLogoUrl: z.url().max(2_048).nullable(),
+    logoChecksum: z.string().length(64).nullable(),
+    sourceChecksum: z.string().length(64).nullable()
+  }).nullable(),
+  candidateLogoChecksum: z.string().length(64).nullable(),
+  candidateSourceChecksum: z.string().length(64).nullable(),
   errorMessage: z.string().max(512).nullable()
 });
 

@@ -184,7 +184,7 @@ export class TeamCatalogService {
         `)
       ]);
       const rows = ids.length ? await this.prisma.teamCatalogSyncItem.findMany({
-        where: { id: { in: ids.map(({ id }) => id) } }
+        where: { id: { in: ids.map(({ id }) => id) } }, include: { currentCatalogItem: true }
       }) : [];
       const positions = new Map(ids.map(({ id }, index) => [id, index]));
       records = rows.sort((left, right) => (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0));
@@ -193,6 +193,7 @@ export class TeamCatalogService {
       [records, total] = await this.prisma.$transaction([
         this.prisma.teamCatalogSyncItem.findMany({
           where: baseWhere,
+          include: { currentCatalogItem: true },
           orderBy: this.syncItemOrder(query.sortBy, query.sortOrder),
           skip: (query.page - 1) * query.pageSize,
           take: query.pageSize
@@ -218,6 +219,17 @@ export class TeamCatalogService {
         reviewStatus: item.reviewStatus,
         currentCatalogItemId: item.currentCatalogItemId,
         candidate: item.candidateJson ? TeamCatalogCandidateSchema.parse(item.candidateJson) : null,
+        current: item.currentCatalogItem ? {
+          nameZh: item.currentCatalogItem.nameZh,
+          nameEn: item.currentCatalogItem.nameEn,
+          shortName: item.currentCatalogItem.shortName,
+          remoteLogoUrl: item.currentCatalogItem.remoteLogoUrl,
+          storedLogoUrl: item.currentCatalogItem.storedLogoUrl,
+          logoChecksum: item.currentCatalogItem.logoChecksum,
+          sourceChecksum: item.currentCatalogItem.sourceChecksum
+        } : null,
+        candidateLogoChecksum: this.logoChecksum(item.candidateJson),
+        candidateSourceChecksum: item.detailChecksum,
         errorCode: item.errorCode,
         errorMessage: item.errorMessage
       })),
