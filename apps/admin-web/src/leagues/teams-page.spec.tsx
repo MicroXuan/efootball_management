@@ -106,6 +106,14 @@ function renderPage(request: ReturnType<typeof vi.fn>) {
 }
 
 describe('league teams page', () => {
+  it('provides a visible roster management action for every team', async () => {
+    const request = mockRoutes({ teams: [baseTeam] });
+    renderPage(request);
+
+    const rosterLink = await screen.findByRole('link', { name: '管理阵容' });
+    expect(rosterLink).toHaveAttribute('href', `/leagues/${leagueId}/teams/${baseTeam.id}/roster`);
+  });
+
   it('keeps PESDATA synchronization out of the league workspace', async () => {
     const request = mockRoutes();
     renderPage(request);

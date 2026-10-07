@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueTeamDetailSchema, LeagueTeamListResponseSchema, PublicUserLookupSchema, type LeagueTeamSummary, type PublicUserLookup } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
+import { AdminIcon } from '../design-system/icons';
 import { useMutationKey } from '../lib/mutation-key';
 import { TeamShellPicker } from './team-shell-picker';
 
@@ -103,7 +104,10 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         </div> },
         { title: '负责人', render: (_, row) => row.ownerDisplayName ? `${row.ownerDisplayName} · ${row.ownerPublicUserNo}` : row.ownerPublicUserNo },
         { title: '阵容', render: (_, row) => `${row.activePlayerCount}/25` },
-        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
+        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> },
+        { title: '操作', key: 'actions', render: (_, row) => <Link aria-label="管理阵容" to={`/leagues/${leagueId}/teams/${row.id}/roster`}>
+          <Button icon={<AdminIcon name="teams" />}>管理阵容</Button>
+        </Link> }
       ]} /> : null}
     </Card>
     <Card title="创建球队" className="form-card">
