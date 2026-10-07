@@ -60,8 +60,16 @@ describe('PlayerImportService', () => {
       return result;
     }
   };
-  const service = new PlayerImportService(prisma, authorization as never);
+  const platformAuthorizationCalls: string[] = [];
+  const adminAuthorization = {
+    requirePlatformAdmin: async (adminId: string) => {
+      platformAuthorizationCalls.push(adminId);
+      return { id: adminId };
+    }
+  };
+  const service = new PlayerImportService(prisma, authorization as never, adminAuthorization as never);
   const actorId = randomUUID();
+  const adminId = randomUUID();
   let sourceCode: string;
   let sourceId: string;
 
@@ -74,6 +82,7 @@ describe('PlayerImportService', () => {
 
   beforeEach(async () => {
     authorizationCalls.length = 0;
+    platformAuthorizationCalls.length = 0;
     sourceCode = `test-${randomUUID()}`;
     const source = await prisma.dataSource.create({
       data: { code: sourceCode, name: 'Test source' }
@@ -104,6 +113,54 @@ describe('PlayerImportService', () => {
       format: 'JSON',
       content: JSON.stringify(rows)
     });
+
+  it('creates a platform batch without checking ordinary user permissions', async () => {
+    const outcome = await service.createBatchForPlatformAdmin(adminId, {
+      sourceCode,
+      fileName: 'platform-players.json',
+      format: 'JSON',
+      content: JSON.stringify([{ ...validCard, externalId: 'platform-card' }])
+    });
+
+    expect(outcome.batch.status).toBe('READY');
+    expect(platformAuthorizationCalls).toEqual([adminId]);
+    expect(authorizationCalls).toEqual([]);
+  });
+
+  it('keeps ordinary import creation on user scope authorization', async () => {
+    const batch = await createJsonBatch([{ ...validCard, externalId: 'user-card' }]);
+
+    expect(batch.status).toBe('READY');
+    expect(authorizationCalls).toContainEqual([actorId, 'catalog.import.create']);
+    expect(platformAuthorizationCalls).toEqual([]);
+  });
+
+  it('reads, paginates, and cancels a batch through the platform boundary', async () => {
+    const outcome = await service.createBatchForPlatformAdmin(adminId, {
+      sourceCode,
+      fileName: 'platform-review.json',
+      format: 'JSON',
+      content: JSON.stringify(Array.from({ length: 25 }, (_, index) => ({
+        ...validCard,
+        externalId: `platform-review-${index + 1}`
+      })))
+    });
+    platformAuthorizationCalls.length = 0;
+
+    const batch = await service.getBatchForPlatformAdmin(adminId, outcome.batch.id);
+    const records = await service.listRecordsForPlatformAdmin(adminId, outcome.batch.id, {
+      page: 2,
+      pageSize: 20
+    });
+    const cancelled = await service.cancelBatchForPlatformAdmin(adminId, outcome.batch.id);
+
+    expect(batch.totalCount).toBe(25);
+    expect(records).toMatchObject({ page: 2, pageSize: 20, total: 25 });
+    expect(records.items).toHaveLength(5);
+    expect(cancelled.status).toBe('CANCELLED');
+    expect(platformAuthorizationCalls).toEqual([adminId, adminId, adminId]);
+    expect(authorizationCalls).toEqual([]);
+  });
 
   it('persists a ready CREATE batch and returns it for the same checksum', async () => {
     const first = await createJsonBatch([validCard]);

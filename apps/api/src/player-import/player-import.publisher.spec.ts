@@ -10,11 +10,21 @@ config({ path: '../../.env', quiet: true });
 
 describe('PlayerImportPublisher', () => {
   const prisma = new PrismaService();
-  const authorization = { can: async () => true };
-  const service = new PlayerImportService(prisma, authorization as never);
+  const userAuthorizationCalls: Array<[string, string]> = [];
+  const authorization = { can: async (id: string, permission: string) => {
+    userAuthorizationCalls.push([id, permission]);
+    return true;
+  } };
+  const platformAuthorizationCalls: string[] = [];
+  const adminAuthorization = { requirePlatformAdmin: async (id: string) => {
+    platformAuthorizationCalls.push(id);
+    return { id };
+  } };
+  const service = new PlayerImportService(prisma, authorization as never, adminAuthorization as never);
   const builds = new PlayerBuildsService(prisma);
-  const publisher = new PlayerImportPublisher(prisma, authorization as never, builds);
+  const publisher = new PlayerImportPublisher(prisma, authorization as never, builds, adminAuthorization as never);
   const actorId = randomUUID();
+  const adminId = randomUUID();
   let sourceId: string;
   let sourceCode: string;
 
@@ -54,6 +64,8 @@ describe('PlayerImportPublisher', () => {
   });
 
   beforeEach(async () => {
+    userAuthorizationCalls.length = 0;
+    platformAuthorizationCalls.length = 0;
     sourceCode = `publisher-${randomUUID()}`;
     const source = await prisma.dataSource.create({ data: { code: sourceCode, name: 'Publisher test' } });
     sourceId = source.id;
@@ -98,6 +110,27 @@ describe('PlayerImportPublisher', () => {
     expect(stored?.attributes?.attributesJson).toEqual({ passing: 96 });
     expect(stored?.versions).toHaveLength(1);
     await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(1);
+  });
+
+  it('publishes for a platform administrator without checking user scopes', async () => {
+    const batch = await createBatch([card('platform-publish')]);
+    userAuthorizationCalls.length = 0;
+
+    const published = await publisher.publishForPlatformAdmin(adminId, batch.id);
+
+    expect(published.status).toBe('PUBLISHED');
+    expect(platformAuthorizationCalls).toEqual([adminId]);
+    expect(userAuthorizationCalls).toEqual([]);
+  });
+
+  it('keeps ordinary publication on user scope authorization', async () => {
+    const batch = await createBatch([card('user-publish')]);
+    userAuthorizationCalls.length = 0;
+
+    await publisher.publish(actorId, batch.id);
+
+    expect(userAuthorizationCalls).toContainEqual([actorId, 'catalog.import.publish']);
+    expect(platformAuthorizationCalls).toEqual([]);
   });
 
   it('persists a source-provided automatic build and refreshes the recommended card', async () => {

@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   ImportBatchSchema,
   NormalizedPlayerCardRecordSchema,
@@ -11,6 +11,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import type { PlayerCardStatus } from '../generated/prisma/enums.js';
 import { normalizeSearchText } from './record-normalizer.js';
 import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 
 type Transaction = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
 
@@ -35,14 +36,26 @@ export class PlayerImportPublisher {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
-    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService,
+    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService
   ) {}
 
   async publish(actorId: string, batchId: string): Promise<ImportBatchResponse> {
     if (!(await this.authorization.can(actorId, 'catalog.import.publish'))) {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Permission denied' });
     }
+    return this.publishUnchecked(actorId, batchId);
+  }
 
+  async publishForPlatformAdmin(actorAdminId: string, batchId: string): Promise<ImportBatchResponse> {
+    if (!this.adminAuthorization) {
+      throw new ForbiddenException({ code: 'ADMIN_PLATFORM_ACCESS_DENIED', message: 'Platform administrator access is required' });
+    }
+    await this.adminAuthorization.requirePlatformAdmin(actorAdminId);
+    return this.publishUnchecked(actorAdminId, batchId);
+  }
+
+  private async publishUnchecked(actorId: string, batchId: string): Promise<ImportBatchResponse> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT id FROM import_batches WHERE id = ${batchId} FOR UPDATE`);
