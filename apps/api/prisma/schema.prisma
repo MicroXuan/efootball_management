@@ -736,6 +736,9 @@ model TeamCatalogSyncRun {
   missingCount   Int                   @default(0) @map("missing_count") @db.UnsignedInt
   failedCount    Int                   @default(0) @map("failed_count") @db.UnsignedInt
   currentOffset  Int                   @default(0) @map("current_offset") @db.UnsignedInt
+  currentPhase   String?               @map("current_phase") @db.VarChar(64)
+  heartbeatAt    DateTime?             @map("heartbeat_at")
+  leaseExpiresAt DateTime?             @map("lease_expires_at")
   errorCode      String?               @map("error_code") @db.VarChar(128)
   errorMessage   String?               @map("error_message") @db.VarChar(512)
   startedAt      DateTime?             @map("started_at")
@@ -746,6 +749,7 @@ model TeamCatalogSyncRun {
   items          TeamCatalogSyncItem[]
 
   @@index([status, createdAt], map: "team_catalog_sync_runs_status_idx")
+  @@index([status, leaseExpiresAt], map: "team_catalog_sync_runs_lease_idx")
   @@index([actorAdminId], map: "team_catalog_sync_runs_actor_idx")
   @@map("team_catalog_sync_runs")
 }
@@ -1492,6 +1496,9 @@ model ExternalSyncRun {
   skippedCount   Int                    @default(0) @map("skipped_count") @db.UnsignedInt
   failedCount    Int                    @default(0) @map("failed_count") @db.UnsignedInt
   currentOffset  Int                    @default(0) @map("current_offset") @db.UnsignedInt
+  currentPhase   String?                @map("current_phase") @db.VarChar(64)
+  heartbeatAt    DateTime?              @map("heartbeat_at")
+  leaseExpiresAt DateTime?              @map("lease_expires_at")
   errorCode      String?                @map("error_code") @db.VarChar(64)
   errorMessage   String?                @map("error_message") @db.VarChar(512)
   startedAt      DateTime?              @map("started_at")
@@ -1503,6 +1510,7 @@ model ExternalSyncRun {
   batchLinks     ExternalSyncRunBatch[]
 
   @@index([sourceId, status, createdAt], map: "external_sync_runs_source_status_idx")
+  @@index([status, leaseExpiresAt], map: "external_sync_runs_lease_idx")
   @@index([actorId], map: "external_sync_runs_actor_idx")
   @@map("external_sync_runs")
 }
