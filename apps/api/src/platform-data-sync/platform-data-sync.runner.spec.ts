@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlatformDataSyncRunner } from './platform-data-sync.runner.js';
 
@@ -129,5 +130,24 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
     await expect(prisma.teamCatalogSyncRun.findUnique({ where: { id: team.id } })).resolves.toMatchObject({
       status: 'RUNNING', activeLeaseKey: expect.any(String), errorCode: null, currentOffset: 20
     });
+  });
+
+  it('schedules each in-process run once and contains execution failures', async () => {
+    let resolvePlayer!: () => void;
+    const player = {
+      executePlatformRun: jest.fn(() => new Promise<void>((resolve) => { resolvePlayer = resolve; }))
+    };
+    const team = { executePlatformRun: jest.fn(async () => { throw new Error('upstream failed'); }) };
+    const runner = new PlatformDataSyncRunner(prisma, player as never, team as never);
+
+    runner.schedulePlayer('player-run');
+    runner.schedulePlayer('player-run');
+    runner.scheduleTeam('team-run');
+    await Promise.resolve();
+
+    expect(player.executePlatformRun).toHaveBeenCalledTimes(1);
+    expect(team.executePlatformRun).toHaveBeenCalledTimes(1);
+    resolvePlayer();
+    await Promise.resolve();
   });
 });

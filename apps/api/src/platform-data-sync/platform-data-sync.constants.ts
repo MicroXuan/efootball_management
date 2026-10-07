@@ -1,0 +1,2 @@
+export const SYNC_LEASE_MS = 60_000;
+export const SYNC_RECONCILE_INTERVAL_MS = 30_000;

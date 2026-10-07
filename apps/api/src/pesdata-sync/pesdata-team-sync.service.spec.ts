@@ -63,6 +63,83 @@ describe('PesdataTeamSyncService', () => {
       .toEqual(['测试联赛', '测试联赛']);
   });
 
+  it('queues a platform team run and resumes from its stored offset under another administrator', async () => {
+    const original = await actor();
+    const resumer = await actor();
+    const sourceId = `queued-${randomUUID()}`;
+    const listOffsets: number[] = [];
+    const client = {
+      listTeams: async ({ start }: { start: number }) => {
+        listOffsets.push(start);
+        return start === 0 ? {
+          list: [{ teamId: sourceId, leagueId: 'league', leagueName: '测试联赛', nameZh: '排队队', nameEn: null, nameJa: null, shortName: null, teamLogo: null, updatedAt: null }],
+          count: 1
+        } : { list: [], count: 1 };
+      },
+      getTeamDetail: async (id: string) => ({
+        teamId: id, leagueId: 'league', leagueName: '测试联赛', nameZh: '排队队',
+        nameEn: null, nameJa: null, shortName: null, teamLogo: null, updatedAt: null
+      })
+    };
+    const sync = new PesdataTeamSyncService(prisma, client as never, { load: async (value: unknown) => value } as never, { pageSize: 1 });
+
+    const queued = await sync.createPlatformRun(original.id, { mode: 'incremental' });
+    await expect(sync.createPlatformRun(original.id, { mode: 'full' }))
+      .rejects.toMatchObject({ code: 'PESDATA_TEAM_SYNC_CONFLICT' });
+    await sync.executePlatformRun(queued.runId);
+    await prisma.teamCatalogSyncRun.update({
+      where: { id: queued.runId },
+      data: { status: 'FAILED', activeLeaseKey: null, currentPhase: 'INTERRUPTED', errorCode: 'PROCESS_INTERRUPTED' }
+    });
+    const resumed = await sync.resumePlatformRun(resumer.id, queued.runId);
+    await sync.executePlatformRun(resumed.runId);
+    const run = await prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } });
+
+    expect(resumed.status).toBe('PENDING');
+    expect(run).toMatchObject({
+      actorAdminId: original.id,
+      status: 'READY',
+      currentOffset: 1,
+      scannedCount: 1,
+      activeLeaseKey: null,
+      leaseExpiresAt: null,
+      currentPhase: 'READY'
+    });
+    expect(run.heartbeatAt).toBeInstanceOf(Date);
+    expect(listOffsets).toEqual([0, 1, 1]);
+    await expect(prisma.teamCatalogSyncItem.count({ where: { runId: run.id } })).resolves.toBe(1);
+  });
+
+  it('retries explicit failed team items without restarting the whole run', async () => {
+    const admin = await actor();
+    const sourceExternalId = `retry-${randomUUID()}`;
+    const run = await prisma.teamCatalogSyncRun.create({
+      data: { actorAdminId: admin.id, mode: 'INCREMENTAL', status: 'READY' }
+    });
+    const item = await prisma.teamCatalogSyncItem.create({
+      data: {
+        runId: run.id,
+        sourceExternalId,
+        summaryChecksum: 'a'.repeat(64),
+        changeType: 'UPDATED',
+        reviewStatus: 'FAILED',
+        errorCode: 'PESDATA_TEAM_ITEM_FAILED'
+      }
+    });
+    const client = { getTeamDetail: async () => ({
+      teamId: sourceExternalId, leagueId: 'league', leagueName: '测试联赛', nameZh: '重试队',
+      nameEn: null, nameJa: null, shortName: null, teamLogo: null, updatedAt: null
+    }) };
+    const sync = new PesdataTeamSyncService(prisma, client as never, { load: async (value: unknown) => value } as never, {});
+
+    const result = await sync.retryPlatformItems(admin.id, [item.id]);
+    const retried = await prisma.teamCatalogSyncItem.findUniqueOrThrow({ where: { id: item.id } });
+
+    expect(result).toEqual({ requestedCount: 1, succeededIds: [item.id], failed: [] });
+    expect(retried).toMatchObject({ reviewStatus: 'PENDING', errorCode: null, attempts: 1 });
+    expect(retried.candidateJson).toMatchObject({ sourceExternalId, nameZh: '重试队' });
+  });
+
   it('fails the run on an upstream protocol error without changing published catalog rows', async () => {
     const admin = await actor();
     const catalogCountBefore = await prisma.teamCatalogItem.count({ where: { sourceType: 'PESDATA' } });
@@ -118,6 +195,9 @@ describe('PesdataTeamSyncService', () => {
 
     expect(completedDetailCalls).toBe(1);
     await expect(prisma.teamCatalogSyncRun.findUnique({ where: { id: run.id } })).resolves.toMatchObject({ mode: 'FULL' });
-    await expect(prisma.teamCatalogItem.findUnique({ where: { id: missing.id } })).resolves.toMatchObject({ status: 'SOURCE_UNCONFIRMED' });
+    await expect(prisma.teamCatalogItem.findUnique({ where: { id: missing.id } })).resolves.toMatchObject({ status: 'ACTIVE' });
+    await expect(prisma.teamCatalogSyncItem.findUnique({
+      where: { runId_sourceExternalId: { runId: run.id, sourceExternalId: missing.sourceExternalId! } }
+    })).resolves.toMatchObject({ changeType: 'SOURCE_MISSING', reviewStatus: 'PENDING' });
   });
 });

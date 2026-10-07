@@ -35,8 +35,10 @@ function detail(id: string): PesdataPlayerDetail {
 describe('PesdataSyncService', () => {
   const prisma = new PrismaService();
   const actorId = randomUUID();
+  const adminId = randomUUID();
   const authorization = { can: async () => true };
-  const importService = new PlayerImportService(prisma, authorization as never);
+  const adminAuthorization = { requirePlatformAdmin: async (id: string) => ({ id }) };
+  const importService = new PlayerImportService(prisma, authorization as never, adminAuthorization as never);
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -53,7 +55,38 @@ describe('PesdataSyncService', () => {
   afterEach(async () => {
     const source = await prisma.dataSource.findUniqueOrThrow({ where: { code: 'pesdata' } });
     await prisma.importBatch.deleteMany({ where: { sourceId: source.id, createdBy: actorId } });
-    await prisma.externalSyncRun.deleteMany({ where: { sourceId: source.id, actorId } });
+    await prisma.externalSyncRun.deleteMany({ where: { sourceId: source.id, actorId: { in: [actorId, adminId] } } });
+  });
+
+  it('queues a platform run, reserves one lease, and renews progress while executing', async () => {
+    const listOffsets: number[] = [];
+    const client = {
+      listPlayers: async ({ start }: { start: number }) => {
+        listOffsets.push(start);
+        return start === 0 ? { list: [summary(901)], count: 1 } : { list: [], count: 1 };
+      },
+      getPlayerDetail: async (id: string) => detail(id)
+    };
+    const sync = new PesdataSyncService(prisma, importService, client as never, { pageSize: 1 });
+
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+    await expect(sync.createPlatformRun(adminId, { mode: 'full' }))
+      .rejects.toMatchObject({ code: 'PESDATA_SYNC_CONFLICT' });
+    const result = await sync.executePlatformRun(queued.runId);
+    const run = await prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } });
+
+    expect(queued).toEqual({ runId: expect.any(String), status: 'PENDING' });
+    expect(result.status).toBe('READY');
+    expect(listOffsets).toEqual([0, 1]);
+    expect(run).toMatchObject({
+      status: 'READY',
+      activeLeaseKey: null,
+      leaseExpiresAt: null,
+      currentPhase: 'READY',
+      currentOffset: 1,
+      scannedCount: 1
+    });
+    expect(run.heartbeatAt).toBeInstanceOf(Date);
   });
 
   afterAll(async () => {

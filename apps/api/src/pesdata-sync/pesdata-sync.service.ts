@@ -7,6 +7,7 @@ import { PlayerImportService } from '../player-import/player-import.service.js';
 import { PesdataClient, PesdataClientError } from './pesdata-client.js';
 import { mapPesdataPlayer, pesdataValueChecksum, PesdataMappingError } from './pesdata-mapper.js';
 import type { PesdataPlayerDetail, PesdataPlayerSummary } from './pesdata.schemas.js';
+import { SYNC_LEASE_MS } from '../platform-data-sync/platform-data-sync.constants.js';
 import {
   PesdataSyncError,
   type PesdataSyncMode,
@@ -67,6 +68,136 @@ export class PesdataSyncService {
     this.pageSize = options.pageSize ?? 100;
   }
 
+  async createPlatformRun(
+    actorAdminId: string,
+    input: StartPesdataSyncInput
+  ): Promise<{ runId: string; status: 'PENDING' }> {
+    if (input.dryRun) {
+      throw new PesdataSyncError('PESDATA_DRY_RUN_UNSUPPORTED', 'Browser synchronization cannot be a dry run');
+    }
+    const limit = input.mode === 'sample' ? (input.limit ?? 100) : input.limit;
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+      throw new PesdataSyncError('PESDATA_LIMIT_INVALID', 'Sync limit must be a positive integer');
+    }
+    const source = await this.prisma.dataSource.findUnique({ where: { code: 'pesdata' } });
+    if (!source?.isEnabled) {
+      throw new PesdataSyncError('PESDATA_SOURCE_UNAVAILABLE', 'PESDATA source is missing or disabled');
+    }
+    const now = new Date();
+    try {
+      const run = await this.prisma.externalSyncRun.create({ data: {
+        sourceId: source.id,
+        actorId: actorAdminId,
+        mode: databaseMode(input.mode),
+        status: 'PENDING',
+        activeLeaseKey: 'pesdata',
+        requestedLimit: limit ?? null,
+        currentPhase: 'QUEUED',
+        heartbeatAt: now,
+        leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS)
+      } });
+      return { runId: run.id, status: 'PENDING' };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'A PESDATA synchronization is already running');
+      }
+      throw error;
+    }
+  }
+
+  async resumePlatformRun(
+    _actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'PENDING' }> {
+    const run = await this.prisma.externalSyncRun.findUnique({ where: { id: runId } });
+    if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
+    if (run.status === 'READY') throw new PesdataSyncError('PESDATA_RUN_ALREADY_READY', 'Synchronization run is already ready');
+    if (run.activeLeaseKey) throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'This synchronization run is already active');
+    const now = new Date();
+    try {
+      await this.prisma.externalSyncRun.update({ where: { id: runId }, data: {
+        status: 'PENDING',
+        activeLeaseKey: 'pesdata',
+        currentPhase: 'QUEUED',
+        heartbeatAt: now,
+        leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS),
+        errorCode: null,
+        errorMessage: null,
+        finishedAt: null
+      } });
+      return { runId, status: 'PENDING' };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'A PESDATA synchronization is already running');
+      }
+      throw error;
+    }
+  }
+
+  async executePlatformRun(runId: string): Promise<PesdataSyncResult> {
+    const run = await this.prisma.externalSyncRun.findUnique({
+      where: { id: runId },
+      include: { items: { orderBy: { createdAt: 'asc' } }, batchLinks: { orderBy: { chunkIndex: 'asc' } } }
+    });
+    if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
+    if (run.status === 'READY') {
+      return {
+        runId, status: 'READY', sourceTotal: run.sourceTotal, scannedCount: run.scannedCount,
+        fetchedCount: run.fetchedCount, skippedCount: run.skippedCount, failedCount: run.failedCount,
+        batchIds: run.batchLinks.map(({ batchId }) => batchId), dryRun: false
+      };
+    }
+    if (run.status !== 'PENDING' || run.activeLeaseKey !== 'pesdata') {
+      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'This synchronization run is not queued');
+    }
+    const now = new Date();
+    await this.prisma.externalSyncRun.update({ where: { id: runId }, data: {
+      status: 'RUNNING', currentPhase: 'FETCHING', startedAt: run.startedAt ?? now,
+      heartbeatAt: now, leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS)
+    } });
+    try {
+      const rows: RawImportRow[] = [];
+      const seenExternalIds = new Set<string>();
+      let fetchedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+      for (const item of run.items) {
+        seenExternalIds.add(item.externalId);
+        if ((item.status === 'FETCHED' || item.status === 'SKIPPED') && item.normalizedJson) {
+          rows.push(item.normalizedJson as RawImportRow);
+          if (item.status === 'FETCHED') fetchedCount += 1; else skippedCount += 1;
+        } else if (item.status === 'FAILED' || item.status === 'PENDING') {
+          try {
+            const detail = await this.client.getPlayerDetail(item.externalId);
+            const row = mapPesdataPlayer(detail);
+            rows.push(row);
+            fetchedCount += 1;
+            await this.persistItem(runId, item.externalId, item.summaryChecksum, pesdataValueChecksum(detail), detail, row, 'FETCHED');
+          } catch (error) {
+            if (error instanceof PesdataClientError && error.code === 'PESDATA_PROTOCOL_ERROR') throw error;
+            failedCount += 1;
+          }
+        }
+      }
+      return await this.execute(run.actorId, {
+        runId,
+        mode: run.mode.toLowerCase() as PesdataSyncMode,
+        limit: run.requestedLimit ?? undefined,
+        offset: run.currentOffset,
+        dryRun: false,
+        platformAdmin: true,
+        initial: {
+          rows,
+          seenExternalIds,
+          counters: { sourceTotal: run.sourceTotal, scannedCount: seenExternalIds.size, fetchedCount, skippedCount, failedCount }
+        }
+      });
+    } catch (error) {
+      await this.failRun(runId, error);
+      throw error;
+    }
+  }
+
   async start(actorId: string, input: StartPesdataSyncInput): Promise<PesdataSyncResult> {
     await this.importService.assertCanCreateBatch(actorId);
     const limit = input.mode === 'sample' ? (input.limit ?? 100) : input.limit;
@@ -99,7 +230,10 @@ export class PesdataSyncService {
           status: 'RUNNING',
           activeLeaseKey: 'pesdata',
           requestedLimit: limit ?? null,
-          startedAt: new Date()
+          startedAt: new Date(),
+          currentPhase: 'FETCHING',
+          heartbeatAt: new Date(),
+          leaseExpiresAt: new Date(Date.now() + SYNC_LEASE_MS)
         }
       });
       runId = run.id;
@@ -154,6 +288,9 @@ export class PesdataSyncService {
         data: {
           status: 'RUNNING',
           activeLeaseKey: 'pesdata',
+          currentPhase: 'FETCHING',
+          heartbeatAt: new Date(),
+          leaseExpiresAt: new Date(Date.now() + SYNC_LEASE_MS),
           errorCode: null,
           errorMessage: null,
           finishedAt: null
@@ -228,7 +365,8 @@ export class PesdataSyncService {
     actorId: string,
     runId: string,
     rows: RawImportRow[],
-    persistLinks = true
+    persistLinks = true,
+    platformAdmin = false
   ): Promise<string[]> {
     const sorted = [...rows].sort((left, right) =>
       comparePesdataExternalIds(String(left.externalId ?? ''), String(right.externalId ?? ''))
@@ -237,12 +375,15 @@ export class PesdataSyncService {
 
     for (let start = 0, chunkIndex = 1; start < sorted.length; start += IMPORT_CHUNK_SIZE, chunkIndex += 1) {
       const content = JSON.stringify(sorted.slice(start, start + IMPORT_CHUNK_SIZE));
-      const outcome = await this.importService.createBatchWithOutcome(actorId, {
+      const input = {
         sourceCode: 'pesdata',
         fileName: `pesdata-${runId}-${String(chunkIndex).padStart(3, '0')}.json`,
         format: 'JSON',
         content
-      });
+      } as const;
+      const outcome = platformAdmin
+        ? await this.importService.createBatchForPlatformAdmin(actorId, input)
+        : await this.importService.createBatchWithOutcome(actorId, input);
       batchIds.push(outcome.batch.id);
       if (persistLinks) {
         await this.prisma.externalSyncRunBatch.upsert({
@@ -263,6 +404,7 @@ export class PesdataSyncService {
       limit?: number | undefined;
       offset: number;
       dryRun: boolean;
+      platformAdmin?: boolean;
       initial?: {
         rows: RawImportRow[];
         seenExternalIds: Set<string>;
@@ -353,6 +495,7 @@ export class PesdataSyncService {
 
       offset += page.list.length;
       if (state.runId) {
+        const heartbeatAt = new Date();
         await this.prisma.externalSyncRun.update({
           where: { id: state.runId },
           data: {
@@ -361,7 +504,10 @@ export class PesdataSyncService {
             fetchedCount: counters.fetchedCount,
             skippedCount: counters.skippedCount,
             failedCount: counters.failedCount,
-            currentOffset: offset
+            currentOffset: offset,
+            currentPhase: 'FETCHING',
+            heartbeatAt,
+            leaseExpiresAt: new Date(heartbeatAt.getTime() + SYNC_LEASE_MS)
           }
         });
       }
@@ -370,7 +516,7 @@ export class PesdataSyncService {
 
     const batchIds = state.dryRun || !state.runId
       ? []
-      : await this.createImportBatches(actorId, state.runId, rows);
+      : await this.createImportBatches(actorId, state.runId, rows, true, state.platformAdmin ?? false);
 
     if (state.runId) {
       await this.prisma.externalSyncRun.update({
@@ -378,6 +524,9 @@ export class PesdataSyncService {
         data: {
           status: 'READY',
           activeLeaseKey: null,
+          leaseExpiresAt: null,
+          heartbeatAt: new Date(),
+          currentPhase: 'READY',
           finishedAt: new Date(),
           sourceTotal: counters.sourceTotal,
           scannedCount: counters.scannedCount,
@@ -449,6 +598,9 @@ export class PesdataSyncService {
       data: {
         status: 'FAILED',
         activeLeaseKey: null,
+        leaseExpiresAt: null,
+        heartbeatAt: new Date(),
+        currentPhase: 'FAILED',
         finishedAt: new Date(),
         errorCode: this.errorCode(error),
         errorMessage: error instanceof Error ? error.message.slice(0, 512) : 'PESDATA synchronization failed'
