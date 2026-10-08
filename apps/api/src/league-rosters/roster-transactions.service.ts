@@ -899,6 +899,9 @@ export class RosterTransactionsService {
     if (season.leagueId !== team.leagueId) {
       throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and league team differ', 409);
     }
+    if (team.status === 'ARCHIVED') {
+      throw new LeagueRosterError('TEAM_ARCHIVED', 'League team has withdrawn', 409);
+    }
     if (team.status !== 'ACTIVE' || team.teamNumber === null) {
       throw new LeagueRosterError(
         'LEAGUE_TEAM_NOT_ELIGIBLE',

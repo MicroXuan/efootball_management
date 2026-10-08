@@ -18,8 +18,8 @@ import { LeagueVisibilityService } from '../league-visibility/league-visibility.
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: true } };
-    homeParticipant: { include: { seasonEntry: true } };
-    awayParticipant: { include: { seasonEntry: true } };
+    homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
+    awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
     officialResultVersion: true;
   };
 }>;
@@ -190,12 +190,15 @@ export class ResultsService {
       where: { id: matchId },
       include: {
         stage: { include: { competition: true } },
-        homeParticipant: { include: { seasonEntry: true } },
-        awayParticipant: { include: { seasonEntry: true } },
+        homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+        awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
         officialResultVersion: true
       }
     });
     if (!match) throw new CompetitionError('MATCH_NOT_FOUND', 'Match was not found', 404);
+    const archived = [match.homeParticipant, match.awayParticipant]
+      .some((participant) => participant.seasonEntry?.leagueTeam?.status === 'ARCHIVED');
+    if (archived) throw new CompetitionError('TEAM_ARCHIVED', 'League team has withdrawn', 409);
     return match;
   }
 

@@ -38,6 +38,7 @@ function harness(proposedValueMinor = 1100) {
   };
   const tx = {
     $queryRaw: jest.fn(async () => [{ id: submission.id }]),
+    leagueTeam: { findUnique: jest.fn(async () => ({ id: 'team-1', status: 'ACTIVE' })) },
     valuationSubmission: {
       findFirst: jest.fn(async () => submission),
       findUniqueOrThrow: jest.fn(async () => submission),

@@ -562,7 +562,9 @@ describe('RosterTransactionsService', () => {
       acquisition(f.season.id, f.teams[0]!.id, player.card.id),
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
-    )).rejects.toMatchObject({ code: 'LEAGUE_TEAM_NOT_ELIGIBLE' });
+    )).rejects.toMatchObject({
+      code: status === 'ARCHIVED' ? 'TEAM_ARCHIVED' : 'LEAGUE_TEAM_NOT_ELIGIBLE'
+    });
   });
 
   it('allows salary exactly at the cap and releases with immutable history and income', async () => {

@@ -36,6 +36,7 @@ export class LeagueTeamShellsService {
     key: string
   ): Promise<ShellResult> {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    await this.requireActive(this.prisma, teamId);
     return this.receipts.execute(actorAdminId, `league-team.change-shell:${teamId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       const team = await this.team(tx, leagueId, teamId, input.expectedVersion);
@@ -60,6 +61,7 @@ export class LeagueTeamShellsService {
     key: string
   ): Promise<ShellResult> {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    await this.requireActive(this.prisma, teamId);
     return this.receipts.execute(actorAdminId, `league-team.refresh-shell:${teamId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       const team = await this.team(tx, leagueId, teamId, input.expectedVersion);
@@ -84,6 +86,10 @@ export class LeagueTeamShellsService {
     key: string
   ): Promise<ShellResult> {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    await Promise.all([
+      this.requireActive(this.prisma, sourceTeamId),
+      this.requireActive(this.prisma, input.targetTeamId)
+    ]);
     return this.receipts.execute(actorAdminId, `league-team.transfer-shell:${sourceTeamId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       if (sourceTeamId === input.targetTeamId) {
@@ -119,6 +125,10 @@ export class LeagueTeamShellsService {
     key: string
   ): Promise<ShellResult> {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    await Promise.all([
+      this.requireActive(this.prisma, input.sourceTeamId),
+      this.requireActive(this.prisma, input.otherTeamId)
+    ]);
     return this.receipts.execute(actorAdminId, `league-team.swap-shells:${leagueId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       if (input.sourceTeamId === input.otherTeamId) {
@@ -166,10 +176,22 @@ export class LeagueTeamShellsService {
   private async team(tx: Prisma.TransactionClient, leagueId: string, teamId: string, expectedVersion: number) {
     const team = await tx.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
     if (!team) throw new LeagueError('LEAGUE_TEAM_NOT_FOUND', 'League team was not found', 404);
+    if (team.status === 'ARCHIVED') throw new LeagueError('TEAM_ARCHIVED', 'League team has withdrawn', 409);
+    if (team.status !== 'ACTIVE') throw new LeagueError('LEAGUE_TEAM_NOT_ACTIVE', 'League team is not active', 409);
     if (team.version !== expectedVersion) {
       throw new LeagueError('VERSION_CONFLICT', 'League team has changed', 409);
     }
     return team;
+  }
+
+  private async requireActive(
+    client: PrismaService | Prisma.TransactionClient,
+    teamId: string
+  ): Promise<void> {
+    const team = await client.leagueTeam.findUnique({ where: { id: teamId }, select: { status: true } });
+    if (!team) throw new LeagueError('LEAGUE_TEAM_NOT_FOUND', 'League team was not found', 404);
+    if (team.status === 'ARCHIVED') throw new LeagueError('TEAM_ARCHIVED', 'League team has withdrawn', 409);
+    if (team.status !== 'ACTIVE') throw new LeagueError('LEAGUE_TEAM_NOT_ACTIVE', 'League team is not active', 409);
   }
 
   private async readableShell(tx: Prisma.TransactionClient, catalogTeamId: string) {

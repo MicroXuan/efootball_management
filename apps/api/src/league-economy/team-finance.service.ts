@@ -39,11 +39,14 @@ export class TeamFinanceService {
       if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     }
     await this.authorization.requireLeagueManager(adminId, leagueId);
+    await this.requireActive(input.leagueTeamId);
     return this.receipts.execute(adminId, `finance-entry.create:${leagueId}`, key, async (tx) => {
       const team = await tx.leagueTeam.findFirst({
-        where: { id: input.leagueTeamId, leagueId }, select: { id: true }
+        where: { id: input.leagueTeamId, leagueId }, select: { id: true, status: true }
       });
       if (!team) throw this.error('LEAGUE_TEAM_NOT_FOUND', '球队不存在或不属于当前联赛', 404);
+      if (team.status === 'ARCHIVED') throw this.error('TEAM_ARCHIVED', '球队已退出联赛', 409);
+      if (team.status && team.status !== 'ACTIVE') throw this.error('LEAGUE_TEAM_NOT_ACTIVE', '球队当前不可操作', 409);
       if (input.seasonId) {
         const season = await tx.leagueSeason.findFirst({
           where: { id: input.seasonId, leagueId }, select: { id: true }
@@ -138,6 +141,12 @@ export class TeamFinanceService {
     type: FinanceLedgerEntry['type']; amountMinor: number; note: string; createdAt: Date;
   }): FinanceLedgerEntry {
     return { ...entry, createdAt: entry.createdAt.toISOString() };
+  }
+
+  private async requireActive(teamId: string): Promise<void> {
+    const team = await this.prisma.leagueTeam.findUnique({ where: { id: teamId }, select: { status: true } });
+    if (team?.status === 'ARCHIVED') throw this.error('TEAM_ARCHIVED', '球队已退出联赛', 409);
+    if (team?.status && team.status !== 'ACTIVE') throw this.error('LEAGUE_TEAM_NOT_ACTIVE', '球队当前不可操作', 409);
   }
 
   private error(code: string, message: string, status: number) {

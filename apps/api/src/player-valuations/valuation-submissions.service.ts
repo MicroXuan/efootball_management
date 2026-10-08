@@ -63,6 +63,10 @@ export class ValuationSubmissionsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const lockedTeam = await tx.leagueTeam.findUnique({ where: { id: teamId }, select: { status: true } });
+      if (lockedTeam?.status && lockedTeam.status !== 'ACTIVE') {
+        throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
+      }
       const latest = await tx.valuationSubmission.findFirst({
         where: { windowId: input.windowId, leagueTeamId: teamId },
         orderBy: [{ attemptNumber: 'desc' }, { createdAt: 'desc' }]
@@ -133,6 +137,10 @@ export class ValuationSubmissionsService {
       .filter((snapshot) => snapshot.leagueTeamId === teamId);
 
     return await this.userReceipts.execute(userId, `VALUATION_PUBLISH:${teamId}:${input.windowId}`, idempotencyKey, async (tx) => {
+      const lockedTeam = await tx.leagueTeam.findUnique({ where: { id: teamId }, select: { status: true } });
+      if (lockedTeam?.status && lockedTeam.status !== 'ACTIVE') {
+        throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
+      }
       const draft = await tx.valuationSubmission.findFirst({
         where: { windowId: input.windowId, leagueTeamId: teamId, status: 'DRAFT' },
         include: { items: true },
@@ -290,16 +298,22 @@ export class ValuationSubmissionsService {
     await this.visibility.requireVisible({ type: 'VALUATION_SUBMISSION', id: submissionId });
     const current = await this.prisma.valuationSubmission.findUniqueOrThrow({
       where: { id: submissionId },
-      include: { window: { include: { season: true } } }
+      include: { window: { include: { season: true } }, leagueTeam: { select: { status: true } } }
     });
+    if (current.leagueTeam?.status === 'ARCHIVED') {
+      throw new LeagueError('TEAM_ARCHIVED', '球队已退出联赛', 409);
+    }
     const leagueId = current.window.season.leagueId;
     await this.authorization.requireLeagueManager(adminId, leagueId);
     return await this.adminReceipts.execute(adminId, `VALUATION_REVIEW:${decision}:${submissionId}`, key, async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM valuation_submissions WHERE id = ${submissionId} FOR UPDATE`);
       const locked = await tx.valuationSubmission.findUniqueOrThrow({
         where: { id: submissionId },
-        include: { items: { include: { snapshot: true } } }
+        include: { items: { include: { snapshot: true } }, leagueTeam: { select: { status: true } } }
       });
+      if (locked.leagueTeam?.status === 'ARCHIVED') {
+        throw new LeagueError('TEAM_ARCHIVED', '球队已退出联赛', 409);
+      }
       if (locked.status !== 'PENDING_REVIEW') {
         throw new LeagueError('VALUATION_SUBMISSION_NOT_PENDING', '该申报已不在待审核状态', 409);
       }
@@ -344,6 +358,9 @@ export class ValuationSubmissionsService {
     const team = await this.prisma.leagueTeam.findUnique({ where: { id: teamId } });
     if (!team || team.ownerUserId !== userId) {
       throw new LeagueError('VALUATION_TEAM_OWNER_REQUIRED', '只有球队拥有者可以提交身价', 403);
+    }
+    if (team.status && team.status !== 'ACTIVE') {
+      throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
     }
     const effective = await this.windows.getEffectiveRule(windowId, at);
     if (effective.window.state !== 'OPEN') {

@@ -46,7 +46,7 @@ export class SalaryRecalculationService {
     return this.receipts.execute(adminId, 'ROSTER_SALARY_RECALCULATION', input.idempotencyKey,
       async (tx) => {
         const teams = await tx.leagueTeam.findMany({
-          where: { leagueId: input.leagueId },
+          where: { leagueId: input.leagueId, status: 'ACTIVE' },
           select: { id: true },
           orderBy: { id: 'asc' }
         });
@@ -58,7 +58,7 @@ export class SalaryRecalculationService {
           throw new LeagueRosterError('SALARY_RULE_NOT_FOUND', 'Salary rule version was not found', 404);
         }
         const ownerships = await tx.leaguePlayerOwnership.findMany({
-          where: { leagueId: input.leagueId, status: 'ACTIVE' },
+          where: { leagueId: input.leagueId, status: 'ACTIVE', leagueTeam: { status: 'ACTIVE' } },
           orderBy: [{ leagueTeamId: 'asc' }, { id: 'asc' }]
         });
         const totals = new Map<string, number>();

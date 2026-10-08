@@ -87,9 +87,10 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
     await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
-      select: { id: true, name: true, ownerUserId: true, leagueId: true }
+      select: { id: true, name: true, ownerUserId: true, leagueId: true, status: true }
     });
     if (!team) throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
+    if (team.status && team.status !== 'ACTIVE') throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
     if (team.ownerUserId !== userId) {
       throw new LeagueError('VALUATION_TEAM_OWNER_REQUIRED', '只有球队拥有者可以管理本队身价', 403);
     }

@@ -153,6 +153,13 @@ export class CupCompetitionsService {
     key: string
   ): Promise<CupRegistrationResponse> {
     await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    const currentEntry = await this.prisma.seasonEntry.findUnique({
+      where: { id: input.seasonEntryId },
+      include: { leagueTeam: { select: { status: true } } }
+    });
+    if (!currentEntry || (currentEntry.leagueTeam?.status && currentEntry.leagueTeam.status !== 'ACTIVE')) {
+      throw new CompetitionError('CUP_SEASON_ENTRY_INELIGIBLE', '只有本赛季正式参赛球队可以报名杯赛', 409);
+    }
     return this.userReceipts.execute(userId, `cup.register:${competitionId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM competitions WHERE id = ${competitionId} FOR UPDATE`;
       const competition = await transaction.competition.findUnique({
@@ -167,8 +174,12 @@ export class CupCompetitionsService {
         throw new CompetitionError('COMPETITION_RULE_VERSION_CHANGED', '杯赛规则已更新，请重新确认', 409);
       }
 
-      const entry = await transaction.seasonEntry.findUnique({ where: { id: input.seasonEntryId } });
-      if (!entry || entry.seasonId !== competition.seasonId || entry.status !== 'APPROVED') {
+      const entry = await transaction.seasonEntry.findUnique({
+        where: { id: input.seasonEntryId },
+        include: { leagueTeam: { select: { status: true } } }
+      });
+      if (!entry || entry.seasonId !== competition.seasonId || entry.status !== 'APPROVED'
+        || (entry.leagueTeam?.status && entry.leagueTeam.status !== 'ACTIVE')) {
         throw new CompetitionError('CUP_SEASON_ENTRY_INELIGIBLE', '只有本赛季正式参赛球队可以报名杯赛', 409);
       }
       if (entry.ownerUserId !== userId) {
@@ -271,10 +282,18 @@ export class CupCompetitionsService {
       this.assertRegistrationOpen(competition);
       const registration = await transaction.competitionRegistration.findFirst({
         where: { competitionId, applicantId: userId },
-        include: { seasonEntry: { select: { teamNameSnapshot: true } } }
+        include: {
+          seasonEntry: {
+            select: { teamNameSnapshot: true, leagueTeam: { select: { status: true } } }
+          }
+        }
       });
       if (!registration || !registration.seasonEntry) {
         throw new CompetitionError('CUP_REGISTRATION_NOT_FOUND', '未找到杯赛报名记录', 404);
+      }
+      if (registration.seasonEntry.leagueTeam?.status
+        && registration.seasonEntry.leagueTeam.status !== 'ACTIVE') {
+        throw new CompetitionError('CUP_SEASON_ENTRY_INELIGIBLE', '已退赛球队不能变更杯赛报名', 409);
       }
       assertExpectedVersion(registration.version, input.expectedVersion, 'Cup registration');
       if (registration.status !== 'APPROVED') {
