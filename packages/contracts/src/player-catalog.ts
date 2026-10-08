@@ -19,11 +19,13 @@ export const PlayerPositionSchema = z.enum([
 
 export const PlayerCardTypeSchema = z.enum([
   'STANDARD',
+  'LEGENDARY',
   'FEATURED',
   'TRENDING',
   'HIGHLIGHT',
   'EPIC',
   'BIG_TIME',
+  'SHOW_TIME',
   'OTHER'
 ]);
 

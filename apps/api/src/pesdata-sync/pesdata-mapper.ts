@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { PlayerCardType, PlayerPosition } from '@efm/contracts';
+import { derivePesdataAutoBuild, type PlayerCardType, type PlayerPosition } from '@efm/contracts';
 import type { RawImportRow } from '../player-import/import-adapter.js';
 import { normalizeImportRow } from '../player-import/record-normalizer.js';
 import type { PesdataPlayerDetail } from './pesdata.schemas.js';
@@ -10,13 +10,13 @@ const positions = new Set<PlayerPosition>([
 
 const cardTypes: Record<number, PlayerCardType> = {
   1: 'STANDARD',
-  2: 'OTHER',
+  2: 'LEGENDARY',
   3: 'EPIC',
   4: 'BIG_TIME',
   5: 'TRENDING',
   6: 'FEATURED',
   7: 'HIGHLIGHT',
-  8: 'HIGHLIGHT'
+  8: 'SHOW_TIME'
 };
 
 export class PesdataMappingError extends Error {
@@ -176,7 +176,19 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
   const cleanAttributes = Object.fromEntries(
     Object.entries(attributes).filter(([, value]) => value !== undefined)
   );
-  const algorithmVersion = text(detail.algorithmVersion);
+  const cardType = mapPesdataCardType(detail.cardType);
+  const sourceAlgorithmVersion = text(detail.algorithmVersion);
+  const derivedBuild = detail.autoBuildAllocation == null
+    && detail.autoBuildMaxOverall == null
+    && detail.dtRating == null
+    && !sourceAlgorithmVersion
+    ? derivePesdataAutoBuild({
+        position: sourcePosition as PlayerPosition,
+        overallRating,
+        maxLevel: detail.maxLevel,
+        cardType
+      })
+    : null;
 
   const row: RawImportRow = {
     externalId,
@@ -188,7 +200,7 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     cardName: packName,
     position: sourcePosition,
     overallRating,
-    cardType: mapPesdataCardType(detail.cardType),
+    cardType,
     playStyle: text(detail.CardStyle_cn) ?? text(detail.CardStyle_en) ?? text(detail.CardStyle),
     status: String(detail.is_del ?? '0') === '1' ? 'INACTIVE' : 'ACTIVE',
     ...(imageUrl ? { imageUrl } : {}),
@@ -198,14 +210,18 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     ...(updatedAt ? { sourceUpdatedAt: updatedAt } : {}),
     skills: skillNames(detail),
     attributes: cleanAttributes,
-    ...(detail.autoBuildAllocation != null
-      ? { autoBuildAllocation: detail.autoBuildAllocation }
+    ...(detail.autoBuildAllocation != null || derivedBuild
+      ? { autoBuildAllocation: detail.autoBuildAllocation ?? derivedBuild!.allocation }
       : {}),
-    ...(detail.autoBuildMaxOverall != null
-      ? { autoBuildMaxOverall: detail.autoBuildMaxOverall }
+    ...(detail.autoBuildMaxOverall != null || derivedBuild
+      ? { autoBuildMaxOverall: detail.autoBuildMaxOverall ?? derivedBuild!.maxOverall }
       : {}),
-    ...(detail.dtRating != null ? { dtRating: detail.dtRating } : {}),
-    ...(algorithmVersion ? { algorithmVersion } : {})
+    ...(detail.dtRating != null || derivedBuild?.dtRating != null
+      ? { dtRating: detail.dtRating ?? derivedBuild!.dtRating! }
+      : {}),
+    ...(sourceAlgorithmVersion || derivedBuild
+      ? { algorithmVersion: sourceAlgorithmVersion ?? derivedBuild!.algorithmVersion }
+      : {})
   };
 
   try {

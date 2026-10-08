@@ -17,6 +17,7 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { SalaryRulesService } from './salary-rules.service.js';
@@ -33,7 +34,8 @@ export class RosterTransactionsService {
     @Inject(AuditLogService) private readonly audit: AuditLogService,
     @Inject(SalaryRulesService) private readonly salaryRules: SalaryRulesService,
     @Inject(TransferWindowsService) private readonly transferWindows: TransferWindowsService,
-    @Inject(RosterLockRepository) private readonly locks: RosterLockRepository
+    @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
   ) {}
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
@@ -52,11 +54,7 @@ export class RosterTransactionsService {
           );
           await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'BUY', at);
 
-          const build = await tx.playerCardAutoBuild.findFirst({
-            where: { playerCardId: input.playerCardId },
-            orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
-            include: { playerCard: true }
-          });
+          const build = await this.playerBuilds.resolveOrDeriveWithClient(tx, input.playerCardId);
           if (!build) {
             throw new LeagueRosterError(
               'PLAYER_AUTO_BUILD_MISSING',
@@ -683,11 +681,7 @@ export class RosterTransactionsService {
   }
 
   private async loadBuild(client: Prisma.TransactionClient, playerCardId: string) {
-    const build = await client.playerCardAutoBuild.findFirst({
-      where: { playerCardId },
-      orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
-      include: { playerCard: true }
-    });
+    const build = await this.playerBuilds.resolveOrDeriveWithClient(client, playerCardId);
     if (!build) {
       throw new LeagueRosterError(
         'PLAYER_AUTO_BUILD_MISSING',

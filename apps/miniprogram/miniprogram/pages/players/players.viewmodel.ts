@@ -50,11 +50,13 @@ const positionLabels: Record<PlayerPosition, string> = {
 
 const cardTypeLabels: Record<PlayerCardType, string> = {
   STANDARD: '基础卡',
+  LEGENDARY: '普通传奇',
   FEATURED: '精选',
   TRENDING: '状态火热',
   HIGHLIGHT: '高光',
   EPIC: '史诗',
   BIG_TIME: '时刻',
+  SHOW_TIME: 'ShowTime',
   OTHER: '其他',
 }
 

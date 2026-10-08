@@ -50,13 +50,13 @@ describe('PESDATA player mapping', () => {
 
   it.each([
     [1, 'STANDARD'],
-    [2, 'OTHER'],
+    [2, 'LEGENDARY'],
     [3, 'EPIC'],
     [4, 'BIG_TIME'],
     [5, 'TRENDING'],
     [6, 'FEATURED'],
     [7, 'HIGHLIGHT'],
-    [8, 'HIGHLIGHT'],
+    [8, 'SHOW_TIME'],
     [99, 'OTHER']
   ])('maps card type %s to %s', (source, expected) => {
     expect(mapPesdataCardType(source)).toBe(expected);
@@ -71,19 +71,48 @@ describe('PESDATA player mapping', () => {
     );
   });
 
-  it('leaves automatic build output unavailable when the source does not provide it', () => {
+  it('derives automatic build output from progression levels when the source omits it', () => {
     const row = mapPesdataPlayer({
       ...detail,
+      position: 'DMF',
+      overall: 80,
+      cardType: 7,
+      maxLevel: 80,
       autoBuildAllocation: undefined,
       autoBuildMaxOverall: undefined,
       dtRating: undefined,
       algorithmVersion: undefined
     });
 
-    expect(row.autoBuildAllocation).toBeUndefined();
-    expect(row.autoBuildMaxOverall).toBeUndefined();
+    expect(row.autoBuildAllocation).toMatchObject({
+      passing: 8,
+      dribbling: 4,
+      dexterity: 4,
+      lowerBodyStrength: 8,
+      aerialStrength: 6,
+      defending: 16
+    });
+    expect(row.autoBuildMaxOverall).toBe(95);
+    expect(row.dtRating).toBe(95);
+    expect(row.algorithmVersion).toBe('pesdata-position-auto-v1');
+  });
+
+  it('maps a trending final card to an empty fixed build at its published overall', () => {
+    const row = mapPesdataPlayer({
+      ...detail,
+      overall: 96,
+      cardType: 5,
+      maxLevel: 0,
+      autoBuildAllocation: undefined,
+      autoBuildMaxOverall: undefined,
+      dtRating: undefined,
+      algorithmVersion: undefined
+    });
+
+    expect(row.autoBuildAllocation).toEqual({});
+    expect(row.autoBuildMaxOverall).toBe(96);
     expect(row.dtRating).toBeUndefined();
-    expect(row.algorithmVersion).toBeUndefined();
+    expect(row.algorithmVersion).toBe('pesdata-final-card-v1');
   });
 
   it('produces stable checksums independent of object key order', () => {

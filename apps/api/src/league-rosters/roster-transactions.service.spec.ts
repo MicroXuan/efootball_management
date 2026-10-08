@@ -26,7 +26,8 @@ describe('RosterTransactionsService', () => {
     audit,
     salaryRules,
     windows,
-    new RosterLockRepository()
+    new RosterLockRepository(),
+    new PlayerBuildsService(prisma)
   );
   const recalculation = new SalaryRecalculationService(
     prisma,
@@ -279,7 +280,7 @@ describe('RosterTransactionsService', () => {
     )).rejects.toMatchObject({ code: 'TEAM_SALARY_CAP_EXCEEDED' });
   });
 
-  it('rejects a player card with no automatic build', async () => {
+  it('derives a missing automatic build before acquiring a final card', async () => {
     const f = await fixture();
     const player = await prisma.footballPlayer.create({ data: { nameEn: 'No build' } });
     const playerCard = await prisma.playerCard.create({
@@ -288,17 +289,27 @@ describe('RosterTransactionsService', () => {
         externalId: `no-build-${randomUUID()}`,
         playerId: player.id,
         cardName: 'No build',
-        position: 'CB',
-        overallRating: 93,
-        cardType: 'STANDARD'
+        position: 'RWF',
+        overallRating: 96,
+        cardType: 'TRENDING'
       }
     });
 
-    await expect(service.acquire(
+    const acquired = await service.acquire(
       acquisition(f.season.id, f.teams[0]!.id, playerCard.id),
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
-    )).rejects.toMatchObject({ code: 'PLAYER_AUTO_BUILD_MISSING' });
+    );
+
+    expect(acquired.ownership).toMatchObject({ maxOverall: 96, salaryMinor: 500 });
+    await expect(prisma.playerCardAutoBuild.findFirstOrThrow({
+      where: { playerCardId: playerCard.id }
+    })).resolves.toMatchObject({
+      maxOverall: 96,
+      dtRating: null,
+      algorithmVersion: 'pesdata-final-card-v1',
+      allocationJson: {}
+    });
   });
 
   it.each([
@@ -399,7 +410,8 @@ describe('RosterTransactionsService', () => {
       failingAudit,
       salaryRules,
       windows,
-      new RosterLockRepository()
+      new RosterLockRepository(),
+      new PlayerBuildsService(prisma)
     );
 
     await expect(rollbackService.acquire(

@@ -37,7 +37,11 @@ describe('PlayerBuildsService', () => {
 
   afterAll(() => prisma.$disconnect());
 
-  async function createCard(externalId: string, releaseDate: string) {
+  async function createCard(
+    externalId: string,
+    releaseDate: string,
+    options: { position?: 'CB' | 'DMF'; overallRating?: number; cardType?: 'EPIC' | 'TRENDING'; maxLevel?: number } = {}
+  ) {
     const pack = await prisma.cardPack.create({
       data: {
         sourceId,
@@ -52,9 +56,14 @@ describe('PlayerBuildsService', () => {
         playerId,
         cardPackId: pack.id,
         cardName: externalId,
-        position: 'CB',
-        overallRating: 87,
-        cardType: 'EPIC'
+        position: options.position ?? 'CB',
+        overallRating: options.overallRating ?? 87,
+        cardType: options.cardType ?? 'EPIC',
+        ...(options.maxLevel === undefined ? {} : {
+          attributes: {
+            create: { attributesJson: { sourceMetadata: { maxLevel: options.maxLevel } } }
+          }
+        })
       }
     });
     cardIds.push(card.id);
@@ -107,5 +116,43 @@ describe('PlayerBuildsService', () => {
     expect(recommendation?.selectionReason).toMatchObject({ candidateCount: 2 });
     expect(recommendation?.selectionReason).not.toHaveProperty('winner.dtRating');
     await expect(prisma.playerCard.count({ where: { playerId } })).resolves.toBe(2);
+  });
+
+  it('derives and persists a fixed build for a legacy trending card', async () => {
+    const card = await createCard('olise-potw', '2026-10-01', {
+      position: 'DMF',
+      overallRating: 96,
+      cardType: 'TRENDING'
+    });
+
+    const build = await prisma.$transaction((tx) => service.resolveOrDeriveWithClient(tx, card.id));
+
+    expect(build).toMatchObject({
+      playerCardId: card.id,
+      maxOverall: 96,
+      dtRating: null,
+      algorithmVersion: 'pesdata-final-card-v1',
+      allocationJson: {}
+    });
+    await expect(prisma.playerCardAutoBuild.count({ where: { playerCardId: card.id } }))
+      .resolves.toBe(1);
+  });
+
+  it('derives and persists a position build for a legacy trainable card', async () => {
+    const card = await createCard('legacy-dmf', '2026-09-24', {
+      position: 'DMF',
+      overallRating: 80,
+      maxLevel: 80
+    });
+
+    const build = await prisma.$transaction((tx) => service.resolveOrDeriveWithClient(tx, card.id));
+
+    expect(build).toMatchObject({
+      playerCardId: card.id,
+      maxOverall: 95,
+      dtRating: 95,
+      algorithmVersion: 'pesdata-position-auto-v1'
+    });
+    expect(build?.allocationJson).toMatchObject({ defending: 16, passing: 8 });
   });
 });

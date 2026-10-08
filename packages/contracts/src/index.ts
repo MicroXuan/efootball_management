@@ -8,5 +8,6 @@ export * from './league.js';
 export * from './league-roster.js';
 export * from './league-team.js';
 export * from './player-catalog.js';
+export * from './player-auto-build.js';
 export * from './player-import.js';
 export * from './user.js';

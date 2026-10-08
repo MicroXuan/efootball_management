@@ -152,11 +152,13 @@ enum PlayerPosition {
 
 enum PlayerCardType {
   STANDARD
+  LEGENDARY
   FEATURED
   TRENDING
   HIGHLIGHT
   EPIC
   BIG_TIME
+  SHOW_TIME
   OTHER
 }
 
