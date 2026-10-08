@@ -397,7 +397,8 @@ export const CupBracketProposalSchema = z.object({
 
 export const CupBracketParticipantSchema = z.object({
   id: ResourceIdSchema,
-  displayName: z.string().trim().min(1).max(64)
+  displayName: z.string().trim().min(1).max(64),
+  teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable()
 });
 
 export const CupBracketMatchSummarySchema = z.object({

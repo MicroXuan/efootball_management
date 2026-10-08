@@ -7,7 +7,7 @@
     <view wx:for="{{items}}" wx:key="matchId" class="match-card">
       <view class="match-head"><text>{{item.competition.name}}</text><text>#{{item.match.matchNumber}}</text></view>
       <text class="planned">{{item.plannedLabel}}</text>
-      <view class="versus"><text>{{item.match.homeParticipant.displayName}}</text><text class="vs">对阵</text><text>{{item.match.awayParticipant.displayName}}</text></view>
+      <view class="versus"><text>{{item.match.homeParticipant.displayName}}{{item.match.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{item.match.awayParticipant.displayName}}{{item.match.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
       <text wx:if="{{item.match.officialResult}}" class="score">{{item.match.officialResult.homeScore}} : {{item.match.officialResult.awayScore}}</text>
       <button class="action {{item.actionEnabled ? '' : 'is-disabled'}}" data-id="{{item.match.id}}" data-enabled="{{item.actionEnabled}}" bindtap="openMatch">{{item.actionLabel}}</button>
     </view>

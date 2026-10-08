@@ -18,7 +18,7 @@
     </view>
     <view class="panel"><view class="panel-head"><view><text class="kicker">赛程编排</text><text class="panel-title">赛程编排</text></view><text class="metric">{{schedule ? schedule.matchCount : 0}}</text></view>
       <button wx:if="{{!schedule}}" class="primary" disabled="{{acting}}" bindtap="generateSchedule">生成循环赛程</button>
-      <block wx:else><view wx:for="{{roundGroups}}" wx:key="roundNumber" wx:for-item="round" class="round"><text class="round-title">第 {{round.roundNumber}} 轮</text><view wx:for="{{round.matches}}" wx:key="id" wx:for-item="fixture" class="fixture"><text>{{fixture.homeParticipant.displayName}}</text><text class="versus">对阵</text><text>{{fixture.awayParticipant.displayName}}</text></view></view>
+      <block wx:else><view wx:for="{{roundGroups}}" wx:key="roundNumber" wx:for-item="round" class="round"><text class="round-title">第 {{round.roundNumber}} 轮</text><view wx:for="{{round.matches}}" wx:key="id" wx:for-item="fixture" class="fixture"><text>{{fixture.homeParticipant.displayName}}{{fixture.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="versus">对阵</text><text>{{fixture.awayParticipant.displayName}}{{fixture.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view></view>
         <button wx:if="{{schedule.status !== 'PUBLISHED'}}" class="gold" disabled="{{acting}}" bindtap="publishSchedule">确认并发布赛程</button><text wx:else class="published">赛程已发布</text></block>
     </view>
     <view class="panel"><view class="panel-head"><view><text class="kicker">赛果管理</text><text class="panel-title">官方比分</text></view><text class="metric">{{matches.length}}</text></view>

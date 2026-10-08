@@ -1934,9 +1934,9 @@ describe('cup center contracts', () => {
         pairings: [{
           id: entryId,
           pairingNumber: 1,
-          homeParticipant: { id: userId, displayName: '上海海港' },
-          awayParticipant: { id: registrationId, displayName: '北京国安' },
-          winnerParticipant: { id: userId, displayName: '上海海港' },
+          homeParticipant: { id: userId, displayName: '上海海港', teamLifecycleStatus: 'ARCHIVED' },
+          awayParticipant: { id: registrationId, displayName: '北京国安', teamLifecycleStatus: 'ACTIVE' },
+          winnerParticipant: { id: userId, displayName: '上海海港', teamLifecycleStatus: 'ARCHIVED' },
           isBye: false,
           match: {
             id: competitionId,
@@ -1948,6 +1948,7 @@ describe('cup center contracts', () => {
       }]
     });
     assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.displayName, '上海海港');
+    assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.teamLifecycleStatus, 'ARCHIVED');
     assert.equal(view.proposalStatus, 'CONFIRMED');
   });
 

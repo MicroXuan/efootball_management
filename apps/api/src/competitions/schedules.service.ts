@@ -6,7 +6,7 @@ import type {
 } from '@efm/contracts';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
-import type { CompetitionParticipant, CompetitionStage, Prisma } from '../generated/prisma/client.js';
+import type { CompetitionStage, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
@@ -24,8 +24,8 @@ export const SCHEDULE_GENERATOR = Symbol('SCHEDULE_GENERATOR');
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
-    homeParticipant: true;
-    awayParticipant: true;
+    homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
+    awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
     officialResultVersion: true;
   };
 }>;
@@ -334,7 +334,11 @@ export class SchedulesService {
   private matches(client: CompetitionTransaction | PrismaService, stageId: string): Promise<MatchRecord[]> {
     return client.competitionMatch.findMany({
       where: { stageId },
-      include: { homeParticipant: true, awayParticipant: true, officialResultVersion: true },
+      include: {
+        homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+        awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+        officialResultVersion: true
+      },
       orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }]
     });
   }
@@ -365,12 +369,13 @@ export class SchedulesService {
     };
   }
 
-  private participant(participant: CompetitionParticipant) {
+  private participant(participant: MatchRecord['homeParticipant']) {
+    const status = participant.seasonEntry?.leagueTeam.status;
     return {
       id: participant.id,
       displayName: participant.displayNameSnapshot,
       participantType: participant.participantType,
-      teamLifecycleStatus: null
+      teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null
     };
   }
 

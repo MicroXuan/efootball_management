@@ -13,7 +13,7 @@ import { LeagueVisibilityService } from '../league-visibility/league-visibility.
 
 const STAGE_INCLUDE = {
   participants: {
-    include: { participant: true },
+    include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
     orderBy: [{ seed: 'asc' as const }, { id: 'asc' as const }]
   },
   standingsSnapshots: {
@@ -21,7 +21,7 @@ const STAGE_INCLUDE = {
     take: 1,
     include: {
       rows: {
-        include: { participant: true },
+        include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
         orderBy: [{ rank: 'asc' as const }, { participantId: 'asc' as const }]
       }
     }
@@ -63,10 +63,14 @@ export class StandingsService {
     };
     const participants = stageId
       ? (await transaction.stageParticipant.findMany({
-        where: { stageId }, include: { participant: true }, orderBy: [{ seed: 'asc' }, { id: 'asc' }]
+        where: { stageId },
+        include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+        orderBy: [{ seed: 'asc' }, { id: 'asc' }]
       })).map((membership) => membership.participant)
       : await transaction.competitionParticipant.findMany({
-        where: { competitionId }, orderBy: [{ admissionSequence: 'asc' }, { id: 'asc' }]
+        where: { competitionId },
+        include: { seasonEntry: { include: { leagueTeam: true } } },
+        orderBy: [{ admissionSequence: 'asc' }, { id: 'asc' }]
       });
     const officialMatches = await transaction.competitionMatch.findMany({
       where: stageId
@@ -133,7 +137,10 @@ export class StandingsService {
       ruleVersion,
       triggeringResultVersionId: triggerResultVersionId,
       generatedAt: snapshot.generatedAt.toISOString(),
-      rows: rows.map((row) => ({ ...row, teamLifecycleStatus: null }))
+      rows: rows.map((row) => {
+        const participant = participants.find(({ id }) => id === row.participantId);
+        return { ...row, teamLifecycleStatus: this.lifecycleStatus(participant) };
+      })
     };
   }
 
@@ -141,7 +148,12 @@ export class StandingsService {
     await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const snapshot = await this.prisma.standingsSnapshot.findFirst({
       where: { competitionId, stageId: null },
-      include: { rows: { include: { participant: true }, orderBy: [{ rank: 'asc' }, { participantId: 'asc' }] } },
+      include: {
+        rows: {
+          include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+          orderBy: [{ rank: 'asc' }, { participantId: 'asc' }]
+        }
+      },
       orderBy: { version: 'desc' }
     });
     if (!snapshot) {
@@ -229,7 +241,7 @@ export class StandingsService {
         rows: stage.participants.map((membership, index) => ({
           participantId: membership.participant.id,
           displayName: membership.participant.displayNameSnapshot,
-          teamLifecycleStatus: null,
+          teamLifecycleStatus: this.lifecycleStatus(membership.participant),
           played: 0,
           wins: 0,
           draws: 0,
@@ -272,12 +284,15 @@ export class StandingsService {
     rank: number;
     tiePending: boolean;
     tieBreakValues: unknown;
-    participant: { displayNameSnapshot: string };
+    participant: {
+      displayNameSnapshot: string;
+      seasonEntry?: { leagueTeam: { status: string } } | null;
+    };
   }) {
     return {
       participantId: row.participantId,
       displayName: row.participant.displayNameSnapshot,
-      teamLifecycleStatus: null,
+      teamLifecycleStatus: this.lifecycleStatus(row.participant),
       played: row.played,
       wins: row.wins,
       draws: row.draws,
@@ -292,5 +307,12 @@ export class StandingsService {
       tiePending: row.tiePending,
       tieBreakValues: row.tieBreakValues as Record<string, number>
     };
+  }
+
+  private lifecycleStatus(participant: {
+    seasonEntry?: { leagueTeam: { status: string } } | null;
+  } | undefined): 'ACTIVE' | 'ARCHIVED' | null {
+    const status = participant?.seasonEntry?.leagueTeam.status;
+    return status === 'ACTIVE' || status === 'ARCHIVED' ? status : null;
   }
 }

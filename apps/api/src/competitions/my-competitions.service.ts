@@ -16,8 +16,8 @@ import { PrismaService } from '../database/prisma.service.js';
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } };
-    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } };
-    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } };
+    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true; leagueTeam: { select: { status: true } } } } } };
+    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true; leagueTeam: { select: { status: true } } } } } };
     officialResultVersion: true;
     resultVersions: true;
   };
@@ -82,8 +82,8 @@ export class MyCompetitionsService {
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
-        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -131,8 +131,8 @@ export class MyCompetitionsService {
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
-        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -166,13 +166,13 @@ export class MyCompetitionsService {
         id: record.homeParticipant.id,
         displayName: record.homeParticipant.displayNameSnapshot,
         participantType: record.homeParticipant.participantType,
-        teamLifecycleStatus: null
+        teamLifecycleStatus: this.lifecycleStatus(record.homeParticipant)
       },
       awayParticipant: {
         id: record.awayParticipant.id,
         displayName: record.awayParticipant.displayNameSnapshot,
         participantType: record.awayParticipant.participantType,
-        teamLifecycleStatus: null
+        teamLifecycleStatus: this.lifecycleStatus(record.awayParticipant)
       },
       plannedAt: record.plannedAt?.toISOString() ?? null,
       status: record.status,
@@ -203,6 +203,11 @@ export class MyCompetitionsService {
       reason: result.reason,
       createdAt: result.createdAt.toISOString()
     };
+  }
+
+  private lifecycleStatus(participant: MatchRecord['homeParticipant']): 'ACTIVE' | 'ARCHIVED' | null {
+    const status = participant.seasonEntry?.leagueTeam?.status;
+    return status === 'ACTIVE' || status === 'ARCHIVED' ? status : null;
   }
 
   private registration(

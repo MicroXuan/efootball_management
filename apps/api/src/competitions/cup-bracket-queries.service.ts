@@ -13,9 +13,9 @@ const BRACKET_INCLUDE = {
       pairings: {
         orderBy: { pairingNumber: 'asc' as const },
         include: {
-          homeParticipant: true,
-          awayParticipant: true,
-          winnerParticipant: true,
+          homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+          awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+          winnerParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
           match: { include: { officialResultVersion: true } }
         }
       }
@@ -108,8 +108,14 @@ export class CupBracketQueriesService {
     };
   }
 
-  private participant(participant: { id: string; displayNameSnapshot: string } | null) {
-    return participant ? { id: participant.id, displayName: participant.displayNameSnapshot } : null;
+  private participant(participant: BracketRecord['rounds'][number]['pairings'][number]['homeParticipant']) {
+    if (!participant) return null;
+    const status = participant.seasonEntry?.leagueTeam.status;
+    return {
+      id: participant.id,
+      displayName: participant.displayNameSnapshot,
+      teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null
+    };
   }
 
   private notFound(): CompetitionError {

@@ -646,11 +646,11 @@ function BracketBoard({ bracket, confirming, onConfirm }: {
         <div className="bracket-round__matches">
           {round.pairings.map((pairing) => <div key={pairing.id} className="bracket-match">
             <div className={pairing.winnerParticipant?.id === pairing.homeParticipant?.id ? 'is-winner' : ''}>
-              <span>{pairing.homeParticipant?.displayName ?? '待定'}</span>
+              <span>{pairing.homeParticipant?.displayName ?? '待定'}{pairing.homeParticipant?.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}</span>
               <strong>{pairing.match?.homeScore ?? (pairing.isBye ? '轮空' : '—')}</strong>
             </div>
             <div className={pairing.winnerParticipant?.id === pairing.awayParticipant?.id ? 'is-winner' : ''}>
-              <span>{pairing.awayParticipant?.displayName ?? (pairing.isBye ? '轮空' : '待定')}</span>
+              <span>{pairing.awayParticipant?.displayName ?? (pairing.isBye ? '轮空' : '待定')}{pairing.awayParticipant?.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}</span>
               <strong>{pairing.match?.awayScore ?? '—'}</strong>
             </div>
           </div>)}
