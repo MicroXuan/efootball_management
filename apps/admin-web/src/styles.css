@@ -145,8 +145,9 @@ select { font: inherit; }
 .league-team-identity a { min-width: 0; display: grid; gap: 3px; color: var(--admin-text); }
 .league-team-identity strong { overflow-wrap: anywhere; }
 .league-team-identity small { color: var(--admin-text-secondary); font-size: 12px; }
-.team-shell-picker { display: grid; gap: 12px; }
-.team-shell-picker__filters { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto; gap: 8px; }
+.team-shell-picker { container-type: inline-size; display: grid; gap: 12px; }
+.team-shell-picker__filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: stretch; gap: 8px; }
+.team-shell-picker__filters > * { min-width: 0; }
 .team-shell-picker__loading { min-height: 92px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--admin-text-secondary); }
 .team-shell-picker__grid { max-height: 360px; padding: 2px; display: grid; gap: 8px; overflow-y: auto; }
 .team-shell-option { min-width: 0; padding: 11px; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid var(--admin-border); border-radius: 13px; background: #fbfcfc; transition: border-color 160ms ease, box-shadow 160ms ease; }
@@ -159,6 +160,15 @@ select { font: inherit; }
 .team-shell-option__copy span { overflow: hidden; color: var(--admin-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .team-shell-option__action { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; }
 .team-shell-actions { margin: 0; }
+.team-shell-modal .ant-modal-body { display: grid; gap: 18px; }
+.team-shell-modal .ant-alert,
+.team-shell-modal .shell-operation-summary,
+.team-shell-modal .admin-modal-form .ant-form-item { margin: 0; }
+.admin-modal-form { display: grid; gap: 18px; }
+.ant-modal-body .ant-form-vertical .ant-select,
+.ant-modal-body .ant-form-vertical .ant-input-number,
+.ant-drawer-body .ant-form-vertical .ant-select,
+.ant-drawer-body .ant-form-vertical .ant-input-number { width: 100%; }
 .team-detail-page { width: min(100%, 1040px); display: grid; gap: 18px; }
 .team-detail-breadcrumb { color: var(--admin-text-secondary); font-size: 14px; }
 .detail-card.team-detail-card { max-width: none; scroll-margin-top: 20px; }
@@ -167,6 +177,11 @@ select { font: inherit; }
 .team-detail-section-copy { margin: 0; color: var(--admin-text-secondary); }
 .shell-operation-summary { margin: 16px 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px 14px; }
 .shell-operation-summary strong { color: var(--admin-text-secondary); }
+
+@container (max-width: 400px) {
+  .team-shell-picker__filters { grid-template-columns: 1fr; }
+  .team-shell-picker__filters .ant-btn { width: 100%; }
+}
 .ant-card .ant-table-container { overflow: hidden; border: 1px solid #e5eaed; border-radius: 10px; }
 .ant-table-wrapper .ant-table-thead > tr > th { color: var(--admin-text-secondary); background: #f7f9fa; font-size: 12px; font-weight: 750; letter-spacing: .04em; }
 .ant-table-wrapper .ant-table-tbody > tr:hover > td { background: #f7faf2 !important; }

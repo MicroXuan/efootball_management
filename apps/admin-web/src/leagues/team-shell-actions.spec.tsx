@@ -45,6 +45,11 @@ describe('team shell actions', () => {
     renderActions(request);
 
     await userEvent.click(screen.getByRole('button', { name: '转让队壳' }));
+    const dialog = await screen.findByRole('dialog');
+    const modalForm = dialog.querySelector('form.admin-modal-form');
+    expect(modalForm).toHaveClass('ant-form-vertical');
+    expect(modalForm).toContainElement(screen.getByRole('combobox', { name: '选择接收球队' }));
+    expect(modalForm).toContainElement(screen.getByRole('textbox', { name: '操作原因（选填）' }));
     expect(await screen.findByText(/阵容、财务、比赛成绩、球队编号、负责人和联赛称呼均保持不变/)).toBeInTheDocument();
     expect(screen.getByText('阿贾克斯（AJA）')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认转让队壳' })).toBeDisabled();

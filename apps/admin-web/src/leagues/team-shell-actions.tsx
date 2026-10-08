@@ -108,6 +108,7 @@ export function TeamShellActions({
       <Button onClick={() => setMode('refresh')}>刷新队壳资料</Button>
     </Space>
     <Modal
+      rootClassName="team-shell-modal"
       open={Boolean(mode)}
       title={title}
       onCancel={close}
@@ -125,26 +126,28 @@ export function TeamShellActions({
         {target ? <><strong>{mode === 'swap' ? '互换球队' : '接收球队'}</strong><span>{target.teamNumber}-{target.name}（{target.ownerAlias}）</span></> : null}
         {selectedShell ? <><strong>{mode === 'transfer' ? '原球队替补队壳' : '新队壳'}</strong><span>{selectedShell.nameZh ?? selectedShell.nameEn ?? selectedShell.nameJa}</span></> : null}
       </div>
-      {(mode === 'transfer' || mode === 'swap') ? <Form.Item label={mode === 'swap' ? '选择互换球队' : '选择接收球队'} required>
-        <Select
-          aria-label={mode === 'swap' ? '选择互换球队' : '选择接收球队'}
-          value={targetTeamId}
-          onChange={(value) => { setTargetTeamId(value); mutationKey.reset(); }}
-          options={teams.map((item) => ({ value: item.id, label: `${item.teamNumber}-${item.name}（${item.ownerAlias}）` }))}
-        />
-      </Form.Item> : null}
-      {(mode === 'change' || mode === 'transfer') ? <Form.Item label={mode === 'transfer' ? '原球队替补队壳' : '选择新队壳'} required>
-        <TeamShellPicker
-          api={api}
-          leagueId={leagueId}
-          value={selectedCatalogTeamId}
-          onChange={(value) => { setSelectedCatalogTeamId(value); mutationKey.reset(); }}
-          onSelectItem={setSelectedShell}
-        />
-      </Form.Item> : null}
-      <Form.Item label="操作原因（选填）">
-        <Input.TextArea value={reason} maxLength={512} onChange={(event) => { setReason(event.target.value); mutationKey.reset(); }} />
-      </Form.Item>
+      <Form layout="vertical" className="admin-modal-form">
+        {(mode === 'transfer' || mode === 'swap') ? <Form.Item label={mode === 'swap' ? '选择互换球队' : '选择接收球队'} required>
+          <Select
+            aria-label={mode === 'swap' ? '选择互换球队' : '选择接收球队'}
+            value={targetTeamId}
+            onChange={(value) => { setTargetTeamId(value); mutationKey.reset(); }}
+            options={teams.map((item) => ({ value: item.id, label: `${item.teamNumber}-${item.name}（${item.ownerAlias}）` }))}
+          />
+        </Form.Item> : null}
+        {(mode === 'change' || mode === 'transfer') ? <Form.Item label={mode === 'transfer' ? '原球队替补队壳' : '选择新队壳'} required>
+          <TeamShellPicker
+            api={api}
+            leagueId={leagueId}
+            value={selectedCatalogTeamId}
+            onChange={(value) => { setSelectedCatalogTeamId(value); mutationKey.reset(); }}
+            onSelectItem={setSelectedShell}
+          />
+        </Form.Item> : null}
+        <Form.Item label="操作原因（选填）">
+          <Input.TextArea aria-label="操作原因（选填）" value={reason} maxLength={512} onChange={(event) => { setReason(event.target.value); mutationKey.reset(); }} />
+        </Form.Item>
+      </Form>
     </Modal>
   </div>;
 }
