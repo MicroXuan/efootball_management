@@ -369,7 +369,8 @@ export class SchedulesService {
     return {
       id: participant.id,
       displayName: participant.displayNameSnapshot,
-      participantType: participant.participantType
+      participantType: participant.participantType,
+      teamLifecycleStatus: null
     };
   }
 

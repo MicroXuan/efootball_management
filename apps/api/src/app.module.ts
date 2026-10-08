@@ -15,6 +15,7 @@ import { LeagueEconomyModule } from './league-economy/league-economy.module.js';
 import { LeagueAllocationModule } from './league-allocation/league-allocation.module.js';
 import { LeagueWorkspaceModule } from './league-workspace/league-workspace.module.js';
 import { LeagueVisibilityModule } from './league-visibility/league-visibility.module.js';
+import { LeagueTeamLifecycleModule } from './league-team-lifecycle/league-team-lifecycle.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerFavoritesModule } from './player-favorites/player-favorites.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
@@ -41,6 +42,7 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
     CompetitionsModule,
     DatabaseModule,
     LeagueVisibilityModule,
+    LeagueTeamLifecycleModule,
     HealthModule,
     LeaguesModule,
     LeagueTeamsModule,

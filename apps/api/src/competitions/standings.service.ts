@@ -133,7 +133,7 @@ export class StandingsService {
       ruleVersion,
       triggeringResultVersionId: triggerResultVersionId,
       generatedAt: snapshot.generatedAt.toISOString(),
-      rows
+      rows: rows.map((row) => ({ ...row, teamLifecycleStatus: null }))
     };
   }
 
@@ -229,6 +229,7 @@ export class StandingsService {
         rows: stage.participants.map((membership, index) => ({
           participantId: membership.participant.id,
           displayName: membership.participant.displayNameSnapshot,
+          teamLifecycleStatus: null,
           played: 0,
           wins: 0,
           draws: 0,
@@ -276,6 +277,7 @@ export class StandingsService {
     return {
       participantId: row.participantId,
       displayName: row.participant.displayNameSnapshot,
+      teamLifecycleStatus: null,
       played: row.played,
       wins: row.wins,
       draws: row.draws,

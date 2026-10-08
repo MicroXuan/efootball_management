@@ -3,6 +3,8 @@ import { config } from 'dotenv';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueTeamLifecycleService } from '../league-team-lifecycle/league-team-lifecycle.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { LeagueTeamsService } from './league-teams.service.js';
 
 config({ path: '../../.env', quiet: true });
@@ -18,10 +20,13 @@ describe('LeagueTeamsService', () => {
 
   beforeAll(async () => {
     await prisma.$connect();
+    const visibility = new LeagueVisibilityService(prisma);
     service = new LeagueTeamsService(
       prisma,
       new AdminMutationReceiptService(prisma),
-      new AuditLogService(prisma)
+      new AuditLogService(prisma),
+      visibility,
+      new LeagueTeamLifecycleService(prisma, visibility)
     );
   });
 
@@ -41,6 +46,7 @@ describe('LeagueTeamsService', () => {
   afterEach(async () => {
     await prisma.auditLog.deleteMany({ where: { actorAdminId: { in: adminIds } } });
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: adminIds } } });
+    await prisma.financeLedgerEntry.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
     await prisma.league.updateMany({
       where: { id: { in: leagueIds } },
@@ -374,5 +380,141 @@ describe('LeagueTeamsService', () => {
     await expect(prisma.auditLog.count({
       where: { leagueId: league.id, resourceId: team.id, action: 'LEAGUE_TEAM_SHELL_VALUE_UPDATED' }
     })).resolves.toBe(1);
+  });
+
+  it('archives and restores a team without changing its identity or historical records', async () => {
+    const { user } = await createUser('退出球队用户');
+    const league = await createLeague('退出球队联赛');
+    const shell = await createShell('退出球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '退出经理',
+      teamNumber: 18,
+      catalogTeamId: shell.id
+    }, randomUUID());
+    const seasonId = league.currentSeasonId!;
+    const ledger = await prisma.financeLedgerEntry.create({
+      data: {
+        leagueId: league.id,
+        leagueTeamId: team.id,
+        seasonId,
+        direction: 'CREDIT',
+        type: 'MANUAL_ADJUSTMENT',
+        amountMinor: 300,
+        note: '退出前历史账本'
+      }
+    });
+    const archiveKey = randomUUID();
+
+    const archived = await service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version,
+      reason: '球队主动退出联赛'
+    }, archiveKey);
+    const replay = await service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version,
+      reason: '球队主动退出联赛'
+    }, archiveKey);
+    const repeatedWithAnotherKey = await service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version,
+      reason: '重复退出不应再次写入'
+    }, randomUUID());
+
+    expect(archived).toMatchObject({
+      id: team.id,
+      status: 'ARCHIVED',
+      version: team.version + 1,
+      teamNumber: 18,
+      catalogTeamId: shell.id
+    });
+    expect(replay).toEqual(archived);
+    expect(repeatedWithAnotherKey).toEqual(archived);
+    await expect(prisma.seasonEntry.count({ where: { leagueTeamId: team.id } })).resolves.toBe(1);
+    await expect(prisma.financeLedgerEntry.findUnique({ where: { id: ledger.id } })).resolves.toMatchObject({
+      amountMinor: 300,
+      note: '退出前历史账本'
+    });
+    await expect(prisma.auditLog.count({
+      where: { resourceId: team.id, action: 'league-team.archive' }
+    })).resolves.toBe(1);
+    await expect(prisma.auditLog.findFirst({
+      where: { resourceId: team.id, action: 'league-team.archive' }
+    })).resolves.toMatchObject({ reason: '球队主动退出联赛' });
+
+    const restored = await service.restore(actorId, league.id, team.id, {
+      expectedVersion: archived.version,
+      reason: '批准恢复球队'
+    }, randomUUID());
+    expect(restored).toMatchObject({
+      id: team.id,
+      status: 'ACTIVE',
+      version: archived.version + 1,
+      teamNumber: 18,
+      catalogTeamId: shell.id
+    });
+    await expect(prisma.auditLog.findFirst({
+      where: { resourceId: team.id, action: 'league-team.restore' }
+    })).resolves.toMatchObject({ reason: '批准恢复球队' });
+  });
+
+  it('rejects invalid lifecycle transitions, stale versions, and deleted parents without side effects', async () => {
+    const { user } = await createUser('状态校验用户');
+    const league = await createLeague('状态校验联赛');
+    const shell = await createShell('状态校验球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '状态经理',
+      teamNumber: 19,
+      catalogTeamId: shell.id
+    }, randomUUID());
+
+    await expect(service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version + 1,
+      reason: '错误版本'
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+
+    await prisma.leagueTeam.update({ where: { id: team.id }, data: { status: 'NEEDS_NUMBER' } });
+    await expect(service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version,
+      reason: '非法状态'
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_STATE_INVALID' } });
+
+    await prisma.leagueTeam.update({ where: { id: team.id }, data: { status: 'ACTIVE' } });
+    await prisma.league.update({ where: { id: league.id }, data: { isDeleted: true } });
+    const deletedKey = randomUUID();
+    await expect(service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version,
+      reason: '不可绕过删除联赛'
+    }, deletedKey)).rejects.toMatchObject({ status: 404 });
+    await expect(prisma.adminMutationReceipt.count({ where: { adminId: actorId, key: deletedKey } })).resolves.toBe(0);
+    await expect(prisma.auditLog.count({
+      where: { resourceId: team.id, action: { in: ['league-team.archive', 'league-team.restore'] } }
+    })).resolves.toBe(0);
+  });
+
+  it('separates active and archived admin lists while hiding archived user details', async () => {
+    const { user } = await createUser('列表筛选用户');
+    const league = await createLeague('列表筛选联赛');
+    const shell = await createShell('列表筛选球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '列表经理',
+      teamNumber: 20,
+      catalogTeamId: shell.id
+    }, randomUUID());
+    await service.archive(actorId, league.id, team.id, {
+      expectedVersion: team.version,
+      reason: '验证列表筛选'
+    }, randomUUID());
+
+    await expect(service.listForLeague(league.id)).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.listForLeague(league.id, 'ACTIVE')).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.listForLeague(league.id, 'ARCHIVED')).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: team.id, status: 'ARCHIVED' })]
+    });
+    await expect(service.getAdminDetail(team.id, league.id)).resolves.toMatchObject({
+      id: team.id,
+      status: 'ARCHIVED'
+    });
+    await expect(service.getDetail(team.id, user.id)).rejects.toMatchObject({ status: 404 });
   });
 });

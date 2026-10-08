@@ -161,12 +161,14 @@ export class MyCompetitionsService {
       homeParticipant: {
         id: record.homeParticipant.id,
         displayName: record.homeParticipant.displayNameSnapshot,
-        participantType: record.homeParticipant.participantType
+        participantType: record.homeParticipant.participantType,
+        teamLifecycleStatus: null
       },
       awayParticipant: {
         id: record.awayParticipant.id,
         displayName: record.awayParticipant.displayNameSnapshot,
-        participantType: record.awayParticipant.participantType
+        participantType: record.awayParticipant.participantType,
+        teamLifecycleStatus: null
       },
       plannedAt: record.plannedAt?.toISOString() ?? null,
       status: record.status,
