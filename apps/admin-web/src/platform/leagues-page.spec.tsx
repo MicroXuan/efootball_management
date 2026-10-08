@@ -20,6 +20,7 @@ it('loads the protected platform league collection and renders an empty state', 
   expect(await screen.findByText('暂无联赛')).toBeInTheDocument();
   expect(request).toHaveBeenCalledWith('/v1/admin/platform/leagues', expect.any(Object));
   expect(screen.getByRole('button', { name: '创建联赛' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /删除联赛/ })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('游戏平台')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('服务器区域')).not.toBeInTheDocument();
   expect(screen.getByLabelText('版本')).toBeInTheDocument();

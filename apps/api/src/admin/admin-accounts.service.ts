@@ -33,7 +33,7 @@ export class AdminAccountsService {
     const account = await this.prisma.adminAccount.findUnique({ where: { id: adminId }, select: { id: true } });
     if (!account) throw new AdminError('ADMIN_ACCOUNT_NOT_FOUND', 'Administrator was not found', 404);
     const grants = await this.prisma.adminLeagueRole.findMany({
-      where: { adminId, revokedAt: null },
+      where: { adminId, revokedAt: null, league: { isDeleted: false } },
       include: { league: true },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
     });
@@ -141,12 +141,17 @@ export class AdminAccountsService {
     });
   }
 
-  grantLeague(
+  async grantLeague(
     actorAdminId: string,
     adminId: string,
     input: CreateAdminLeagueGrantRequest,
     key: string
   ) {
+    const visibleLeague = await this.prisma.league.findFirst({
+      where: { id: input.leagueId, isDeleted: false },
+      select: { id: true }
+    });
+    if (!visibleLeague) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
     return this.receipts.execute(
       actorAdminId,
       `admin.league-grant.create:${adminId}:${input.leagueId}`,
@@ -154,7 +159,9 @@ export class AdminAccountsService {
       async (transaction) => {
         const admin = await transaction.adminAccount.findUnique({ where: { id: adminId } });
         if (!admin) throw new AdminError('ADMIN_ACCOUNT_NOT_FOUND', 'Administrator was not found', 404);
-        const league = await transaction.league.findUnique({ where: { id: input.leagueId } });
+        const league = await transaction.league.findFirst({
+          where: { id: input.leagueId, isDeleted: false }
+        });
         if (!league) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
         const grant = await transaction.adminLeagueRole.upsert({
           where: {
@@ -189,16 +196,26 @@ export class AdminAccountsService {
     );
   }
 
-  revokeLeague(
+  async revokeLeague(
     actorAdminId: string,
     adminId: string,
     grantId: string,
     expectedVersion: number,
     key: string
   ) {
+    const target = await this.prisma.adminLeagueRole.findFirst({
+      where: { id: grantId, adminId },
+      select: { league: { select: { isDeleted: true } } }
+    });
+    if (!target) {
+      throw new AdminError('ADMIN_LEAGUE_GRANT_NOT_FOUND', 'League grant was not found', 404);
+    }
+    if (target.league.isDeleted) {
+      throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
+    }
     return this.receipts.execute(actorAdminId, `admin.league-grant.revoke:${grantId}`, key, async (transaction) => {
       const existing = await transaction.adminLeagueRole.findFirst({
-        where: { id: grantId, adminId },
+        where: { id: grantId, adminId, league: { isDeleted: false } },
         include: { league: true }
       });
       if (!existing) throw new AdminError('ADMIN_LEAGUE_GRANT_NOT_FOUND', 'League grant was not found', 404);

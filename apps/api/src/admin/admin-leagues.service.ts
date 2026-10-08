@@ -16,6 +16,7 @@ export class AdminLeaguesService {
 
   async list() {
     const leagues = await this.prisma.league.findMany({
+      where: { isDeleted: false },
       include: {
         currentSeason: {
           include: { _count: { select: { entries: { where: { status: 'APPROVED' } } } } }
@@ -27,8 +28,8 @@ export class AdminLeaguesService {
   }
 
   async get(leagueId: string) {
-    const league = await this.prisma.league.findUnique({
-      where: { id: leagueId },
+    const league = await this.prisma.league.findFirst({
+      where: { id: leagueId, isDeleted: false },
       include: {
         currentSeason: {
           include: { _count: { select: { entries: { where: { status: 'APPROVED' } } } } }
@@ -68,10 +69,15 @@ export class AdminLeaguesService {
     });
   }
 
-  update(actorAdminId: string, leagueId: string, input: UpdateLeagueRequest, key: string) {
+  async update(actorAdminId: string, leagueId: string, input: UpdateLeagueRequest, key: string) {
+    const visible = await this.prisma.league.findFirst({
+      where: { id: leagueId, isDeleted: false },
+      select: { id: true }
+    });
+    if (!visible) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
     return this.receipts.execute(actorAdminId, `admin.league.update:${leagueId}`, key, async (transaction) => {
       const result = await transaction.league.updateMany({
-        where: { id: leagueId, version: input.expectedVersion },
+        where: { id: leagueId, version: input.expectedVersion, isDeleted: false },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.shortName !== undefined ? { shortName: input.shortName } : {}),
@@ -89,7 +95,10 @@ export class AdminLeaguesService {
         }
       });
       if (result.count !== 1) throw new AdminError('VERSION_CONFLICT', 'League has changed', 409);
-      const league = await transaction.league.findUniqueOrThrow({ where: { id: leagueId } });
+      const league = await transaction.league.findFirst({
+        where: { id: leagueId, isDeleted: false }
+      });
+      if (!league) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
       await this.audit.record(transaction, {
         actorAdminId,
         leagueId,

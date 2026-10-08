@@ -19,6 +19,13 @@ export class AdminAuthorizationService {
   }
 
   async requireLeagueManager(adminId: string, leagueId: string) {
+    const league = await this.prisma.league.findFirst({
+      where: { id: leagueId, isDeleted: false },
+      select: { id: true }
+    });
+    if (!league) {
+      throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
+    }
     const admin = await this.prisma.adminAccount.findUnique({
       where: { id: adminId },
       include: {

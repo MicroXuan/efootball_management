@@ -76,18 +76,21 @@ export class LeaguesService {
     });
   }
 
-  update(
+  async update(
     actorId: string,
     leagueId: string,
     input: UpdateLeagueRequest,
     key: string
   ): Promise<LeagueDetail> {
+    await this.requireVisible(leagueId);
     return this.receipts.execute(actorId, `league.update:${leagueId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-      const existing = await transaction.league.findUnique({ where: { id: leagueId } });
+      const existing = await transaction.league.findFirst({
+        where: { id: leagueId, isDeleted: false }
+      });
       if (!existing) throw this.notFound();
       const updated = await transaction.league.updateMany({
-        where: { id: leagueId, version: input.expectedVersion },
+        where: { id: leagueId, version: input.expectedVersion, isDeleted: false },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.shortName !== undefined ? { shortName: input.shortName } : {}),
@@ -159,8 +162,8 @@ export class LeaguesService {
     client: LeagueTransaction | PrismaService,
     leagueId: string
   ): Promise<LeagueRecord> {
-    const record = await client.league.findUnique({
-      where: { id: leagueId },
+    const record = await client.league.findFirst({
+      where: { id: leagueId, isDeleted: false },
       include: LEAGUE_INCLUDE
     });
     if (!record) throw this.notFound();
@@ -219,6 +222,14 @@ export class LeaguesService {
 
   private notFound(): LeagueError {
     return new LeagueError('LEAGUE_NOT_FOUND', 'League was not found', 404);
+  }
+
+  private async requireVisible(leagueId: string): Promise<void> {
+    const league = await this.prisma.league.findFirst({
+      where: { id: leagueId, isDeleted: false },
+      select: { id: true }
+    });
+    if (!league) throw this.notFound();
   }
 
   private legacyRegion(edition: 'NATIONAL' | 'INTERNATIONAL'): string {
