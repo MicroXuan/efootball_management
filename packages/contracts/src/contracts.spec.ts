@@ -98,7 +98,8 @@ import {
   UpdateRosterLifecycleRequestSchema,
   UpdateTeamProfileRequestSchema,
   WechatLoginRequestSchema,
-  StartPlatformSyncRequestSchema
+  StartPlatformSyncRequestSchema,
+  derivePesdataPositionAutoBuild
 } from './index.js';
 import {
   AuditLogSchema,
@@ -114,6 +115,31 @@ import {
 } from './index.js';
 
 describe('platform data sync contracts', () => {
+  it('derives the salary ability from the PESDATA automatic build total', () => {
+    assert.deepEqual(derivePesdataPositionAutoBuild({
+      position: 'DMF',
+      overallRating: 80,
+      maxLevel: 80,
+      cardType: 'HIGHLIGHT'
+    }), {
+      allocation: {
+        dribbling: 4,
+        dexterity: 4,
+        shooting: 0,
+        lowerBodyStrength: 8,
+        passing: 8,
+        aerialStrength: 6,
+        defending: 16,
+        goalkeeping1: 0,
+        goalkeeping2: 0,
+        goalkeeping3: 0
+      },
+      maxOverall: 95,
+      dtRating: 95,
+      algorithmVersion: 'pesdata-position-auto-v1'
+    });
+  });
+
   it('accepts supported sync modes and bounded pagination', () => {
     assert.equal(StartPlatformSyncRequestSchema.parse({ mode: 'sample', limit: 2 }).mode, 'sample');
     assert.throws(() => PlatformPageRequestSchema.parse({ page: 1, pageSize: 100 }));

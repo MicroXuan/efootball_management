@@ -20,6 +20,7 @@ export const PesdataPlayerDetailSchema = PesdataPlayerSummarySchema.extend({
   skillList: z.unknown().optional(),
   Skills: z.unknown().optional(),
   PositionHot: z.unknown().optional(),
+  maxLevel: z.union([z.string(), z.number()]).nullish(),
   autoBuildAllocation: z.record(z.string(), z.coerce.number().int().nonnegative()).nullish(),
   autoBuildMaxOverall: z.coerce.number().int().nullish(),
   dtRating: z.coerce.number().int().nullish(),

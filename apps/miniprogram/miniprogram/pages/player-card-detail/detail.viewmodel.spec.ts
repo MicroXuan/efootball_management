@@ -209,7 +209,7 @@ describe('player card detail view model', () => {
     expect(view.autoBuild).toEqual({
       available: true,
       maxOverall: 95,
-      dtRating: null,
+      dtRating: 95,
       unavailableReason: '',
       allocationRows: [
         { key: 'passing', label: '传球', points: 4 },

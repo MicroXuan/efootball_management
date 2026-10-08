@@ -26,6 +26,7 @@ import { SalaryRulesService } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 
 const MAX_ROSTER_SIZE = 25;
 type AppliedTransactionFee = {
@@ -45,7 +46,8 @@ export class RosterTransactionsService {
     @Inject(TransferWindowsService) private readonly transferWindows: TransferWindowsService,
     @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
     @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService,
-    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService
+    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
   ) {}
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
@@ -66,11 +68,7 @@ export class RosterTransactionsService {
           );
           await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'BUY', at);
 
-          const build = await tx.playerCardAutoBuild.findFirst({
-            where: { playerCardId: input.playerCardId },
-            orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
-            include: { playerCard: true }
-          });
+          const build = await this.playerBuilds.resolveOrDeriveWithClient(tx, input.playerCardId);
           if (!build) {
             throw new LeagueRosterError(
               'PLAYER_AUTO_BUILD_MISSING',
@@ -832,11 +830,7 @@ export class RosterTransactionsService {
   }
 
   private async loadBuild(client: Prisma.TransactionClient, playerCardId: string) {
-    const build = await client.playerCardAutoBuild.findFirst({
-      where: { playerCardId },
-      orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
-      include: { playerCard: true }
-    });
+    const build = await this.playerBuilds.resolveOrDeriveWithClient(client, playerCardId);
     if (!build) {
       throw new LeagueRosterError(
         'PLAYER_AUTO_BUILD_MISSING',

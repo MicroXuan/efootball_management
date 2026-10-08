@@ -56,6 +56,8 @@ describe('acquire player drawer', () => {
     expect(screen.getByRole('img', { name: '博努奇 Epic 球员卡' })).toHaveAttribute('src', 'https://media.example.com/bonucci.webp');
     expect(screen.getByText('找到 1 名球员 · 2 张球员卡')).toBeInTheDocument();
     expect(screen.getAllByText('中后卫')).toHaveLength(2);
+    expect(screen.getAllByText('自动加点总评')).toHaveLength(2);
+    expect(screen.queryByText('DT 能力')).not.toBeInTheDocument();
     expect(screen.getByText('购买后工资').parentElement).toHaveTextContent('1,100 / 2,000');
     await userEvent.click(screen.getByText('Highlight'));
     expect(screen.getByLabelText('Highlight')).toBeChecked();
@@ -63,12 +65,12 @@ describe('acquire player drawer', () => {
     expect(screen.getByText('购买后工资').parentElement).toHaveTextContent('900 / 2,000');
   });
 
-  it('blocks a card without a DT rating', async () => {
+  it('explains when an automatic build total is unavailable', async () => {
     const request = vi.fn().mockResolvedValue({ items: [{ ...candidate, recommendedPlayerCardId: otherCardId, cards: [{ ...candidate.cards[1], id: otherCardId, dtRating: null, recommended: true }] }] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
     await userEvent.click(screen.getByRole('button', { name: '搜索' }));
-    expect(await screen.findByText('缺少 DT 能力值，不能加入阵容')).toBeInTheDocument();
+    expect(await screen.findByText('缺少自动加点总评，不能加入阵容')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
   });
 

@@ -43,7 +43,8 @@ describe('RosterTransactionsService', () => {
     windows,
     new RosterLockRepository(),
     transactionFees,
-    valuationSnapshots
+    valuationSnapshots,
+    new PlayerBuildsService(prisma)
   );
   const recalculation = new SalaryRecalculationService(
     prisma,
@@ -290,7 +291,8 @@ describe('RosterTransactionsService', () => {
       windows,
       new RosterLockRepository(),
       transactionFees,
-      realSnapshots
+      realSnapshots,
+      new PlayerBuildsService(prisma)
     );
 
     let releaseWindowLock: () => void = () => undefined;
@@ -437,14 +439,14 @@ describe('RosterTransactionsService', () => {
     )).rejects.toMatchObject({ code: 'LEAGUE_PLAYER_ALREADY_OWNED' });
   });
 
-  it('rejects missing DT, a closed window, and a salary above the cap', async () => {
+  it('uses the automatic build total when legacy DT is missing, and rejects window or cap violations', async () => {
     const missing = await fixture();
     const noDt = await card(missing.source.id, 'Missing DT', null);
     await expect(service.acquire(
       acquisition(missing.season.id, missing.teams[0]!.id, noDt.card.id),
       missing.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
-    )).rejects.toMatchObject({ code: 'PLAYER_DT_RATING_MISSING' });
+    )).resolves.toMatchObject({ ownership: { dtRating: 93, salaryMinor: 200 } });
 
     const closed = await fixture({ openWindow: false });
     const closedCard = await card(closed.source.id, 'Closed');
@@ -483,6 +485,39 @@ describe('RosterTransactionsService', () => {
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
     )).rejects.toMatchObject({ code: 'PLAYER_AUTO_BUILD_MISSING' });
+  });
+
+  it('backfills and uses the automatic build total when acquiring a legacy PESDATA card', async () => {
+    const f = await fixture();
+    const player = await prisma.footballPlayer.create({ data: { nameEn: 'Guido Rodriguez' } });
+    const playerCard = await prisma.playerCard.create({
+      data: {
+        sourceId: f.source.id,
+        externalId: `legacy-build-${randomUUID()}`,
+        playerId: player.id,
+        cardName: 'Spanish League Selection Midfielders',
+        position: 'DMF',
+        overallRating: 80,
+        cardType: 'HIGHLIGHT',
+        attributes: {
+          create: { attributesJson: { sourceMetadata: { maxLevel: 80 } } }
+        }
+      }
+    });
+
+    const result = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, playerCard.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+
+    expect(result.ownership).toMatchObject({
+      currentPlayerCardId: playerCard.id,
+      dtRating: 95,
+      salaryMinor: 400
+    });
+    await expect(prisma.playerCardAutoBuild.findFirst({ where: { playerCardId: playerCard.id } }))
+      .resolves.toMatchObject({ maxOverall: 95, dtRating: 95 });
   });
 
   it.each([
@@ -584,7 +619,8 @@ describe('RosterTransactionsService', () => {
       windows,
       new RosterLockRepository(),
       transactionFees,
-      valuationSnapshots
+      valuationSnapshots,
+      new PlayerBuildsService(prisma)
     );
 
     await expect(rollbackService.acquire(

@@ -50,7 +50,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   const purchaseBlockReason = useMemo(() => {
     if (!selected) return '请先选择一张球员卡';
     if (selectedPlayer?.ownedByTeamId) return '该球员在本联赛已归属其他球队';
-    if (selected.dtRating === null) return '缺少 DT 能力值，不能加入阵容';
+    if (selected.dtRating === null) return '缺少自动加点总评，不能加入阵容';
     if (selected.salaryMinor === null) return '未找到适用的工资规则';
     if (summary.rosterCount >= 25) return '阵容已满 25 人，请先移出球员';
     if (projectedSalary !== null && projectedSalary > summary.salaryCapMinor) return '购买后将超过球队工资帽';
@@ -98,7 +98,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   };
 
   const blockDescription = selected?.dtRating === null
-    ? '这张卡还没有完成自动加点和 DT 计算，请选择其他卡片，或先完成球员卡数据同步。'
+    ? '系统暂时无法根据成长等级计算这张卡的自动加点总评，请选择其他卡片，或先完成球员卡数据同步。'
     : undefined;
 
   return <Drawer
@@ -163,8 +163,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
                 <dl className="candidate-card__stats">
                   <div><dt>位置</dt><dd>{positionLabels[card.position as PlayerPosition] ?? card.position}</dd></div>
                   <div><dt>初始能力</dt><dd>{card.overallRating}</dd></div>
-                  <div><dt>满级能力</dt><dd>{card.maxOverall ?? '未计算'}</dd></div>
-                  <div><dt>DT 能力</dt><dd>{card.dtRating ?? '未计算'}</dd></div>
+                  <div><dt>自动加点总评</dt><dd>{card.maxOverall ?? '未计算'}</dd></div>
                   <div><dt>球员工资</dt><dd>{card.salaryMinor === null ? '未配置' : money.format(card.salaryMinor)}</dd></div>
                 </dl>
               </div>

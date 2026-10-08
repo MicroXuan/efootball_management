@@ -11,6 +11,7 @@ export * from './league-team.js';
 export * from './team-catalog.js';
 export * from './player-valuation.js';
 export * from './player-catalog.js';
+export * from './player-auto-build.js';
 export * from './player-import.js';
 export * from './platform-data-sync.js';
 export * from './platform-presentation.js';

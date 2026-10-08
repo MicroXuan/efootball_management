@@ -84,6 +84,30 @@ describe('PlayerBuildsService', () => {
       .resolves.toMatchObject({ maxOverall: 99, dtRating: 98 });
   });
 
+  it('backfills a legacy PESDATA card from its progression level on first use', async () => {
+    const card = await createCard('legacy-dmf-80', '2026-10-01');
+    await prisma.playerCard.update({
+      where: { id: card.id },
+      data: { position: 'DMF', overallRating: 80, cardType: 'HIGHLIGHT' }
+    });
+    await prisma.playerCardAttribute.create({
+      data: {
+        playerCardId: card.id,
+        attributesJson: { sourceMetadata: { maxLevel: 80 } }
+      }
+    });
+
+    const build = await service.resolveOrDeriveWithClient(prisma, card.id);
+
+    expect(build).toMatchObject({
+      maxOverall: 95,
+      dtRating: 95,
+      algorithmVersion: 'pesdata-position-auto-v1'
+    });
+    await expect(prisma.playerCardAutoBuild.count({ where: { playerCardId: card.id } }))
+      .resolves.toBe(1);
+  });
+
   it('refreshes the recommendation deterministically while preserving every card', async () => {
     const first = await createCard('bonucci-z', '2026-09-24');
     const second = await createCard('bonucci-a', '2026-09-24');

@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import type { PlayerCardType, PlayerPosition } from '@efm/contracts';
+import {
+  derivePesdataPositionAutoBuild,
+  type PlayerCardType,
+  type PlayerPosition
+} from '@efm/contracts';
 import type { RawImportRow } from '../player-import/import-adapter.js';
 import { normalizeImportRow } from '../player-import/record-normalizer.js';
 import type { PesdataPlayerDetail } from './pesdata.schemas.js';
@@ -177,6 +181,18 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     Object.entries(attributes).filter(([, value]) => value !== undefined)
   );
   const algorithmVersion = text(detail.algorithmVersion);
+  const cardType = mapPesdataCardType(detail.cardType);
+  const derivedBuild = detail.autoBuildAllocation == null
+    && detail.autoBuildMaxOverall == null
+    && detail.dtRating == null
+    && !algorithmVersion
+    ? derivePesdataPositionAutoBuild({
+      position: sourcePosition as PlayerPosition,
+      overallRating,
+      maxLevel: detail.maxLevel,
+      cardType
+    })
+    : null;
 
   const row: RawImportRow = {
     externalId,
@@ -188,7 +204,7 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     cardName: packName,
     position: sourcePosition,
     overallRating,
-    cardType: mapPesdataCardType(detail.cardType),
+    cardType,
     playStyle: text(detail.CardStyle_cn) ?? text(detail.CardStyle_en) ?? text(detail.CardStyle),
     status: String(detail.is_del ?? '0') === '1' ? 'INACTIVE' : 'ACTIVE',
     ...(imageUrl ? { imageUrl } : {}),
@@ -198,14 +214,18 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     ...(updatedAt ? { sourceUpdatedAt: updatedAt } : {}),
     skills: skillNames(detail),
     attributes: cleanAttributes,
-    ...(detail.autoBuildAllocation != null
-      ? { autoBuildAllocation: detail.autoBuildAllocation }
+    ...(detail.autoBuildAllocation != null || derivedBuild
+      ? { autoBuildAllocation: detail.autoBuildAllocation ?? derivedBuild!.allocation }
       : {}),
-    ...(detail.autoBuildMaxOverall != null
-      ? { autoBuildMaxOverall: detail.autoBuildMaxOverall }
+    ...(detail.autoBuildMaxOverall != null || derivedBuild
+      ? { autoBuildMaxOverall: detail.autoBuildMaxOverall ?? derivedBuild!.maxOverall }
       : {}),
-    ...(detail.dtRating != null ? { dtRating: detail.dtRating } : {}),
-    ...(algorithmVersion ? { algorithmVersion } : {})
+    ...(detail.dtRating != null || derivedBuild
+      ? { dtRating: detail.dtRating ?? derivedBuild!.dtRating }
+      : {}),
+    ...(algorithmVersion || derivedBuild
+      ? { algorithmVersion: algorithmVersion ?? derivedBuild!.algorithmVersion }
+      : {})
   };
 
   try {
