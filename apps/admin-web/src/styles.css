@@ -158,7 +158,13 @@ select { font: inherit; }
 .team-shell-option__copy strong { overflow: hidden; color: var(--admin-text); text-overflow: ellipsis; white-space: nowrap; }
 .team-shell-option__copy span { overflow: hidden; color: var(--admin-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .team-shell-option__action { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; }
-.team-shell-actions { margin: 0 0 24px; padding: 18px; border: 1px solid var(--admin-border); border-radius: 14px; background: #f7f9f6; }
+.team-shell-actions { margin: 0; }
+.team-detail-page { width: min(100%, 1040px); display: grid; gap: 18px; }
+.team-detail-breadcrumb { color: var(--admin-text-secondary); font-size: 14px; }
+.detail-card.team-detail-card { max-width: none; }
+.team-detail-card .ant-card-head-title h2 { margin: 0; font-size: 18px; }
+.team-detail-roster-card p,
+.team-detail-section-copy { margin: 0; color: var(--admin-text-secondary); }
 .shell-operation-summary { margin: 16px 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px 14px; }
 .shell-operation-summary strong { color: var(--admin-text-secondary); }
 .ant-card .ant-table-container { overflow: hidden; border: 1px solid #e5eaed; border-radius: 10px; }

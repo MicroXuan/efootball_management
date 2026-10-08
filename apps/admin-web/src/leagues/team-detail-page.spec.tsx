@@ -17,22 +17,59 @@ const detail = (name: string, version: number) => ({
   createdAt: '2026-09-29T00:00:00.000Z', updatedAt: '2026-09-29T00:00:00.000Z'
 });
 
+function renderPage(request: ReturnType<typeof vi.fn>) {
+  const api: AdminApi = {
+    restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request
+  };
+  return render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/teams/${teamId}`]}><Routes>
+    <Route path="/leagues/:leagueId/teams/:teamId" element={<TeamDetailPage api={api} />} />
+  </Routes></MemoryRouter>);
+}
+
+it('separates overview, roster, settings, and shell management without an archive control', async () => {
+  const request = vi.fn().mockResolvedValue(detail('巴塞罗那', 1));
+  renderPage(request);
+
+  expect(await screen.findByRole('heading', { name: '球队概览' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '阵容管理' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '球队设置' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '队壳管理' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '管理阵容' })).toHaveAttribute(
+    'href',
+    `/leagues/${leagueId}/teams/${teamId}/roster`
+  );
+  expect(screen.queryByLabelText('球队状态')).not.toBeInTheDocument();
+  expect(screen.queryByText('归档')).not.toBeInTheDocument();
+});
+
+it('saves team settings without changing the team lifecycle status', async () => {
+  const request = vi.fn()
+    .mockResolvedValueOnce(detail('巴塞罗那', 1))
+    .mockResolvedValueOnce({ ...detail('巴塞罗那', 2), ownerAlias: '新称呼' });
+  renderPage(request);
+
+  const alias = await screen.findByLabelText('联赛称呼');
+  await userEvent.clear(alias);
+  await userEvent.type(alias, '新称呼');
+  await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+
+  expect(request).toHaveBeenNthCalledWith(2, `/v1/admin/leagues/${leagueId}/teams/${teamId}`, expect.objectContaining({
+    method: 'PATCH',
+    body: { teamNumber: 0, ownerAlias: '新称呼', shellValueMinor: 25000, expectedVersion: 1 }
+  }));
+});
+
 it('refreshes current data after an optimistic-version conflict', async () => {
   const request = vi.fn()
     .mockResolvedValueOnce(detail('旧名称', 1))
     .mockRejectedValueOnce(new ApiError({ status: 409, code: 'VERSION_CONFLICT' }))
     .mockResolvedValueOnce(detail('其他管理员的新名称', 2));
-  const api: AdminApi = {
-    restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request
-  };
-  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/teams/${teamId}`]}><Routes>
-    <Route path="/leagues/:leagueId/teams/:teamId" element={<TeamDetailPage api={api} />} />
-  </Routes></MemoryRouter>);
+  renderPage(request);
 
   const alias = await screen.findByLabelText('联赛称呼');
   await userEvent.clear(alias);
   await userEvent.type(alias, '我的新称呼');
-  await userEvent.click(screen.getByRole('button', { name: '保存球队' }));
+  await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent('数据已被其他管理员更新');
   await waitFor(() => expect(screen.getByLabelText('联赛称呼')).toHaveValue('tidus'));
