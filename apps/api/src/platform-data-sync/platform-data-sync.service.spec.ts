@@ -4,6 +4,7 @@ import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { TeamCatalogService } from '../team-catalog/team-catalog.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
 import { PlatformDataSyncService } from './platform-data-sync.service.js';
 
@@ -118,7 +119,7 @@ describe('PlatformDataSyncService queries', () => {
   function service() {
     const imports = new PlayerImportService(prisma, userAuthorization as never, adminAuthorization as never);
     const audit = new AuditLogService(prisma);
-    const catalog = new TeamCatalogService(prisma, audit);
+    const catalog = new TeamCatalogService(prisma, audit, new LeagueVisibilityService(prisma));
     return new PlatformDataSyncService(
       prisma,
       adminAuthorization as never,

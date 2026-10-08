@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { TeamCatalogService } from './team-catalog.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -38,7 +39,11 @@ describe('TeamCatalogService', () => {
     const team = await prisma.leagueTeam.create({
       data: { leagueId: firstLeague.id, ownerUserId: owner.id, ownerAlias: 'tidus', catalogTeamId: ajax.id, teamNumber: 3, name: '阿贾克斯', shortName: '阿贾克斯', logoUrl: ajax.storedLogoUrl }
     });
-    const service = new TeamCatalogService(prisma, new AuditLogService(prisma));
+    const service = new TeamCatalogService(
+      prisma,
+      new AuditLogService(prisma),
+      new LeagueVisibilityService(prisma)
+    );
 
     try {
       const ajaxSearch = await service.listAvailable(firstLeague.id, { keyword: 'ajax' });
@@ -57,6 +62,10 @@ describe('TeamCatalogService', () => {
       await expect(service.listAvailable(firstLeague.id, { keyword: '停用', includeDisabled: true })).resolves.toMatchObject({
         items: [{ id: disabled.id, status: 'DISABLED' }]
       });
+
+      await prisma.league.update({ where: { id: firstLeague.id }, data: { isDeleted: true } });
+      await expect(service.listAvailable(firstLeague.id)).rejects.toMatchObject({ status: 404 });
+      await prisma.league.update({ where: { id: firstLeague.id }, data: { isDeleted: false } });
 
       const custom = await service.createCustom(admin.id, {
         nameZh: '自定义球队',
@@ -100,7 +109,11 @@ describe('TeamCatalogService', () => {
         changeType: 'ADDED', candidateJson: { ...candidate, sourceExternalId: `reject-${suffix}` }
       } })
     ]);
-    const service = new TeamCatalogService(prisma, new AuditLogService(prisma));
+    const service = new TeamCatalogService(
+      prisma,
+      new AuditLogService(prisma),
+      new LeagueVisibilityService(prisma)
+    );
 
     try {
       await service.publishSyncItem(admin.id, publishItem.id);

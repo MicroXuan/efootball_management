@@ -25,7 +25,8 @@ describe('AuditLogService', () => {
         findMany: jest.fn(async () => [{ id: 'season-2', displayName: 'S2' }])
       }
     };
-    const service = new AuditLogService(prisma as never);
+    const visibility = { requireVisible: jest.fn(async () => 'league-1') };
+    const service = new AuditLogService(prisma as never, visibility as never);
 
     await expect(service.list()).resolves.toEqual([expect.objectContaining({
       actorDisplayName: '小宣',
@@ -34,11 +35,33 @@ describe('AuditLogService', () => {
       metadata
     })]);
     expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: [
+          { leagueId: null },
+          { league: { isDeleted: false } }
+        ]
+      },
       include: {
         actorAdmin: { select: { displayName: true } },
         actorUser: { select: { displayName: true } },
         league: { select: { name: true } }
       }
+    }));
+  });
+
+  it('checks a requested league before listing its audit records', async () => {
+    const prisma = {
+      auditLog: { findMany: jest.fn(async () => []) },
+      leagueSeason: { findMany: jest.fn(async () => []) }
+    };
+    const visibility = { requireVisible: jest.fn(async () => 'league-1') };
+    const service = new AuditLogService(prisma as never, visibility as never);
+
+    await expect(service.list('league-1')).resolves.toEqual([]);
+
+    expect(visibility.requireVisible).toHaveBeenCalledWith({ type: 'LEAGUE', id: 'league-1' });
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId: 'league-1', league: { isDeleted: false } }
     }));
   });
 });

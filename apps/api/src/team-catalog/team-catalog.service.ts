@@ -14,6 +14,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import type { TeamCatalogItem as TeamCatalogRecord } from '../generated/prisma/client.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 export type TeamCatalogListQuery = {
   keyword?: string;
@@ -34,10 +35,12 @@ const sourceLeagueAliases: Readonly<Record<string, readonly string[]>> = {
 export class TeamCatalogService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Inject(LeagueVisibilityService) private readonly visibility: LeagueVisibilityService
   ) {}
 
   async listAvailable(leagueId: string, query: TeamCatalogListQuery = {}): Promise<TeamCatalogListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const keyword = query.keyword?.trim();
     const sourceLeagueName = query.sourceLeagueName?.trim();
     const sourceLeagueTerms = sourceLeagueName
