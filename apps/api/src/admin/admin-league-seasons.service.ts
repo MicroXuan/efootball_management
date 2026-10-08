@@ -31,7 +31,7 @@ export class AdminLeagueSeasonsService {
   async list(actorAdminId: string, leagueId: string) {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     const seasons = await this.prisma.leagueSeason.findMany({
-      where: { leagueId },
+      where: { leagueId, league: { isDeleted: false } },
       include: SEASON_INCLUDE,
       orderBy: [{ seasonNumber: 'desc' }, { id: 'asc' }]
     });
@@ -51,7 +51,9 @@ export class AdminLeagueSeasonsService {
       key,
       async (transaction) => {
         await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-        const league = await transaction.league.findUnique({ where: { id: leagueId } });
+        const league = await transaction.league.findFirst({
+          where: { id: leagueId, isDeleted: false }
+        });
         if (!league) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
         const previous = await transaction.leagueSeason.findFirst({
           where: { leagueId },
@@ -157,8 +159,10 @@ export class AdminLeagueSeasonsService {
       async (transaction) => {
         await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
         const [league, season] = await Promise.all([
-          transaction.league.findUnique({ where: { id: leagueId } }),
-          transaction.leagueSeason.findUnique({ where: { id: seasonId } })
+          transaction.league.findFirst({ where: { id: leagueId, isDeleted: false } }),
+          transaction.leagueSeason.findFirst({
+            where: { id: seasonId, league: { isDeleted: false } }
+          })
         ]);
         if (!league) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
         if (!season || season.leagueId !== leagueId) {
@@ -197,7 +201,9 @@ export class AdminLeagueSeasonsService {
       key,
       async (transaction) => {
         const season = await this.seasonInLeague(transaction, leagueId, seasonId);
-        const league = await transaction.league.findUnique({ where: { id: leagueId } });
+        const league = await transaction.league.findFirst({
+          where: { id: leagueId, isDeleted: false }
+        });
         if (!league) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
         const teams = await transaction.leagueTeam.findMany({
           where: { id: { in: input.leagueTeamIds }, leagueId, status: 'ACTIVE' }
@@ -271,7 +277,9 @@ export class AdminLeagueSeasonsService {
     leagueId: string,
     seasonId: string
   ): Promise<LeagueSeason> {
-    const season = await transaction.leagueSeason.findUnique({ where: { id: seasonId } });
+    const season = await transaction.leagueSeason.findFirst({
+      where: { id: seasonId, league: { isDeleted: false } }
+    });
     if (!season || season.leagueId !== leagueId) {
       throw new AdminError('SEASON_NOT_IN_LEAGUE', 'Season does not belong to this league', 409);
     }
@@ -279,8 +287,8 @@ export class AdminLeagueSeasonsService {
   }
 
   private async getRecord(transaction: Prisma.TransactionClient, seasonId: string) {
-    const season = await transaction.leagueSeason.findUnique({
-      where: { id: seasonId },
+    const season = await transaction.leagueSeason.findFirst({
+      where: { id: seasonId, league: { isDeleted: false } },
       include: SEASON_INCLUDE
     });
     if (!season) throw new AdminError('SEASON_NOT_FOUND', 'Season was not found', 404);

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   CreateValuationWindowRequestSchema,
   UpdateValuationWindowRequestSchema,
@@ -12,6 +12,7 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma, type ValuationWindowRuleVersion } from '../generated/prisma/client.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 type WindowWithRule = {
   id: string;
@@ -30,12 +31,17 @@ type WindowWithRule = {
 
 @Injectable()
 export class ValuationWindowsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService
-  ) {}
+    @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async create(
     adminId: string,
@@ -45,6 +51,7 @@ export class ValuationWindowsService {
     at = new Date()
   ) {
     const input = CreateValuationWindowRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const season = await this.prisma.leagueSeason.findUniqueOrThrow({ where: { id: seasonId } });
     await this.authorization.requireLeagueManager(adminId, season.leagueId);
 
@@ -105,6 +112,7 @@ export class ValuationWindowsService {
     at = new Date()
   ) {
     const input = UpdateValuationWindowRequestSchema.parse(raw);
+    await this.requireVisibleWindow(windowId);
     const current = await this.prisma.valuationWindow.findUniqueOrThrow({
       where: { id: windowId },
       include: { season: true, currentRuleVersion: true }
@@ -184,6 +192,7 @@ export class ValuationWindowsService {
   }
 
   async listForSeason(adminId: string, seasonId: string, at = new Date()) {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const season = await this.prisma.leagueSeason.findUniqueOrThrow({ where: { id: seasonId } });
     await this.authorization.requireLeagueManager(adminId, season.leagueId);
     const windows = await this.prisma.valuationWindow.findMany({
@@ -195,6 +204,7 @@ export class ValuationWindowsService {
   }
 
   async getEffectiveRule(windowId: string, at = new Date()) {
+    await this.requireVisibleWindow(windowId);
     const window = await this.prisma.valuationWindow.findUniqueOrThrow({
       where: { id: windowId },
       include: { currentRuleVersion: true, season: true }
@@ -230,6 +240,10 @@ export class ValuationWindowsService {
       createdAt: window.createdAt.toISOString(),
       updatedAt: window.updatedAt.toISOString()
     };
+  }
+
+  private async requireVisibleWindow(windowId: string) {
+    return this.visibility.requireVisible({ type: 'VALUATION_WINDOW', id: windowId });
   }
 
   private state(window: Pick<WindowWithRule, 'startsAt' | 'endsAt' | 'closedAt'>, at: Date): ValuationWindowState {

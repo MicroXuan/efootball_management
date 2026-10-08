@@ -43,7 +43,9 @@ describe('AdminRosterQueriesService candidate filters', () => {
         }
       }
     };
-    const service = new AdminRosterQueriesService(prisma as never);
+    const service = new AdminRosterQueriesService(prisma as never, {
+      requireVisible: async () => leagueId
+    } as never);
 
     const result = await service.candidates(leagueId, {
       keyword: '梅西', position: 'AMF', cardType: 'EPIC', cardPackId: packId
@@ -77,7 +79,9 @@ describe('AdminRosterQueriesService candidate filters', () => {
         }]
       }
     };
-    const service = new AdminRosterQueriesService(prisma as never);
+    const service = new AdminRosterQueriesService(prisma as never, {
+      requireVisible: async () => leagueId
+    } as never);
 
     const result = await service.candidates(leagueId, { keyword: '罗德里格斯' });
 

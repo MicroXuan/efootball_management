@@ -11,6 +11,8 @@ export type LeagueOwnedResource =
   | { type: 'STAGE'; id: string }
   | { type: 'MATCH'; id: string }
   | { type: 'TRANSFER_WINDOW'; id: string }
+  | { type: 'VALUATION_WINDOW'; id: string }
+  | { type: 'VALUATION_SUBMISSION'; id: string }
   | { type: 'OWNERSHIP'; id: string };
 
 type DatabaseClient = PrismaService | Prisma.TransactionClient;
@@ -98,6 +100,22 @@ export class LeagueVisibilityService {
         });
         if (!window) throw this.notFound();
         return window.season.leagueId;
+      }
+      case 'VALUATION_WINDOW': {
+        const window = await client.valuationWindow.findFirst({
+          where: { id: resource.id, season: { league: { isDeleted: false } } },
+          select: { season: { select: { leagueId: true } } }
+        });
+        if (!window) throw this.notFound();
+        return window.season.leagueId;
+      }
+      case 'VALUATION_SUBMISSION': {
+        const submission = await client.valuationSubmission.findFirst({
+          where: { id: resource.id, window: { season: { league: { isDeleted: false } } } },
+          select: { window: { select: { season: { select: { leagueId: true } } } } }
+        });
+        if (!submission) throw this.notFound();
+        return submission.window.season.leagueId;
       }
       case 'OWNERSHIP': {
         const ownership = await client.leaguePlayerOwnership.findFirst({

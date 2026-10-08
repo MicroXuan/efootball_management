@@ -176,6 +176,31 @@ describe('SeasonsService', () => {
     ]);
   });
 
+  it('hides deleted-league seasons and rejects writes before creating a receipt', async () => {
+    const league = await createLeague('逻辑删除赛季联赛');
+    const season = await service.create(actorId, league.id, seasonInput(1), randomUUID());
+    await prisma.league.update({ where: { id: league.id }, data: { isDeleted: true } });
+    const key = randomUUID();
+    const expected = {
+      status: 404,
+      response: { code: 'LEAGUE_NOT_FOUND', message: 'League was not found' }
+    };
+
+    await expect(service.listManaged(league.id)).rejects.toMatchObject(expected);
+    await expect(service.getManaged(season.id)).rejects.toMatchObject(expected);
+    await expect(service.update(actorId, season.id, {
+      displayName: '不应写入',
+      expectedVersion: season.version
+    }, key)).rejects.toMatchObject(expected);
+    await expect(prisma.mutationReceipt.count({
+      where: { actorId, operation: `season.update:${season.id}`, key }
+    })).resolves.toBe(0);
+    await expect(prisma.leagueSeason.findUniqueOrThrow({ where: { id: season.id } })).resolves.toMatchObject({
+      displayName: season.displayName,
+      version: season.version
+    });
+  });
+
   it('updates a draft timeline, allows renaming after opening, and keeps other fields locked', async () => {
     const league = await createLeague('编辑联赛');
     const season = await service.create(actorId, league.id, seasonInput(1), randomUUID());

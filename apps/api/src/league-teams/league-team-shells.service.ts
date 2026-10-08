@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ChangeTeamShellRequest,
   RefreshTeamShellRequest,
@@ -10,25 +10,32 @@ import type { LeagueTeam, TeamCatalogItem } from '../generated/prisma/client.js'
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
 
 type ShellResult = { updatedTeamIds: string[] };
 
 @Injectable()
 export class LeagueTeamShellsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  changeShell(
+  async changeShell(
     actorAdminId: string,
     leagueId: string,
     teamId: string,
     input: ChangeTeamShellRequest,
     key: string
   ): Promise<ShellResult> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.change-shell:${teamId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       const team = await this.team(tx, leagueId, teamId, input.expectedVersion);
@@ -45,13 +52,14 @@ export class LeagueTeamShellsService {
     }, input);
   }
 
-  refreshShell(
+  async refreshShell(
     actorAdminId: string,
     leagueId: string,
     teamId: string,
     input: RefreshTeamShellRequest,
     key: string
   ): Promise<ShellResult> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.refresh-shell:${teamId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       const team = await this.team(tx, leagueId, teamId, input.expectedVersion);
@@ -68,13 +76,14 @@ export class LeagueTeamShellsService {
     }, input);
   }
 
-  transferShell(
+  async transferShell(
     actorAdminId: string,
     leagueId: string,
     sourceTeamId: string,
     input: TransferTeamShellRequest,
     key: string
   ): Promise<ShellResult> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.transfer-shell:${sourceTeamId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       if (sourceTeamId === input.targetTeamId) {
@@ -103,12 +112,13 @@ export class LeagueTeamShellsService {
     }, input);
   }
 
-  swapShells(
+  async swapShells(
     actorAdminId: string,
     leagueId: string,
     input: SwapTeamShellRequest,
     key: string
   ): Promise<ShellResult> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.swap-shells:${leagueId}`, key, async (tx) => {
       await this.lockLeague(tx, leagueId);
       if (input.sourceTeamId === input.otherTeamId) {
@@ -146,7 +156,10 @@ export class LeagueTeamShellsService {
 
   private async lockLeague(tx: Prisma.TransactionClient, leagueId: string) {
     await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-    const exists = await tx.league.findUnique({ where: { id: leagueId }, select: { id: true } });
+    const exists = await tx.league.findFirst({
+      where: { id: leagueId, isDeleted: false },
+      select: { id: true }
+    });
     if (!exists) throw new LeagueError('LEAGUE_NOT_FOUND', 'League was not found', 404);
   }
 

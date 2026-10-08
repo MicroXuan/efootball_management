@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   CreateLeagueSeasonRequestSchema,
   type LeagueSeasonDetail,
@@ -11,6 +11,7 @@ import {
 import type { LeagueSeason, Prisma } from '../generated/prisma/client.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { assertSeasonTransition } from './domain/season-state.js';
 import { LeagueError } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
@@ -24,22 +25,30 @@ type TransitionInput = SeasonTransitionRequest & { reason?: string | undefined }
 
 @Injectable()
 export class SeasonsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService
-  ) {}
+    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  create(
+  async create(
     actorId: string,
     leagueId: string,
     input: ParsedCreateLeagueSeasonRequest,
     key: string
   ): Promise<LeagueSeasonDetail> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorId, `season.create:${leagueId}`, key, async (transaction) => {
       const parsed = CreateLeagueSeasonRequestSchema.safeParse(input);
       if (!parsed.success) throw this.invalidTimeline();
       await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-      const league = await transaction.league.findUnique({ where: { id: leagueId } });
+      const league = await transaction.league.findFirst({
+        where: { id: leagueId, isDeleted: false }
+      });
       if (!league) throw new LeagueError('LEAGUE_NOT_FOUND', 'League was not found', 404);
       const previous = await transaction.leagueSeason.findFirst({
         where: { leagueId },
@@ -77,15 +86,18 @@ export class SeasonsService {
     });
   }
 
-  update(
+  async update(
     actorId: string,
     seasonId: string,
     input: UpdateLeagueSeasonRequest,
     key: string
   ): Promise<LeagueSeasonDetail> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(actorId, `season.update:${seasonId}`, key, async (transaction) => {
       await this.lockSeason(transaction, seasonId);
-      const existing = await transaction.leagueSeason.findUnique({ where: { id: seasonId } });
+      const existing = await transaction.leagueSeason.findFirst({
+        where: { id: seasonId, league: { isDeleted: false } }
+      });
       if (!existing) throw this.notFound();
       const changedFields = Object.keys(input).filter((name) => name !== 'expectedVersion');
       const isRenameOnly = changedFields.length === 1 && input.displayName !== undefined;
@@ -127,16 +139,19 @@ export class SeasonsService {
     });
   }
 
-  transition(
+  async transition(
     actorId: string,
     seasonId: string,
     target: LeagueSeasonStatus,
     input: TransitionInput,
     key: string
   ): Promise<LeagueSeasonDetail> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(actorId, `season.transition:${seasonId}:${target}`, key, async (transaction) => {
       await this.lockSeason(transaction, seasonId);
-      const existing = await transaction.leagueSeason.findUnique({ where: { id: seasonId } });
+      const existing = await transaction.leagueSeason.findFirst({
+        where: { id: seasonId, league: { isDeleted: false } }
+      });
       if (!existing) throw this.notFound();
       if (existing.version !== input.expectedVersion) throw this.versionConflict();
       assertSeasonTransition(existing.status, target);
@@ -175,8 +190,9 @@ export class SeasonsService {
   }
 
   async listPublic(leagueId: string): Promise<LeagueSeasonSummary[]> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const seasons = await this.prisma.leagueSeason.findMany({
-      where: { leagueId, status: { not: 'DRAFT' } },
+      where: { leagueId, league: { isDeleted: false }, status: { not: 'DRAFT' } },
       include: SEASON_INCLUDE,
       orderBy: [{ seasonNumber: 'desc' }, { id: 'asc' }]
     });
@@ -184,8 +200,9 @@ export class SeasonsService {
   }
 
   async listManaged(leagueId: string): Promise<LeagueSeasonDetail[]> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const seasons = await this.prisma.leagueSeason.findMany({
-      where: { leagueId },
+      where: { leagueId, league: { isDeleted: false } },
       include: SEASON_INCLUDE,
       orderBy: [{ seasonNumber: 'desc' }, { id: 'asc' }]
     });
@@ -193,12 +210,14 @@ export class SeasonsService {
   }
 
   async getPublic(seasonId: string): Promise<LeagueSeasonDetail> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const record = await this.getRecord(this.prisma, seasonId);
     if (record.status === 'DRAFT') throw this.notFound();
     return this.detail(record, false);
   }
 
   async getManaged(seasonId: string): Promise<LeagueSeasonDetail> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.detail(await this.getRecord(this.prisma, seasonId), true);
   }
 
@@ -266,8 +285,8 @@ export class SeasonsService {
     client: LeagueTransaction | PrismaService,
     seasonId: string
   ): Promise<SeasonRecord> {
-    const record = await client.leagueSeason.findUnique({
-      where: { id: seasonId },
+    const record = await client.leagueSeason.findFirst({
+      where: { id: seasonId, league: { isDeleted: false } },
       include: SEASON_INCLUDE
     });
     if (!record) throw this.notFound();

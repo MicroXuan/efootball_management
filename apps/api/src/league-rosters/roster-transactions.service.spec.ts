@@ -1292,4 +1292,32 @@ describe('RosterTransactionsService', () => {
       where: { rosterTransactionId: result.transaction.id, type: 'TRANSACTION_FEE', amountMinor: 123 }
     })).resolves.toBe(1);
   });
+
+  it('blocks an ownership-only mutation before receipts after the parent league is deleted', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Deleted ownership');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await prisma.league.update({ where: { id: f.league.id }, data: { isDeleted: true } });
+    const receiptCount = await prisma.adminMutationReceipt.count({ where: { adminId: f.admin.id } });
+    const auditCount = await prisma.auditLog.count({ where: { leagueId: f.league.id } });
+
+    await expect(service.release({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      amountMinor: null,
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID(),
+      reason: '不可执行'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z')))
+      .rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });
+    await expect(prisma.adminMutationReceipt.count({ where: { adminId: f.admin.id } }))
+      .resolves.toBe(receiptCount);
+    await expect(prisma.auditLog.count({ where: { leagueId: f.league.id } })).resolves.toBe(auditCount);
+    await expect(prisma.leaguePlayerOwnership.findUnique({ where: { id: acquired.ownership.id } }))
+      .resolves.toMatchObject({ status: 'ACTIVE', version: acquired.ownership.version });
+  });
 });

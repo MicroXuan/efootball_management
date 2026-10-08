@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CreateTransactionFeeRuleRequest,
   LeagueTransactionListResponse,
@@ -10,6 +10,7 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 export type TransactionFeeQuote = {
   valuationSnapshotMinor: number;
@@ -19,12 +20,17 @@ export type TransactionFeeQuote = {
 
 @Injectable()
 export class TransactionFeesService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   quote(leagueId: string, playerId: string, at = new Date()) {
     return this.quoteWithClient(this.prisma, leagueId, playerId, at);
@@ -36,6 +42,10 @@ export class TransactionFeesService {
     playerId: string,
     at = new Date()
   ): Promise<TransactionFeeQuote> {
+    await this.visibility.requireVisible(
+      { type: 'LEAGUE', id: leagueId },
+      client as Prisma.TransactionClient
+    );
     const rule = await client.leagueTransactionFeeRuleVersion.findFirst({
       where: { leagueId, effectiveAt: { lte: at } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
@@ -61,6 +71,7 @@ export class TransactionFeesService {
     playerId: string,
     at = new Date()
   ): Promise<TransactionFeeQuote | null> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client);
     const configured = await client.leagueTransactionFeeRuleVersion.findFirst({
       where: { leagueId, effectiveAt: { lte: at } },
       select: { id: true }
@@ -74,6 +85,7 @@ export class TransactionFeesService {
     input: CreateTransactionFeeRuleRequest,
     key: string
   ): Promise<TransactionFeeRuleVersion> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     await this.authorization.requireLeagueManager(adminId, leagueId);
     return this.receipts.execute(adminId, `transaction-fee-rule.create:${leagueId}`, key, async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
@@ -109,6 +121,7 @@ export class TransactionFeesService {
   }
 
   async listRuleVersions(leagueId: string): Promise<{ items: TransactionFeeRuleVersion[] }> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const rules = await this.prisma.leagueTransactionFeeRuleVersion.findMany({
       where: { leagueId }, orderBy: { version: 'desc' }
     });
@@ -120,6 +133,7 @@ export class TransactionFeesService {
     cursor?: string,
     limit = 30
   ): Promise<LeagueTransactionListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const rows = await this.prisma.rosterTransaction.findMany({
       where: { leagueId },
       include: {
@@ -157,6 +171,7 @@ export class TransactionFeesService {
   }
 
   async listTransactionsForParticipant(userId: string, leagueId: string, cursor?: string, limit = 30) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const entry = await this.prisma.seasonEntry.findFirst({
       where: { ownerUserId: userId, status: 'APPROVED', season: { leagueId } }, select: { id: true }
     });

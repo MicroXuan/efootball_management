@@ -128,4 +128,22 @@ describe('TransferWindowsService', () => {
       expectedVersion: 2
     })).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
   });
+
+  it('hides a transfer-window id after its parent league is logically deleted', async () => {
+    const created = await service.create(adminId, seasonId, window(
+      'Deleted parent',
+      '2026-09-10T00:00:00.000Z',
+      '2026-09-20T00:00:00.000Z'
+    ));
+    await prisma.league.update({ where: { id: leagueId }, data: { isDeleted: true } });
+    const auditCount = await prisma.auditLog.count({ where: { leagueId } });
+
+    await expect(service.update(adminId, created.id, {
+      ...window('Should not update', '2026-09-10T00:00:00.000Z', '2026-09-20T00:00:00.000Z'),
+      expectedVersion: created.version
+    })).rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });
+    await expect(service.requireAllowed(seasonId, 'BUY', new Date('2026-09-15T00:00:00.000Z')))
+      .rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });
+    await expect(prisma.auditLog.count({ where: { leagueId } })).resolves.toBe(auditCount);
+  });
 });

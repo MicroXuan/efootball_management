@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   PublishValuationSubmissionRequestSchema,
   ReviewValuationSubmissionRequestSchema,
@@ -19,6 +19,7 @@ import { LeagueError } from '../leagues/league.errors.js';
 import { valuationRange } from './valuation-calculator.js';
 import { ValuationSnapshotsService } from './valuation-snapshots.service.js';
 import { ValuationWindowsService } from './valuation-windows.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 type PreparedItem = {
   snapshotId: string;
@@ -32,6 +33,8 @@ type PreparedItem = {
 
 @Injectable()
 export class ValuationSubmissionsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ValuationWindowsService) private readonly windows: ValuationWindowsService,
@@ -39,11 +42,16 @@ export class ValuationSubmissionsService {
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(MutationReceiptService) private readonly userReceipts: MutationReceiptService,
     @Inject(AdminMutationReceiptService) private readonly adminReceipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async saveDraft(userId: string, teamId: string, raw: SaveValuationDraftRequest, at = new Date()) {
     const input = SaveValuationDraftRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    await this.visibility.requireVisible({ type: 'VALUATION_WINDOW', id: input.windowId });
     const context = await this.ownerContext(userId, teamId, input.windowId, at);
     const snapshots = await this.snapshots.ensureWindowSnapshot(input.windowId, at);
     const teamSnapshots = snapshots.filter((snapshot) => snapshot.leagueTeamId === teamId);
@@ -118,6 +126,8 @@ export class ValuationSubmissionsService {
     at = new Date()
   ) {
     const input = PublishValuationSubmissionRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    await this.visibility.requireVisible({ type: 'VALUATION_WINDOW', id: input.windowId });
     const context = await this.ownerContext(userId, teamId, input.windowId, at);
     const snapshots = (await this.snapshots.ensureWindowSnapshot(input.windowId, at))
       .filter((snapshot) => snapshot.leagueTeamId === teamId);
@@ -220,6 +230,7 @@ export class ValuationSubmissionsService {
   }
 
   async listForLeague(adminId: string, leagueId: string) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     await this.authorization.requireLeagueManager(adminId, leagueId);
     const submissions = await this.prisma.valuationSubmission.findMany({
       where: { window: { season: { leagueId } } },
@@ -276,6 +287,7 @@ export class ValuationSubmissionsService {
     at: Date
   ) {
     const input = ReviewValuationSubmissionRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'VALUATION_SUBMISSION', id: submissionId });
     const current = await this.prisma.valuationSubmission.findUniqueOrThrow({
       where: { id: submissionId },
       include: { window: { include: { season: true } } }

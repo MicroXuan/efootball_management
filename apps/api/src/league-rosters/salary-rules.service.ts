@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   CreateSalaryRuleVersionRequestSchema,
   PreviewSalaryRuleRequestSchema,
@@ -10,6 +10,7 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { LeagueRosterError } from './league-roster.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 export function defaultSalaryTiers() {
   return [
@@ -39,14 +40,20 @@ function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
 
 @Injectable()
 export class SalaryRulesService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async createVersion(adminId: string, leagueId: string, raw: CreateSalaryRuleVersionRequest) {
     const input = CreateSalaryRuleVersionRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     await this.authorization.requireLeagueManager(adminId, leagueId);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`);
@@ -98,6 +105,10 @@ export class SalaryRulesService {
     leagueId: string,
     salaryCapMinor: number
   ) {
+    await this.visibility.requireVisible(
+      { type: 'LEAGUE', id: leagueId },
+      tx
+    );
     const teams = await tx.leagueTeam.findMany({
       where: { leagueId },
       select: { id: true },
@@ -140,6 +151,7 @@ export class SalaryRulesService {
     overall: number,
     at = new Date()
   ) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
     const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
@@ -163,6 +175,7 @@ export class SalaryRulesService {
     salaryRuleVersionId: string,
     overall: number
   ) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
     const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { id: salaryRuleVersionId, leagueId },
       include: { tiers: { orderBy: { minOverall: 'asc' } } }
@@ -181,6 +194,7 @@ export class SalaryRulesService {
 
   async previewRecalculation(leagueId: string, raw: PreviewSalaryRuleRequest) {
     const input = PreviewSalaryRuleRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const ownerships = await this.prisma.leaguePlayerOwnership.findMany({
       where: { leagueId, status: 'ACTIVE' },
       include: { leagueTeam: { select: { name: true } } },

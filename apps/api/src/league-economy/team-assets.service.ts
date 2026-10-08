@@ -1,13 +1,22 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { PlayerValuationHistoryResponse, TeamAssetOverview } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class TeamAssetsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly visibility: LeagueVisibilityService;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async getTeamAssets(userId: string, teamId: string): Promise<TeamAssetOverview> {
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
       include: {
@@ -121,6 +130,7 @@ export class TeamAssetsService {
     leagueId: string,
     playerId: string
   ): Promise<PlayerValuationHistoryResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const participation = await this.prisma.seasonEntry.findFirst({
       where: { ownerUserId: userId, status: 'APPROVED', season: { leagueId } },
       select: { id: true }

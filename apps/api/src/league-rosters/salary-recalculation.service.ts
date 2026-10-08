@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   RecalculateLeagueSalaryRequestSchema,
   type RecalculateLeagueSalaryRequest
@@ -10,17 +10,23 @@ import { PrismaService } from '../database/prisma.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { SalaryRulesService } from './salary-rules.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class SalaryRecalculationService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
     @Inject(SalaryRulesService) private readonly salaryRules: SalaryRulesService,
-    @Inject(RosterLockRepository) private readonly locks: RosterLockRepository
-  ) {}
+    @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async recalculateLeague(
     raw: RecalculateLeagueSalaryRequest,
@@ -28,6 +34,9 @@ export class SalaryRecalculationService {
     at = new Date()
   ) {
     const input = RecalculateLeagueSalaryRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: input.leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    if (seasonLeagueId !== input.leagueId) throw this.visibility.notFound();
     const season = await this.prisma.leagueSeason.findUnique({ where: { id: input.seasonId } });
     if (!season || season.leagueId !== input.leagueId) {
       throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and league differ', 409);

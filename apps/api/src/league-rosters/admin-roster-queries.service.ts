@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   derivePesdataAutoBuild,
   type FinanceLedgerListResponse,
@@ -10,12 +10,21 @@ import {
 } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class AdminRosterQueriesService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly visibility: LeagueVisibilityService;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async salaryRules(leagueId: string): Promise<SalaryRuleVersionListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const rules = await this.prisma.leagueSalaryRuleVersion.findMany({
       where: { leagueId },
       include: { tiers: { orderBy: { minOverall: 'asc' } } },
@@ -31,6 +40,7 @@ export class AdminRosterQueriesService {
   }
 
   async seasons(leagueId: string) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const seasons = await this.prisma.leagueSeason.findMany({
       where: { leagueId },
       include: { _count: { select: { entries: true } }, entries: { where: { status: 'APPROVED' }, select: { id: true } } },
@@ -51,6 +61,7 @@ export class AdminRosterQueriesService {
   }
 
   async transferWindows(leagueId: string, seasonId: string): Promise<TransferWindowListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     await this.requireSeason(leagueId, seasonId);
     const windows = await this.prisma.transferWindow.findMany({
       where: { seasonId },
@@ -68,6 +79,9 @@ export class AdminRosterQueriesService {
   }
 
   async roster(leagueId: string, teamId: string, seasonId: string): Promise<TeamRosterView> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const teamLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    if (teamLeagueId !== leagueId) throw this.visibility.notFound();
     await this.requireSeason(leagueId, seasonId);
     const team = await this.prisma.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
     if (!team) throw new LeagueRosterError('LEAGUE_TEAM_NOT_FOUND', 'League team was not found', 404);
@@ -121,6 +135,7 @@ export class AdminRosterQueriesService {
   }
 
   async candidates(leagueId: string, query: RosterPlayerCandidateQuery): Promise<RosterPlayerCandidateListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const salaryRule = await this.prisma.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
       include: { tiers: { orderBy: { minOverall: 'asc' } } },
@@ -197,6 +212,11 @@ export class AdminRosterQueriesService {
   }
 
   async ledger(leagueId: string, teamId?: string): Promise<FinanceLedgerListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    if (teamId) {
+      const teamLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+      if (teamLeagueId !== leagueId) throw this.visibility.notFound();
+    }
     const entries = await this.prisma.financeLedgerEntry.findMany({
       where: { leagueId, ...(teamId ? { leagueTeamId: teamId } : {}) },
       include: { leagueTeam: { select: { name: true } } },
@@ -222,8 +242,8 @@ export class AdminRosterQueriesService {
   }
 
   private async requireSeason(leagueId: string, seasonId: string) {
-    const season = await this.prisma.leagueSeason.findFirst({ where: { id: seasonId, leagueId }, select: { id: true } });
-    if (!season) throw new LeagueRosterError('LEAGUE_SEASON_NOT_FOUND', 'League season was not found', 404);
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
   }
 }
 

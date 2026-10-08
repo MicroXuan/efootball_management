@@ -25,7 +25,13 @@ function harness() {
   const receipts = { execute: jest.fn(async (_admin: string, _operation: string, _key: string, work: (client: typeof tx) => Promise<unknown>) => work(tx)) };
   const audit = { record: jest.fn(async () => undefined) };
   return {
-    service: new TeamFinanceService(prisma as never, authorization as never, receipts as never, audit as never),
+    service: new TeamFinanceService(
+      prisma as never,
+      authorization as never,
+      receipts as never,
+      audit as never,
+      { requireVisible: jest.fn(async () => 'league-1') } as never
+    ),
     prisma, tx, authorization, receipts, audit, team
   };
 }

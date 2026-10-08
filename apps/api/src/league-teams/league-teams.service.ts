@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ParsedCreateLeagueTeamRequest,
   LeagueTeamDetail,
@@ -13,6 +13,7 @@ import type { LeagueTeam, User } from '../generated/prisma/client.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
 import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
 
@@ -21,21 +22,29 @@ type TeamRosterMetrics = { activePlayerCount: number; salaryTotalMinor: number; 
 
 @Injectable()
 export class LeagueTeamsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  create(
+  async create(
     actorAdminId: string,
     leagueId: string,
     input: ParsedCreateLeagueTeamRequest,
     key: string
   ): Promise<LeagueTeamDetail> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.create:${leagueId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-      const league = await transaction.league.findUnique({ where: { id: leagueId } });
+      const league = await transaction.league.findFirst({
+        where: { id: leagueId, isDeleted: false }
+      });
       if (!league) throw this.notFound('LEAGUE_NOT_FOUND', 'League was not found');
       if (!league.currentSeasonId) {
         throw new LeagueError(
@@ -142,16 +151,19 @@ export class LeagueTeamsService {
     });
   }
 
-  update(
+  async update(
     actorAdminId: string,
     leagueId: string,
     teamId: string,
     input: UpdateLeagueTeamRequest,
     key: string
   ): Promise<LeagueTeamDetail> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.update:${teamId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM league_teams WHERE id = ${teamId} FOR UPDATE`;
-      const existing = await transaction.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
+      const existing = await transaction.leagueTeam.findFirst({
+        where: { id: teamId, leagueId, league: { isDeleted: false } }
+      });
       if (!existing) throw this.notFound('LEAGUE_TEAM_NOT_FOUND', 'League team was not found');
       if (input.teamNumber !== undefined && input.teamNumber !== existing.teamNumber) {
         const participationCount = await transaction.seasonEntry.count({
@@ -206,7 +218,7 @@ export class LeagueTeamsService {
 
   async listMine(ownerUserId: string): Promise<LeagueTeamListResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId },
+      where: { ownerUserId, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
@@ -216,7 +228,7 @@ export class LeagueTeamsService {
 
   async listMineViews(ownerUserId: string): Promise<MyLeagueTeamListResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId },
+      where: { ownerUserId, league: { isDeleted: false } },
       include: {
         owner: true,
         _count: { select: { seasonEntries: true } },
@@ -325,8 +337,9 @@ export class LeagueTeamsService {
   }
 
   async listForLeague(leagueId: string): Promise<LeagueTeamListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { leagueId },
+      where: { leagueId, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ teamNumber: 'asc' }, { id: 'asc' }]
     });
@@ -335,9 +348,11 @@ export class LeagueTeamsService {
   }
 
   async getDetail(teamId: string, ownerUserId?: string, leagueId?: string): Promise<LeagueTeamDetail> {
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
     const team = await this.prisma.leagueTeam.findFirst({
       where: {
         id: teamId,
+        league: { isDeleted: false },
         ...(ownerUserId ? { ownerUserId } : {}),
         ...(leagueId ? { leagueId } : {})
       },
@@ -349,8 +364,8 @@ export class LeagueTeamsService {
   }
 
   private async record(client: Prisma.TransactionClient, teamId: string): Promise<TeamWithOwner> {
-    return client.leagueTeam.findUniqueOrThrow({
-      where: { id: teamId },
+    return client.leagueTeam.findFirstOrThrow({
+      where: { id: teamId, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } }
     });
   }

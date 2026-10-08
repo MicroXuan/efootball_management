@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CreateManualFinanceEntryRequest,
   FinanceLedgerEntry,
@@ -9,15 +9,21 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class TeamFinanceService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async createManualEntry(
     adminId: string,
@@ -25,6 +31,13 @@ export class TeamFinanceService {
     input: CreateManualFinanceEntryRequest,
     key: string
   ): Promise<FinanceLedgerEntry> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const teamLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: input.leagueTeamId });
+    if (teamLeagueId !== leagueId) throw this.visibility.notFound();
+    if (input.seasonId) {
+      const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+      if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
+    }
     await this.authorization.requireLeagueManager(adminId, leagueId);
     return this.receipts.execute(adminId, `finance-entry.create:${leagueId}`, key, async (tx) => {
       const team = await tx.leagueTeam.findFirst({
@@ -73,6 +86,11 @@ export class TeamFinanceService {
     teamId: string,
     seasonId: string | null
   ): Promise<TeamFinanceSummary> {
+    const teamLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    if (seasonId) {
+      const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+      if (seasonLeagueId !== teamLeagueId) throw this.visibility.notFound();
+    }
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
       include: { league: { select: { currentSeasonId: true } } }

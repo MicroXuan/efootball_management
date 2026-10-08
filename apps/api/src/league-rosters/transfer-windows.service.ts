@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   CreateTransferWindowRequestSchema,
   UpdateTransferWindowRequestSchema,
@@ -11,6 +11,7 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { LeagueRosterError } from './league-roster.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const operationField: Record<TransferOperation, 'allowBuy' | 'allowSell' | 'allowTransfer' | 'allowCardUpgrade'> = {
   BUY: 'allowBuy',
@@ -21,14 +22,20 @@ const operationField: Record<TransferOperation, 'allowBuy' | 'allowSell' | 'allo
 
 @Injectable()
 export class TransferWindowsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async create(adminId: string, seasonId: string, raw: CreateTransferWindowRequest) {
     const input = CreateTransferWindowRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const season = await this.prisma.leagueSeason.findUniqueOrThrow({ where: { id: seasonId } });
     await this.authorization.requireLeagueManager(adminId, season.leagueId);
     return this.prisma.$transaction(async (tx) => {
@@ -57,6 +64,7 @@ export class TransferWindowsService {
 
   async update(adminId: string, windowId: string, raw: UpdateTransferWindowRequest) {
     const input = UpdateTransferWindowRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'TRANSFER_WINDOW', id: windowId });
     const current = await this.prisma.transferWindow.findUniqueOrThrow({
       where: { id: windowId },
       include: { season: true }
@@ -103,6 +111,7 @@ export class TransferWindowsService {
   }
 
   async requireAllowed(seasonId: string, operation: TransferOperation, at = new Date()) {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.requireAllowedWithClient(this.prisma, seasonId, operation, at);
   }
 
@@ -112,6 +121,7 @@ export class TransferWindowsService {
     operation: TransferOperation,
     at = new Date()
   ) {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId }, client as Prisma.TransactionClient);
     const windows = await client.transferWindow.findMany({
       where: { seasonId, startsAt: { lte: at }, endsAt: { gt: at } },
       orderBy: { startsAt: 'asc' }

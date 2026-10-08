@@ -17,6 +17,8 @@ describe('LeagueVisibilityService', () => {
   let stageId: string;
   let matchId: string;
   let windowId: string;
+  let valuationWindowId: string;
+  let valuationSubmissionId: string;
   let ownershipId: string;
   let adminId: string;
   let catalogId: string;
@@ -141,6 +143,41 @@ describe('LeagueVisibilityService', () => {
       }
     });
     windowId = window.id;
+    const valuationWindow = await prisma.valuationWindow.create({
+      data: {
+        seasonId,
+        name: '身价窗口',
+        startsAt: new Date('2026-09-01T00:00:00.000Z'),
+        endsAt: new Date('2026-09-30T00:00:00.000Z'),
+        createdByAdminId: adminId
+      }
+    });
+    valuationWindowId = valuationWindow.id;
+    const valuationRule = await prisma.valuationWindowRuleVersion.create({
+      data: {
+        windowId: valuationWindowId,
+        version: 1,
+        minimumValueMinor: 100,
+        maximumValueMinor: 10_000,
+        maximumIncreaseBps: 2_000,
+        maximumDecreaseBps: 2_000,
+        createdByAdminId: adminId
+      }
+    });
+    await prisma.valuationWindow.update({
+      where: { id: valuationWindowId },
+      data: { currentRuleVersionId: valuationRule.id }
+    });
+    const valuationSubmission = await prisma.valuationSubmission.create({
+      data: {
+        windowId: valuationWindowId,
+        leagueTeamId: teamId,
+        ruleVersionId: valuationRule.id,
+        attemptNumber: 1,
+        submittedByUserId: users[0]!.id
+      }
+    });
+    valuationSubmissionId = valuationSubmission.id;
     const source = await prisma.dataSource.create({
       data: { code: `visibility-${suffix}`, name: '可见性来源' }
     });
@@ -186,6 +223,13 @@ describe('LeagueVisibilityService', () => {
     await prisma.league.update({ where: { id: leagueId }, data: { isDeleted: false } });
     await prisma.leaguePlayerOwnership.delete({ where: { id: ownershipId } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId } });
+    await prisma.valuationSubmission.delete({ where: { id: valuationSubmissionId } });
+    await prisma.valuationWindow.update({
+      where: { id: valuationWindowId },
+      data: { currentRuleVersionId: null }
+    });
+    await prisma.valuationWindowRuleVersion.deleteMany({ where: { windowId: valuationWindowId } });
+    await prisma.valuationWindow.delete({ where: { id: valuationWindowId } });
     await prisma.transferWindow.delete({ where: { id: windowId } });
     await prisma.competitionMatch.delete({ where: { id: matchId } });
     await prisma.competitionParticipant.deleteMany({ where: { competitionId } });
@@ -211,6 +255,8 @@ describe('LeagueVisibilityService', () => {
     ['STAGE', () => stageId],
     ['MATCH', () => matchId],
     ['TRANSFER_WINDOW', () => windowId],
+    ['VALUATION_WINDOW', () => valuationWindowId],
+    ['VALUATION_SUBMISSION', () => valuationSubmissionId],
     ['OWNERSHIP', () => ownershipId]
   ] as const)('resolves a visible %s resource to its league', async (type, id) => {
     await expect(service.requireVisible({ type, id: id() })).resolves.toBe(leagueId);
@@ -230,5 +276,7 @@ describe('LeagueVisibilityService', () => {
     await prisma.league.update({ where: { id: leagueId }, data: { isDeleted: true } });
     await expect(service.requireVisible({ type: 'LEAGUE', id: leagueId })).rejects.toMatchObject(expected);
     await expect(service.requireVisible({ type: 'MATCH', id: matchId })).rejects.toMatchObject(expected);
+    await expect(service.requireVisible({ type: 'VALUATION_WINDOW', id: valuationWindowId })).rejects.toMatchObject(expected);
+    await expect(service.requireVisible({ type: 'VALUATION_SUBMISSION', id: valuationSubmissionId })).rejects.toMatchObject(expected);
   });
 });

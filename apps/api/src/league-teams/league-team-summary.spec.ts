@@ -30,7 +30,9 @@ describe('LeagueTeamsService roster summary', () => {
         findMany: async () => [{ leagueId: team.leagueId, salaryCapMinor: 2_000 }]
       }
     };
-    const service = new LeagueTeamsService(prisma as never, {} as never, {} as never);
+    const service = new LeagueTeamsService(prisma as never, {} as never, {} as never, {
+      requireVisible: async () => 'league-1'
+    } as never);
 
     const result = await service.listForLeague(team.leagueId);
 

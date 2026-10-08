@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   AcquirePlayerRequestSchema,
   EmergencyCorrectRosterRequestSchema,
@@ -27,6 +27,7 @@ import { SalaryRulesService } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const MAX_ROSTER_SIZE = 25;
 type AppliedTransactionFee = {
@@ -37,6 +38,8 @@ type AppliedTransactionFee = {
 
 @Injectable()
 export class RosterTransactionsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
@@ -47,11 +50,16 @@ export class RosterTransactionsService {
     @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
     @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService,
     @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
-    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
-  ) {}
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
     const input = AcquirePlayerRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    await this.visibility.requireVisible({ type: 'TEAM', id: input.targetLeagueTeamId });
     const scope = await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, scope.leagueId);
 
@@ -214,6 +222,8 @@ export class RosterTransactionsService {
 
   async release(raw: ReleasePlayerRequest, adminId: string, at = new Date()) {
     const input = ReleasePlayerRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
     const current = await this.prisma.leaguePlayerOwnership.findUnique({
       where: { id: input.ownershipId }
     });
@@ -315,6 +325,9 @@ export class RosterTransactionsService {
 
   async transfer(raw: TransferPlayerRequest, adminId: string, at = new Date()) {
     const input = TransferPlayerRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    await this.visibility.requireVisible({ type: 'TEAM', id: input.targetLeagueTeamId });
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
@@ -464,6 +477,8 @@ export class RosterTransactionsService {
 
   async upgradeCard(raw: UpgradePlayerCardRequest, adminId: string, at = new Date()) {
     const input = UpgradePlayerCardRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
 
@@ -578,6 +593,11 @@ export class RosterTransactionsService {
 
   async emergencyCorrect(raw: EmergencyCorrectRosterRequest, adminId: string, at = new Date()) {
     const input = EmergencyCorrectRosterRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    if (input.targetLeagueTeamId) {
+      await this.visibility.requireVisible({ type: 'TEAM', id: input.targetLeagueTeamId });
+    }
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requirePlatformAdmin(adminId);
     const targetTeamId = input.targetLeagueTeamId ?? current.leagueTeamId;
@@ -694,6 +714,8 @@ export class RosterTransactionsService {
 
   async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string) {
     const input = UpdateRosterLifecycleRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
 

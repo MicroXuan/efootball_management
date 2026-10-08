@@ -317,6 +317,37 @@ describe('LeagueTeamsService', () => {
     ]);
   });
 
+  it('omits teams from deleted leagues and rejects direct reads and writes', async () => {
+    const { user } = await createUser('逻辑删除球队用户');
+    const league = await createLeague('逻辑删除球队联赛');
+    const shell = await createShell('逻辑删除球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '逻辑删除经理',
+      teamNumber: 41,
+      catalogTeamId: shell.id
+    }, randomUUID());
+    await prisma.league.update({ where: { id: league.id }, data: { isDeleted: true } });
+    const key = randomUUID();
+    const expected = {
+      status: 404,
+      response: { code: 'LEAGUE_NOT_FOUND', message: 'League was not found' }
+    };
+
+    await expect(service.listMineViews(user.id)).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.getDetail(team.id, user.id)).rejects.toMatchObject(expected);
+    await expect(service.update(actorId, league.id, team.id, {
+      ownerAlias: '不应写入',
+      expectedVersion: team.version
+    }, key)).rejects.toMatchObject(expected);
+    await expect(prisma.adminMutationReceipt.count({
+      where: { adminId: actorId, operation: `league-team.update:${team.id}`, key }
+    })).resolves.toBe(0);
+    await expect(prisma.auditLog.count({
+      where: { leagueId: league.id, resourceId: team.id, action: 'league-team.update' }
+    })).resolves.toBe(0);
+  });
+
   it('updates the team shell value with versioning, idempotency, and an audit record', async () => {
     const { user } = await createUser('队壳用户');
     const league = await createLeague('队壳价值');
