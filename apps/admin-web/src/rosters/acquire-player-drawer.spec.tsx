@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AdminApi } from '../lib/api';
-import { ApiError } from '../lib/api';
 import { AcquirePlayerDrawer } from './acquire-player-drawer';
 
 const leagueId = '11111111-1111-4111-8111-111111111111';
@@ -18,7 +17,7 @@ function api(request: AdminApi['request']): AdminApi {
 const candidate = {
   playerId, playerName: '博努奇', ownedByTeamId: null, recommendedPlayerCardId: bestCardId,
   cards: [
-    { id: bestCardId, cardName: 'Epic', imageUrl: null, position: 'CB' as const, overallRating: 87, maxOverall: 99, dtRating: 98, salaryMinor: 700, recommended: true },
+    { id: bestCardId, cardName: 'Epic', imageUrl: 'https://media.example.com/bonucci.webp', position: 'CB' as const, overallRating: 87, maxOverall: 99, dtRating: 98, salaryMinor: 700, recommended: true },
     { id: otherCardId, cardName: 'Highlight', imageUrl: null, position: 'CB' as const, overallRating: 86, maxOverall: 97, dtRating: 96, salaryMinor: 500, recommended: false }
   ]
 };
@@ -54,6 +53,14 @@ describe('acquire player drawer', () => {
     expect(await screen.findByText('系统推荐')).toBeInTheDocument();
     expect(screen.getByLabelText('Epic')).toBeChecked();
     expect(screen.getByText('Highlight')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '博努奇 Epic 球员卡' })).toHaveAttribute('src', 'https://media.example.com/bonucci.webp');
+    expect(screen.getByText('找到 1 名球员 · 2 张球员卡')).toBeInTheDocument();
+    expect(screen.getAllByText('中后卫')).toHaveLength(2);
+    expect(screen.getByText('购买后工资').parentElement).toHaveTextContent('1,100 / 2,000');
+    await userEvent.click(screen.getByText('Highlight'));
+    expect(screen.getByLabelText('Highlight')).toBeChecked();
+    expect(screen.getByText('已选择')).toBeInTheDocument();
+    expect(screen.getByText('购买后工资').parentElement).toHaveTextContent('900 / 2,000');
   });
 
   it('blocks a card without a DT rating', async () => {
@@ -65,19 +72,27 @@ describe('acquire player drawer', () => {
     expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
   });
 
-  it('shows current roster and salary limits for business failures', async () => {
-    const request = vi.fn()
-      .mockResolvedValueOnce({ items: [], nextCursor: null, releaseSequence: 1 })
-      .mockResolvedValueOnce({ items: [candidate] })
-      .mockRejectedValueOnce(new ApiError({ status: 409, code: 'TEAM_ROSTER_FULL' }));
+  it('explains the next required field instead of leaving an inert purchase button', async () => {
+    const request = vi.fn().mockResolvedValue({ items: [candidate] });
+    render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
+    await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+
+    expect(await screen.findByText('请填写成交金额')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('成交金额'), '100');
+    expect(screen.getByText('请填写操作原因')).toBeInTheDocument();
+  });
+
+  it('prevents a purchase when the roster is already full and shows the current limits', async () => {
+    const request = vi.fn().mockResolvedValue({ items: [candidate] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 25, salaryMinor: 1900, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
     await userEvent.click(screen.getByRole('button', { name: '搜索' }));
-    await userEvent.type(screen.getByLabelText('成交金额'), '100');
-    await userEvent.type(screen.getByLabelText('操作原因'), '首发补强');
-    await userEvent.click(screen.getByRole('button', { name: '确认购买' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('阵容人数 25/25');
-    expect(screen.getByRole('alert')).toHaveTextContent('工资 1900/2000');
+    expect(await screen.findByRole('alert')).toHaveTextContent('阵容已满 25 人');
+    expect(screen.getByLabelText('购买影响摘要')).toHaveTextContent('阵容人数25 / 25');
+    expect(screen.getByLabelText('购买影响摘要')).toHaveTextContent('当前工资1,900 / 2,000');
+    expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
   });
 
   it('reuses the idempotency key when an unchanged submission is retried', async () => {
