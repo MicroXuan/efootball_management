@@ -54,7 +54,6 @@ export class RosterTransactionsService {
     const input = AcquirePlayerRequestSchema.parse(raw);
     const scope = await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, scope.leagueId);
-    await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
 
     try {
       return await this.receipts.execute(adminId, 'ROSTER_PLAYER_ACQUIRE', input.idempotencyKey,
@@ -157,9 +156,6 @@ export class RosterTransactionsService {
                 acquiredAt: at
               }
             });
-          const fee = await this.feeQuote(
-            tx, lockedScope.leagueId, footballPlayerId, input.manualTransactionFeeMinor, at
-          );
           const transaction = await tx.rosterTransaction.create({
             data: {
               leagueId: lockedScope.leagueId,
@@ -170,9 +166,6 @@ export class RosterTransactionsService {
               newPlayerCardId: input.playerCardId,
               newSalaryMinor: quote.salaryMinor,
               amountMinor: input.amountMinor,
-              valuationSnapshotMinor: fee?.valuationSnapshotMinor ?? null,
-              transactionFeeMinor: fee?.transactionFeeMinor ?? null,
-              transactionFeeRuleVersionId: fee?.transactionFeeRuleVersionId ?? null,
               reason: input.reason,
               createdByAdminId: adminId,
               createdAt: at
@@ -191,7 +184,6 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, input.targetLeagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
           await this.audit.record(tx, {
             actorAdminId: adminId,
             leagueId: lockedScope.leagueId,
@@ -241,7 +233,6 @@ export class RosterTransactionsService {
       throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and roster entry differ', 409);
     }
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
-    await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_RELEASE', input.idempotencyKey,
       async (tx) => {
@@ -262,9 +253,6 @@ export class RosterTransactionsService {
           });
         }
 
-        const fee = input.amountMinor === null ? null : await this.feeQuote(
-          tx, locked.leagueId, locked.footballPlayerId, input.manualTransactionFeeMinor, at
-        );
         const ownership = await tx.leaguePlayerOwnership.update({
           where: { id: locked.id },
           data: { status: 'RELEASED', version: { increment: 1 } }
@@ -279,9 +267,6 @@ export class RosterTransactionsService {
             oldPlayerCardId: locked.currentPlayerCardId,
             oldSalaryMinor: locked.salaryMinor,
             amountMinor: input.amountMinor,
-            valuationSnapshotMinor: fee?.valuationSnapshotMinor ?? null,
-            transactionFeeMinor: fee?.transactionFeeMinor ?? null,
-            transactionFeeRuleVersionId: fee?.transactionFeeRuleVersionId ?? null,
             reason: input.reason,
             createdByAdminId: adminId,
             createdAt: at
@@ -301,7 +286,6 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, locked.leagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,
@@ -490,7 +474,6 @@ export class RosterTransactionsService {
     const input = UpgradePlayerCardRequestSchema.parse(raw);
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
-    await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_CARD_UPGRADE', input.idempotencyKey,
       async (tx) => {
@@ -530,9 +513,6 @@ export class RosterTransactionsService {
             quote.salaryCapMinor
           );
         }
-        const fee = input.amountMinor === null ? null : await this.feeQuote(
-          tx, locked.leagueId, locked.footballPlayerId, input.manualTransactionFeeMinor, at
-        );
         const ownership = await tx.leaguePlayerOwnership.update({
           where: { id: locked.id },
           data: {
@@ -556,9 +536,6 @@ export class RosterTransactionsService {
             oldSalaryMinor: locked.salaryMinor,
             newSalaryMinor: quote.salaryMinor,
             amountMinor: input.amountMinor,
-            valuationSnapshotMinor: fee?.valuationSnapshotMinor ?? null,
-            transactionFeeMinor: fee?.transactionFeeMinor ?? null,
-            transactionFeeRuleVersionId: fee?.transactionFeeRuleVersionId ?? null,
             reason: input.reason,
             createdByAdminId: adminId,
             createdAt: at
@@ -578,7 +555,6 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, locked.leagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,

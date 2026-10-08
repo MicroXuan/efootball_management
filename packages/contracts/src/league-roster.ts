@@ -342,8 +342,7 @@ export const MyLeagueTeamOverviewSchema = z.object({
 const RosterMutationBaseSchema = z.object({
   seasonId: ResourceIdSchema,
   idempotencyKey: IdempotencyKeySchema,
-  reason: z.string().trim().min(1).max(512),
-  manualTransactionFeeMinor: NonNegativeMoneyMinorSchema.optional()
+  reason: z.string().trim().min(1).max(512)
 });
 
 export const AcquirePlayerRequestSchema = RosterMutationBaseSchema.extend({
@@ -362,6 +361,7 @@ export const TransferPlayerRequestSchema = RosterMutationBaseSchema.extend({
   ownershipId: ResourceIdSchema,
   targetLeagueTeamId: ResourceIdSchema,
   amountMinor: MoneyMinorSchema.nullable().default(null),
+  manualTransactionFeeMinor: NonNegativeMoneyMinorSchema.optional(),
   expectedVersion: ExpectedVersionSchema
 });
 export const UpgradePlayerCardRequestSchema = RosterMutationBaseSchema.extend({
