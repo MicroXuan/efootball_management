@@ -17,11 +17,11 @@ const detail = (name: string, version: number) => ({
   createdAt: '2026-09-29T00:00:00.000Z', updatedAt: '2026-09-29T00:00:00.000Z'
 });
 
-function renderPage(request: ReturnType<typeof vi.fn>) {
+function renderPage(request: ReturnType<typeof vi.fn>, hash = '') {
   const api: AdminApi = {
     restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request
   };
-  return render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/teams/${teamId}`]}><Routes>
+  return render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/teams/${teamId}${hash}`]}><Routes>
     <Route path="/leagues/:leagueId/teams/:teamId" element={<TeamDetailPage api={api} />} />
   </Routes></MemoryRouter>);
 }
@@ -40,6 +40,24 @@ it('separates overview, roster, settings, and shell management without an archiv
   );
   expect(screen.queryByLabelText('球队状态')).not.toBeInTheDocument();
   expect(screen.queryByText('归档')).not.toBeInTheDocument();
+});
+
+it('scrolls to the requested team management section after details load', async () => {
+  const scrollIntoView = vi.fn();
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
+  Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+  try {
+    renderPage(vi.fn().mockResolvedValue(detail('巴塞罗那', 1)), '#team-shell');
+
+    expect(await screen.findByRole('heading', { name: '队壳管理' })).toBeInTheDocument();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+  } finally {
+    if (originalScrollIntoView) {
+      Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    }
+  }
 });
 
 it('saves team settings without changing the team lifecycle status', async () => {

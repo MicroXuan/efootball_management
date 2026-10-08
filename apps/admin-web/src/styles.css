@@ -161,7 +161,7 @@ select { font: inherit; }
 .team-shell-actions { margin: 0; }
 .team-detail-page { width: min(100%, 1040px); display: grid; gap: 18px; }
 .team-detail-breadcrumb { color: var(--admin-text-secondary); font-size: 14px; }
-.detail-card.team-detail-card { max-width: none; }
+.detail-card.team-detail-card { max-width: none; scroll-margin-top: 20px; }
 .team-detail-card .ant-card-head-title h2 { margin: 0; font-size: 18px; }
 .team-detail-roster-card p,
 .team-detail-section-copy { margin: 0; color: var(--admin-text-secondary); }
@@ -508,5 +508,14 @@ select { font: inherit; }
 
 @media (prefers-reduced-motion: no-preference) {
   .login-card { animation: card-in 180ms ease-out both; }
+  .team-detail-card:target { animation: team-section-target 1100ms ease-out; }
   @keyframes card-in { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes team-section-target {
+    0%, 32% { border-color: #8eb92e; box-shadow: 0 0 0 4px rgba(182,241,58,.24); }
+    100% { border-color: var(--admin-border); box-shadow: var(--admin-shadow-card); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-detail-card:target { border-color: #8eb92e; }
 }

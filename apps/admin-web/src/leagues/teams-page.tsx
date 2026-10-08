@@ -110,8 +110,8 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
             <Button type="primary" icon={<AdminIcon name="teams" />}>管理阵容</Button>
           </Link>
           <Dropdown menu={{ items: [
-            { key: 'detail', label: <Link to={`/leagues/${leagueId}/teams/${row.id}`}>查看球队详情</Link> },
-            { key: 'settings', label: <Link to={`/leagues/${leagueId}/teams/${row.id}#team-settings`}>球队设置</Link> }
+            { key: 'settings', label: <Link to={`/leagues/${leagueId}/teams/${row.id}#team-settings`}>球队设置</Link> },
+            { key: 'shell', label: <Link to={`/leagues/${leagueId}/teams/${row.id}#team-shell`}>队壳管理</Link> }
           ] }} trigger={['click']}>
             <Button aria-label="更多">更多</Button>
           </Dropdown>

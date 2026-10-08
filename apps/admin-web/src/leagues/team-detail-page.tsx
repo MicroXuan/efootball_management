@@ -33,8 +33,9 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
   }, [api, form, leagueId, teamId]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (!detail || hash !== '#team-settings') return;
-    document.getElementById('team-settings')?.scrollIntoView({ block: 'start' });
+    const targetId = hash.slice(1);
+    if (!detail || !['team-settings', 'team-shell'].includes(targetId)) return;
+    document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
   }, [detail, hash]);
   const save = async (values: Fields) => {
     if (!detail || submitting) return;
@@ -88,7 +89,7 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
           <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>保存设置</Button>
         </Form>
       </Card>
-      <Card className="detail-card team-detail-card" title={<h2>队壳管理</h2>}>
+      <Card id="team-shell" className="detail-card team-detail-card" title={<h2>队壳管理</h2>}>
         <p className="team-detail-section-copy">队名、简称和队徽属于队壳；更换或转让不会改变球队阵容、财务和比赛成绩。</p>
         <TeamShellActions api={api} leagueId={leagueId} team={detail} onCompleted={load} />
       </Card>

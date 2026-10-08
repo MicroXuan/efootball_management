@@ -114,20 +114,21 @@ describe('league teams page', () => {
     expect(rosterLink).toHaveAttribute('href', `/leagues/${leagueId}/teams/${baseTeam.id}/roster`);
   });
 
-  it('keeps team details and settings in a secondary action menu', async () => {
+  it('offers distinct settings and shell shortcuts without duplicating the team detail link', async () => {
     const request = mockRoutes({ teams: [baseTeam] });
     renderPage(request);
 
     await userEvent.click(await screen.findByRole('button', { name: '更多' }));
 
-    expect(await screen.findByRole('link', { name: '查看球队详情' })).toHaveAttribute(
-      'href',
-      `/leagues/${leagueId}/teams/${baseTeam.id}`
-    );
-    expect(screen.getByRole('link', { name: '球队设置' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: '球队设置' })).toHaveAttribute(
       'href',
       `/leagues/${leagueId}/teams/${baseTeam.id}#team-settings`
     );
+    expect(screen.getByRole('link', { name: '队壳管理' })).toHaveAttribute(
+      'href',
+      `/leagues/${leagueId}/teams/${baseTeam.id}#team-shell`
+    );
+    expect(screen.queryByRole('link', { name: '查看球队详情' })).not.toBeInTheDocument();
     expect(screen.queryByText('归档球队')).not.toBeInTheDocument();
   });
 
