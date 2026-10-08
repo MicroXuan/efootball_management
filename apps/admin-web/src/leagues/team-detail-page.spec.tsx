@@ -95,3 +95,29 @@ it('refreshes current data after an optimistic-version conflict', async () => {
     method: 'PATCH', body: expect.objectContaining({ expectedVersion: 1 })
   }));
 });
+
+it('requires a reason to withdraw and renders a withdrawn team read-only with recovery', async () => {
+  const archived = { ...detail('巴塞罗那', 2), status: 'ARCHIVED' as const };
+  const request = vi.fn()
+    .mockResolvedValueOnce(detail('巴塞罗那', 1))
+    .mockResolvedValueOnce(archived);
+  const view = renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '退出联赛' }));
+  expect(screen.getByRole('button', { name: '确认退出' })).toBeDisabled();
+  await userEvent.type(screen.getByLabelText('操作原因'), '球队主动退赛');
+  await userEvent.click(screen.getByRole('button', { name: '确认退出' }));
+
+  await waitFor(() => expect(request).toHaveBeenNthCalledWith(2,
+    `/v1/admin/leagues/${leagueId}/teams/${teamId}/archive`,
+    expect.objectContaining({
+      method: 'POST',
+      body: { expectedVersion: 1, reason: '球队主动退赛' }
+    })
+  ));
+  expect(await screen.findByRole('button', { name: '恢复球队' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '阵容管理' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '球队设置' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '队壳管理' })).not.toBeInTheDocument();
+  view.unmount();
+});

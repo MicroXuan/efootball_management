@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Form, Input, InputNumber, Space, Spin, Table, Tag } from 'antd';
+import { Alert, Button, Card, Empty, Form, Input, InputNumber, Space, Spin, Table, Tabs, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueTeamDetailSchema, LeagueTeamListResponseSchema, PublicUserLookupSchema, type LeagueTeamSummary, type PublicUserLookup } from '@efm/contracts';
@@ -33,6 +33,7 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [filterKeyword, setFilterKeyword] = useState('');
+  const [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [form] = Form.useForm<CreateFields>();
   const mutationKey = useMutationKey();
   const filteredTeams = useMemo(() => filterLeagueTeams(teams, filterKeyword), [teams, filterKeyword]);
@@ -40,11 +41,11 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
   const load = useCallback(async () => {
     setLoading(true); setLoadError(false);
     try {
-      const response = await api.request(`/v1/admin/leagues/${leagueId}/teams`, { schema: LeagueTeamListResponseSchema });
+      const response = await api.request(`/v1/admin/leagues/${leagueId}/teams?status=${status}`, { schema: LeagueTeamListResponseSchema });
       setTeams(response.items);
     } catch { setLoadError(true); }
     finally { setLoading(false); }
-  }, [api, leagueId]);
+  }, [api, leagueId, status]);
   useEffect(() => { void load(); }, [load]);
 
   const lookup = async () => {
@@ -83,6 +84,10 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
 
   return <div className="page-grid page-grid--teams">
     <Card title="联赛球队" className="data-card">
+      <Tabs activeKey={status} onChange={(key) => { setFilterKeyword(''); setStatus(key as 'ACTIVE' | 'ARCHIVED'); }} items={[
+        { key: 'ACTIVE', label: '现役球队' },
+        { key: 'ARCHIVED', label: '已退出' }
+      ]} />
       {loadError ? <Alert role="alert" type="error" showIcon title="球队列表加载失败" action={<Button onClick={() => void load()}>重新加载</Button>} /> : null}
       {loading ? <div className="loading-block"><Spin /></div> : teams.length === 0 && !loadError ? <Empty description="暂无球队" /> : null}
       {!loading && teams.length ? <Input.Search
@@ -104,13 +109,15 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         </div> },
         { title: '负责人', render: (_, row) => row.ownerDisplayName ? `${row.ownerDisplayName} · ${row.ownerPublicUserNo}` : row.ownerPublicUserNo },
         { title: '阵容', render: (_, row) => `${row.activePlayerCount}/25` },
-        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> },
+        { title: '状态', render: (_, row) => row.status === 'ARCHIVED'
+          ? <Tag>已退赛</Tag>
+          : <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> },
         { title: '操作', key: 'actions', render: (_, row) => <Link aria-label="球队管理" to={`/leagues/${leagueId}/teams/${row.id}`}>
           <Button type="primary" icon={<AdminIcon name="teams" />}>球队管理</Button>
         </Link> }
       ]} /> : null}
     </Card>
-    <Card title="创建球队" className="form-card">
+    {status === 'ACTIVE' ? <Card title="创建球队" className="form-card">
       {mutationError ? <Alert role="alert" type="error" showIcon title={mutationError} /> : null}
       <Form<CreateFields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={create}>
         <Form.Item label="用户编号" htmlFor="public-user-no" required validateStatus={lookupError ? 'error' : undefined} help={lookupError}>
@@ -124,6 +131,6 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>创建球队</Button>
       </Form>
-    </Card>
+    </Card> : null}
   </div>;
 }
