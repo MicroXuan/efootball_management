@@ -13,14 +13,8 @@ describe('StandingsService', () => {
   afterAll(() => prisma.$disconnect());
 
   it('returns an empty version-zero public snapshot before any official result', async () => {
-    await expect(service.getLatestPublic('00000000-0000-4000-8000-000000000000')).resolves.toEqual({
-      competitionId: '00000000-0000-4000-8000-000000000000',
-      version: 0,
-      ruleVersion: 1,
-      triggeringResultVersionId: null,
-      generatedAt: null,
-      rows: []
-    });
+    await expect(service.getLatestPublic('00000000-0000-4000-8000-000000000000'))
+      .rejects.toMatchObject({ status: 404 });
   });
 });
 
@@ -44,7 +38,9 @@ describe('stage-scoped standings', () => {
         }]
       })) }
     };
-    const service = new StandingsService(prisma as never);
+    const service = new StandingsService(prisma as never, {
+      requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn()
+    } as never);
 
     const response = await service.getDivisionStandings('user-1', 'league-1', 'season-1');
     expect(response).toMatchObject({ myStageId: 'stage-a' });
@@ -59,6 +55,8 @@ describe('stage-scoped standings', () => {
   it('rejects users without an approved entry and scopes recalculation to one stage', async () => {
     const denied = new StandingsService({
       seasonEntry: { findFirst: jest.fn(async () => null) }
+    } as never, {
+      requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn()
     } as never);
     await expect(denied.getDivisionStandings('outsider', 'league-1', 'season-1'))
       .rejects.toMatchObject({ response: { code: 'DIVISION_STANDINGS_FORBIDDEN' } });
@@ -79,7 +77,9 @@ describe('stage-scoped standings', () => {
       },
       standingsRow: { createMany: jest.fn(async () => ({ count: 1 })) }
     };
-    const service = new StandingsService({} as never);
+    const service = new StandingsService({} as never, {
+      requireVisible: jest.fn(async () => null), notFound: jest.fn()
+    } as never);
     const snapshot = await service.recalculate(transaction as never, 'competition-1', 'result-1', 'stage-a');
     expect(snapshot).toMatchObject({ stageId: 'stage-a', version: 1 });
     expect(transaction.competitionMatch.findMany).toHaveBeenCalledWith(expect.objectContaining({

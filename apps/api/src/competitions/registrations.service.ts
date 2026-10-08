@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CompetitionRegistrationResponse,
   RegisterCompetitionRequest,
@@ -10,6 +10,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 export interface CompetitionClock {
   now(): Date;
@@ -26,18 +27,24 @@ export class SystemCompetitionClock implements CompetitionClock {
 
 @Injectable()
 export class RegistrationsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
-    @Inject(COMPETITION_CLOCK) private readonly clock: CompetitionClock
-  ) {}
+    @Inject(COMPETITION_CLOCK) private readonly clock: CompetitionClock,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  register(
+  async register(
     userId: string,
     competitionId: string,
     input: RegisterCompetitionRequest,
     key: string
   ): Promise<CompetitionRegistrationResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(userId, `competition.register:${competitionId}`, key, async (transaction) => {
       await this.lockCompetition(transaction, competitionId);
       const competition = await transaction.competition.findUnique({ where: { id: competitionId } });
@@ -97,12 +104,13 @@ export class RegistrationsService {
     });
   }
 
-  withdraw(
+  async withdraw(
     userId: string,
     competitionId: string,
     input: VersionedMutationRequest,
     key: string
   ): Promise<CompetitionRegistrationResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(userId, `competition.withdraw:${competitionId}`, key, async (transaction) => {
       await this.lockCompetition(transaction, competitionId);
       const competition = await transaction.competition.findUnique({ where: { id: competitionId } });
@@ -126,13 +134,14 @@ export class RegistrationsService {
     });
   }
 
-  review(
+  async review(
     actorId: string,
     competitionId: string,
     registrationId: string,
     input: ReviewRegistrationRequest,
     key: string
   ): Promise<CompetitionRegistrationResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.registration.review:${registrationId}`, key, async (transaction) => {
       await this.lockCompetition(transaction, competitionId);
       const registration = await transaction.competitionRegistration.findFirst({
@@ -186,6 +195,7 @@ export class RegistrationsService {
   }
 
   async getMine(userId: string, competitionId: string): Promise<CompetitionRegistrationResponse | null> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const registration = await this.prisma.competitionRegistration.findUnique({
       where: { competitionId_applicantId: { competitionId, applicantId: userId } }
     });
@@ -193,6 +203,7 @@ export class RegistrationsService {
   }
 
   async listForManager(competitionId: string): Promise<CompetitionRegistrationResponse[]> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const registrations = await this.prisma.competitionRegistration.findMany({
       where: { competitionId },
       include: { applicant: true, gameAccount: true },

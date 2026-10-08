@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CupRegistrationResponse,
   ParsedCreateSeasonCupRequest,
@@ -15,6 +15,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { COMPETITION_CLOCK, type CompetitionClock } from './registrations.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const DEFAULT_TIE_BREAKERS = [
   'TOTAL_POINTS',
@@ -29,20 +30,28 @@ type CupRecord = Competition & { cupConfig: CupCompetitionConfig | null };
 
 @Injectable()
 export class CupCompetitionsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly adminReceipts: AdminMutationReceiptService,
     @Inject(MutationReceiptService) private readonly userReceipts: MutationReceiptService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(COMPETITION_CLOCK) private readonly clock: CompetitionClock
-  ) {}
+    @Inject(COMPETITION_CLOCK) private readonly clock: CompetitionClock,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async listAdmin(
     actorAdminId: string,
     leagueId: string,
     seasonId: string
   ): Promise<SeasonCupListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     const competitions = await this.prisma.competition.findMany({
       where: {
@@ -68,6 +77,9 @@ export class CupCompetitionsService {
     input: ParsedCreateSeasonCupRequest,
     key: string
   ) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.adminReceipts.execute(actorAdminId, `admin.cup.create:${seasonId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM league_seasons WHERE id = ${seasonId} FOR UPDATE`;
@@ -134,12 +146,13 @@ export class CupCompetitionsService {
     }, input);
   }
 
-  register(
+  async register(
     userId: string,
     competitionId: string,
     input: RegisterSeasonCupRequest,
     key: string
   ): Promise<CupRegistrationResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.userReceipts.execute(userId, `cup.register:${competitionId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM competitions WHERE id = ${competitionId} FOR UPDATE`;
       const competition = await transaction.competition.findUnique({
@@ -225,6 +238,7 @@ export class CupCompetitionsService {
   }
 
   async getMine(userId: string, competitionId: string): Promise<CupRegistrationResponse | null> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const registration = await this.prisma.competitionRegistration.findFirst({
       where: {
         competitionId,
@@ -238,12 +252,13 @@ export class CupCompetitionsService {
     return this.registration(registration, registration.seasonEntry.teamNameSnapshot);
   }
 
-  withdraw(
+  async withdraw(
     userId: string,
     competitionId: string,
     input: WithdrawSeasonCupRequest,
     key: string
   ): Promise<CupRegistrationResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.userReceipts.execute(userId, `cup.withdraw:${competitionId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM competitions WHERE id = ${competitionId} FOR UPDATE`;
       const competition = await transaction.competition.findUnique({

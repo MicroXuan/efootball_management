@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ConfirmCupGroupProposalRequest,
   CupGroupProposal,
@@ -12,6 +12,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError } from './competition.errors.js';
 import { buildBalancedCupGroups } from './domain/cup-draw.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const ALGORITHM_VERSION = 'cup-groups-v1';
 const PROPOSAL_INCLUDE = {
@@ -22,14 +23,21 @@ type ProposalRecord = Prisma.CupGroupProposalGetPayload<{ include: typeof PROPOS
 
 @Injectable()
 export class CupGroupsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async getAdmin(actorAdminId: string, leagueId: string, competitionId: string): Promise<CupGroupView> {
+    const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (competitionLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     const competition = await this.prisma.competition.findUnique({
       where: { id: competitionId },
@@ -76,6 +84,8 @@ export class CupGroupsService {
     input: GenerateCupGroupProposalRequest,
     key: string
   ): Promise<CupGroupProposal> {
+    const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (competitionLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,
@@ -172,6 +182,8 @@ export class CupGroupsService {
     input: ConfirmCupGroupProposalRequest,
     key: string
   ) {
+    const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (competitionLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,

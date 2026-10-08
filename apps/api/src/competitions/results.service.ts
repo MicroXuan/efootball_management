@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ManagerMatchResultRequest,
   MatchResultVersionResponse,
@@ -13,6 +13,7 @@ import type { CompetitionTransaction } from './competition.types.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { StandingsService } from './standings.service.js';
 import { CupProgressionService } from './cup-progression.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
@@ -25,14 +26,20 @@ type MatchRecord = Prisma.CompetitionMatchGetPayload<{
 
 @Injectable()
 export class ResultsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
     @Inject(StandingsService) private readonly standings: StandingsService,
-    @Inject(CupProgressionService) private readonly cupProgression: CupProgressionService
-  ) {}
+    @Inject(CupProgressionService) private readonly cupProgression: CupProgressionService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
+  async submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
+    await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.submit:${matchId}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.playerMatch(transaction, userId, matchId);
@@ -59,7 +66,8 @@ export class ResultsService {
     });
   }
 
-  confirm(userId: string, matchId: string, resultVersion: number, input: VersionedMutationRequest, key: string) {
+  async confirm(userId: string, matchId: string, resultVersion: number, input: VersionedMutationRequest, key: string) {
+    await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.confirm:${matchId}:${resultVersion}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.playerMatch(transaction, userId, matchId);
@@ -86,7 +94,8 @@ export class ResultsService {
     });
   }
 
-  reject(userId: string, matchId: string, resultVersion: number, input: RejectMatchResultRequest, key: string) {
+  async reject(userId: string, matchId: string, resultVersion: number, input: RejectMatchResultRequest, key: string) {
+    await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.reject:${matchId}:${resultVersion}`, key, async (transaction) => {
       if (!input.reason?.trim()) {
         throw new CompetitionError('RESULT_REJECTION_REASON_REQUIRED', 'Rejection reason is required', 400);
@@ -114,13 +123,16 @@ export class ResultsService {
     });
   }
 
-  recordByManager(
+  async recordByManager(
     actorId: string,
     competitionId: string,
     matchId: string,
     input: ManagerMatchResultRequest,
     key: string
   ) {
+    const matchLeagueId = await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
+    const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (matchLeagueId !== competitionLeagueId) throw this.visibility.notFound();
     return this.receipts.execute(actorId, `match.result.manager:${matchId}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.managerMatch(transaction, competitionId, matchId);

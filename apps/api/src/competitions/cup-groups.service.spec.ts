@@ -63,7 +63,8 @@ function harness() {
     transaction as never,
     authorization as never,
     { execute } as never,
-    audit as never
+    audit as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
   return { service, transaction };
 }
@@ -128,7 +129,8 @@ function confirmationHarness() {
     transaction as never,
     authorization as never,
     { execute } as never,
-    audit as never
+    audit as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
   return { service, transaction };
 }
@@ -165,7 +167,8 @@ function readHarness(options?: { proposalStatus?: 'DRAFT' | 'CONFIRMED'; empty?:
     prisma as never,
     authorization as never,
     { execute: jest.fn() } as never,
-    { record: jest.fn() } as never
+    { record: jest.fn() } as never,
+    { requireVisible: jest.fn(async () => options?.leagueId ?? 'league-1'), notFound: jest.fn(() => ({ code: 'CUP_NOT_FOUND' })) } as never
   );
   return { service, prisma };
 }

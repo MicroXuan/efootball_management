@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   CreateCompetitionRequestSchema,
   type CompetitionDetail,
@@ -17,6 +17,7 @@ import { CompetitionError, assertExpectedVersion } from './competition.errors.js
 import type { CompetitionTransaction } from './competition.types.js';
 import { assertCompetitionTransition } from './domain/competition-state.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const DEFAULT_RULES: CompetitionRules = {
   winPoints: 3,
@@ -48,10 +49,15 @@ type TransitionInput = VersionedMutationRequest & { reason?: string | undefined 
 
 @Injectable()
 export class CompetitionsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService
-  ) {}
+    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   create(actorId: string, input: ParsedCreateCompetitionRequest, key: string): Promise<CompetitionDetail> {
     return this.receipts.execute(actorId, 'competition.create', key, async (transaction) => {
@@ -95,12 +101,13 @@ export class CompetitionsService {
     });
   }
 
-  update(
+  async update(
     actorId: string,
     competitionId: string,
     input: UpdateCompetitionRequest,
     key: string
   ): Promise<CompetitionDetail> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.update:${competitionId}`, key, async (transaction) => {
       const existing = await this.findCompetition(transaction, competitionId);
       assertExpectedVersion(existing.version, input.expectedVersion, 'Competition');
@@ -154,12 +161,13 @@ export class CompetitionsService {
     });
   }
 
-  updateRules(
+  async updateRules(
     actorId: string,
     competitionId: string,
     input: UpdateCompetitionRulesRequest,
     key: string
   ): Promise<CompetitionDetail> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.rules:${competitionId}`, key, async (transaction) => {
       const existing = await this.findCompetition(transaction, competitionId);
       assertExpectedVersion(existing.version, input.expectedVersion, 'Competition');
@@ -187,13 +195,14 @@ export class CompetitionsService {
     });
   }
 
-  transition(
+  async transition(
     actorId: string,
     competitionId: string,
     target: CompetitionStatus,
     input: TransitionInput,
     key: string
   ): Promise<CompetitionDetail> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.transition:${competitionId}:${target}`, key, async (transaction) => {
       await this.lockCompetition(transaction, competitionId);
       const existing = await this.findCompetition(transaction, competitionId);
@@ -242,17 +251,18 @@ export class CompetitionsService {
     const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
     const records = await this.prisma.competition.findMany({
       where: {
+        AND: [
+          { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] },
+          ...(cursor ? [{ OR: [
+            { registrationOpensAt: { lt: cursor.registrationOpensAt } },
+            { registrationOpensAt: cursor.registrationOpensAt, id: { gt: cursor.id } }
+          ] }] : [])
+        ],
         status: query.status && query.status !== 'DRAFT' ? query.status : { not: 'DRAFT' },
         ...(query.seasonId ? { seasonId: query.seasonId } : {}),
         ...(query.category === 'CUP' ? {
           competitionType: { in: ['GROUP_KNOCKOUT_CUP', 'KNOCKOUT_CUP'] as const }
         } : {}),
-        ...(cursor ? {
-          OR: [
-            { registrationOpensAt: { lt: cursor.registrationOpensAt } },
-            { registrationOpensAt: cursor.registrationOpensAt, id: { gt: cursor.id } }
-          ]
-        } : {})
       },
       include: { _count: { select: { participants: true } } },
       orderBy: [{ registrationOpensAt: 'desc' }, { id: 'asc' }],
@@ -269,18 +279,22 @@ export class CompetitionsService {
   }
 
   async getPublic(competitionId: string): Promise<CompetitionDetail> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const record = await this.getDetailRecord(this.prisma, competitionId);
     if (record.status === 'DRAFT') throw this.notFound();
     return this.detail(record, false);
   }
 
   async getManaged(competitionId: string): Promise<CompetitionDetail> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const record = await this.getDetailRecord(this.prisma, competitionId);
     return this.detail(record, true);
   }
 
   private async findCompetition(transaction: CompetitionTransaction, id: string): Promise<Competition> {
-    const competition = await transaction.competition.findUnique({ where: { id } });
+    const competition = await transaction.competition.findFirst({
+      where: { id, OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] }
+    });
     if (!competition) throw this.notFound();
     return competition;
   }
@@ -293,8 +307,8 @@ export class CompetitionsService {
     client: CompetitionTransaction | PrismaService,
     id: string
   ): Promise<DetailRecord> {
-    const record = await client.competition.findUnique({
-      where: { id },
+    const record = await client.competition.findFirst({
+      where: { id, OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] },
       include: {
         _count: { select: { participants: true } },
         ruleVersions: { orderBy: { version: 'desc' }, take: 1 },

@@ -249,7 +249,8 @@ describe('tiered stage schedules', () => {
       {} as never,
       generateRoundRobin,
       adminReceipts as never,
-      audit as never
+      audit as never,
+      { requireVisible: jest.fn(async () => 'league-1') } as never
     );
     return { service, transaction, stage };
   }

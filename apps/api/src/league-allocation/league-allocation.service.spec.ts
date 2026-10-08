@@ -89,7 +89,8 @@ function harness(seasonOverrides: Record<string, unknown> = {}) {
     prisma as never,
     authorization as never,
     receipts as never,
-    audit as never
+    audit as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
   return { service, transaction, receipts, audit, season };
 }
@@ -184,7 +185,8 @@ function confirmationHarness(options: { published?: boolean; seasonVersion?: num
     transaction as never,
     authorization as never,
     receipts as never,
-    audit as never
+    audit as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
   return { service, transaction, proposal, season };
 }

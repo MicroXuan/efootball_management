@@ -176,7 +176,10 @@ describe('team match ownership', () => {
       _actor: string, _operation: string, _key: string,
       work: (client: typeof transaction) => Promise<unknown>
     ) => work(transaction)) };
-    const service = new ResultsService(transaction as never, receipts as never, {} as never, {} as never);
+    const service = new ResultsService(
+      transaction as never, receipts as never, {} as never, {} as never,
+      { requireVisible: jest.fn(async () => null), notFound: jest.fn() } as never
+    );
     return { service };
   }
 
@@ -231,7 +234,8 @@ describe('cup match results', () => {
     const progression = { recordWinner: jest.fn(async () => undefined) };
     return {
       service: new ResultsService(
-        transaction as never, receipts as never, standings as never, progression as never
+        transaction as never, receipts as never, standings as never, progression as never,
+        { requireVisible: jest.fn(async () => null), notFound: jest.fn() } as never
       ),
       transaction,
       standings,

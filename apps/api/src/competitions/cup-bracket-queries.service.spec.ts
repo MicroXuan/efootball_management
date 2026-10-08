@@ -45,7 +45,11 @@ function harness(found: typeof proposal | null = proposal) {
     leagueId
   })) };
   return {
-    service: new CupBracketQueriesService(prisma as never, authorization as never),
+    service: new CupBracketQueriesService(
+      prisma as never,
+      authorization as never,
+      { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
+    ),
     prisma,
     authorization
   };

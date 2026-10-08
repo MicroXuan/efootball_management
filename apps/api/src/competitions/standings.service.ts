@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CompetitionTieBreaker,
   DivisionStandingsResponse,
@@ -9,6 +9,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import type { CompetitionTransaction } from './competition.types.js';
 import { CompetitionError } from './competition.errors.js';
 import { calculateStandings } from './domain/standings.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const STAGE_INCLUDE = {
   participants: {
@@ -30,7 +31,14 @@ type StageRecord = Prisma.CompetitionStageGetPayload<{ include: typeof STAGE_INC
 
 @Injectable()
 export class StandingsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly visibility: LeagueVisibilityService;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async recalculate(
     transaction: CompetitionTransaction,
@@ -38,6 +46,7 @@ export class StandingsService {
     triggerResultVersionId: string,
     stageId?: string
   ): Promise<StandingsSnapshotResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId }, transaction);
     const competition = await transaction.competition.findUniqueOrThrow({ where: { id: competitionId } });
     const ruleVersion = competition.boundRuleVersion || competition.activeRuleVersion;
     const storedRules = await transaction.competitionRuleVersion.findUnique({
@@ -129,6 +138,7 @@ export class StandingsService {
   }
 
   async getLatestPublic(competitionId: string): Promise<StandingsSnapshotResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const snapshot = await this.prisma.standingsSnapshot.findFirst({
       where: { competitionId, stageId: null },
       include: { rows: { include: { participant: true }, orderBy: [{ rank: 'asc' }, { participantId: 'asc' }] } },
@@ -158,6 +168,9 @@ export class StandingsService {
   }
 
   async getDivisionStandings(userId: string, leagueId: string, seasonId: string): Promise<DivisionStandingsResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     const entry = await this.prisma.seasonEntry.findFirst({
       where: { seasonId, ownerUserId: userId, status: 'APPROVED', season: { leagueId } },
       select: { id: true }

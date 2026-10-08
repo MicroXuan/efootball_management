@@ -31,7 +31,10 @@ export class MyCompetitionsService {
 
   async listCompetitions(userId: string, query: MyCompetitionListQuery): Promise<MyCompetitionListResponse> {
     const registrations = await this.prisma.competitionRegistration.findMany({
-      where: { applicantId: userId },
+      where: {
+        applicantId: userId,
+        competition: { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] }
+      },
       include: {
         competition: { include: { _count: { select: { participants: true } } } },
         seasonEntry: { select: { teamNameSnapshot: true } }
@@ -59,7 +62,13 @@ export class MyCompetitionsService {
   async listMatches(userId: string, query: MyMatchListQuery): Promise<MyMatchListResponse> {
     const records = await this.prisma.competitionMatch.findMany({
       where: {
-        stage: { status: 'PUBLISHED', competition: { status: { not: 'CANCELLED' } } },
+        stage: {
+          status: 'PUBLISHED',
+          competition: {
+            status: { not: 'CANCELLED' },
+            OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }]
+          }
+        },
         OR: [
           { homeParticipant: { individualUserId: userId } },
           { awayParticipant: { individualUserId: userId } },
@@ -110,7 +119,10 @@ export class MyCompetitionsService {
   private async matchesForParticipant(participantId: string): Promise<MatchRecord[]> {
     const records = await this.prisma.competitionMatch.findMany({
       where: {
-        stage: { status: 'PUBLISHED' },
+        stage: {
+          status: 'PUBLISHED',
+          competition: { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] }
+        },
         OR: [{ homeParticipantId: participantId }, { awayParticipantId: participantId }]
       },
       include: {
