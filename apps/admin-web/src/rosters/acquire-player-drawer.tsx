@@ -48,17 +48,16 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
       <div className="candidate-title"><strong>{player.playerName}</strong>{player.ownedByTeamId ? <Tag color="red">本联赛已归属</Tag> : null}</div>
       <Radio.Group value={selectedCardId} onChange={(event) => { setSelectedCardId(event.target.value); mutationKey.reset(); }}>
         <div className="candidate-card-grid">{player.cards.map((card) => <Radio key={card.id} value={card.id} aria-label={card.cardName} disabled={Boolean(player.ownedByTeamId)}>
-          <div className="candidate-card"><strong>{card.cardName}</strong>{card.recommended ? <Tag color="green">系统推荐</Tag> : null}<span>{card.position} · 初始 {card.overallRating}</span><span>自动加点 {card.maxOverall ?? '—'} · DT {card.dtRating ?? '—'}</span></div>
+          <div className="candidate-card"><strong>{card.cardName}</strong>{card.recommended ? <Tag color="green">系统推荐</Tag> : null}<span>{card.position} · 初始 {card.overallRating}</span><span>自动加点总评 {card.maxOverall ?? '—'}</span></div>
         </Radio>)}</div>
       </Radio.Group>
     </section>)}
     {selected ? <Descriptions size="small" column={2} items={[{ key: 'salary', label: '球员工资', children: selected.salaryMinor ?? '未配置' }, { key: 'impact', label: '预计球队工资', children: selected.salaryMinor === null ? '—' : `${summary.salaryMinor + selected.salaryMinor}/${summary.salaryCapMinor}` }]} /> : null}
-    {selected?.dtRating === null ? <Alert type="error" showIcon title="缺少 DT 能力值，不能加入阵容" /> : null}
     <Form layout="vertical">
       <Form.Item label="成交金额"><InputNumber aria-label="成交金额" min={1} precision={0} value={amountMinor} onChange={(value) => { setAmountMinor(value); mutationKey.reset(); }} /></Form.Item>
       <Form.Item label="操作原因"><Input aria-label="操作原因" value={reason} onChange={(event) => { setReason(event.target.value); mutationKey.reset(); }} /></Form.Item>
     </Form>
     <Typography.Paragraph type="secondary">确认后将写入不可修改的阵容交易和财务流水。</Typography.Paragraph>
-    <Button aria-label="确认购买" type="primary" onClick={() => void submit()} loading={busy} disabled={!selected || selected.dtRating === null || selected.salaryMinor === null || Boolean(results.find((player) => player.cards.some((card) => card.id === selectedCardId))?.ownedByTeamId)}>确认购买</Button>
+    <Button aria-label="确认购买" type="primary" onClick={() => void submit()} loading={busy} disabled={!selected || selected.salaryMinor === null || Boolean(results.find((player) => player.cards.some((card) => card.id === selectedCardId))?.ownedByTeamId)}>确认购买</Button>
   </Drawer>;
 }

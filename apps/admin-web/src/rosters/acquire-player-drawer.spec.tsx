@@ -18,8 +18,8 @@ function api(request: AdminApi['request']): AdminApi {
 const candidate = {
   playerId, playerName: '博努奇', ownedByTeamId: null, recommendedPlayerCardId: bestCardId,
   cards: [
-    { id: bestCardId, cardName: 'Epic', imageUrl: null, position: 'CB' as const, overallRating: 87, maxOverall: 99, dtRating: 98, salaryMinor: 700, recommended: true },
-    { id: otherCardId, cardName: 'Highlight', imageUrl: null, position: 'CB' as const, overallRating: 86, maxOverall: 97, dtRating: 96, salaryMinor: 500, recommended: false }
+    { id: bestCardId, cardName: 'Epic', imageUrl: null, position: 'CB' as const, overallRating: 87, maxOverall: 99, salaryMinor: 700, recommended: true },
+    { id: otherCardId, cardName: 'Highlight', imageUrl: null, position: 'CB' as const, overallRating: 86, maxOverall: 97, salaryMinor: 500, recommended: false }
   ]
 };
 
@@ -34,13 +34,14 @@ describe('acquire player drawer', () => {
     expect(screen.getByText('Highlight')).toBeInTheDocument();
   });
 
-  it('blocks a card without a DT rating', async () => {
-    const request = vi.fn().mockResolvedValue({ items: [{ ...candidate, recommendedPlayerCardId: otherCardId, cards: [{ ...candidate.cards[1], id: otherCardId, dtRating: null, recommended: true }] }] });
+  it('keeps a card selectable when salary is available without DT', async () => {
+    const request = vi.fn().mockResolvedValue({ items: [{ ...candidate, recommendedPlayerCardId: otherCardId, cards: [{ ...candidate.cards[1], id: otherCardId, recommended: true }] }] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
     await userEvent.click(screen.getByRole('button', { name: '搜索' }));
-    expect(await screen.findByText('缺少 DT 能力值，不能加入阵容')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
+    expect(await screen.findByLabelText('Highlight')).toBeChecked();
+    expect(screen.queryByText(/DT/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认购买' })).toBeEnabled();
   });
 
   it('shows current roster and salary limits for business failures', async () => {
