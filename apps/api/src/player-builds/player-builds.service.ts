@@ -71,7 +71,6 @@ export class PlayerBuildsService {
       externalId: build.playerCard.externalId,
       algorithmVersion: build.algorithmVersion,
       maxOverall: build.maxOverall,
-      dtRating: build.dtRating,
       releaseDate: build.playerCard.cardPack?.releaseDate ?? null
     })));
     if (!selection) return saved;

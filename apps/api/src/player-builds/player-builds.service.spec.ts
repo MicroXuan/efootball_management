@@ -86,7 +86,7 @@ describe('PlayerBuildsService', () => {
 
   it('refreshes the recommendation deterministically while preserving every card', async () => {
     const first = await createCard('bonucci-z', '2026-09-24');
-    const second = await createCard('bonucci-a', '2026-09-24');
+    const second = await createCard('bonucci-a', '2025-09-24');
     await service.save(first.id, {
       autoBuildAllocation: { defending: 12 },
       autoBuildMaxOverall: 98,
@@ -103,8 +103,9 @@ describe('PlayerBuildsService', () => {
     const recommendation = await prisma.footballPlayerBestCard.findUnique({
       where: { footballPlayerId: playerId }
     });
-    expect(recommendation?.playerCardId).toBe(second.id);
+    expect(recommendation?.playerCardId).toBe(first.id);
     expect(recommendation?.selectionReason).toMatchObject({ candidateCount: 2 });
+    expect(recommendation?.selectionReason).not.toHaveProperty('winner.dtRating');
     await expect(prisma.playerCard.count({ where: { playerId } })).resolves.toBe(2);
   });
 });
