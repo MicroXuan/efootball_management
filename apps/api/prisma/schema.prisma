@@ -611,13 +611,13 @@ model LeagueSalaryRuleVersion {
 model LeagueSalaryTier {
   id                  String                  @id @default(uuid()) @db.Char(36)
   salaryRuleVersionId String                  @map("salary_rule_version_id") @db.Char(36)
-  minDtRating         Int                     @map("min_dt_rating") @db.UnsignedTinyInt
-  maxDtRating         Int                     @map("max_dt_rating") @db.UnsignedTinyInt
+  minOverall          Int                     @map("min_overall") @db.UnsignedTinyInt
+  maxOverall          Int                     @map("max_overall") @db.UnsignedTinyInt
   salaryMinor         Int                     @map("salary_minor") @db.UnsignedInt
   salaryRuleVersion   LeagueSalaryRuleVersion @relation(fields: [salaryRuleVersionId], references: [id], onDelete: Cascade)
 
-  @@unique([salaryRuleVersionId, minDtRating], map: "league_salary_tiers_min_unique")
-  @@index([salaryRuleVersionId, maxDtRating], map: "league_salary_tiers_lookup_idx")
+  @@unique([salaryRuleVersionId, minOverall], map: "league_salary_tiers_min_unique")
+  @@index([salaryRuleVersionId, maxOverall], map: "league_salary_tiers_lookup_idx")
   @@map("league_salary_tiers")
 }
 
@@ -649,7 +649,8 @@ model LeaguePlayerOwnership {
   leagueTeamId        String                  @map("league_team_id") @db.Char(36)
   footballPlayerId    String                  @map("football_player_id") @db.Char(36)
   currentPlayerCardId String                  @map("current_player_card_id") @db.Char(36)
-  dtRatingSnapshot    Int                     @map("dt_rating_snapshot") @db.UnsignedTinyInt
+  maxOverallSnapshot  Int                     @map("max_overall_snapshot") @db.UnsignedTinyInt
+  dtRatingSnapshot    Int?                    @map("dt_rating_snapshot") @db.UnsignedTinyInt
   salaryRuleVersionId String                  @map("salary_rule_version_id") @db.Char(36)
   salaryMinor         Int                     @map("salary_minor") @db.UnsignedInt
   acquiredAt          DateTime                @default(now()) @map("acquired_at")

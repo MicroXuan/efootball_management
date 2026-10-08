@@ -628,7 +628,7 @@ describe('league team administration contracts', () => {
     }));
   });
 
-  it('requires salary tiers to cover every DT value without gaps or overlaps', () => {
+  it('requires salary tiers to cover every automatic overall without gaps or overlaps', () => {
     const base = {
       id: ids.rule,
       leagueId: ids.league,
@@ -640,20 +640,24 @@ describe('league team administration contracts', () => {
       createdAt
     };
     const validTiers = [
-      { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
-      { minDtRating: 93, maxDtRating: 93, salaryMinor: 200 },
-      { minDtRating: 94, maxDtRating: 99, salaryMinor: 300 },
-      { minDtRating: 100, maxDtRating: 120, salaryMinor: 900 }
+      { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
+      { minOverall: 93, maxOverall: 93, salaryMinor: 200 },
+      { minOverall: 94, maxOverall: 99, salaryMinor: 300 },
+      { minOverall: 100, maxOverall: 120, salaryMinor: 900 }
     ];
 
     assert.equal(SalaryRuleVersionSchema.parse({ ...base, tiers: validTiers }).tiers.length, 4);
     assert.throws(() => SalaryRuleVersionSchema.parse({
       ...base,
-      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 94 } : tier)
+      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minOverall: 94 } : tier)
     }));
     assert.throws(() => SalaryRuleVersionSchema.parse({
       ...base,
-      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 92 } : tier)
+      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minOverall: 92 } : tier)
+    }));
+    assert.throws(() => SalaryRuleVersionSchema.parse({
+      ...base,
+      tiers: [{ minDtRating: 0, maxDtRating: 120, salaryMinor: 100 }]
     }));
     assert.throws(() => CreateSalaryRuleVersionRequestSchema.parse({
       salaryCapMinor: 10_000,
@@ -765,7 +769,7 @@ describe('league team administration contracts', () => {
       currentPlayerCardId: ids.card,
       cardName: 'Epic Italy',
       maxOverall: 97,
-      dtRating: 97,
+      dtRating: 91,
       salaryRuleVersionId: ids.rule,
       salaryMinor: 600,
       acquiredAt: createdAt,
@@ -773,6 +777,7 @@ describe('league team administration contracts', () => {
       version: 1
     });
     assert.equal(rosterEntry.playerId, ids.player);
+    assert.equal(Object.hasOwn(rosterEntry, 'dtRating'), false);
 
     const transaction = RosterTransactionSchema.parse({
       id: ids.transaction,
@@ -800,7 +805,7 @@ describe('league team administration contracts', () => {
         leagueTeamId: ids.team,
         playerId: ids.player,
         currentPlayerCardId: ids.card,
-        dtRating: 97,
+        maxOverall: 97,
         salaryRuleVersionId: ids.rule,
         salaryMinor: 600,
         acquiredAt: createdAt,
