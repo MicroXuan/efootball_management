@@ -121,6 +121,7 @@ export class LeaguesService {
     const cursor = query.cursor ? this.decodeCursor(query.cursor) : null;
     const records = await this.prisma.league.findMany({
       where: {
+        isDeleted: false,
         status: 'ACTIVE',
         ...(cursor ? {
           OR: [

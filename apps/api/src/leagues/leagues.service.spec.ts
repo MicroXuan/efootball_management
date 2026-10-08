@@ -128,6 +128,22 @@ describe('LeaguesService', () => {
     });
   });
 
+  it('defaults new leagues to visible and omits them after logical deletion', async () => {
+    const created = await service.create(actorId, {
+      ...input,
+      name: '逻辑删除联赛'
+    }, `logical-delete-${suffix}`);
+    leagueIds.push(created.id);
+
+    const stored = await prisma.league.findUniqueOrThrow({ where: { id: created.id } });
+    expect(stored.isDeleted).toBe(false);
+
+    await prisma.league.update({ where: { id: created.id }, data: { isDeleted: true } });
+
+    const page = await service.listPublic({ limit: 100 });
+    expect(page.items.some((league) => league.id === created.id)).toBe(false);
+  });
+
   it('uses only the explicitly selected current season and its live approved count', async () => {
     const created = await service.create(actorId, {
       ...input,

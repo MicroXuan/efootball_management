@@ -577,6 +577,7 @@ model League {
   description             String                            @default("") @db.VarChar(500)
   logoUrl                 String?                           @map("logo_url") @db.VarChar(2048)
   status                  LeagueStatus                      @default(ACTIVE)
+  isDeleted               Boolean                           @default(false) @map("is_deleted")
   edition                 LeagueEdition                     @default(INTERNATIONAL)
   currentSeasonId         String?                           @unique @map("current_season_id") @db.Char(36)
   defaultPlatform         GamePlatform                      @map("default_platform")
@@ -605,7 +606,7 @@ model League {
   playerValuationHistory  PlayerValuationHistory[]
   transactionFeeRules     LeagueTransactionFeeRuleVersion[]
 
-  @@index([status, createdAt, id], map: "leagues_public_list_idx")
+  @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
   @@index([createdByAdminId], map: "leagues_admin_creator_idx")
   @@map("leagues")
