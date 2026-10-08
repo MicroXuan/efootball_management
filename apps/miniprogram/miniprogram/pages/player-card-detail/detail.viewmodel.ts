@@ -1,5 +1,6 @@
-import { derivePesdataPositionAutoBuild, type PlayerCardDetail, type PlayerPosition } from '@efm/contracts'
+import type { PlayerCardDetail, PlayerPosition } from '@efm/contracts'
 import { toCardViewModel, type PlayerCardViewModel } from '../players/players.viewmodel'
+import { derivePlayerAutoBuild } from './player-auto-build'
 
 const attributeOrder = [
   'overall',
@@ -343,7 +344,7 @@ function derivedAutomaticBuild(detail: PlayerCardDetail): PlayerCardDetailViewMo
     }
   }
   const source = objectRecord(detail.attributes.sourceMetadata)
-  const build = derivePesdataPositionAutoBuild({
+  const build = derivePlayerAutoBuild({
     position: detail.position,
     overallRating: detail.overallRating,
     maxLevel: sourceNumber(source, 'maxLevel'),
