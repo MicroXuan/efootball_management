@@ -64,18 +64,18 @@ describe('SalaryRulesService', () => {
     service.createVersion(adminId, leagueId, {
       salaryCapMinor,
       tiers: defaultSalaryTiers().map((tier) =>
-        tier.minDtRating === 93 ? { ...tier, salaryMinor: salary93 } : tier),
+        tier.minOverall === 93 ? { ...tier, salaryMinor: salary93 } : tier),
       effectiveAt: new Date(Date.now() - 1_000).toISOString(),
       expectedCurrentVersion: 0
     });
 
-  it('rejects salary tiers with a DT gap or overlap', async () => {
+  it('rejects salary tiers with an overall gap or overlap', async () => {
     const { admin, league } = await fixture();
     await expect(service.createVersion(admin.id, league.id, {
       salaryCapMinor: 10_000,
       tiers: [
-        { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
-        { minDtRating: 94, maxDtRating: 120, salaryMinor: 200 }
+        { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
+        { minOverall: 94, maxOverall: 120, salaryMinor: 200 }
       ],
       effectiveAt: new Date().toISOString(),
       expectedCurrentVersion: 0
@@ -128,7 +128,8 @@ describe('SalaryRulesService', () => {
         leagueTeamId: team.id,
         footballPlayerId: player.id,
         currentPlayerCardId: card.id,
-        dtRatingSnapshot: 93,
+        maxOverallSnapshot: 95,
+        dtRatingSnapshot: 91,
         salaryRuleVersionId: current.id,
         salaryMinor: 200
       }
@@ -137,7 +138,7 @@ describe('SalaryRulesService', () => {
     const preview = await service.previewRecalculation(league.id, {
       salaryCapMinor: 300,
       tiers: defaultSalaryTiers().map((tier) =>
-        tier.minDtRating === 93 ? { ...tier, salaryMinor: 400 } : tier)
+        tier.minOverall === 95 ? { ...tier, salaryMinor: 400 } : tier)
     });
 
     expect(preview.teams).toEqual([expect.objectContaining({
@@ -182,7 +183,8 @@ describe('SalaryRulesService', () => {
         leagueTeamId: team.id,
         footballPlayerId: player.id,
         currentPlayerCardId: card.id,
-        dtRatingSnapshot: 93,
+        maxOverallSnapshot: 93,
+        dtRatingSnapshot: 91,
         salaryRuleVersionId: current.id,
         salaryMinor: 200
       }
