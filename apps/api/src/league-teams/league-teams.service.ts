@@ -237,7 +237,7 @@ export class LeagueTeamsService {
         where: { leagueTeamId: teamId, status: 'ACTIVE' },
         include: {
           footballPlayer: true,
-          currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } }
+          currentPlayerCard: true
         },
         orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
       }),
@@ -267,8 +267,7 @@ export class LeagueTeamsService {
         playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
         currentPlayerCardId: entry.currentPlayerCardId,
         cardName: entry.currentPlayerCard.cardName,
-        maxOverall: entry.currentPlayerCard.autoBuilds[0]?.maxOverall ?? entry.currentPlayerCard.overallRating,
-        dtRating: entry.dtRatingSnapshot,
+        maxOverall: entry.maxOverallSnapshot,
         salaryRuleVersionId: entry.salaryRuleVersionId,
         salaryMinor: entry.salaryMinor,
         acquiredAt: entry.acquiredAt.toISOString(),

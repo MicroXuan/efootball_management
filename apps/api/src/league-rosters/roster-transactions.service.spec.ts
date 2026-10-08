@@ -146,7 +146,12 @@ describe('RosterTransactionsService', () => {
     return { admin, users, league, season, teams, source };
   }
 
-  async function card(sourceId: string, name: string, dtRating: number | null = 93) {
+  async function card(
+    sourceId: string,
+    name: string,
+    dtRating: number | null = 93,
+    maxOverall = 93
+  ) {
     const player = await prisma.footballPlayer.create({ data: { nameEn: name } });
     const playerCard = await prisma.playerCard.create({
       data: {
@@ -161,7 +166,7 @@ describe('RosterTransactionsService', () => {
     });
     await new PlayerBuildsService(prisma).save(playerCard.id, {
       autoBuildAllocation: { defending: 10 },
-      autoBuildMaxOverall: 93,
+      autoBuildMaxOverall: maxOverall,
       dtRating,
       algorithmVersion: 'test-v1'
     });
@@ -243,14 +248,19 @@ describe('RosterTransactionsService', () => {
     )).rejects.toMatchObject({ code: 'LEAGUE_PLAYER_ALREADY_OWNED' });
   });
 
-  it('rejects missing DT, a closed window, and a salary above the cap', async () => {
+  it('allows missing DT while still enforcing windows and the salary cap', async () => {
     const missing = await fixture();
-    const noDt = await card(missing.source.id, 'Missing DT', null);
-    await expect(service.acquire(
+    const noDt = await card(missing.source.id, 'Missing DT', null, 95);
+    const acquiredWithoutDt = await service.acquire(
       acquisition(missing.season.id, missing.teams[0]!.id, noDt.card.id),
       missing.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
-    )).rejects.toMatchObject({ code: 'PLAYER_DT_RATING_MISSING' });
+    );
+    expect(acquiredWithoutDt.ownership).toMatchObject({ maxOverall: 95, salaryMinor: 400 });
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquiredWithoutDt.ownership.id },
+      select: { maxOverallSnapshot: true, dtRatingSnapshot: true }
+    })).resolves.toEqual({ maxOverallSnapshot: 95, dtRatingSnapshot: null });
 
     const closed = await fixture({ openWindow: false });
     const closedCard = await card(closed.source.id, 'Closed');
@@ -353,6 +363,7 @@ describe('RosterTransactionsService', () => {
           leagueTeamId: f.teams[0]!.id,
           footballPlayerId: player.player.id,
           currentPlayerCardId: player.card.id,
+          maxOverallSnapshot: 93,
           dtRatingSnapshot: 93,
           salaryRuleVersionId: rule.id,
           salaryMinor: 200
@@ -522,6 +533,7 @@ describe('RosterTransactionsService', () => {
           leagueTeamId: full.teams[1]!.id,
           footballPlayerId: seeded.player.id,
           currentPlayerCardId: seeded.card.id,
+          maxOverallSnapshot: 93,
           dtRatingSnapshot: 93,
           salaryRuleVersionId: rule.id,
           salaryMinor: 200
@@ -614,8 +626,8 @@ describe('RosterTransactionsService', () => {
     });
     await new PlayerBuildsService(prisma).save(upgrade.id, {
       autoBuildAllocation: { defending: 11 },
-      autoBuildMaxOverall: 94,
-      dtRating: 94,
+      autoBuildMaxOverall: 95,
+      dtRating: 91,
       algorithmVersion: 'test-v1'
     });
     await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
@@ -634,8 +646,8 @@ describe('RosterTransactionsService', () => {
 
     expect(upgraded.ownership).toMatchObject({
       currentPlayerCardId: upgrade.id,
-      dtRating: 94,
-      salaryMinor: 300,
+      maxOverall: 95,
+      salaryMinor: 400,
       version: 2
     });
     await expect(prisma.financeLedgerEntry.count({
@@ -645,7 +657,7 @@ describe('RosterTransactionsService', () => {
 
   it('rejects an equal-salary card change while over cap but permits a salary reduction', async () => {
     const f = await fixture({ cap: 1_000 });
-    const player = await card(f.source.id, 'Over cap upgrade', 94);
+    const player = await card(f.source.id, 'Over cap upgrade', 94, 94);
     const acquired = await service.acquire(
       acquisition(f.season.id, f.teams[0]!.id, player.card.id),
       f.admin.id,
@@ -725,6 +737,7 @@ describe('RosterTransactionsService', () => {
         leagueTeamId: f.teams[0]!.id,
         footballPlayerId: player.player.id,
         currentPlayerCardId: player.card.id,
+        maxOverallSnapshot: 93,
         dtRatingSnapshot: 93,
         salaryRuleVersionId: rule.id,
         salaryMinor: 200
@@ -798,6 +811,7 @@ describe('RosterTransactionsService', () => {
         leagueTeamId: f.teams[0]!.id,
         footballPlayerId: player.player.id,
         currentPlayerCardId: player.card.id,
+        maxOverallSnapshot: 93,
         dtRatingSnapshot: 93,
         salaryRuleVersionId: rule.id,
         salaryMinor: 200

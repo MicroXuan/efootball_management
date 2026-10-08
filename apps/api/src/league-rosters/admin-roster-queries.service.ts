@@ -16,7 +16,7 @@ export class AdminRosterQueriesService {
   async salaryRules(leagueId: string): Promise<SalaryRuleVersionListResponse> {
     const rules = await this.prisma.leagueSalaryRuleVersion.findMany({
       where: { leagueId },
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } },
+      include: { tiers: { orderBy: { minOverall: 'asc' } } },
       orderBy: { version: 'desc' }
     });
     return {
@@ -71,7 +71,7 @@ export class AdminRosterQueriesService {
     if (!team) throw new LeagueRosterError('LEAGUE_TEAM_NOT_FOUND', 'League team was not found', 404);
     const entries = await this.prisma.leaguePlayerOwnership.findMany({
       where: { leagueTeamId: teamId, status: 'ACTIVE' },
-      include: { footballPlayer: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } },
+      include: { footballPlayer: true, currentPlayerCard: true },
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
     const salaryRule = await this.prisma.leagueSalaryRuleVersion.findFirst({
@@ -94,8 +94,7 @@ export class AdminRosterQueriesService {
         playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
         currentPlayerCardId: entry.currentPlayerCardId,
         cardName: entry.currentPlayerCard.cardName,
-        maxOverall: entry.currentPlayerCard.autoBuilds[0]?.maxOverall ?? entry.currentPlayerCard.overallRating,
-        dtRating: entry.dtRatingSnapshot,
+        maxOverall: entry.maxOverallSnapshot,
         salaryRuleVersionId: entry.salaryRuleVersionId,
         salaryMinor: entry.salaryMinor,
         acquiredAt: entry.acquiredAt.toISOString(),
@@ -120,7 +119,7 @@ export class AdminRosterQueriesService {
   async candidates(leagueId: string, keyword: string): Promise<RosterPlayerCandidateListResponse> {
     const salaryRule = await this.prisma.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } },
+      include: { tiers: { orderBy: { minOverall: 'asc' } } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
     });
     const players = await this.prisma.footballPlayer.findMany({
@@ -158,10 +157,11 @@ export class AdminRosterQueriesService {
             position: card.position,
             overallRating: card.overallRating,
             maxOverall: build?.maxOverall ?? null,
-            dtRating: build?.dtRating ?? null,
-            salaryMinor: build?.dtRating === null || build?.dtRating === undefined
+            salaryMinor: build === undefined
               ? null
-              : salaryRule?.tiers.find((tier) => build.dtRating! >= tier.minDtRating && build.dtRating! <= tier.maxDtRating)?.salaryMinor ?? null,
+              : salaryRule?.tiers.find((tier) =>
+                build.maxOverall >= tier.minOverall && build.maxOverall <= tier.maxOverall
+              )?.salaryMinor ?? null,
             recommended: player.bestCard?.playerCardId === card.id
           };
         })

@@ -64,14 +64,6 @@ export class RosterTransactionsService {
               422
             );
           }
-          if (build.dtRating === null) {
-            throw new LeagueRosterError(
-              'PLAYER_DT_RATING_MISSING',
-              'The selected player card has no DT rating',
-              422
-            );
-          }
-
           const footballPlayerId = build.playerCard.playerId;
           await this.locks.lockOwnership(tx, lockedScope.leagueId, footballPlayerId);
           const existing = await tx.leaguePlayerOwnership.findUnique({
@@ -100,7 +92,7 @@ export class RosterTransactionsService {
           const quote = await this.salaryRules.quoteWithClient(
             tx,
             lockedScope.leagueId,
-            build.dtRating,
+            build.maxOverall,
             at
           );
           const currentSalaryMinor = roster._sum.salaryMinor ?? 0;
@@ -125,6 +117,7 @@ export class RosterTransactionsService {
               data: {
                 leagueTeamId: input.targetLeagueTeamId,
                 currentPlayerCardId: input.playerCardId,
+                maxOverallSnapshot: build.maxOverall,
                 dtRatingSnapshot: build.dtRating,
                 salaryRuleVersionId: quote.salaryRuleVersionId,
                 salaryMinor: quote.salaryMinor,
@@ -139,6 +132,7 @@ export class RosterTransactionsService {
                 leagueTeamId: input.targetLeagueTeamId,
                 footballPlayerId,
                 currentPlayerCardId: input.playerCardId,
+                maxOverallSnapshot: build.maxOverall,
                 dtRatingSnapshot: build.dtRating,
                 salaryRuleVersionId: quote.salaryRuleVersionId,
                 salaryMinor: quote.salaryMinor,
@@ -290,7 +284,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          locked.dtRatingSnapshot,
+          locked.maxOverallSnapshot,
           at
         );
         await this.setRosterStatus(
@@ -339,7 +333,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          locked.dtRatingSnapshot,
+          locked.maxOverallSnapshot,
           at
         );
         const projectedSalaryMinor = targetRoster.salaryMinor + quote.salaryMinor;
@@ -473,7 +467,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          build.dtRating,
+          build.maxOverall,
           at
         );
         const roster = await this.rosterAggregate(tx, locked.leagueTeamId);
@@ -491,6 +485,7 @@ export class RosterTransactionsService {
           where: { id: locked.id },
           data: {
             currentPlayerCardId: input.newPlayerCardId,
+            maxOverallSnapshot: build.maxOverall,
             dtRatingSnapshot: build.dtRating,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
@@ -592,7 +587,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          build.dtRating,
+          build.maxOverall,
           at
         );
         const targetRoster = await this.rosterAggregate(tx, targetTeamId);
@@ -617,6 +612,7 @@ export class RosterTransactionsService {
           data: {
             leagueTeamId: targetTeamId,
             currentPlayerCardId: newCardId,
+            maxOverallSnapshot: build.maxOverall,
             dtRatingSnapshot: build.dtRating,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
@@ -703,14 +699,7 @@ export class RosterTransactionsService {
         422
       );
     }
-    if (build.dtRating === null) {
-      throw new LeagueRosterError(
-        'PLAYER_DT_RATING_MISSING',
-        'The selected player card has no DT rating',
-        422
-      );
-    }
-    return { ...build, dtRating: build.dtRating };
+    return build;
   }
 
   private async rosterAggregate(client: Prisma.TransactionClient, leagueTeamId: string) {
@@ -808,7 +797,7 @@ export class RosterTransactionsService {
       leagueTeamId: string;
       footballPlayerId: string;
       currentPlayerCardId: string;
-      dtRatingSnapshot: number;
+      maxOverallSnapshot: number;
       salaryRuleVersionId: string;
       salaryMinor: number;
       acquiredAt: Date;
@@ -842,7 +831,7 @@ export class RosterTransactionsService {
         leagueTeamId: ownership.leagueTeamId,
         playerId: ownership.footballPlayerId,
         currentPlayerCardId: ownership.currentPlayerCardId,
-        dtRating: ownership.dtRatingSnapshot,
+        maxOverall: ownership.maxOverallSnapshot,
         salaryRuleVersionId: ownership.salaryRuleVersionId,
         salaryMinor: ownership.salaryMinor,
         acquiredAt: ownership.acquiredAt.toISOString(),
