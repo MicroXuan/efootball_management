@@ -11,6 +11,7 @@ import {
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionListQuerySchema,
+  CompetitionParticipantSummarySchema,
   CompetitionParticipantTypeSchema,
   CompetitionStageCodeSchema,
   CompetitionStageSummarySchema,
@@ -80,6 +81,8 @@ import {
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
   LeagueTeamDetailSchema,
+  LeagueTeamAdminListStatusSchema,
+  LeagueTeamLifecycleRequestSchema,
   LeagueTeamSummarySchema,
   LeagueEditionSchema,
   CurrentSeasonSummarySchema,
@@ -938,6 +941,7 @@ describe('shared API contracts', () => {
       rows: [{
         participantId,
         displayName: '球员一',
+        teamLifecycleStatus: null,
         played: 1,
         wins: 0,
         draws: 1,
@@ -1124,6 +1128,47 @@ describe('league team administration contracts', () => {
     assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
       logoUrl: 'https://outside.example/logo.png',
       expectedVersion: 2
+    }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
+      status: 'ARCHIVED',
+      expectedVersion: 2
+    }));
+  });
+
+  it('requires a reason and version for team lifecycle changes', () => {
+    assert.deepEqual(LeagueTeamLifecycleRequestSchema.parse({
+      expectedVersion: 2,
+      reason: '  球队主动退出联赛  '
+    }), {
+      expectedVersion: 2,
+      reason: '球队主动退出联赛'
+    });
+    assert.throws(() => LeagueTeamLifecycleRequestSchema.parse({ expectedVersion: 0, reason: '退出' }));
+    assert.throws(() => LeagueTeamLifecycleRequestSchema.parse({ expectedVersion: 1, reason: '   ' }));
+    assert.throws(() => LeagueTeamLifecycleRequestSchema.parse({ expectedVersion: 1, reason: 'x'.repeat(513) }));
+    assert.equal(LeagueTeamAdminListStatusSchema.parse('ACTIVE'), 'ACTIVE');
+    assert.equal(LeagueTeamAdminListStatusSchema.parse('ARCHIVED'), 'ARCHIVED');
+    assert.throws(() => LeagueTeamAdminListStatusSchema.parse('NEEDS_NUMBER'));
+  });
+
+  it('requires team lifecycle status in participant and standings responses', () => {
+    const participant = CompetitionParticipantSummarySchema.parse({
+      id: ids.user,
+      displayName: '上海海港',
+      participantType: 'TEAM',
+      teamLifecycleStatus: 'ARCHIVED'
+    });
+    assert.equal(participant.teamLifecycleStatus, 'ARCHIVED');
+    assert.equal(CompetitionParticipantSummarySchema.parse({
+      id: ids.user,
+      displayName: '个人选手',
+      participantType: 'INDIVIDUAL',
+      teamLifecycleStatus: null
+    }).teamLifecycleStatus, null);
+    assert.throws(() => CompetitionParticipantSummarySchema.parse({
+      id: ids.user,
+      displayName: '缺少状态',
+      participantType: 'TEAM'
     }));
   });
 
@@ -1566,6 +1611,7 @@ describe('tiered league contracts', () => {
           rows: [{
             participantId: ids.participant,
             displayName: '上海海港',
+            teamLifecycleStatus: 'ACTIVE',
             played: 0,
             wins: 0,
             draws: 0,

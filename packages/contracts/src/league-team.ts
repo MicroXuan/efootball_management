@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { ResourceIdSchema } from './common.js';
-import { ExpectedVersionSchema } from './competition.js';
+import { ExpectedVersionSchema, ResourceIdSchema } from './common.js';
 
 const TimestampSchema = z.iso.datetime();
 const NonNegativeMoneyMinorSchema = z.number().int().nonnegative();
@@ -9,6 +8,8 @@ const OwnerAliasSchema = z.string().trim().min(1).max(32);
 export const PublicUserNumberSchema = z.string().regex(/^\d{6}$/);
 export const TeamNumberSchema = z.number().int().min(0).max(9_999);
 export const LeagueTeamStatusSchema = z.enum(['ACTIVE', 'ARCHIVED', 'NEEDS_NUMBER']);
+export const LeagueTeamLifecycleStatusSchema = LeagueTeamStatusSchema.extract(['ACTIVE', 'ARCHIVED']);
+export const LeagueTeamAdminListStatusSchema = LeagueTeamLifecycleStatusSchema;
 export const LeagueTeamRosterStatusSchema = z.enum(['COMPLIANT', 'OVER_CAP']);
 
 export const PublicUserLookupSchema = z.object({
@@ -29,9 +30,13 @@ export const CreateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.exten
 });
 
 export const UpdateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.partial().extend({
-  status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
   shellValueMinor: NonNegativeMoneyMinorSchema.max(4_294_967_295).optional(),
   expectedVersion: ExpectedVersionSchema
+}).strict();
+
+export const LeagueTeamLifecycleRequestSchema = z.object({
+  expectedVersion: ExpectedVersionSchema,
+  reason: z.string().trim().min(1).max(512)
 }).strict();
 
 const ShellMutationBaseSchema = z.object({
@@ -102,10 +107,13 @@ export const LeagueTeamListResponseSchema = z.object({
 
 export type PublicUserLookup = z.infer<typeof PublicUserLookupSchema>;
 export type LeagueTeamStatus = z.infer<typeof LeagueTeamStatusSchema>;
+export type LeagueTeamLifecycleStatus = z.infer<typeof LeagueTeamLifecycleStatusSchema>;
+export type LeagueTeamAdminListStatus = z.infer<typeof LeagueTeamAdminListStatusSchema>;
 export type LeagueTeamRosterStatus = z.infer<typeof LeagueTeamRosterStatusSchema>;
 export type CreateLeagueTeamRequest = z.input<typeof CreateLeagueTeamRequestSchema>;
 export type ParsedCreateLeagueTeamRequest = z.output<typeof CreateLeagueTeamRequestSchema>;
 export type UpdateLeagueTeamRequest = z.infer<typeof UpdateLeagueTeamRequestSchema>;
+export type LeagueTeamLifecycleRequest = z.infer<typeof LeagueTeamLifecycleRequestSchema>;
 export type ChangeTeamShellRequest = z.infer<typeof ChangeTeamShellRequestSchema>;
 export type RefreshTeamShellRequest = z.infer<typeof RefreshTeamShellRequestSchema>;
 export type TransferTeamShellRequest = z.infer<typeof TransferTeamShellRequestSchema>;
