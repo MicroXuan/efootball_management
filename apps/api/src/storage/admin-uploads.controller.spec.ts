@@ -11,6 +11,15 @@ import { LocalObjectStorage } from './local-object-storage.js';
 import type { ObjectStorage } from './object-storage.js';
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const pngWithDimensions = (width: number, height: number) => {
+  const buffer = Buffer.alloc(24);
+  png.copy(buffer, 0);
+  buffer.writeUInt32BE(13, 8);
+  buffer.write('IHDR', 12, 'ascii');
+  buffer.writeUInt32BE(width, 16);
+  buffer.writeUInt32BE(height, 20);
+  return buffer;
+};
 
 describe('league image storage', () => {
   it('protects the upload controller with administrator authentication', () => {
@@ -40,6 +49,60 @@ describe('league image storage', () => {
     expect(put).toHaveBeenCalledWith('league-images', expect.objectContaining({ extension: 'png' }));
   });
 
+  it('stores the league center banner in its own cache-busting image scope', async () => {
+    const put = jest.fn(async () => ({
+      key: 'league-center-banners--opaque.png',
+      url: 'https://media.example.com/league-center-banners--opaque.png',
+      mimeType: 'image/png' as const,
+      size: png.length,
+    }));
+    const storage: ObjectStorage = {
+      put,
+      delete: jest.fn(async () => undefined),
+    };
+    const controller = new AdminUploadsController(storage);
+
+    await controller.uploadLeagueCenterBanner({
+      buffer: png,
+      originalname: 'banner.png',
+      mimetype: 'image/png',
+      size: png.length,
+    });
+
+    expect(put).toHaveBeenCalledWith(
+      'league-center-banners',
+      expect.objectContaining({ extension: 'png' }),
+    );
+  });
+
+  it('uploads a dimension-checked team crest in its own storage scope', async () => {
+    const crest = pngWithDimensions(256, 256);
+    const put = jest.fn(async () => ({
+      key: 'team-crests--opaque.png',
+      url: 'https://media.example.com/team-crests--opaque.png',
+      mimeType: 'image/png' as const,
+      size: crest.length
+    }));
+    const storage: ObjectStorage = { put, delete: jest.fn(async () => undefined) };
+    const controller = new AdminUploadsController(storage);
+
+    await controller.uploadTeamCrest({ buffer: crest, originalname: 'ajax.png', mimetype: 'image/png', size: crest.length });
+
+    expect(put).toHaveBeenCalledWith('team-crests', expect.objectContaining({ extension: 'png' }));
+    expect(() => controller.uploadTeamCrest({
+      buffer: pngWithDimensions(5000, 256),
+      originalname: 'oversized.png',
+      mimetype: 'image/png',
+      size: 24
+    })).toThrow(expect.objectContaining({ response: expect.objectContaining({ code: 'INVALID_TEAM_CREST' }) }));
+    expect(() => controller.uploadTeamCrest({
+      buffer: Buffer.from('<html>not an image</html>'),
+      originalname: 'fake.png',
+      mimetype: 'image/png',
+      size: 25
+    })).toThrow(expect.objectContaining({ response: expect.objectContaining({ code: 'INVALID_TEAM_CREST' }) }));
+  });
+
   it('stores local objects behind a stable public media URL', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'efm-storage-'));
     try {
@@ -53,6 +116,27 @@ describe('league image storage', () => {
 
       expect(stored.url).toBe(`http://127.0.0.1:3000/v1/media/${stored.key}`);
       expect(await readFile(join(directory, stored.key))).toEqual(png);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('serves locally uploaded league center banners through the public media endpoint', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'efm-banner-storage-'));
+    try {
+      const storage = new LocalObjectStorage(directory, 'http://127.0.0.1:3000');
+      const stored = await storage.put('league-center-banners', {
+        buffer: png,
+        mimeType: 'image/png',
+        extension: 'png',
+        size: png.length,
+      });
+
+      await expect(storage.read(stored.key)).resolves.toMatchObject({
+        buffer: png,
+        mimeType: 'image/png',
+        size: png.length,
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

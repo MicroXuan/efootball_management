@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type {
-  FinanceLedgerListResponse,
-  RosterPlayerCandidateQuery,
-  RosterPlayerCandidateListResponse,
-  SalaryRuleVersionListResponse,
-  TeamRosterView,
-  TransferWindowListResponse
+import {
+  derivePesdataPositionAutoBuild,
+  type FinanceLedgerListResponse,
+  type RosterPlayerCandidateQuery,
+  type RosterPlayerCandidateListResponse,
+  type SalaryRuleVersionListResponse,
+  type TeamRosterView,
+  type TransferWindowListResponse
 } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
@@ -146,7 +147,10 @@ export class AdminRosterQueriesService {
         bestCard: true,
         cards: {
           where: cardFilters,
-          include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } },
+          include: {
+            attributes: true,
+            autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 }
+          },
           orderBy: [{ overallRating: 'desc' }, { id: 'asc' }]
         },
         leagueOwnerships: { where: { leagueId, status: 'ACTIVE' }, take: 1 }
@@ -164,17 +168,27 @@ export class AdminRosterQueriesService {
           : player.cards[0]?.id ?? null,
         cards: player.cards.map((card) => {
           const build = card.autoBuilds[0];
+          const attributes = objectRecord(card.attributes?.attributesJson);
+          const sourceMetadata = objectRecord(attributes?.sourceMetadata);
+          const derivedBuild = build ? null : derivePesdataPositionAutoBuild({
+            position: card.position,
+            overallRating: card.overallRating,
+            maxLevel: sourceMetadata?.maxLevel as number | string | null | undefined,
+            cardType: card.cardType
+          });
+          const maxOverall = build?.maxOverall ?? derivedBuild?.maxOverall ?? null;
+          const salaryRating = build?.dtRating ?? build?.maxOverall ?? derivedBuild?.dtRating ?? null;
           return {
             id: card.id,
             cardName: card.cardName,
             imageUrl: card.imageUrl,
             position: card.position,
             overallRating: card.overallRating,
-            maxOverall: build?.maxOverall ?? null,
-            dtRating: build?.dtRating ?? null,
-            salaryMinor: build?.dtRating === null || build?.dtRating === undefined
+            maxOverall,
+            dtRating: salaryRating,
+            salaryMinor: salaryRating === null
               ? null
-              : salaryRule?.tiers.find((tier) => build.dtRating! >= tier.minDtRating && build.dtRating! <= tier.maxDtRating)?.salaryMinor ?? null,
+              : salaryRule?.tiers.find((tier) => salaryRating >= tier.minDtRating && salaryRating <= tier.maxDtRating)?.salaryMinor ?? null,
             recommended: player.bestCard?.playerCardId === card.id
               || (!player.cards.some((candidate) => candidate.id === player.bestCard?.playerCardId) && player.cards[0]?.id === card.id)
           };
@@ -212,4 +226,10 @@ export class AdminRosterQueriesService {
     const season = await this.prisma.leagueSeason.findFirst({ where: { id: seasonId, leagueId }, select: { id: true } });
     if (!season) throw new LeagueRosterError('LEAGUE_SEASON_NOT_FOUND', 'League season was not found', 404);
   }
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

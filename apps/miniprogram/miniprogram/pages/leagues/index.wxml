@@ -1,12 +1,19 @@
 <view class="page-shell leagues-page">
-  <view class="masthead">
-    <view>
-      <text class="eyebrow">联赛目录</text>
-      <text class="page-title">联赛中心</text>
+  <view class="league-banner {{bannerUrl && !bannerFailed ? 'has-image' : 'is-fallback'}}" aria-label="联赛主题图">
+    <image
+      wx:if="{{bannerUrl && !bannerFailed}}"
+      class="league-banner__image"
+      src="{{bannerUrl}}"
+      mode="aspectFill"
+      lazy-load="{{true}}"
+      binderror="onBannerError"
+    />
+    <view wx:else class="league-banner__fallback">
+      <view class="pitch-line pitch-line--outer"></view>
+      <view class="pitch-line pitch-line--center"></view>
+      <view class="pitch-dot"></view>
     </view>
-    <text class="edition">LIVE · 01</text>
   </view>
-  <text class="intro">发现公开联赛，查看当前赛季；已分配球队的联赛会收纳在“我的联赛”。</text>
 
   <view class="league-tabs" aria-label="联赛范围">
     <button class="{{activeTab === 'all' ? 'is-active' : ''}}" data-tab="all" bindtap="switchTab">全部联赛</button>

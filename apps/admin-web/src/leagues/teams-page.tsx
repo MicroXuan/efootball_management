@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueTeamDetailSchema, LeagueTeamListResponseSchema, PublicUserLookupSchema, type LeagueTeamSummary, type PublicUserLookup } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
+import { AdminIcon } from '../design-system/icons';
 import { useMutationKey } from '../lib/mutation-key';
+import { TeamShellPicker } from './team-shell-picker';
 
-type CreateFields = { publicUserNo: string; teamNumber: number; name: string; shortName: string };
+type CreateFields = { publicUserNo: string; teamNumber: number; ownerAlias: string; catalogTeamId: string };
 
 export function filterLeagueTeams(teams: LeagueTeamSummary[], keyword: string) {
   const normalizedKeyword = keyword.trim().toLocaleLowerCase('zh-CN');
@@ -14,6 +16,7 @@ export function filterLeagueTeams(teams: LeagueTeamSummary[], keyword: string) {
   return teams.filter((team) => [
     team.name,
     team.shortName,
+    team.ownerAlias,
     team.teamNumber?.toString() ?? '',
     team.ownerDisplayName ?? '',
     team.ownerPublicUserNo
@@ -57,14 +60,21 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
     try {
       await api.request(`/v1/admin/leagues/${leagueId}/teams`, {
         method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: LeagueTeamDetailSchema,
-        body: { ownerUserId: owner.id, teamNumber: values.teamNumber, name: values.name, shortName: values.shortName, logoUrl: null }
+        body: {
+          ownerUserId: owner.id,
+          ownerAlias: values.ownerAlias,
+          teamNumber: values.teamNumber,
+          catalogTeamId: values.catalogTeamId
+        }
       });
       mutationKey.reset(); form.resetFields(); setOwner(null); await load();
     } catch (error) {
       setMutationError(error instanceof ApiError && error.code === 'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS'
         ? '球队编号已被占用，请选择其他编号'
-        : error instanceof ApiError && error.code === 'LEAGUE_TEAM_OWNER_ALREADY_EXISTS'
-          ? '该用户在此联赛中已经拥有球队'
+          : error instanceof ApiError && error.code === 'LEAGUE_TEAM_OWNER_ALREADY_EXISTS'
+            ? '该用户在此联赛中已经拥有球队'
+            : error instanceof ApiError && error.code === 'LEAGUE_TEAM_SHELL_ALREADY_ASSIGNED'
+              ? '该队壳刚刚被其他球队占用，请重新选择'
           : error instanceof ApiError && error.code === 'LEAGUE_CURRENT_SEASON_REQUIRED'
             ? '请先在赛季管理中设置当前赛季，再绑定球队'
             : '球队创建失败，请稍后重试');
@@ -85,11 +95,19 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
       /> : null}
       {!loading && teams.length > 0 && filteredTeams.length === 0 ? <Empty description="没有符合筛选条件的球队" /> : null}
       {!loading && filteredTeams.length ? <Table rowKey="id" pagination={false} dataSource={filteredTeams} columns={[
-        { title: '编号', dataIndex: 'teamNumber', render: (value) => value ?? '—' },
-        { title: '球队', dataIndex: 'name', render: (value, row) => <Link to={`/leagues/${leagueId}/teams/${row.id}`}>{value}</Link> },
+        { title: '球队', render: (_, row) => <div className="league-team-identity">
+          {row.logoUrl ? <img src={row.logoUrl} alt={`${row.name}队徽`} /> : <span aria-label={`${row.name}暂无队徽`}>{row.shortName.slice(0, 2)}</span>}
+          <Link to={`/leagues/${leagueId}/teams/${row.id}`}>
+            <strong>{row.teamNumber === null ? row.name : `${row.teamNumber}-${row.name}`}</strong>
+            <small>（{row.ownerAlias}）</small>
+          </Link>
+        </div> },
         { title: '负责人', render: (_, row) => row.ownerDisplayName ? `${row.ownerDisplayName} · ${row.ownerPublicUserNo}` : row.ownerPublicUserNo },
         { title: '阵容', render: (_, row) => `${row.activePlayerCount}/25` },
-        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> }
+        { title: '状态', render: (_, row) => <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> },
+        { title: '操作', key: 'actions', render: (_, row) => <Link aria-label="球队管理" to={`/leagues/${leagueId}/teams/${row.id}`}>
+          <Button type="primary" icon={<AdminIcon name="teams" />}>球队管理</Button>
+        </Link> }
       ]} /> : null}
     </Card>
     <Card title="创建球队" className="form-card">
@@ -100,9 +118,11 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         </Form.Item>
         {owner ? <Alert type="success" showIcon title={owner.displayName} description={`用户编号 ${owner.publicUserNo}`} /> : null}
         <Form.Item label="球队编号" name="teamNumber" rules={[{ required: true, message: '请输入球队编号' }]}><InputNumber min={0} max={9999} precision={0} /></Form.Item>
-        <Form.Item label="球队名称" name="name" rules={[{ required: true, message: '请输入球队名称' }]}><Input maxLength={64} /></Form.Item>
-        <Form.Item label="球队简称" name="shortName" rules={[{ required: true, message: '请输入球队简称' }]}><Input maxLength={24} /></Form.Item>
-        <Button type="primary" htmlType="submit" loading={submitting} disabled={!owner || submitting}>创建球队</Button>
+        <Form.Item label="联赛称呼" name="ownerAlias" extra="仅在当前联赛中显示，可填写微信昵称或常用称呼。" rules={[{ required: true, message: '请输入联赛称呼' }, { max: 32 }]}><Input maxLength={32} /></Form.Item>
+        <Form.Item label="球队队壳" name="catalogTeamId" rules={[{ required: true, message: '请选择球队队壳' }]}>
+          <TeamShellPicker api={api} leagueId={leagueId} />
+        </Form.Item>
+        <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>创建球队</Button>
       </Form>
     </Card>
   </div>;

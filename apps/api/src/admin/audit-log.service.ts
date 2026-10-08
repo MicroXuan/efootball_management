@@ -61,6 +61,13 @@ export class AuditLogService {
     });
   }
 
+  updateMetadata(client: AuditClient, id: string, metadata: Record<string, unknown>) {
+    return client.auditLog.update({
+      where: { id },
+      data: { metadata: sanitize(metadata) as Prisma.InputJsonValue }
+    });
+  }
+
   async list(leagueId?: string) {
     const logs = await this.prisma.auditLog.findMany({
       ...(leagueId ? { where: { leagueId } } : {}),

@@ -1,6 +1,19 @@
-import type { LeagueEdition, LeagueSeasonStatus, LeagueSummary, MyLeagueTeamSummary } from '@efm/contracts'
+import type {
+  LeagueEdition,
+  LeagueSeasonStatus,
+  LeagueSummary,
+  MyLeagueTeamSummary,
+  PlatformPresentation,
+} from '@efm/contracts'
 
 export type LeagueListTab = 'all' | 'mine'
+
+export function leagueBannerView(presentation: PlatformPresentation) {
+  return {
+    imageUrl: presentation.leagueCenterBannerUrl ?? '',
+    hasImage: Boolean(presentation.leagueCenterBannerUrl),
+  }
+}
 
 export type LeagueCardView = {
   id: string

@@ -12,7 +12,7 @@ function harness(overrides: Record<string, unknown> = {}) {
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     leagueSeason: {
-      findUnique: jest.fn(async () => ({
+      findUnique: jest.fn<() => Promise<Record<string, unknown> | null>>(async () => ({
         id: 'season-20', leagueId: 'league-1', version: 4, displayName: 'S20', status: 'DRAFT'
       })),
       updateMany: jest.fn(async () => ({ count: 1 }))
@@ -45,6 +45,41 @@ function harness(overrides: Record<string, unknown> = {}) {
 }
 
 describe('AdminLeagueSeasonsService', () => {
+  it('renames an opened season and records a specific audit action', async () => {
+    const { service, transaction, audit } = harness();
+    const opened = {
+      id: 'season-20', leagueId: 'league-1', seasonNumber: 20, displayName: 'S20',
+      previousSeasonId: null, isFirstSeason: false,
+      registrationOpensAt: new Date('2026-01-01T00:00:00.000Z'),
+      registrationClosesAt: new Date('2026-01-02T00:00:00.000Z'),
+      startsAt: new Date('2026-01-03T00:00:00.000Z'), endsAt: new Date('2026-02-03T00:00:00.000Z'),
+      superCapacity: 23, championCapacity: 18, promotionCount: 4,
+      status: 'REGISTRATION_OPEN' as const, version: 4,
+      createdAt: new Date('2025-12-01T00:00:00.000Z'), updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdById: null, createdByAdminId: 'admin-1',
+    };
+    transaction.leagueSeason.findUnique
+      .mockResolvedValueOnce(opened)
+      .mockResolvedValueOnce({
+        ...opened, displayName: 'S20 正式赛季', version: 5,
+        _count: { entries: 0 }, entries: [],
+      });
+
+    await expect(service.update('admin-1', 'league-1', 'season-20', {
+      displayName: 'S20 正式赛季', expectedVersion: 4,
+    }, 'rename-season-1')).resolves.toMatchObject({
+      displayName: 'S20 正式赛季', status: 'REGISTRATION_OPEN', version: 5,
+    });
+
+    expect(transaction.leagueSeason.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ displayName: 'S20 正式赛季' }),
+    }));
+    expect(audit.record).toHaveBeenCalledWith(transaction, expect.objectContaining({
+      action: 'admin.league-season.rename',
+      metadata: { displayName: 'S20 正式赛季' },
+    }));
+  });
+
   it('switches only to a season in the same league without automatically enrolling teams', async () => {
     const { service, transaction, audit } = harness();
 

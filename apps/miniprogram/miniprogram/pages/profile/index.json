@@ -3,6 +3,7 @@
   "enablePullDownRefresh": true,
   "backgroundColor": "#0E1417",
   "usingComponents": {
-    "loading-state": "/components/loading-state/index"
+    "loading-state": "/components/loading-state/index",
+    "entity-artwork": "/components/entity-artwork/index"
   }
 }

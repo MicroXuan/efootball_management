@@ -16,6 +16,7 @@ describe('LeaguesService', () => {
   );
   const suffix = randomUUID();
   const leagueIds: string[] = [];
+  const catalogIds: string[] = [];
   let actorId: string;
 
   beforeAll(async () => {
@@ -35,6 +36,7 @@ describe('LeaguesService', () => {
     });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.userRoleBinding.deleteMany({
       where: { OR: [{ userId: actorId }, { scopeId: { in: leagueIds } }] }
     });
@@ -132,10 +134,16 @@ describe('LeaguesService', () => {
       name: '显式当前赛季联赛'
     }, `current-season-${suffix}`);
     leagueIds.push(created.id);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '测试球队', shortName: '测试' }
+    });
+    catalogIds.push(shell.id);
     const team = await prisma.leagueTeam.create({
       data: {
         leagueId: created.id,
         ownerUserId: actorId,
+        ownerAlias: '测试用户',
+        catalogTeamId: shell.id,
         teamNumber: 3,
         name: '测试球队',
         shortName: '测试'

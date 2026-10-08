@@ -13,10 +13,12 @@ describe('AdminRosterQueriesService candidate filters', () => {
       cards: [{
         id: '44444444-4444-4444-8444-444444444444', cardName: '蓝白传奇', imageUrl: null,
         position: 'AMF', overallRating: 99, cardType: 'EPIC', cardPackId: packId,
+        attributes: null,
         autoBuilds: [{ maxOverall: 103, dtRating: 101 }]
       }, {
         id: '55555555-5555-4555-8555-555555555555', cardName: '基础卡', imageUrl: null,
         position: 'RWF', overallRating: 90, cardType: 'STANDARD', cardPackId: null,
+        attributes: null,
         autoBuilds: [{ maxOverall: 94, dtRating: 93 }]
       }]
     }, {
@@ -50,5 +52,40 @@ describe('AdminRosterQueriesService candidate filters', () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.playerName).toBe('梅西');
     expect(result.items[0]?.cards.map(({ cardName }) => cardName)).toEqual(['蓝白传奇']);
+  });
+
+  it('shows the derived automatic build total and salary for legacy cards', async () => {
+    const prisma = {
+      leagueSalaryRuleVersion: {
+        findFirst: async () => ({
+          tiers: [{ minDtRating: 90, maxDtRating: 99, salaryMinor: 500 }]
+        })
+      },
+      footballPlayer: {
+        findMany: async () => [{
+          id: '33333333-3333-4333-8333-333333333333',
+          nameZh: '主多·罗德里格斯', nameEn: null, shortName: null,
+          bestCard: null,
+          leagueOwnerships: [],
+          cards: [{
+            id: '44444444-4444-4444-8444-444444444444',
+            cardName: 'Spanish League Selection Midfielders', imageUrl: null,
+            position: 'DMF', overallRating: 80, cardType: 'HIGHLIGHT', cardPackId: packId,
+            attributes: { attributesJson: { sourceMetadata: { maxLevel: 80 } } },
+            autoBuilds: []
+          }]
+        }]
+      }
+    };
+    const service = new AdminRosterQueriesService(prisma as never);
+
+    const result = await service.candidates(leagueId, { keyword: '罗德里格斯' });
+
+    expect(result.items[0]?.cards[0]).toMatchObject({
+      overallRating: 80,
+      maxOverall: 95,
+      dtRating: 95,
+      salaryMinor: 500
+    });
   });
 });

@@ -11,8 +11,15 @@ import {
   signPesdataRequest,
   type PesdataRequestParam
 } from './pesdata-signer.js';
+import {
+  PesdataLeagueListEnvelopeSchema,
+  PesdataTeamDetailEnvelopeSchema,
+  PesdataTeamListEnvelopeSchema,
+  type PesdataLeague,
+  type PesdataTeam
+} from './pesdata-team.schemas.js';
 
-export type PesdataEndpoint = 'list' | 'detail';
+export type PesdataEndpoint = 'list' | 'detail' | 'league-list' | 'team-list' | 'team-detail';
 export type PesdataClientErrorCode =
   | 'PESDATA_CONFIG_MISSING'
   | 'PESDATA_PROTOCOL_ERROR'
@@ -54,6 +61,8 @@ type ListQuery = {
   limit: number;
   order: 'ASC' | 'DESC';
 };
+
+type TeamListQuery = ListQuery & { leagueId?: string };
 
 const defaultSleep = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -101,6 +110,28 @@ export class PesdataClient {
         throw this.protocolError('detail', 1);
       }
       return envelope.data[0] as PesdataPlayerDetail;
+    });
+  }
+
+  listLeagues(): Promise<PesdataLeague[]> {
+    return this.enqueue(async () => {
+      const envelope = await this.request('league-list', '/api/league/list', {}, PesdataLeagueListEnvelopeSchema);
+      return envelope.data.list;
+    });
+  }
+
+  listTeams(query: TeamListQuery): Promise<{ list: PesdataTeam[]; count: number }> {
+    return this.enqueue(async () => {
+      const envelope = await this.request('team-list', '/api/team/list', query, PesdataTeamListEnvelopeSchema);
+      return envelope.data;
+    });
+  }
+
+  getTeamDetail(teamId: string): Promise<PesdataTeam> {
+    return this.enqueue(async () => {
+      const envelope = await this.request('team-detail', '/api/team/detail', { team_id: teamId }, PesdataTeamDetailEnvelopeSchema);
+      if (envelope.data.length !== 1) throw this.protocolError('team-detail', 1);
+      return envelope.data[0] as PesdataTeam;
     });
   }
 

@@ -1,4 +1,4 @@
-import type { PlayerCardDetail, PlayerPosition } from '@efm/contracts'
+import { derivePesdataPositionAutoBuild, type PlayerCardDetail, type PlayerPosition } from '@efm/contracts'
 import { toCardViewModel, type PlayerCardViewModel } from '../players/players.viewmodel'
 
 const attributeOrder = [
@@ -100,27 +100,6 @@ const allocationAttributeKeys: Record<string, string[]> = {
   goalkeeping1: ['goalkeeping', 'gkAwareness', 'jump'],
   goalkeeping2: ['gkParrying', 'gkReach'],
   goalkeeping3: ['gkCatching', 'gkReflexes'],
-}
-
-const automaticBuildWeights: number[][] = [
-  [13, 40, 0, 66, 67, 213, 13, 412, 399, 399],
-  [41, 164, 55, 231, 109, 368, 573, 0, 0, 0],
-  [184, 269, 72, 440, 208, 159, 294, 0, 0, 0],
-  [184, 269, 72, 440, 208, 159, 294, 0, 0, 0],
-  [183, 134, 61, 306, 244, 220, 464, 0, 0, 0],
-  [318, 208, 97, 330, 367, 85, 233, 0, 0, 0],
-  [354, 318, 134, 367, 331, 48, 109, 0, 0, 0],
-  [354, 318, 134, 367, 331, 48, 109, 0, 0, 0],
-  [391, 281, 208, 257, 355, 60, 84, 0, 0, 0],
-  [404, 391, 183, 330, 171, 85, 60, 0, 0, 0],
-  [404, 391, 183, 330, 171, 85, 60, 0, 0, 0],
-  [419, 346, 308, 234, 173, 99, 36, 0, 0, 0],
-  [222, 419, 382, 259, 49, 210, 36, 0, 0, 0],
-]
-
-const positionIndex: Record<PlayerPosition, number> = {
-  GK: 0, CB: 1, LB: 2, RB: 3, DMF: 4, CMF: 5, LMF: 6,
-  RMF: 7, AMF: 8, LWF: 9, RWF: 10, SS: 11, CF: 12,
 }
 
 const positionMetricWeights: Record<PlayerPosition, [number, number, number, number, number, number]> = {
@@ -356,30 +335,6 @@ function attributeRows(
     })
 }
 
-function automaticAllocation(position: PlayerPosition, availablePoints: number): Record<string, number> {
-  const categoryKeys = [
-    'dribbling', 'dexterity', 'shooting', 'lowerBodyStrength', 'passing',
-    'aerialStrength', 'defending', 'goalkeeping1', 'goalkeeping2', 'goalkeeping3',
-  ]
-  const baseWeights = automaticBuildWeights[positionIndex[position]]!
-  const weights = [...baseWeights]
-  const levels = new Array(10).fill(0) as number[]
-  let remaining = Math.max(0, Math.floor(availablePoints))
-  for (let pass = 0; pass < categoryKeys.length; pass += 1) {
-    while (remaining > 0) {
-      const currentWeight = [...weights].sort((left, right) => right - left)[pass]
-      const category = weights.indexOf(currentWeight ?? -1)
-      if (category < 0) break
-      const cost = Math.ceil((levels[category]! + 1) / 4)
-      if (remaining < cost) break
-      levels[category] = levels[category]! + 1
-      remaining -= Math.ceil(levels[category]! / 4)
-      weights[category] = Math.floor(baseWeights[category]! / Math.ceil((levels[category]! + 1) / 4))
-    }
-  }
-  return Object.fromEntries(categoryKeys.map((key, index) => [key, levels[index] ?? 0]))
-}
-
 function derivedAutomaticBuild(detail: PlayerCardDetail): PlayerCardDetailViewModel['autoBuild'] {
   if (detail.cardType === 'TRENDING') {
     return {
@@ -388,22 +343,26 @@ function derivedAutomaticBuild(detail: PlayerCardDetail): PlayerCardDetailViewMo
     }
   }
   const source = objectRecord(detail.attributes.sourceMetadata)
-  const availablePoints = sourceNumber(source, 'maxLevel')
-  if (availablePoints === null || availablePoints <= 0) {
+  const build = derivePesdataPositionAutoBuild({
+    position: detail.position,
+    overallRating: detail.overallRating,
+    maxLevel: sourceNumber(source, 'maxLevel'),
+    cardType: detail.cardType,
+  })
+  if (!build) {
     return {
       available: false, maxOverall: null, dtRating: null, allocationRows: [],
       unavailableReason: '该卡未提供成长等级，暂时无法自动加点。',
     }
   }
-  const allocationRows = Object.entries(automaticAllocation(detail.position, availablePoints))
+  const allocationRows = Object.entries(build.allocation)
     .filter(([, points]) => points > 0)
     .sort(([left], [right]) => allocationOrder.indexOf(left) - allocationOrder.indexOf(right))
     .map(([key, points]) => ({ key, label: allocationLabels[key] ?? key, points }))
-  const allocatedLevels = allocationRows.reduce((sum, row) => sum + row.points, 0)
   return {
     available: true,
-    maxOverall: Math.min(110, detail.overallRating + Math.round(allocatedLevels / 3.15)),
-    dtRating: null,
+    maxOverall: build.maxOverall,
+    dtRating: build.dtRating,
     allocationRows,
     unavailableReason: '',
   }

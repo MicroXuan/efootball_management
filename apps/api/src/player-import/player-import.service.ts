@@ -1,12 +1,18 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   type CreateImportBatchRequest,
   ImportBatchSchema,
+  ImportRecordSchema,
   type ImportBatchResponse,
   type ImportDiffType,
-  type NormalizedPlayerCardRecord
+  type ImportRecordResponse,
+  type NormalizedPlayerCardRecord,
+  type PlayerImportRecordPage,
+  type PlatformPageRequest
 } from '@efm/contracts';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { ImportFormat, PlayerCardStatus } from '../generated/prisma/enums.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
@@ -18,6 +24,9 @@ import { normalizeImportRow, normalizeSearchText } from './record-normalizer.js'
 import type { ParsedImportRow, RawImportRow } from './import-adapter.js';
 
 type ValidationError = { code: string; path: string; message: string };
+export type PlatformImportRecordQuery = Pick<PlatformPageRequest, 'page' | 'pageSize' | 'query'> & {
+  diffType?: ImportDiffType;
+};
 
 export class ImportDomainError extends BadRequestException {
   readonly code: string;
@@ -97,7 +106,9 @@ function toExistingRecord(card: {
 export class PlayerImportService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(AuthorizationService) private readonly authorization: AuthorizationService
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService,
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
   ) {}
 
   async createBatch(actorId: string, input: CreateImportBatchRequest): Promise<ImportBatchResponse> {
@@ -113,6 +124,21 @@ export class PlayerImportService {
     input: CreateImportBatchRequest
   ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
     await this.assertCanCreateBatch(actorId);
+    return this.createBatchUnchecked(actorId, input);
+  }
+
+  async createBatchForPlatformAdmin(
+    actorAdminId: string,
+    input: CreateImportBatchRequest
+  ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
+    await this.requirePlatformAdmin(actorAdminId);
+    return this.createBatchUnchecked(actorAdminId, input);
+  }
+
+  private async createBatchUnchecked(
+    actorId: string,
+    input: CreateImportBatchRequest
+  ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
 
     const source = await this.prisma.dataSource.findUnique({ where: { code: input.sourceCode } });
     if (!source?.isEnabled) {
@@ -222,6 +248,11 @@ export class PlayerImportService {
     return this.getBatchUnchecked(batchId);
   }
 
+  async getBatchForPlatformAdmin(actorAdminId: string, batchId: string): Promise<ImportBatchResponse> {
+    await this.requirePlatformAdmin(actorAdminId);
+    return this.getBatchUnchecked(batchId);
+  }
+
   async listRecords(
     actorId: string,
     batchId: string,
@@ -233,29 +264,116 @@ export class PlayerImportService {
       where: { batchId, ...(filter.diffType ? { diffType: filter.diffType } : {}) },
       orderBy: { rowNumber: 'asc' }
     });
-    return records.map((record) => ({
-      id: record.id,
-      batchId: record.batchId,
-      rowNumber: record.rowNumber,
-      externalId: record.externalId,
-      diffType: record.diffType,
-      raw: record.rawJson,
-      normalized: record.normalizedJson,
-      fieldDiff: record.fieldDiff,
-      validationErrors: record.validationErrors,
-      targetPlayerId: record.targetPlayerId,
-      targetCardId: record.targetCardId
-    }));
+    return records.map((record) => this.recordResponse(record));
+  }
+
+  async listRecordsForPlatformAdmin(
+    actorAdminId: string,
+    batchId: string,
+    query: PlatformImportRecordQuery
+  ): Promise<PlayerImportRecordPage> {
+    await this.requirePlatformAdmin(actorAdminId);
+    const batch = await this.ensureBatch(batchId);
+    const where: Prisma.ImportRecordWhereInput = {
+      batchId,
+      ...(query.diffType ? { diffType: query.diffType } : {})
+    };
+    let records;
+    let total: number;
+    if (query.query) {
+      const pattern = `%${query.query}%`;
+      const conditions: Prisma.Sql[] = [Prisma.sql`batch_id = ${batchId}`];
+      if (query.diffType) conditions.push(Prisma.sql`diff_type = ${query.diffType}`);
+      conditions.push(Prisma.sql`(
+        external_id LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.playerNameZh')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.playerNameEn')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.playerShortName')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.cardName')) LIKE ${pattern}
+        OR JSON_UNQUOTE(JSON_EXTRACT(normalized_json, '$.packName')) LIKE ${pattern}
+      )`);
+      const whereSql = Prisma.join(conditions, ' AND ');
+      const offset = (query.page - 1) * query.pageSize;
+      const [ids, counts] = await this.prisma.$transaction([
+        this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id FROM import_records
+          WHERE ${whereSql}
+          ORDER BY \`row_number\` ASC, id ASC
+          LIMIT ${query.pageSize} OFFSET ${offset}
+        `),
+        this.prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+          SELECT COUNT(*) AS total FROM import_records WHERE ${whereSql}
+        `)
+      ]);
+      const rows = ids.length ? await this.prisma.importRecord.findMany({
+        where: { id: { in: ids.map(({ id }) => id) } }
+      }) : [];
+      const positions = new Map(ids.map(({ id }, index) => [id, index]));
+      records = rows.sort((left, right) => (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0));
+      total = Number(counts[0]?.total ?? 0);
+    } else {
+      [records, total] = await this.prisma.$transaction([
+        this.prisma.importRecord.findMany({
+          where,
+          orderBy: { rowNumber: 'asc' },
+          skip: (query.page - 1) * query.pageSize,
+          take: query.pageSize
+        }),
+        this.prisma.importRecord.count({ where })
+      ]);
+    }
+    return {
+      items: records.map((record) => this.recordResponse(record)),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      summary: {
+        create: batch.createCount,
+        update: batch.updateCount,
+        unchanged: batch.unchangedCount,
+        invalid: batch.invalidCount
+      }
+    };
   }
 
   async cancelBatch(actorId: string, batchId: string) {
     await this.requirePermission(actorId, 'catalog.import.publish');
-    const batch = await this.ensureBatch(batchId);
-    if (!['UPLOADED', 'VALIDATED', 'READY'].includes(batch.status)) {
-      throw new ImportDomainError('IMPORT_BATCH_NOT_CANCELLABLE', 'Import batch cannot be cancelled');
-    }
-    await this.prisma.importBatch.update({ where: { id: batchId }, data: { status: 'CANCELLED' } });
-    return this.getBatchUnchecked(batchId);
+    return this.cancelBatchUnchecked(batchId);
+  }
+
+  async cancelBatchForPlatformAdmin(actorAdminId: string, batchId: string): Promise<ImportBatchResponse> {
+    await this.requirePlatformAdmin(actorAdminId);
+    return this.cancelBatchUnchecked(batchId, actorAdminId);
+  }
+
+  private async cancelBatchUnchecked(batchId: string, actorAdminId?: string): Promise<ImportBatchResponse> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM import_batches WHERE id = ${batchId} FOR UPDATE`);
+      const batch = await tx.importBatch.findUnique({
+        where: { id: batchId },
+        include: { source: true, release: true }
+      });
+      if (!batch) throw new NotFoundException({ code: 'IMPORT_BATCH_NOT_FOUND' });
+      if (batch.status === 'CANCELLED') return this.batchResponse(batch);
+      if (!['UPLOADED', 'VALIDATED', 'READY'].includes(batch.status)) {
+        throw new ImportDomainError('IMPORT_BATCH_NOT_CANCELLABLE', 'Import batch cannot be cancelled');
+      }
+      const cancelled = await tx.importBatch.update({
+        where: { id: batchId },
+        data: { status: 'CANCELLED' },
+        include: { source: true, release: true }
+      });
+      if (actorAdminId && this.audit) {
+        await this.audit.record(tx, {
+          actorAdminId,
+          action: 'REJECT_PLAYER_CARD_IMPORT_BATCH',
+          resourceType: 'ImportBatch',
+          resourceId: batchId,
+          metadata: { batchId, status: cancelled.status }
+        });
+      }
+      return this.batchResponse(cancelled);
+    });
   }
 
   private adapterFor(format: CreateImportBatchRequest['format']) {
@@ -353,6 +471,41 @@ export class PlayerImportService {
     if (!(await this.authorization.can(actorId, permission))) {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Permission denied' });
     }
+  }
+
+  private async requirePlatformAdmin(actorAdminId: string): Promise<void> {
+    if (!this.adminAuthorization) {
+      throw new ForbiddenException({ code: 'ADMIN_PLATFORM_ACCESS_DENIED', message: 'Platform administrator access is required' });
+    }
+    await this.adminAuthorization.requirePlatformAdmin(actorAdminId);
+  }
+
+  private recordResponse(record: {
+    id: string;
+    batchId: string;
+    rowNumber: number;
+    externalId: string | null;
+    diffType: ImportDiffType;
+    rawJson: Prisma.JsonValue;
+    normalizedJson: Prisma.JsonValue | null;
+    fieldDiff: Prisma.JsonValue;
+    validationErrors: Prisma.JsonValue;
+    targetPlayerId: string | null;
+    targetCardId: string | null;
+  }): ImportRecordResponse {
+    return ImportRecordSchema.parse({
+      id: record.id,
+      batchId: record.batchId,
+      rowNumber: record.rowNumber,
+      externalId: record.externalId,
+      diffType: record.diffType,
+      raw: record.rawJson,
+      normalized: record.normalizedJson,
+      fieldDiff: record.fieldDiff,
+      validationErrors: record.validationErrors,
+      targetPlayerId: record.targetPlayerId,
+      targetCardId: record.targetCardId
+    });
   }
 
   private async failBatch(batchId: string, reason: string): Promise<void> {

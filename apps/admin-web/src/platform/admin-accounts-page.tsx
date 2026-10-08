@@ -106,8 +106,8 @@ export function AdminAccountsPage({ api = adminApi }: { api?: AdminApi }) {
     } finally { setPending(null); }
   };
   return <div className="page-stack">
-    <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>管理员账号</h1><p>管理登录状态、密码与联赛授权范围。</p></div></header>
-    <Card title="管理员账号" className="data-card">
+    <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>账号管理</h1><p>管理登录状态、密码与联赛授权范围。</p></div></header>
+    <Card title="账号管理" className="data-card">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       {loading ? <div className="loading-block"><Spin /></div> : accounts.length ? <Table rowKey="id" pagination={false} dataSource={accounts} columns={[
         { title: '账号', dataIndex: 'username' }, { title: '显示名称', dataIndex: 'displayName' },

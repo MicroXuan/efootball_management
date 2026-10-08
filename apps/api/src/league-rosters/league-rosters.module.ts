@@ -11,9 +11,10 @@ import { TransferWindowsService } from './transfer-windows.service.js';
 import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 import { LeagueEconomyModule } from '../league-economy/league-economy.module.js';
 import { PlayerValuationsModule } from '../player-valuations/player-valuations.module.js';
+import { PlayerBuildsModule } from '../player-builds/player-builds.module.js';
 
 @Module({
-  imports: [AdminAuthModule, AdminModule, LeagueEconomyModule, PlayerValuationsModule],
+  imports: [AdminAuthModule, AdminModule, LeagueEconomyModule, PlayerValuationsModule, PlayerBuildsModule],
   controllers: [AdminRulesController, AdminRostersController],
   providers: [
     SalaryRulesService,

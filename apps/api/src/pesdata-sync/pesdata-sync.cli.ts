@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { AppModule } from '../app.module.js';
 import { PesdataSyncService } from './pesdata-sync.service.js';
 import type { PesdataSyncMode } from './pesdata-sync.types.js';
+import { PesdataTeamSyncService, type TeamSyncMode } from './pesdata-team-sync.service.js';
 
 type StartArgs = {
   command: 'start';
@@ -20,7 +21,9 @@ type ResumeArgs = {
   actorId: string;
 };
 
-export type PesdataSyncArgs = StartArgs | ResumeArgs;
+type TeamStartArgs = { resource: 'teams'; command: 'start'; mode: TeamSyncMode; actorId: string; limit?: number };
+type TeamResumeArgs = { resource: 'teams'; command: 'resume'; runId: string; actorId: string };
+export type PesdataSyncArgs = StartArgs | ResumeArgs | TeamStartArgs | TeamResumeArgs;
 
 export class PesdataCliError extends Error {
   constructor(readonly code: string) {
@@ -43,6 +46,25 @@ function requiredActor(argv: string[]): string {
 
 export function parsePesdataSyncArgs(argv: string[]): PesdataSyncArgs {
   const normalizedArguments = argv[0] === '--' ? argv.slice(1) : argv;
+  if (normalizedArguments[0] === 'teams') {
+    const teamArguments = normalizedArguments.slice(1);
+    const [teamMode, teamTarget] = teamArguments;
+    const actorId = requiredActor(teamArguments);
+    if (teamMode === 'resume') {
+      if (!teamTarget || !z.uuid().safeParse(teamTarget).success) throw new PesdataCliError('PESDATA_TEAM_RUN_INVALID');
+      return { resource: 'teams', command: 'resume', runId: teamTarget, actorId };
+    }
+    if (teamMode !== 'sample' && teamMode !== 'full' && teamMode !== 'incremental') {
+      throw new PesdataCliError('PESDATA_TEAM_MODE_INVALID');
+    }
+    const limitValue = option(teamArguments, '--limit');
+    if (limitValue !== undefined && teamMode !== 'sample') throw new PesdataCliError('PESDATA_TEAM_LIMIT_UNSUPPORTED');
+    const limit = limitValue === undefined ? undefined : Number(limitValue);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 5_000)) {
+      throw new PesdataCliError('PESDATA_TEAM_LIMIT_INVALID');
+    }
+    return { resource: 'teams', command: 'start', mode: teamMode, actorId, ...(limit === undefined ? {} : { limit }) };
+  }
   const [mode, target] = normalizedArguments;
   const actorId = requiredActor(normalizedArguments);
   const dryRun = normalizedArguments.includes('--dry-run');
@@ -80,9 +102,13 @@ async function run(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
   try {
     const service = app.get(PesdataSyncService);
-    const result = args.command === 'resume'
-      ? await service.resume(args.actorId, args.runId)
-      : await service.start(args.actorId, {
+    const result = 'resource' in args
+      ? args.command === 'resume'
+        ? await app.get(PesdataTeamSyncService).resume(args.actorId, args.runId)
+        : await app.get(PesdataTeamSyncService).start(args.actorId, { mode: args.mode, ...(args.limit === undefined ? {} : { limit: args.limit }) })
+      : args.command === 'resume'
+        ? await service.resume(args.actorId, args.runId)
+        : await service.start(args.actorId, {
           mode: args.mode,
           ...(args.limit !== undefined ? { limit: args.limit } : {}),
           dryRun: args.dryRun

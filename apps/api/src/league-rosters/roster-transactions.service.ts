@@ -26,6 +26,7 @@ import { SalaryRulesService } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 
 const MAX_ROSTER_SIZE = 25;
 type AppliedTransactionFee = {
@@ -45,14 +46,14 @@ export class RosterTransactionsService {
     @Inject(TransferWindowsService) private readonly transferWindows: TransferWindowsService,
     @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
     @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService,
-    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService
+    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
   ) {}
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
     const input = AcquirePlayerRequestSchema.parse(raw);
     const scope = await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, scope.leagueId);
-    await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
 
     try {
       return await this.receipts.execute(adminId, 'ROSTER_PLAYER_ACQUIRE', input.idempotencyKey,
@@ -66,11 +67,7 @@ export class RosterTransactionsService {
           );
           await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'BUY', at);
 
-          const build = await tx.playerCardAutoBuild.findFirst({
-            where: { playerCardId: input.playerCardId },
-            orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
-            include: { playerCard: true }
-          });
+          const build = await this.playerBuilds.resolveOrDeriveWithClient(tx, input.playerCardId);
           if (!build) {
             throw new LeagueRosterError(
               'PLAYER_AUTO_BUILD_MISSING',
@@ -159,9 +156,6 @@ export class RosterTransactionsService {
                 acquiredAt: at
               }
             });
-          const fee = await this.feeQuote(
-            tx, lockedScope.leagueId, footballPlayerId, input.manualTransactionFeeMinor, at
-          );
           const transaction = await tx.rosterTransaction.create({
             data: {
               leagueId: lockedScope.leagueId,
@@ -172,9 +166,6 @@ export class RosterTransactionsService {
               newPlayerCardId: input.playerCardId,
               newSalaryMinor: quote.salaryMinor,
               amountMinor: input.amountMinor,
-              valuationSnapshotMinor: fee?.valuationSnapshotMinor ?? null,
-              transactionFeeMinor: fee?.transactionFeeMinor ?? null,
-              transactionFeeRuleVersionId: fee?.transactionFeeRuleVersionId ?? null,
               reason: input.reason,
               createdByAdminId: adminId,
               createdAt: at
@@ -193,7 +184,6 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, input.targetLeagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
           await this.audit.record(tx, {
             actorAdminId: adminId,
             leagueId: lockedScope.leagueId,
@@ -243,7 +233,6 @@ export class RosterTransactionsService {
       throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and roster entry differ', 409);
     }
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
-    await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_RELEASE', input.idempotencyKey,
       async (tx) => {
@@ -264,9 +253,6 @@ export class RosterTransactionsService {
           });
         }
 
-        const fee = input.amountMinor === null ? null : await this.feeQuote(
-          tx, locked.leagueId, locked.footballPlayerId, input.manualTransactionFeeMinor, at
-        );
         const ownership = await tx.leaguePlayerOwnership.update({
           where: { id: locked.id },
           data: { status: 'RELEASED', version: { increment: 1 } }
@@ -281,9 +267,6 @@ export class RosterTransactionsService {
             oldPlayerCardId: locked.currentPlayerCardId,
             oldSalaryMinor: locked.salaryMinor,
             amountMinor: input.amountMinor,
-            valuationSnapshotMinor: fee?.valuationSnapshotMinor ?? null,
-            transactionFeeMinor: fee?.transactionFeeMinor ?? null,
-            transactionFeeRuleVersionId: fee?.transactionFeeRuleVersionId ?? null,
             reason: input.reason,
             createdByAdminId: adminId,
             createdAt: at
@@ -303,7 +286,6 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, locked.leagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,
@@ -492,7 +474,6 @@ export class RosterTransactionsService {
     const input = UpgradePlayerCardRequestSchema.parse(raw);
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
-    await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_CARD_UPGRADE', input.idempotencyKey,
       async (tx) => {
@@ -532,9 +513,6 @@ export class RosterTransactionsService {
             quote.salaryCapMinor
           );
         }
-        const fee = input.amountMinor === null ? null : await this.feeQuote(
-          tx, locked.leagueId, locked.footballPlayerId, input.manualTransactionFeeMinor, at
-        );
         const ownership = await tx.leaguePlayerOwnership.update({
           where: { id: locked.id },
           data: {
@@ -558,9 +536,6 @@ export class RosterTransactionsService {
             oldSalaryMinor: locked.salaryMinor,
             newSalaryMinor: quote.salaryMinor,
             amountMinor: input.amountMinor,
-            valuationSnapshotMinor: fee?.valuationSnapshotMinor ?? null,
-            transactionFeeMinor: fee?.transactionFeeMinor ?? null,
-            transactionFeeRuleVersionId: fee?.transactionFeeRuleVersionId ?? null,
             reason: input.reason,
             createdByAdminId: adminId,
             createdAt: at
@@ -580,7 +555,6 @@ export class RosterTransactionsService {
               createdAt: at
             }
           });
-          await this.writeFeeLedger(tx, locked.leagueTeamId, input.seasonId, transaction.id, fee, input.reason, at);
         }
         await this.audit.record(tx, {
           actorAdminId: adminId,
@@ -832,11 +806,7 @@ export class RosterTransactionsService {
   }
 
   private async loadBuild(client: Prisma.TransactionClient, playerCardId: string) {
-    const build = await client.playerCardAutoBuild.findFirst({
-      where: { playerCardId },
-      orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
-      include: { playerCard: true }
-    });
+    const build = await this.playerBuilds.resolveOrDeriveWithClient(client, playerCardId);
     if (!build) {
       throw new LeagueRosterError(
         'PLAYER_AUTO_BUILD_MISSING',

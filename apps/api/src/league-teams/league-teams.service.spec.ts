@@ -12,6 +12,7 @@ describe('LeagueTeamsService', () => {
   const userIds: string[] = [];
   const adminIds: string[] = [];
   const leagueIds: string[] = [];
+  const catalogIds: string[] = [];
   let service: LeagueTeamsService;
   let actorId: string;
 
@@ -47,6 +48,7 @@ describe('LeagueTeamsService', () => {
     });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.gameAccount.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -54,6 +56,7 @@ describe('LeagueTeamsService', () => {
     userIds.length = 0;
     adminIds.length = 0;
     leagueIds.length = 0;
+    catalogIds.length = 0;
   });
 
   afterAll(() => prisma.$disconnect());
@@ -105,17 +108,48 @@ describe('LeagueTeamsService', () => {
     });
   }
 
+  async function createShell(
+    name: string,
+    options: { status?: 'ACTIVE' | 'DISABLED'; logoUrl?: string | null } = {}
+  ) {
+    const shell = await prisma.teamCatalogItem.create({
+      data: {
+        sourceType: 'CUSTOM',
+        nameZh: name,
+        shortName: name.slice(0, 24),
+        storedLogoUrl: options.logoUrl ?? null,
+        status: options.status ?? 'ACTIVE'
+      }
+    });
+    catalogIds.push(shell.id);
+    return shell;
+  }
+
   it('rejects binding when the league has no current season and creates no orphan team', async () => {
     const { user } = await createUser('未开赛用户');
     const league = await createLeague('未设置赛季', false);
+    const shell = await createShell('未开赛球队');
 
     await expect(service.create(actorId, league.id, {
       ownerUserId: user.id,
+      ownerAlias: '未开赛经理',
       teamNumber: 1,
-      name: '未开赛球队',
-      shortName: '未开赛',
-      logoUrl: null
+      catalogTeamId: shell.id
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_CURRENT_SEASON_REQUIRED' } });
+    await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(0);
+  });
+
+  it('rejects a disabled catalog shell before creating a team', async () => {
+    const { user } = await createUser('停用队壳用户');
+    const league = await createLeague('停用队壳');
+    const shell = await createShell('停用球队', { status: 'DISABLED' });
+
+    await expect(service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '停用经理',
+      teamNumber: 2,
+      catalogTeamId: shell.id
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'TEAM_CATALOG_ITEM_UNAVAILABLE' } });
     await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(0);
   });
 
@@ -123,20 +157,19 @@ describe('LeagueTeamsService', () => {
     const { user } = await createUser('同一用户');
     const firstLeague = await createLeague('甲');
     const secondLeague = await createLeague('乙');
+    const shell = await createShell('跨联赛球队');
 
     const first = await service.create(actorId, firstLeague.id, {
       ownerUserId: user.id,
+      ownerAlias: '甲联赛称呼',
       teamNumber: 7,
-      name: '甲联赛球队',
-      shortName: '甲队',
-      logoUrl: null
+      catalogTeamId: shell.id
     }, randomUUID());
     const second = await service.create(actorId, secondLeague.id, {
       ownerUserId: user.id,
+      ownerAlias: '乙联赛称呼',
       teamNumber: 7,
-      name: '乙联赛球队',
-      shortName: '乙队',
-      logoUrl: null
+      catalogTeamId: shell.id
     }, randomUUID());
 
     expect(first.ownerUserId).toBe(second.ownerUserId);
@@ -163,28 +196,27 @@ describe('LeagueTeamsService', () => {
     const firstOwner = await createUser('一号');
     const secondOwner = await createUser('二号');
     const league = await createLeague('唯一约束');
+    const firstShell = await createShell('一号队');
+    const secondShell = await createShell('二号队');
     await service.create(actorId, league.id, {
       ownerUserId: firstOwner.user.id,
+      ownerAlias: '一号',
       teamNumber: 12,
-      name: '一号队',
-      shortName: '一号',
-      logoUrl: null
+      catalogTeamId: firstShell.id
     }, randomUUID());
 
     await expect(service.create(actorId, league.id, {
       ownerUserId: firstOwner.user.id,
+      ownerAlias: '重复用户',
       teamNumber: 13,
-      name: '重复用户队',
-      shortName: '重复',
-      logoUrl: null
+      catalogTeamId: secondShell.id
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_OWNER_ALREADY_EXISTS' } });
 
     await expect(service.create(actorId, league.id, {
       ownerUserId: secondOwner.user.id,
+      ownerAlias: '二号',
       teamNumber: 12,
-      name: '重复编号队',
-      shortName: '重复号',
-      logoUrl: null
+      catalogTeamId: secondShell.id
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS' } });
     await expect(prisma.seasonEntry.count({ where: { season: { leagueId: league.id } } })).resolves.toBe(1);
   });
@@ -192,18 +224,26 @@ describe('LeagueTeamsService', () => {
   it('creates one approved current-season entry without a game account and replays idempotently', async () => {
     const { user } = await createUser('幂等用户');
     const league = await createLeague('幂等绑定');
+    const shell = await createShell('幂等球队', { logoUrl: 'https://media.example/idempotent.webp' });
     const key = randomUUID();
     const input = {
       ownerUserId: user.id,
+      ownerAlias: '幂等经理',
       teamNumber: 21,
-      name: '幂等球队',
-      shortName: '幂等',
-      logoUrl: null
+      catalogTeamId: shell.id,
+      name: '客户端伪造名称',
+      logoUrl: 'https://outside.example/fake.png'
     };
 
-    const first = await service.create(actorId, league.id, input, key);
-    const replay = await service.create(actorId, league.id, input, key);
+    const first = await service.create(actorId, league.id, input as never, key);
+    const replay = await service.create(actorId, league.id, input as never, key);
     expect(replay).toEqual(first);
+    expect(first).toMatchObject({
+      name: '幂等球队',
+      logoUrl: 'https://media.example/idempotent.webp',
+      ownerAlias: '幂等经理',
+      catalogTeamId: shell.id
+    });
     await expect(prisma.seasonEntry.findMany({ where: { leagueTeamId: first.id } })).resolves.toEqual([
       expect.objectContaining({
         gameAccountId: null,
@@ -213,30 +253,38 @@ describe('LeagueTeamsService', () => {
         leagueEditionSnapshot: 'INTERNATIONAL'
       })
     ]);
+    await expect(prisma.auditLog.findFirst({
+      where: { resourceId: first.id, action: 'CREATE_LEAGUE_TEAM' }
+    })).resolves.toMatchObject({
+      metadata: expect.objectContaining({ catalogTeamId: shell.id, ownerAlias: '幂等经理' })
+    });
   });
 
-  it('serializes concurrent bindings and leaves no orphan season entry', async () => {
-    const { user } = await createUser('并发用户');
+  it('allows only one concurrent assignment of the same shell and leaves no orphan season entry', async () => {
+    const first = await createUser('并发用户甲');
+    const second = await createUser('并发用户乙');
     const league = await createLeague('并发绑定');
+    const shell = await createShell('并发球队');
     const results = await Promise.allSettled([
       service.create(actorId, league.id, {
-        ownerUserId: user.id,
+        ownerUserId: first.user.id,
+        ownerAlias: '并发甲',
         teamNumber: 31,
-        name: '并发球队甲',
-        shortName: '并发甲',
-        logoUrl: null
+        catalogTeamId: shell.id
       }, randomUUID()),
       service.create(actorId, league.id, {
-        ownerUserId: user.id,
+        ownerUserId: second.user.id,
+        ownerAlias: '并发乙',
         teamNumber: 32,
-        name: '并发球队乙',
-        shortName: '并发乙',
-        logoUrl: null
+        catalogTeamId: shell.id
       }, randomUUID())
     ]);
 
     expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(({ status }) => status === 'rejected')).toHaveLength(1);
+    expect(results.find(({ status }) => status === 'rejected')).toMatchObject({
+      reason: { response: { code: 'LEAGUE_TEAM_SHELL_ALREADY_ASSIGNED' } }
+    });
     await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(1);
     await expect(prisma.seasonEntry.count({ where: { season: { leagueId: league.id } } })).resolves.toBe(1);
   });
@@ -244,10 +292,13 @@ describe('LeagueTeamsService', () => {
   it('keeps a migrated legacy team readable while its number awaits assignment', async () => {
     const { user } = await createUser('旧球队');
     const league = await createLeague('迁移');
+    const shell = await createShell('迁移后的旧球队');
     const migrated = await prisma.leagueTeam.create({
       data: {
         leagueId: league.id,
         ownerUserId: user.id,
+        ownerAlias: '旧球队经理',
+        catalogTeamId: shell.id,
         teamNumber: null,
         name: '迁移后的旧球队',
         shortName: '旧队',
@@ -269,12 +320,12 @@ describe('LeagueTeamsService', () => {
   it('updates the team shell value with versioning, idempotency, and an audit record', async () => {
     const { user } = await createUser('队壳用户');
     const league = await createLeague('队壳价值');
+    const shell = await createShell('队壳球队');
     const team = await service.create(actorId, league.id, {
       ownerUserId: user.id,
+      ownerAlias: '队壳经理',
       teamNumber: 8,
-      name: '队壳球队',
-      shortName: '队壳',
-      logoUrl: null
+      catalogTeamId: shell.id
     }, randomUUID());
     const key = randomUUID();
 

@@ -27,6 +27,110 @@ it('presents a season switch as a Chinese business event', () => {
   });
 });
 
-it('uses a safe Chinese fallback for unknown actions', () => {
-  expect(presentAuditLog({ ...base, action: 'future.action' }).action).toBe('其他后台操作');
+it('presents a season rename as a specific operation', () => {
+  expect(presentAuditLog({
+    ...base,
+    action: 'admin.league-season.rename',
+    metadata: { displayName: 'S2 正式赛季' },
+  })).toMatchObject({
+    action: '修改赛季名称',
+    subject: 'S2',
+    summary: '平台管理员“小宣”对 S2 执行了“修改赛季名称”',
+  });
+});
+
+it('presents a configured league center banner update explicitly', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'admin.platform-presentation.update',
+    resourceType: 'PlatformPresentation',
+    resourceId: 'global',
+    subjectDisplayName: null,
+    metadata: { leagueCenterBannerUrl: 'https://media.example.com/banner.webp' },
+  })).toMatchObject({
+    action: '更新联赛中心 Banner',
+    subject: '联赛中心 Banner',
+    summary: '平台管理员“小宣”更新了联赛中心 Banner',
+  });
+});
+
+it('presents restoring the default league center background explicitly', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'admin.platform-presentation.update',
+    resourceType: 'PlatformPresentation',
+    resourceId: 'global',
+    subjectDisplayName: null,
+    metadata: { leagueCenterBannerUrl: null },
+  })).toMatchObject({
+    action: '恢复联赛中心默认背景',
+    subject: '联赛中心 Banner',
+    summary: '平台管理员“小宣”恢复了联赛中心默认背景',
+  });
+});
+
+it('shows exact technical identifiers instead of vague copy for a future action', () => {
+  expect(presentAuditLog({
+    ...base,
+    action: 'future.action',
+    resourceType: 'FutureResource',
+    subjectDisplayName: null,
+    leagueName: null,
+  })).toMatchObject({
+    action: 'future.action',
+    subject: 'FutureResource',
+    summary: '平台管理员“小宣”对 FutureResource 执行了“future.action”',
+  });
+});
+
+it('presents data synchronization actions with concrete Chinese business labels', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'BATCH_PUBLISH_TEAM_SHELLS',
+    resourceType: 'TeamCatalogSyncItemBatch',
+    subjectDisplayName: null,
+    metadata: { requestedCount: 3, succeededCount: 1, failedCount: 2 },
+  })).toMatchObject({
+    action: '批量发布球队队壳',
+    subject: '球队队壳同步项目',
+    summary: '平台管理员“小宣”批量发布球队队壳：成功 1 条，失败 2 条',
+  });
+});
+
+it('does not present an unfinished team batch audit as completed', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'BATCH_REJECT_TEAM_SHELLS',
+    resourceType: 'TeamCatalogSyncItemBatch',
+    subjectDisplayName: null,
+    metadata: { status: 'PROCESSING', requestedCount: 3 },
+  })).toMatchObject({
+    action: '批量驳回球队队壳',
+    result: '处理中',
+    summary: '平台管理员“小宣”批量驳回球队队壳已开始，结果待确认',
+  });
+});
+
+it('presents a retried team-shell item as a concrete operation', () => {
+  expect(presentAuditLog({
+    ...base,
+    leagueId: null,
+    leagueName: null,
+    action: 'RETRY_TEAM_SHELL_SYNC_ITEM',
+    resourceType: 'TeamCatalogSyncItem',
+    subjectDisplayName: null,
+    metadata: { runId: 'run-1', sourceExternalId: 'team-1' },
+  })).toMatchObject({
+    action: '重试球队队壳同步失败项',
+    subject: '球队队壳同步项目',
+    summary: '平台管理员“小宣”对 球队队壳同步项目 执行了“重试球队队壳同步失败项”',
+  });
 });

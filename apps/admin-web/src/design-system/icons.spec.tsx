@@ -10,7 +10,9 @@ describe('admin navigation icons', () => {
   });
 
   it('names a meaningful icon when it is not decorative', () => {
-    render(<AdminIcon name="seasons" decorative={false} />);
+    const { rerender } = render(<AdminIcon name="seasons" decorative={false} />);
     expect(screen.getByRole('img', { name: '赛季' })).toBeInTheDocument();
+    rerender(<AdminIcon name="sync" decorative={false} />);
+    expect(screen.getByRole('img', { name: '数据同步' })).toBeInTheDocument();
   });
 });

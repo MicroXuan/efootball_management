@@ -31,17 +31,20 @@ describe('role-aware administration navigation', () => {
 
     expect(await screen.findByRole('link', { name: 'CELL 联赛' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'GOK 联赛' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '管理员账号' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '账号管理' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '审计日志' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '数据同步' })).not.toBeInTheDocument();
   });
 
   it('shows platform navigation to platform administrators', async () => {
     const identity: AdminMeResponse = { admin: baseAdmin, platformAdmin: true, leagueGrants: [] };
     render(<AdminSessionProvider api={api(identity)}><MemoryRouter initialEntries={['/platform/leagues']}><ApplicationShell /></MemoryRouter></AdminSessionProvider>);
 
-    expect(await screen.findByRole('link', { name: '管理员账号' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '账号管理' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '联赛管理' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '审计日志' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '数据同步' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '数据同步' }).closest('.ant-menu-item')?.querySelector('.admin-icon')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '联赛管理' })).toHaveAttribute('aria-current', 'page');
   });
 
@@ -60,8 +63,15 @@ describe('role-aware administration navigation', () => {
       </AdminSessionProvider>,
     );
 
-    expect(await screen.findByRole('navigation', { name: '联赛工作区导航' })).toBeInTheDocument();
+    const navigation = await screen.findByRole('navigation', { name: '联赛工作区导航' });
+    expect(navigation).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '赛季管理' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: '财务与交易' })).toBeInTheDocument();
+    for (const name of [
+      '用户与球队', '赛季管理', '分组与赛程', '杯赛中心', '工资规则',
+      '转会窗口', '身价窗口', '身价审核', '财务与交易',
+    ]) {
+      expect(screen.getByRole('link', { name }).querySelector('.admin-icon')).toBeInTheDocument();
+    }
   });
 });

@@ -7,7 +7,6 @@ page { background: #0e1417; color: #f4f7f8; }
     #0e1417;
 }
 
-.masthead,
 .league-card__identity,
 .league-card__meta-line,
 .season-strip {
@@ -15,10 +14,8 @@ page { background: #0e1417; color: #f4f7f8; }
   align-items: center;
 }
 
-.masthead,
 .season-strip { justify-content: space-between; }
 
-.eyebrow,
 .state-code,
 .season-label {
   display: block;
@@ -28,33 +25,62 @@ page { background: #0e1417; color: #f4f7f8; }
   letter-spacing: 4rpx;
 }
 
-.page-title {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 58rpx;
-  font-weight: 800;
-  letter-spacing: -2rpx;
-  line-height: 1.08;
+.league-banner {
+  position: relative;
+  height: 220rpx;
+  overflow: hidden;
+  border: 2rpx solid #344047;
+  border-radius: 24rpx;
+  background: #151d21;
+  box-shadow: 0 18rpx 54rpx rgba(0, 0, 0, 0.28);
 }
 
-.edition {
-  color: #7e8b91;
-  font-size: 18rpx;
-  font-weight: 800;
-  letter-spacing: 3rpx;
+.league-banner__image,
+.league-banner__fallback {
+  width: 100%;
+  height: 100%;
 }
 
-.intro {
-  display: block;
-  max-width: 600rpx;
-  margin-top: 24rpx;
-  color: #aab5ba;
-  font-size: 24rpx;
-  line-height: 1.65;
+.league-banner__image { display: block; }
+
+.league-banner__fallback {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 20%, rgba(182, 241, 58, 0.17), transparent 28%),
+    linear-gradient(135deg, #1b3428 0%, #14251f 52%, #10191a 100%);
+}
+
+.pitch-line {
+  position: absolute;
+  border: 2rpx solid rgba(244, 247, 248, 0.18);
+}
+
+.pitch-line--outer {
+  inset: 24rpx;
+  border-radius: 10rpx;
+}
+
+.pitch-line--center {
+  top: 24rpx;
+  bottom: 24rpx;
+  left: 50%;
+  border-width: 0 0 0 2rpx;
+}
+
+.pitch-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70rpx;
+  height: 70rpx;
+  border: 2rpx solid rgba(244, 247, 248, 0.18);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .league-tabs {
-  margin-top: 36rpx;
+  margin-top: 24rpx;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8rpx;

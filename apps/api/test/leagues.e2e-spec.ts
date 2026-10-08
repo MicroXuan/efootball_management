@@ -14,6 +14,7 @@ describe('league foundation lifecycle API', () => {
   const userIds: string[] = [];
   const leagueIds: string[] = [];
   const accountIds: string[] = [];
+  const catalogIds: string[] = [];
   let app: INestApplication;
   let adminToken: string;
   let managerToken: string;
@@ -68,6 +69,7 @@ describe('league foundation lifecycle API', () => {
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { ownerUserId: { in: userIds } } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -178,10 +180,16 @@ describe('league foundation lifecycle API', () => {
         logoUrl: null,
         defaultGameAccountId: account.body.id
       }).expect(201);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '上海申花', shortName: '申花' }
+    });
+    catalogIds.push(shell.id);
     const leagueTeam = await prisma.leagueTeam.create({
       data: {
         leagueId: createdLeague.body.id as string,
         ownerUserId: userIds[2]!,
+        ownerAlias: '上海玩家',
+        catalogTeamId: shell.id,
         teamNumber: 44,
         name: '上海申花',
         shortName: '申花',

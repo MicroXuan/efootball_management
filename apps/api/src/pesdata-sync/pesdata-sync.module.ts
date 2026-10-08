@@ -2,11 +2,16 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseModule } from '../database/database.module.js';
 import { PlayerImportModule } from '../player-import/player-import.module.js';
+import { StorageModule } from '../storage/storage.module.js';
+import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 import { PesdataClient, type PesdataClientConfig } from './pesdata-client.js';
+import { PesdataCrestLoader } from './pesdata-crest-loader.js';
 import { PESDATA_SYNC_OPTIONS, PesdataSyncService } from './pesdata-sync.service.js';
+import { PESDATA_TEAM_SYNC_OPTIONS, PesdataTeamSyncService } from './pesdata-team-sync.service.js';
+import { AdminModule } from '../admin/admin.module.js';
 
 @Module({
-  imports: [DatabaseModule, PlayerImportModule],
+  imports: [AdminModule, DatabaseModule, PlayerImportModule, StorageModule],
   providers: [
     {
       provide: PesdataClient,
@@ -24,9 +29,16 @@ import { PESDATA_SYNC_OPTIONS, PesdataSyncService } from './pesdata-sync.service
         return new PesdataClient(clientConfig);
       }
     },
+    {
+      provide: PesdataCrestLoader,
+      inject: [OBJECT_STORAGE],
+      useFactory: (storage: ObjectStorage) => new PesdataCrestLoader(storage)
+    },
     { provide: PESDATA_SYNC_OPTIONS, useValue: {} },
-    PesdataSyncService
+    { provide: PESDATA_TEAM_SYNC_OPTIONS, useValue: {} },
+    PesdataSyncService,
+    PesdataTeamSyncService
   ],
-  exports: [PesdataSyncService]
+  exports: [PesdataSyncService, PesdataTeamSyncService]
 })
 export class PesdataSyncModule {}

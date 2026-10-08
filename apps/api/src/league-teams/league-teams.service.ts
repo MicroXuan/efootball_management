@@ -46,7 +46,17 @@ export class LeagueTeamsService {
       }
       const owner = await transaction.user.findUnique({ where: { id: input.ownerUserId } });
       if (!owner?.publicUserNo) throw this.notFound('PUBLIC_USER_NOT_FOUND', 'User was not found');
-      await this.assertAvailable(transaction, leagueId, owner.id, input.teamNumber);
+      await transaction.$queryRaw`SELECT id FROM team_catalog_items WHERE id = ${input.catalogTeamId} FOR UPDATE`;
+      const catalogTeam = await transaction.teamCatalogItem.findUnique({ where: { id: input.catalogTeamId } });
+      const catalogName = catalogTeam?.nameZh ?? catalogTeam?.nameEn ?? catalogTeam?.nameJa;
+      if (!catalogTeam || catalogTeam.status !== 'ACTIVE' || !catalogName) {
+        throw new LeagueError(
+          'TEAM_CATALOG_ITEM_UNAVAILABLE',
+          'The selected team shell is unavailable',
+          409
+        );
+      }
+      await this.assertAvailable(transaction, leagueId, owner.id, input.teamNumber, catalogTeam.id);
       await synchronizeSeasonValuationSnapshots(transaction, league.currentSeasonId);
 
       try {
@@ -54,10 +64,12 @@ export class LeagueTeamsService {
           data: {
             leagueId,
             ownerUserId: owner.id,
+            ownerAlias: input.ownerAlias,
+            catalogTeamId: catalogTeam.id,
             teamNumber: input.teamNumber,
-            name: input.name,
-            shortName: input.shortName,
-            logoUrl: input.logoUrl,
+            name: catalogName,
+            shortName: catalogTeam.shortName,
+            logoUrl: catalogTeam.storedLogoUrl,
             defaultGameAccountId: null
           }
         });
@@ -87,12 +99,14 @@ export class LeagueTeamsService {
         await this.audit.record(transaction, {
           actorAdminId,
           leagueId,
-          action: 'league-team.create',
+          action: 'CREATE_LEAGUE_TEAM',
           resourceType: 'LeagueTeam',
           resourceId: team.id,
           metadata: {
             ownerUserId: owner.id,
+            ownerAlias: team.ownerAlias,
             teamNumber: team.teamNumber,
+            catalogTeamId: team.catalogTeamId,
             currentSeasonId: league.currentSeasonId
           }
         });
@@ -111,6 +125,13 @@ export class LeagueTeamsService {
             throw new LeagueError(
               'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS',
               'Team number is already assigned in this league',
+              409
+            );
+          }
+          if (target.includes('catalog')) {
+            throw new LeagueError(
+              'LEAGUE_TEAM_SHELL_ALREADY_ASSIGNED',
+              'This team shell is already assigned in the league',
               409
             );
           }
@@ -159,9 +180,7 @@ export class LeagueTeamsService {
         where: { id: teamId, leagueId, version: input.expectedVersion },
         data: {
           ...(input.teamNumber !== undefined ? { teamNumber: input.teamNumber } : {}),
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.shortName !== undefined ? { shortName: input.shortName } : {}),
-          ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
+          ...(input.ownerAlias !== undefined ? { ownerAlias: input.ownerAlias } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.shellValueMinor !== undefined ? { shellValueMinor: input.shellValueMinor } : {}),
           version: { increment: 1 }
@@ -341,7 +360,8 @@ export class LeagueTeamsService {
     client: Prisma.TransactionClient,
     leagueId: string,
     ownerUserId: string,
-    teamNumber: number
+    teamNumber: number,
+    catalogTeamId: string
   ) {
     const owner = await client.leagueTeam.findUnique({
       where: { leagueId_ownerUserId: { leagueId, ownerUserId } },
@@ -362,6 +382,17 @@ export class LeagueTeamsService {
       throw new LeagueError(
         'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS',
         'Team number is already assigned in this league',
+        409
+      );
+    }
+    const shell = await client.leagueTeam.findFirst({
+      where: { leagueId, catalogTeamId },
+      select: { id: true }
+    });
+    if (shell) {
+      throw new LeagueError(
+        'LEAGUE_TEAM_SHELL_ALREADY_ASSIGNED',
+        'This team shell is already assigned in the league',
         409
       );
     }
@@ -417,6 +448,8 @@ export class LeagueTeamsService {
       ownerUserId: team.ownerUserId,
       ownerPublicUserNo: team.owner.publicUserNo,
       ownerDisplayName: team.owner.displayName,
+      ownerAlias: team.ownerAlias,
+      catalogTeamId: team.catalogTeamId,
       teamNumber: team.teamNumber,
       name: team.name,
       shortName: team.shortName,

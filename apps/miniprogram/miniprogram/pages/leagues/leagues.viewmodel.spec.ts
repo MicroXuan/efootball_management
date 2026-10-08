@@ -1,6 +1,7 @@
 import type { LeagueSummary, MyLeagueTeamSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
+  leagueBannerView,
   leagueCardView,
   leagueListErrorMessage,
   myLeagueCardView,
@@ -17,6 +18,7 @@ const league = (overrides: Partial<LeagueSummary> = {}): LeagueSummary => ({
 
 const mine = (overrides: Partial<MyLeagueTeamSummary> = {}): MyLeagueTeamSummary => ({
   id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', ownerPublicUserNo: '000123', teamNumber: 25,
+  ownerAlias: '阿宣', catalogTeamId: 'catalog-team-1',
   name: '上海申花', shortName: '申花', logoUrl: null, status: 'ACTIVE', activePlayerCount: 0,
   salaryTotalMinor: 0, salaryCapMinor: 0, rosterStatus: 'COMPLIANT', version: 1,
   shellValueMinor: 0,
@@ -26,6 +28,20 @@ const mine = (overrides: Partial<MyLeagueTeamSummary> = {}): MyLeagueTeamSummary
 })
 
 describe('league list view model', () => {
+  it('uses the configured league center banner and falls back cleanly when it is absent', () => {
+    expect(leagueBannerView({
+      leagueCenterBannerUrl: 'https://media.example.com/league-center.webp',
+      version: 2,
+    })).toEqual({
+      imageUrl: 'https://media.example.com/league-center.webp',
+      hasImage: true,
+    });
+    expect(leagueBannerView({ leagueCenterBannerUrl: null, version: 0 })).toEqual({
+      imageUrl: '',
+      hasImage: false,
+    });
+  });
+
   it('formats current season, edition, and live approved participant copy', () => {
     const card = leagueCardView(league({ currentSeason: {
       id: 'season-1', displayName: 'CELL S20', status: 'REGISTRATION_OPEN', approvedEntryCount: 12,

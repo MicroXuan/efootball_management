@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { derivePesdataPositionAutoBuild } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { selectBestCard } from './player-build-selector.js';
@@ -22,6 +23,53 @@ export class PlayerBuildsService {
 
   save(playerCardId: string, input: SavePlayerBuildInput) {
     return this.prisma.$transaction((tx) => this.saveWithClient(tx, playerCardId, input));
+  }
+
+  async resolveOrDeriveWithClient(client: DatabaseClient, playerCardId: string) {
+    const existing = await client.playerCardAutoBuild.findFirst({
+      where: { playerCardId },
+      orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
+      include: { playerCard: true }
+    });
+    if (existing?.dtRating != null) return existing;
+    if (existing) {
+      return client.playerCardAutoBuild.update({
+        where: { id: existing.id },
+        data: { dtRating: existing.maxOverall, calculatedAt: new Date() },
+        include: { playerCard: true }
+      });
+    }
+
+    const card = await client.playerCard.findUnique({
+      where: { id: playerCardId },
+      include: { attributes: true }
+    });
+    if (!card) return null;
+    const attributes = objectRecord(card.attributes?.attributesJson);
+    const sourceMetadata = objectRecord(attributes?.sourceMetadata);
+    const build = derivePesdataPositionAutoBuild({
+      position: card.position,
+      overallRating: card.overallRating,
+      maxLevel: sourceMetadata?.maxLevel as number | string | null | undefined,
+      cardType: card.cardType
+    });
+    if (!build) return null;
+
+    await this.saveWithClient(client, playerCardId, {
+      autoBuildAllocation: build.allocation,
+      autoBuildMaxOverall: build.maxOverall,
+      dtRating: build.dtRating,
+      algorithmVersion: build.algorithmVersion
+    });
+    return client.playerCardAutoBuild.findUniqueOrThrow({
+      where: {
+        playerCardId_algorithmVersion: {
+          playerCardId,
+          algorithmVersion: build.algorithmVersion
+        }
+      },
+      include: { playerCard: true }
+    });
   }
 
   async saveWithClient(client: DatabaseClient, playerCardId: string, input: SavePlayerBuildInput) {
@@ -93,4 +141,10 @@ export class PlayerBuildsService {
     });
     return saved;
   }
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

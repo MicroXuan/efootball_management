@@ -7,6 +7,8 @@ export type ProfileTeamView = {
   teamNumber: string
   teamLogoUrl: string | null
   teamLogoText: string
+  identityCopy: string
+  ownerAliasCopy: string
   leagueName: string
   leagueLogoUrl: string | null
   editionLabel: string
@@ -41,6 +43,8 @@ export function profileView(
     teamNumber: team.teamNumber === null ? '—' : String(team.teamNumber),
     teamLogoUrl: team.logoUrl,
     teamLogoText: (team.shortName.trim() || team.name.trim() || '球队').slice(0, 2),
+    identityCopy: `${team.teamNumber === null ? '—' : team.teamNumber}-${team.name.trim() || '未命名球队'}`,
+    ownerAliasCopy: `（${team.ownerAlias}）`,
     leagueName: team.leagueName.trim() || '未命名联赛',
     leagueLogoUrl: team.leagueLogoUrl,
     editionLabel: editionLabel(team.leagueEdition),

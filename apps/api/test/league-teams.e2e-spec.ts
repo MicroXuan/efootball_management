@@ -20,6 +20,8 @@ describe('league-scoped team API', () => {
   let playerAccountId: string;
   let secondUserId: string;
   let secondAccountId: string;
+  let firstCatalogTeamId: string;
+  let secondCatalogTeamId: string;
   const leagueIds: string[] = [];
 
   beforeAll(async () => {
@@ -84,6 +86,12 @@ describe('league-scoped team API', () => {
       }
     });
     secondAccountId = secondAccount.id;
+    const [firstShell, secondShell] = await Promise.all([
+      prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: '第一赛季球队名', shortName: '一队' } }),
+      prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: '重复编号', shortName: '重号' } })
+    ]);
+    firstCatalogTeamId = firstShell.id;
+    secondCatalogTeamId = secondShell.id;
 
     for (const label of ['一', '二']) {
       const league = await prisma.league.create({
@@ -141,6 +149,7 @@ describe('league-scoped team API', () => {
     await prisma.adminSession.deleteMany({ where: { adminId: { in: [platformId, managerId] } } });
     await prisma.adminLeagueRole.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: [firstCatalogTeamId, secondCatalogTeamId] } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: [playerAccountId, secondAccountId] } } });
     await prisma.mutationReceipt.deleteMany({ where: { actorId: { in: [playerId, secondUserId] } } });
@@ -161,9 +170,8 @@ describe('league-scoped team API', () => {
       .send({
         ownerUserId: playerId,
         teamNumber: 8,
-        name: '第一赛季球队名',
-        shortName: '一队',
-        logoUrl: null
+        ownerAlias: '首位用户',
+        catalogTeamId: firstCatalogTeamId
       }).expect(201);
 
     await request(app.getHttpServer())
@@ -172,9 +180,8 @@ describe('league-scoped team API', () => {
       .send({
         ownerUserId: playerId,
         teamNumber: 9,
-        name: '重复所有者',
-        shortName: '重复',
-        logoUrl: null
+        ownerAlias: '首位用户',
+        catalogTeamId: secondCatalogTeamId
       }).expect(409);
 
     await request(app.getHttpServer())
@@ -183,9 +190,8 @@ describe('league-scoped team API', () => {
       .send({
         ownerUserId: secondUserId,
         teamNumber: 8,
-        name: '重复编号',
-        shortName: '重号',
-        logoUrl: null
+        ownerAlias: '第二位用户',
+        catalogTeamId: secondCatalogTeamId
       }).expect(409);
 
     await request(app.getHttpServer())
@@ -194,9 +200,8 @@ describe('league-scoped team API', () => {
       .send({
         ownerUserId: playerId,
         teamNumber: 8,
-        name: '跨联赛球队',
-        shortName: '二队',
-        logoUrl: null
+        ownerAlias: '首位用户',
+        catalogTeamId: firstCatalogTeamId
       }).expect(403);
 
     await prisma.adminLeagueRole.create({
@@ -208,9 +213,8 @@ describe('league-scoped team API', () => {
       .send({
         ownerUserId: playerId,
         teamNumber: 8,
-        name: '跨联赛球队',
-        shortName: '二队',
-        logoUrl: null
+        ownerAlias: '首位用户',
+        catalogTeamId: firstCatalogTeamId
       }).expect(201);
 
     expect(secondLeagueTeam.body.id).toEqual(expect.any(String));
@@ -250,14 +254,14 @@ describe('league-scoped team API', () => {
       teamNameSnapshot: '第一赛季球队名'
     });
 
-    const renamed = await request(app.getHttpServer())
+    const aliasUpdated = await request(app.getHttpServer())
       .patch(`/v1/admin/leagues/${leagueIds[0]}/teams/${first.body.id}`)
       .set(adminAuth()).set('Idempotency-Key', key())
-      .send({ name: '后来改名', expectedVersion: first.body.version }).expect(200);
+      .send({ ownerAlias: '后来称呼', expectedVersion: first.body.version }).expect(200);
     await request(app.getHttpServer())
       .patch(`/v1/admin/leagues/${leagueIds[0]}/teams/${first.body.id}`)
       .set(adminAuth()).set('Idempotency-Key', key())
-      .send({ teamNumber: 18, expectedVersion: renamed.body.version }).expect(409)
+      .send({ teamNumber: 18, expectedVersion: aliasUpdated.body.version }).expect(409)
       .expect(({ body }) => expect(body.error.code).toBe('LEAGUE_TEAM_NUMBER_LOCKED'));
     await request(app.getHttpServer()).get(`/v1/seasons/${season.id}/entries/me`)
       .set('Authorization', `Bearer ${playerToken}`).expect(200)

@@ -6,7 +6,10 @@
   <view wx:else class="team-list">
     <view wx:for="{{teams}}" wx:key="id" class="team-card" data-id="{{item.id}}" bindtap="openTeam">
       <view class="team-head"><text class="league-name">{{item.leagueName}}</text><text class="status {{item.rosterStatus === 'OVER_CAP' ? 'danger' : ''}}">{{item.statusCopy}}</text></view>
-      <text class="team-name">{{item.teamNumber}} · {{item.name}}</text>
+      <view class="team-identity">
+        <entity-artwork class="team-crest" src="{{item.logoUrl}}" fallback="{{item.logoFallback}}" shape="square" />
+        <view class="team-identity__copy"><text class="team-name">{{item.identityCopy}}</text><text class="team-alias">{{item.ownerAliasCopy}}</text></view>
+      </view>
       <view class="metrics"><text>阵容 {{item.rosterCopy}}</text><text>工资 {{item.salaryCopy}}</text></view>
       <text class="chevron">查看球队档案 →</text>
     </view>

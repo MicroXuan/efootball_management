@@ -7,6 +7,7 @@ const user: CurrentUserResponse = {
 }
 const team: MyLeagueTeamSummary = {
   id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', ownerPublicUserNo: '000123', teamNumber: 25,
+  ownerAlias: '老肥', catalogTeamId: 'catalog-team-1',
   name: '上海申花', shortName: '申花', logoUrl: null, status: 'ACTIVE', activePlayerCount: 3,
   salaryTotalMinor: 600, salaryCapMinor: 2000, rosterStatus: 'COMPLIANT', version: 1,
   shellValueMinor: 0,
@@ -19,7 +20,10 @@ describe('read-only profile view model', () => {
   it('presents identity, memorable public number, and bound league teams', () => {
     expect(profileView(user, [team])).toMatchObject({
       displayName: 'Dust', publicUserNoDisplay: '000 123', hasTeams: true,
-      teams: [{ teamName: '上海申花', leagueName: 'CELL传奇联赛', editionLabel: '国服', seasonName: 'CELL S20' }],
+      teams: [{
+        teamName: '上海申花', identityCopy: '25-上海申花', ownerAliasCopy: '（老肥）',
+        teamLogoText: '申花', leagueName: 'CELL传奇联赛', editionLabel: '国服', seasonName: 'CELL S20',
+      }],
     })
   })
 

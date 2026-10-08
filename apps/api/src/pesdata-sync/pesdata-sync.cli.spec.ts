@@ -23,6 +23,15 @@ describe('PESDATA sync CLI arguments', () => {
     expect(parsePesdataSyncArgs(['--', 'sample', '--actor', actorId, '--limit', '2', '--dry-run'])).toEqual({
       command: 'start', mode: 'sample', actorId, limit: 2, dryRun: true
     });
+    expect(parsePesdataSyncArgs(['teams', 'sample', '--actor', actorId, '--limit', '2'])).toEqual({
+      resource: 'teams', command: 'start', mode: 'sample', actorId, limit: 2
+    });
+    expect(parsePesdataSyncArgs(['teams', 'incremental', '--actor', actorId])).toEqual({
+      resource: 'teams', command: 'start', mode: 'incremental', actorId
+    });
+    expect(parsePesdataSyncArgs(['teams', 'resume', runId, '--actor', actorId])).toEqual({
+      resource: 'teams', command: 'resume', runId, actorId
+    });
   });
 
   it.each([
@@ -33,6 +42,8 @@ describe('PESDATA sync CLI arguments', () => {
     [['unknown', '--actor', actorId], 'PESDATA_MODE_INVALID'],
     [['resume', 'not-a-uuid', '--actor', actorId], 'PESDATA_RUN_INVALID'],
     [['resume', runId, '--actor', actorId, '--dry-run'], 'PESDATA_DRY_RUN_UNSUPPORTED']
+    , [['teams', 'unknown', '--actor', actorId], 'PESDATA_TEAM_MODE_INVALID']
+    , [['teams', 'full', '--actor', actorId, '--limit', '2'], 'PESDATA_TEAM_LIMIT_UNSUPPORTED']
   ])('rejects invalid arguments with %s', (arguments_, code) => {
     expect(() => parsePesdataSyncArgs(arguments_)).toThrow(expect.objectContaining({ code }));
   });

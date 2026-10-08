@@ -7,6 +7,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Spin,
   Table,
   Tag
@@ -56,6 +57,8 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
   const [teams, setTeams] = useState<LeagueTeamSummary[]>([]);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [editing, setEditing] = useState<LeagueSeasonSummary | null>(null);
+  const [renaming, setRenaming] = useState<LeagueSeasonSummary | null>(null);
+  const [renameName, setRenameName] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +129,28 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
     });
   };
 
+  const beginRename = (season: LeagueSeasonSummary) => {
+    mutationKey.reset();
+    setRenaming(season);
+    setRenameName(season.displayName);
+  };
+
+  const renameSeason = async () => {
+    const displayName = renameName.trim();
+    if (!renaming || !displayName || submitting) return;
+    setSubmitting(true); setError(null);
+    try {
+      await api.request(`/v1/admin/leagues/${leagueId}/seasons/${renaming.id}`, {
+        method: 'PATCH',
+        headers: { 'Idempotency-Key': mutationKey.current() },
+        schema: LeagueSeasonSummarySchema,
+        body: { displayName, expectedVersion: renaming.version }
+      });
+      mutationKey.reset(); setRenaming(null); setRenameName(''); await load();
+    } catch { setError('赛季名称保存失败，请刷新后重试'); }
+    finally { setSubmitting(false); }
+  };
+
   const setCurrent = async (season: LeagueSeasonSummary) => {
     if (!league || submitting) return;
     setSubmitting(true); setError(null);
@@ -180,11 +205,32 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
         { title: '参赛球队', dataIndex: 'approvedEntryCount' },
         { title: '状态', render: (_, row) => league?.currentSeason?.id === row.id ? <Tag color="success">当前赛季</Tag> : <Tag>{row.status}</Tag> },
         { title: '操作', render: (_, row) => <>
+          <Button type="link" disabled={submitting} onClick={() => beginRename(row)}>修改名称</Button>
           {row.status === 'DRAFT' ? <Button type="link" disabled={submitting} onClick={() => beginEdit(row)}>编辑</Button> : null}
           {league?.currentSeason?.id !== row.id ? <Button type="link" disabled={submitting} onClick={() => void setCurrent(row)}>设为当前赛季</Button> : null}
         </> }
       ]} />}
     </Card>
+
+    <Modal
+      title="修改赛季名称"
+      open={Boolean(renaming)}
+      onCancel={() => { if (!submitting) { setRenaming(null); setRenameName(''); } }}
+      footer={[
+        <Button key="cancel" disabled={submitting} onClick={() => { setRenaming(null); setRenameName(''); }}>取消</Button>,
+        <Button key="save" type="primary" loading={submitting} disabled={!renameName.trim()} onClick={() => void renameSeason()}>保存名称</Button>
+      ]}
+    >
+      <label htmlFor="season-rename-name">新赛季名称</label>
+      <Input
+        id="season-rename-name"
+        value={renameName}
+        maxLength={64}
+        autoFocus
+        onChange={(event) => { mutationKey.reset(); setRenameName(event.target.value); }}
+        onPressEnter={() => void renameSeason()}
+      />
+    </Modal>
 
     <Card id="season-editor" title={editing ? `编辑赛季 · ${editing.displayName}` : '新建赛季'} className="form-card">
       <Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save}>

@@ -43,7 +43,8 @@ describe('RosterTransactionsService', () => {
     windows,
     new RosterLockRepository(),
     transactionFees,
-    valuationSnapshots
+    valuationSnapshots,
+    new PlayerBuildsService(prisma)
   );
   const recalculation = new SalaryRecalculationService(
     prisma,
@@ -57,6 +58,7 @@ describe('RosterTransactionsService', () => {
   const createdAdminIds: string[] = [];
   const createdUserIds: string[] = [];
   const createdSourceIds: string[] = [];
+  const createdCatalogIds: string[] = [];
 
   beforeAll(() => prisma.$connect());
 
@@ -87,6 +89,7 @@ describe('RosterTransactionsService', () => {
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.adminLeagueRole.deleteMany({ where: { adminId: { in: createdAdminIds } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: createdCatalogIds } } });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: createdLeagueIds } } });
     await prisma.league.deleteMany({ where: { id: { in: createdLeagueIds } } });
     const cards = await prisma.playerCard.findMany({
@@ -102,7 +105,7 @@ describe('RosterTransactionsService', () => {
     await prisma.dataSource.deleteMany({ where: { id: { in: createdSourceIds } } });
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.adminAccount.deleteMany({ where: { id: { in: createdAdminIds } } });
-    createdLeagueIds.length = createdAdminIds.length = createdUserIds.length = createdSourceIds.length = 0;
+    createdLeagueIds.length = createdAdminIds.length = createdUserIds.length = createdSourceIds.length = createdCatalogIds.length = 0;
   });
 
   afterAll(() => prisma.$disconnect());
@@ -144,15 +147,21 @@ describe('RosterTransactionsService', () => {
         createdById: users[0]!.id
       }
     });
-    const teams = await Promise.all(users.map((user, index) => prisma.leagueTeam.create({
-      data: {
+    const teams = await Promise.all(users.map(async (user, index) => {
+      const shell = await prisma.teamCatalogItem.create({
+        data: { sourceType: 'CUSTOM', nameZh: `Team ${index + 1}`, shortName: `T${index + 1}` }
+      });
+      createdCatalogIds.push(shell.id);
+      return prisma.leagueTeam.create({ data: {
         leagueId: league.id,
         ownerUserId: user.id,
+        ownerAlias: user.displayName,
+        catalogTeamId: shell.id,
         teamNumber: index + 1,
         name: `Team ${index + 1}`,
         shortName: `T${index + 1}`
-      }
-    })));
+      } });
+    }));
     await salaryRules.createVersion(admin.id, league.id, {
       salaryCapMinor: options.cap ?? 10_000,
       tiers: defaultSalaryTiers(),
@@ -219,17 +228,24 @@ describe('RosterTransactionsService', () => {
   it('acquires a player atomically and replays an identical idempotent result', async () => {
     const f = await fixture();
     const player = await card(f.source.id, 'Bonucci');
-    const input = acquisition(f.season.id, f.teams[0]!.id, player.card.id, 'same-key');
+    const input = {
+      seasonId: f.season.id,
+      targetLeagueTeamId: f.teams[0]!.id,
+      playerCardId: player.card.id,
+      amountMinor: 1_000,
+      idempotencyKey: 'same-key'
+    };
 
     const operationAt = new Date('2026-09-15T00:00:00.000Z');
-    const first = await service.acquire(input, f.admin.id, operationAt);
+    const first = await service.acquire(input as never, f.admin.id, operationAt);
     expect(valuationSnapshots.synchronizeSeasonBeforeRosterMutation).toHaveBeenCalledWith(
       expect.anything(),
       f.season.id
     );
-    const replay = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    const replay = await service.acquire(input as never, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
 
     expect(replay).toEqual(first);
+    expect(first.transaction.reason).toBe('购买球员（未填写原因）');
     expect(first.summary).toMatchObject({ rosterCount: 1, salaryMinor: 200, salaryCapMinor: 10_000 });
     await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
     await expect(prisma.financeLedgerEntry.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
@@ -282,7 +298,8 @@ describe('RosterTransactionsService', () => {
       windows,
       new RosterLockRepository(),
       transactionFees,
-      realSnapshots
+      realSnapshots,
+      new PlayerBuildsService(prisma)
     );
 
     let releaseWindowLock: () => void = () => undefined;
@@ -429,14 +446,14 @@ describe('RosterTransactionsService', () => {
     )).rejects.toMatchObject({ code: 'LEAGUE_PLAYER_ALREADY_OWNED' });
   });
 
-  it('rejects missing DT, a closed window, and a salary above the cap', async () => {
+  it('uses the automatic build total when legacy DT is missing, and rejects window or cap violations', async () => {
     const missing = await fixture();
     const noDt = await card(missing.source.id, 'Missing DT', null);
     await expect(service.acquire(
       acquisition(missing.season.id, missing.teams[0]!.id, noDt.card.id),
       missing.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
-    )).rejects.toMatchObject({ code: 'PLAYER_DT_RATING_MISSING' });
+    )).resolves.toMatchObject({ ownership: { dtRating: 93, salaryMinor: 200 } });
 
     const closed = await fixture({ openWindow: false });
     const closedCard = await card(closed.source.id, 'Closed');
@@ -475,6 +492,39 @@ describe('RosterTransactionsService', () => {
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
     )).rejects.toMatchObject({ code: 'PLAYER_AUTO_BUILD_MISSING' });
+  });
+
+  it('backfills and uses the automatic build total when acquiring a legacy PESDATA card', async () => {
+    const f = await fixture();
+    const player = await prisma.footballPlayer.create({ data: { nameEn: 'Guido Rodriguez' } });
+    const playerCard = await prisma.playerCard.create({
+      data: {
+        sourceId: f.source.id,
+        externalId: `legacy-build-${randomUUID()}`,
+        playerId: player.id,
+        cardName: 'Spanish League Selection Midfielders',
+        position: 'DMF',
+        overallRating: 80,
+        cardType: 'HIGHLIGHT',
+        attributes: {
+          create: { attributesJson: { sourceMetadata: { maxLevel: 80 } } }
+        }
+      }
+    });
+
+    const result = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, playerCard.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+
+    expect(result.ownership).toMatchObject({
+      currentPlayerCardId: playerCard.id,
+      dtRating: 95,
+      salaryMinor: 400
+    });
+    await expect(prisma.playerCardAutoBuild.findFirst({ where: { playerCardId: playerCard.id } }))
+      .resolves.toMatchObject({ maxOverall: 95, dtRating: 95 });
   });
 
   it.each([
@@ -576,7 +626,8 @@ describe('RosterTransactionsService', () => {
       windows,
       new RosterLockRepository(),
       transactionFees,
-      valuationSnapshots
+      valuationSnapshots,
+      new PlayerBuildsService(prisma)
     );
 
     await expect(rollbackService.acquire(
@@ -1140,7 +1191,7 @@ describe('RosterTransactionsService', () => {
       .resolves.toMatchObject({ footballPlayerId: player.player.id });
   });
 
-  it('blocks automatic transaction fees when the official valuation is missing', async () => {
+  it('lets a team sign from the public pool without valuation but requires valuation for team transfers', async () => {
     const f = await fixture();
     const player = await card(f.source.id, 'No valuation fee');
     await prisma.leagueTransactionFeeRuleVersion.create({
@@ -1150,17 +1201,41 @@ describe('RosterTransactionsService', () => {
       }
     });
 
-    await expect(service.acquire(
+    const acquired = await service.acquire(
       acquisition(f.season.id, f.teams[0]!.id, player.card.id),
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
-    )).rejects.toMatchObject({ code: 'PLAYER_VALUATION_REQUIRED_FOR_FEE' });
-    await expect(prisma.leaguePlayerOwnership.count({ where: { leagueId: f.league.id } })).resolves.toBe(0);
+    );
+    expect(acquired.transaction).toMatchObject({
+      type: 'BUY',
+      valuationSnapshotMinor: null,
+      transactionFeeMinor: null,
+      transactionFeeRuleVersionId: null
+    });
+    await expect(prisma.financeLedgerEntry.count({
+      where: { rosterTransactionId: acquired.transaction.id, type: 'TRANSACTION_FEE' }
+    })).resolves.toBe(0);
+
+    await expect(service.transfer({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      targetLeagueTeamId: f.teams[1]!.id,
+      amountMinor: 1_000,
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID(),
+      reason: '球队之间交易'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z')))
+      .rejects.toMatchObject({ code: 'PLAYER_VALUATION_REQUIRED_FOR_FEE' });
   });
 
-  it('allows only platform administrators to set a reasoned manual transaction fee', async () => {
+  it('allows only platform administrators to set a manual fee for a team transfer', async () => {
     const f = await fixture();
     const player = await card(f.source.id, 'Manual fee');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
     const manager = await prisma.adminAccount.create({
       data: {
         username: `fee-manager-${randomUUID()}`, displayName: '手续费管理员',
@@ -1172,14 +1247,19 @@ describe('RosterTransactionsService', () => {
       data: { adminId: manager.id, leagueId: f.league.id, grantedById: f.admin.id }
     });
     const input = {
-      ...acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      targetLeagueTeamId: f.teams[1]!.id,
+      amountMinor: 1_000,
+      expectedVersion: acquired.ownership.version,
+      idempotencyKey: randomUUID(),
       manualTransactionFeeMinor: 123,
       reason: '平台管理员人工手续费'
     };
 
-    await expect(service.acquire(input, manager.id, new Date('2026-09-15T00:00:00.000Z')))
+    await expect(service.transfer(input, manager.id, new Date('2026-09-15T00:00:00.000Z')))
       .rejects.toMatchObject({ code: 'ADMIN_PLATFORM_ACCESS_DENIED' });
-    const result = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    const result = await service.transfer(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
     expect(result.transaction).toMatchObject({
       valuationSnapshotMinor: null, transactionFeeMinor: 123, transactionFeeRuleVersionId: null
     });

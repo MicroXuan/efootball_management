@@ -1,5 +1,5 @@
-import { Alert, Button, Card, Empty, Form, Input, InputNumber, Select, Spin, Tag, Upload } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { Alert, Button, Card, Empty, Form, Input, InputNumber, Select, Spin, Tabs, Tag, Upload } from 'antd';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LeagueDetailSchema, LeagueListResponseSchema, type LeagueEdition, type LeagueSummary } from '@efm/contracts';
 import { z } from 'zod';
@@ -15,9 +15,12 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [statusTab, setStatusTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [editing, setEditing] = useState<LeagueSummary | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [form] = Form.useForm<Fields>();
+  const editorRef = useRef<HTMLDivElement>(null);
+  const editorTitleRef = useRef<HTMLHeadingElement>(null);
   const mutationKey = useMutationKey();
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -29,6 +32,11 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
     finally { setLoading(false); }
   }, [api]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!editing) return;
+    editorTitleRef.current?.focus({ preventScroll: true });
+    editorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [editing]);
   const save = async (values: Fields) => {
     if (submitting) return; setSubmitting(true); setError(null);
     try {
@@ -63,12 +71,24 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
       } else setError(editing ? '联赛保存失败，请稍后重试' : '联赛创建失败，请检查填写内容');
     } finally { setSubmitting(false); }
   };
+  const activeCount = items.filter((item) => item.status === 'ACTIVE').length;
+  const archivedCount = items.filter((item) => item.status === 'ARCHIVED').length;
+  const visibleItems = items.filter((item) => item.status === statusTab);
   return <div className="page-grid">
     <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>联赛管理</h1><p>创建联赛、确认当前赛季，并进入各赛事工作区。</p></div></header>
-    <Card title="联赛目录" extra={!loading ? `${items.length} 个联赛` : undefined} className="data-card league-directory">
+    <Card title="联赛目录" extra={!loading ? `共 ${items.length} 个联赛` : undefined} className="data-card league-directory">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
-      {loading ? <div className="loading-block"><Spin /></div> : items.length ? <div className="league-card-grid">
-        {items.map((item) => <article key={item.id} className="league-card">
+      {loading ? <div className="loading-block"><Spin /></div> : <>
+        <Tabs
+          activeKey={statusTab}
+          onChange={(key) => setStatusTab(key as 'ACTIVE' | 'ARCHIVED')}
+          items={[
+            { key: 'ACTIVE', label: `启用联赛（${activeCount}）` },
+            { key: 'ARCHIVED', label: `已归档（${archivedCount}）` },
+          ]}
+        />
+        {visibleItems.length ? <div className="league-card-grid">
+        {visibleItems.map((item) => <article key={item.id} className={`league-card${item.status === 'ARCHIVED' ? ' league-card--archived' : ''}`}>
           <div className="league-card__main">
             {item.logoUrl
               ? <img className="league-card__logo" src={item.logoUrl} alt={`${item.shortName} 联赛标识`} />
@@ -82,16 +102,18 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
           <div className="league-card__season">
             <span>当前赛季</span>
             {item.currentSeason ? <strong>{item.currentSeason.displayName}</strong> : <strong>尚未设置当前赛季</strong>}
-            <Link to={`/leagues/${item.id}/seasons`}>{item.currentSeason ? '管理赛季' : '设置首个赛季'}</Link>
+            <Link to={`/leagues/${item.id}/seasons`}>{item.status === 'ARCHIVED' ? '查看赛季' : item.currentSeason ? '管理赛季' : '设置首个赛季'}</Link>
           </div>
           <div className="league-card__actions">
-            <Button type="primary" href={`/leagues/${item.id}/teams`}>进入联赛</Button>
-            <Button aria-label="编辑" disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(item); setImageFile(null); form.setFieldsValue(item); }}>编辑</Button>
+            <Button type={item.status === 'ACTIVE' ? 'primary' : 'default'} href={`/leagues/${item.id}/teams`}>{item.status === 'ACTIVE' ? '进入联赛' : '查看历史'}</Button>
+            <Button aria-label={`编辑 ${item.name}`} disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(item); setImageFile(null); form.setFieldsValue(item); }}>编辑</Button>
           </div>
         </article>)}
-      </div> : <Empty description="暂无联赛" />}
+      </div> : <Empty description={items.length ? (statusTab === 'ACTIVE' ? '暂无启用联赛' : '暂无已归档联赛') : '暂无联赛'} />}
+      </>}
     </Card>
-    <Card title={editing ? `编辑联赛 · ${editing.name}` : '新建联赛'} className="form-card"><Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save} initialValues={{ defaultSuperCapacity: 23, defaultChampionCapacity: 18, defaultPromotionCount: 4 }}>
+    <div ref={editorRef} className="league-editor-anchor">
+    <Card title={<h2 ref={editorTitleRef} className="form-card__title" tabIndex={-1}>{editing ? `编辑联赛 · ${editing.name}` : '新建联赛'}</h2>} className="form-card"><Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save} initialValues={{ defaultSuperCapacity: 23, defaultChampionCapacity: 18, defaultPromotionCount: 4 }}>
       <div className="form-section-title"><strong>基础资料</strong><span>用于前台展示与管理员识别</span></div>
       <Form.Item label="联赛名称" name="name" rules={[{ required: true, message: '请输入联赛名称' }]}><Input /></Form.Item>
       <Form.Item label="联赛简称" name="shortName" rules={[{ required: true, message: '请输入联赛简称' }]}><Input /></Form.Item>
@@ -114,5 +136,6 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
       <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>{editing ? '保存联赛' : '创建联赛'}</Button>
       {editing ? <Button disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(null); setImageFile(null); form.resetFields(); }}>取消编辑</Button> : null}
     </Form></Card>
+    </div>
   </div>;
 }

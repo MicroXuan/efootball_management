@@ -17,6 +17,7 @@ describe('SeasonsService', () => {
   const leagueIds: string[] = [];
   const userIds: string[] = [];
   const accountIds: string[] = [];
+  const catalogIds: string[] = [];
   let actorId: string;
   let teamOwnerId: string;
   let teamProfileId: string;
@@ -77,6 +78,7 @@ describe('SeasonsService', () => {
       where: { OR: [{ userId: { in: userIds } }, { scopeId: { in: leagueIds } }] }
     });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     await prisma.teamProfile.deleteMany({ where: { id: teamProfileId } });
     await prisma.gameAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -174,7 +176,7 @@ describe('SeasonsService', () => {
     ]);
   });
 
-  it('updates a draft with a valid merged timeline and locks fields after opening', async () => {
+  it('updates a draft timeline, allows renaming after opening, and keeps other fields locked', async () => {
     const league = await createLeague('编辑联赛');
     const season = await service.create(actorId, league.id, seasonInput(1), randomUUID());
     const updated = await service.update(actorId, season.id, {
@@ -187,9 +189,15 @@ describe('SeasonsService', () => {
     const opened = await service.transition(actorId, season.id, 'REGISTRATION_OPEN', {
       expectedVersion: updated.version
     }, randomUUID());
-    await expect(service.update(actorId, season.id, {
-      displayName: '不允许修改',
+    const renamed = await service.update(actorId, season.id, {
+      displayName: 'S1 正式赛季',
       expectedVersion: opened.version
+    }, randomUUID());
+    expect(renamed).toMatchObject({ displayName: 'S1 正式赛季', status: 'REGISTRATION_OPEN' });
+
+    await expect(service.update(actorId, season.id, {
+      championCapacity: 16,
+      expectedVersion: renamed.version
     }, randomUUID())).rejects.toMatchObject({ code: 'SEASON_FIELDS_LOCKED' });
   });
 
@@ -219,10 +227,16 @@ describe('SeasonsService', () => {
 
   it('creates one fresh renewal invitation and replays opening idempotently', async () => {
     const league = await createLeague('续赛联赛');
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '续赛球队', shortName: '续赛' }
+    });
+    catalogIds.push(shell.id);
     const team = await prisma.leagueTeam.create({
       data: {
         leagueId: league.id,
         ownerUserId: teamOwnerId,
+        ownerAlias: '续赛用户',
+        catalogTeamId: shell.id,
         teamNumber: 6,
         name: '续赛球队',
         shortName: '续赛',

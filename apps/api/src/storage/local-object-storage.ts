@@ -9,7 +9,7 @@ import type {
   StoredUploadInput
 } from './object-storage.js';
 
-const SAFE_KEY = /^league-images--[0-9a-f-]+\.(?:jpg|png|webp)$/;
+const SAFE_KEY = /^(?:league-images|league-center-banners|team-crests)--[0-9a-f-]+\.(?:jpg|png|webp)$/;
 const MIME_BY_EXTENSION: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
@@ -36,6 +36,18 @@ export class LocalObjectStorage implements ObjectStorage {
       mimeType: file.mimeType,
       size: file.size
     };
+  }
+
+  async putNamed(scope: StorageScope, name: string, file: StoredUploadInput): Promise<StoredObject> {
+    if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(name)) throw new Error('Invalid storage object name');
+    await mkdir(this.directory, { recursive: true });
+    const key = `${scope}--${name}.${file.extension}`;
+    try {
+      await writeFile(this.pathFor(key), file.buffer, { flag: 'wx' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    return { key, url: `${this.publicBaseUrl}/v1/media/${key}`, mimeType: file.mimeType, size: file.size };
   }
 
   async delete(key: string): Promise<void> {

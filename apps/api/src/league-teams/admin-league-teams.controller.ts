@@ -1,9 +1,17 @@
 import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import {
   CreateLeagueTeamRequestSchema,
+  ChangeTeamShellRequestSchema,
+  RefreshTeamShellRequestSchema,
   ResourceIdSchema,
+  SwapTeamShellRequestSchema,
+  TransferTeamShellRequestSchema,
   UpdateLeagueTeamRequestSchema,
+  type ChangeTeamShellRequest,
   type ParsedCreateLeagueTeamRequest,
+  type RefreshTeamShellRequest,
+  type SwapTeamShellRequest,
+  type TransferTeamShellRequest,
   type UpdateLeagueTeamRequest
 } from '@efm/contracts';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard.js';
@@ -13,11 +21,15 @@ import { AdminScopeGuard } from '../admin/admin-scope.guard.js';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { LeagueError } from '../leagues/league.errors.js';
 import { LeagueTeamsService } from './league-teams.service.js';
+import { LeagueTeamShellsService } from './league-team-shells.service.js';
 
 @Controller('admin/leagues/:leagueId/teams')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
 export class AdminLeagueTeamsController {
-  constructor(@Inject(LeagueTeamsService) private readonly teams: LeagueTeamsService) {}
+  constructor(
+    @Inject(LeagueTeamsService) private readonly teams: LeagueTeamsService,
+    @Inject(LeagueTeamShellsService) private readonly shells: LeagueTeamShellsService
+  ) {}
 
   @Get()
   list(@Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string) {
@@ -51,6 +63,49 @@ export class AdminLeagueTeamsController {
     @Body(new ZodValidationPipe(UpdateLeagueTeamRequestSchema)) body: UpdateLeagueTeamRequest
   ) {
     return this.teams.update(admin.id, leagueId, teamId, body, this.key(key));
+  }
+
+  @Post(':teamId/shell/change')
+  changeShell(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(ChangeTeamShellRequestSchema)) body: ChangeTeamShellRequest
+  ) {
+    return this.shells.changeShell(admin.id, leagueId, teamId, body, this.key(key));
+  }
+
+  @Post(':teamId/shell/refresh')
+  refreshShell(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(RefreshTeamShellRequestSchema)) body: RefreshTeamShellRequest
+  ) {
+    return this.shells.refreshShell(admin.id, leagueId, teamId, body, this.key(key));
+  }
+
+  @Post(':teamId/shell/transfer')
+  transferShell(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(TransferTeamShellRequestSchema)) body: TransferTeamShellRequest
+  ) {
+    return this.shells.transferShell(admin.id, leagueId, teamId, body, this.key(key));
+  }
+
+  @Post('shell/swap')
+  swapShells(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(SwapTeamShellRequestSchema)) body: SwapTeamShellRequest
+  ) {
+    return this.shells.swapShells(admin.id, leagueId, body, this.key(key));
   }
 
   private key(value: string | undefined) {

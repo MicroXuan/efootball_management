@@ -14,7 +14,7 @@ describe('SalaryRulesService', () => {
     new AdminAuthorizationService(prisma),
     new AuditLogService(prisma)
   );
-  const ids = { admins: [] as string[], users: [] as string[], leagues: [] as string[] };
+  const ids = { admins: [] as string[], users: [] as string[], leagues: [] as string[], catalogs: [] as string[] };
 
   beforeAll(() => prisma.$connect());
 
@@ -23,12 +23,14 @@ describe('SalaryRulesService', () => {
     await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueId: { in: ids.leagues } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: ids.leagues } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: ids.leagues } } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: ids.catalogs } } });
     await prisma.league.deleteMany({ where: { id: { in: ids.leagues } } });
     await prisma.user.deleteMany({ where: { id: { in: ids.users } } });
     await prisma.adminAccount.deleteMany({ where: { id: { in: ids.admins } } });
     ids.admins.length = 0;
     ids.users.length = 0;
     ids.leagues.length = 0;
+    ids.catalogs.length = 0;
   });
 
   afterAll(() => prisma.$disconnect());
@@ -104,8 +106,12 @@ describe('SalaryRulesService', () => {
   it('previews recalculated team salary and cap violations without changing ownership', async () => {
     const { admin, user, league } = await fixture();
     const current = await createRule(admin.id, league.id, 1_000, 200);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: 'One', shortName: 'ONE' }
+    });
+    ids.catalogs.push(shell.id);
     const team = await prisma.leagueTeam.create({
-      data: { leagueId: league.id, ownerUserId: user.id, teamNumber: 1, name: 'One', shortName: 'ONE' }
+      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'One', shortName: 'ONE' }
     });
     const source = await prisma.dataSource.create({
       data: { code: `salary-source-${randomUUID()}`, name: 'Salary source' }
@@ -158,8 +164,12 @@ describe('SalaryRulesService', () => {
   it('marks a team over cap when an immediately-effective cap is lowered', async () => {
     const { admin, user, league } = await fixture();
     const current = await createRule(admin.id, league.id, 1_000, 200);
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: 'Cap team', shortName: 'CAP' }
+    });
+    ids.catalogs.push(shell.id);
     const team = await prisma.leagueTeam.create({
-      data: { leagueId: league.id, ownerUserId: user.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP' }
+      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP' }
     });
     const source = await prisma.dataSource.create({
       data: { code: `cap-source-${randomUUID()}`, name: 'Cap source' }

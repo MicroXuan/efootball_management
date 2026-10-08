@@ -20,6 +20,7 @@ describe('league economy end-to-end flow', () => {
   let leagueId: string;
   let seasonId: string;
   const teamIds: string[] = [];
+  const catalogIds: string[] = [];
   let sourceId: string;
   let playerId: string;
   let ownershipId: string;
@@ -83,13 +84,21 @@ describe('league economy end-to-end flow', () => {
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: seasonId } });
 
     for (const [index, userId] of userIds.slice(0, 2).entries()) {
+      const teamName = index === 0 ? '卖方球队' : '买方球队';
+      const teamShortName = index === 0 ? '卖方' : '买方';
+      const shell = await prisma.teamCatalogItem.create({
+        data: { sourceType: 'CUSTOM', nameZh: teamName, shortName: teamShortName }
+      });
+      catalogIds.push(shell.id);
       const team = await prisma.leagueTeam.create({
         data: {
           leagueId,
           ownerUserId: userId,
+          ownerAlias: teamShortName,
+          catalogTeamId: shell.id,
           teamNumber: index + 1,
-          name: index === 0 ? '卖方球队' : '买方球队',
-          shortName: index === 0 ? '卖方' : '买方',
+          name: teamName,
+          shortName: teamShortName,
           shellValueMinor: 5_000
         }
       });
@@ -180,6 +189,7 @@ describe('league economy end-to-end flow', () => {
     await prisma.leagueSalaryTier.deleteMany({ where: { salaryRuleVersion: { leagueId } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId } });
+    await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: null } });
     await prisma.leagueSeason.delete({ where: { id: seasonId } });
     await prisma.league.delete({ where: { id: leagueId } });

@@ -20,11 +20,11 @@ page { background: #0e1417; color: #f4f7f8; }
 .team-list { margin-top:22rpx; }
 .team-card { margin-top:16rpx; padding:24rpx; border:2rpx solid #344047; border-radius:20rpx; background:#151d21; }
 .team-logo { width:90rpx; height:90rpx; flex:none; border-radius:16rpx; background:#09140e; }
-.logo-fallback { display:flex; align-items:center; justify-content:center; color:#f4f7f8; font-size:24rpx; font-weight:800; }
 .team-copy { min-width:0; margin-left:20rpx; display:flex; flex:1; flex-direction:column; }
 .team-name-line { min-width:0; gap:12rpx; }
 .team-number { color:#aab5ba; font-size:21rpx; font-weight:800; }
 .team-name { overflow:hidden; font-size:29rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.team-alias { margin-top:5rpx; color:#aab5ba; font-size:21rpx; }
 .league-name,.season-name { margin-top:8rpx; overflow:hidden; color:#9caf9f; font-size:20rpx; text-overflow:ellipsis; white-space:nowrap; }
 .season-name { color:#aab5ba; }
 .chevron { color:#b6f13a; font-size:44rpx; }

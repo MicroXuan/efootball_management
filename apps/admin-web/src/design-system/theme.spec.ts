@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { adminSemanticColors, premiumAdminTheme } from './theme';
 
 describe('premium admin theme', () => {
@@ -33,5 +34,15 @@ describe('premium admin theme', () => {
     expect(premiumAdminTheme.token?.colorPrimaryBorder).toBe('#93C52C');
     expect(premiumAdminTheme.components?.Card?.borderRadiusLG).toBe(14);
     expect(premiumAdminTheme.components?.Button?.borderRadius).toBe(10);
+  });
+
+  it('draws only one focus ring for an allow-clear input', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    expect(styles).toContain('.ant-input-affix-wrapper .ant-input:focus-visible');
+  });
+
+  it('does not apply the global control height twice inside an input wrapper', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    expect(styles).toMatch(/\.ant-input-affix-wrapper\s*>\s*\.ant-input\s*\{[^}]*min-height:\s*0/);
   });
 });

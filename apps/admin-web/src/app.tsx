@@ -12,6 +12,8 @@ const ApplicationShell = lazy(() => import('./application-shell').then((module) 
 const AdminAccountsPage = lazy(() => import('./platform/admin-accounts-page').then((module) => ({ default: module.AdminAccountsPage })));
 const AuditPage = lazy(() => import('./platform/audit-page').then((module) => ({ default: module.AuditPage })));
 const LeaguesPage = lazy(() => import('./platform/leagues-page').then((module) => ({ default: module.LeaguesPage })));
+const PlatformPresentationCard = lazy(() => import('./platform/platform-presentation-card').then((module) => ({ default: module.PlatformPresentationCard })));
+const DataSyncPage = lazy(() => import('./platform/data-sync/data-sync-page').then((module) => ({ default: module.DataSyncPage })));
 const LeagueShell = lazy(() => import('./leagues/league-shell').then((module) => ({ default: module.LeagueShell })));
 const TeamDetailPage = lazy(() => import('./leagues/team-detail-page').then((module) => ({ default: module.TeamDetailPage })));
 const TeamsPage = lazy(() => import('./leagues/teams-page').then((module) => ({ default: module.TeamsPage })));
@@ -50,6 +52,8 @@ export function App() {
             <Route index element={<DefaultRoute />} />
             <Route element={<PlatformRoute />}>
               <Route path="platform/leagues" element={deferred(<LeaguesPage api={adminApi} />)} />
+              <Route path="platform/presentation" element={deferred(<PlatformPresentationCard api={adminApi} />)} />
+              <Route path="platform/data-sync" element={deferred(<DataSyncPage api={adminApi} />)} />
               <Route path="platform/admins" element={deferred(<AdminAccountsPage api={adminApi} />)} />
               <Route path="platform/audit" element={deferred(<AuditPage api={adminApi} />)} />
             </Route>
