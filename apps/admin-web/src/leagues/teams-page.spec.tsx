@@ -106,30 +106,14 @@ function renderPage(request: ReturnType<typeof vi.fn>) {
 }
 
 describe('league teams page', () => {
-  it('provides a visible roster management action for every team', async () => {
+  it('uses one team management action to open the complete team workspace', async () => {
     const request = mockRoutes({ teams: [baseTeam] });
     renderPage(request);
 
-    const rosterLink = await screen.findByRole('link', { name: '管理阵容' });
-    expect(rosterLink).toHaveAttribute('href', `/leagues/${leagueId}/teams/${baseTeam.id}/roster`);
-  });
-
-  it('offers distinct settings and shell shortcuts without duplicating the team detail link', async () => {
-    const request = mockRoutes({ teams: [baseTeam] });
-    renderPage(request);
-
-    await userEvent.click(await screen.findByRole('button', { name: '更多' }));
-
-    expect(await screen.findByRole('link', { name: '球队设置' })).toHaveAttribute(
-      'href',
-      `/leagues/${leagueId}/teams/${baseTeam.id}#team-settings`
-    );
-    expect(screen.getByRole('link', { name: '队壳管理' })).toHaveAttribute(
-      'href',
-      `/leagues/${leagueId}/teams/${baseTeam.id}#team-shell`
-    );
-    expect(screen.queryByRole('link', { name: '查看球队详情' })).not.toBeInTheDocument();
-    expect(screen.queryByText('归档球队')).not.toBeInTheDocument();
+    const managementLink = await screen.findByRole('link', { name: '球队管理' });
+    expect(managementLink).toHaveAttribute('href', `/leagues/${leagueId}/teams/${baseTeam.id}`);
+    expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '管理阵容' })).not.toBeInTheDocument();
   });
 
   it('keeps PESDATA synchronization out of the league workspace', async () => {
