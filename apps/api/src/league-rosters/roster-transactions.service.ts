@@ -118,7 +118,6 @@ export class RosterTransactionsService {
                 leagueTeamId: input.targetLeagueTeamId,
                 currentPlayerCardId: input.playerCardId,
                 maxOverallSnapshot: build.maxOverall,
-                dtRatingSnapshot: build.dtRating,
                 salaryRuleVersionId: quote.salaryRuleVersionId,
                 salaryMinor: quote.salaryMinor,
                 acquiredAt: at,
@@ -133,7 +132,6 @@ export class RosterTransactionsService {
                 footballPlayerId,
                 currentPlayerCardId: input.playerCardId,
                 maxOverallSnapshot: build.maxOverall,
-                dtRatingSnapshot: build.dtRating,
                 salaryRuleVersionId: quote.salaryRuleVersionId,
                 salaryMinor: quote.salaryMinor,
                 acquiredAt: at
@@ -486,7 +484,6 @@ export class RosterTransactionsService {
           data: {
             currentPlayerCardId: input.newPlayerCardId,
             maxOverallSnapshot: build.maxOverall,
-            dtRatingSnapshot: build.dtRating,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }
@@ -613,7 +610,6 @@ export class RosterTransactionsService {
             leagueTeamId: targetTeamId,
             currentPlayerCardId: newCardId,
             maxOverallSnapshot: build.maxOverall,
-            dtRatingSnapshot: build.dtRating,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }

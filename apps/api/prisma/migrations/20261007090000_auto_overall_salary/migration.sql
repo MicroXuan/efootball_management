@@ -16,31 +16,38 @@ INNER JOIN `player_card_auto_builds` AS `auto_build`
   )
 SET `ownership`.`max_overall_snapshot` = `auto_build`.`max_overall`;
 
-DELIMITER //
-CREATE PROCEDURE `assert_ownership_overall_backfill_complete`()
-BEGIN
-  DECLARE `missing_ownership_id` CHAR(36) DEFAULT NULL;
-  DECLARE `failure_message` VARCHAR(255);
+CREATE TEMPORARY TABLE `_auto_overall_backfill_guard` (
+  `ownership_id` CHAR(36) NOT NULL,
+  PRIMARY KEY (`ownership_id`)
+);
 
+CREATE TEMPORARY TABLE `_auto_overall_backfill_failure` (
+  `ownership_id` CHAR(36) NOT NULL,
+  PRIMARY KEY (`ownership_id`)
+);
+
+INSERT INTO `_auto_overall_backfill_guard` (`ownership_id`)
   SELECT `id`
-  INTO `missing_ownership_id`
   FROM `league_player_ownerships`
   WHERE `max_overall_snapshot` IS NULL
-  ORDER BY `id`
+  ORDER BY `id`;
+
+-- If any ownership could not be backfilled, this deliberately fails with a
+-- duplicate-key error whose value is the first missing ownership ID.
+INSERT INTO `_auto_overall_backfill_failure` (`ownership_id`)
+  SELECT `ownership_id`
+  FROM `_auto_overall_backfill_guard`
+  ORDER BY `ownership_id`
   LIMIT 1;
 
-  IF `missing_ownership_id` IS NOT NULL THEN
-    SET `failure_message` = CONCAT(
-      'Cannot backfill max_overall_snapshot for ownership ',
-      `missing_ownership_id`
-    );
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = `failure_message`;
-  END IF;
-END//
-DELIMITER ;
+INSERT INTO `_auto_overall_backfill_failure` (`ownership_id`)
+  SELECT `ownership_id`
+  FROM `_auto_overall_backfill_guard`
+  ORDER BY `ownership_id`
+  LIMIT 1;
 
-CALL `assert_ownership_overall_backfill_complete`();
-DROP PROCEDURE `assert_ownership_overall_backfill_complete`;
+DROP TEMPORARY TABLE `_auto_overall_backfill_guard`;
+DROP TEMPORARY TABLE `_auto_overall_backfill_failure`;
 
 ALTER TABLE `league_player_ownerships`
   MODIFY COLUMN `max_overall_snapshot` TINYINT UNSIGNED NOT NULL,
