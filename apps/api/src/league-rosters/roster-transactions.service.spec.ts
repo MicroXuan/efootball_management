@@ -228,17 +228,24 @@ describe('RosterTransactionsService', () => {
   it('acquires a player atomically and replays an identical idempotent result', async () => {
     const f = await fixture();
     const player = await card(f.source.id, 'Bonucci');
-    const input = acquisition(f.season.id, f.teams[0]!.id, player.card.id, 'same-key');
+    const input = {
+      seasonId: f.season.id,
+      targetLeagueTeamId: f.teams[0]!.id,
+      playerCardId: player.card.id,
+      amountMinor: 1_000,
+      idempotencyKey: 'same-key'
+    };
 
     const operationAt = new Date('2026-09-15T00:00:00.000Z');
-    const first = await service.acquire(input, f.admin.id, operationAt);
+    const first = await service.acquire(input as never, f.admin.id, operationAt);
     expect(valuationSnapshots.synchronizeSeasonBeforeRosterMutation).toHaveBeenCalledWith(
       expect.anything(),
       f.season.id
     );
-    const replay = await service.acquire(input, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    const replay = await service.acquire(input as never, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
 
     expect(replay).toEqual(first);
+    expect(first.transaction.reason).toBe('购买球员（未填写原因）');
     expect(first.summary).toMatchObject({ rosterCount: 1, salaryMinor: 200, salaryCapMinor: 10_000 });
     await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
     await expect(prisma.financeLedgerEntry.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);

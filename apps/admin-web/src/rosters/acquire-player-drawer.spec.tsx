@@ -74,7 +74,7 @@ describe('acquire player drawer', () => {
     expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
   });
 
-  it('explains the next required field instead of leaving an inert purchase button', async () => {
+  it('requires the amount but keeps the operation reason optional', async () => {
     const request = vi.fn().mockResolvedValue({ items: [candidate] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
@@ -83,7 +83,11 @@ describe('acquire player drawer', () => {
     expect(await screen.findByText('请填写成交金额')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
     await userEvent.type(screen.getByLabelText('成交金额'), '100');
-    expect(screen.getByText('请填写操作原因')).toBeInTheDocument();
+    expect(screen.queryByText('请填写操作原因')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认购买' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: '确认购买' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(request.mock.calls[2]?.[1]?.body).not.toHaveProperty('reason');
   });
 
   it('prevents a purchase when the roster is already full and shows the current limits', async () => {

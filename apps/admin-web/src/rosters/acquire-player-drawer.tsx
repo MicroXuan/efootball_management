@@ -55,7 +55,6 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
     if (summary.rosterCount >= 25) return '阵容已满 25 人，请先移出球员';
     if (projectedSalary !== null && projectedSalary > summary.salaryCapMinor) return '购买后将超过球队工资帽';
     if (amountMinor === null) return '请填写成交金额';
-    if (!reason.trim()) return '请填写操作原因';
     return null;
   }, [amountMinor, projectedSalary, reason, selected, selectedPlayer?.ownedByTeamId, summary.rosterCount, summary.salaryCapMinor]);
 
@@ -84,10 +83,10 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   };
 
   const submit = async () => {
-    if (!selectedCardId || amountMinor === null || !reason.trim() || purchaseBlockReason || busy) return;
+    if (!selectedCardId || amountMinor === null || purchaseBlockReason || busy) return;
     setBusy(true); setError(null);
     try {
-      await api.request('/v1/admin/roster/acquisitions', { method: 'POST', schema: RosterMutationResponseSchema, body: { seasonId, targetLeagueTeamId: teamId, playerCardId: selectedCardId, amountMinor, reason: reason.trim(), idempotencyKey: mutationKey.current() } });
+      await api.request('/v1/admin/roster/acquisitions', { method: 'POST', schema: RosterMutationResponseSchema, body: { seasonId, targetLeagueTeamId: teamId, playerCardId: selectedCardId, amountMinor, ...(reason.trim() ? { reason: reason.trim() } : {}), idempotencyKey: mutationKey.current() } });
       mutationKey.reset(); onCompleted(); onClose();
     } catch (caught) {
       if (caught instanceof ApiError && (caught.code === 'TEAM_ROSTER_FULL' || caught.code === 'TEAM_SALARY_CAP_EXCEEDED')) {
@@ -116,7 +115,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
       </div>
       <Form layout="vertical" className="acquire-order-form">
         <Form.Item label="成交金额" required><InputNumber aria-label="成交金额" min={1} precision={0} value={amountMinor} placeholder="输入金额" onChange={(value) => { setAmountMinor(value); mutationKey.reset(); }} /></Form.Item>
-        <Form.Item label="操作原因" required><Input aria-label="操作原因" value={reason} placeholder="例如：补强中后卫" onChange={(event) => { setReason(event.target.value); mutationKey.reset(); }} /></Form.Item>
+        <Form.Item label="操作原因（选填）"><Input aria-label="操作原因" value={reason} placeholder="例如：补强中后卫" onChange={(event) => { setReason(event.target.value); mutationKey.reset(); }} /></Form.Item>
       </Form>
       {purchaseBlockReason ? <Alert type={selected?.dtRating === null ? 'error' : 'warning'} showIcon title={purchaseBlockReason} description={blockDescription} /> : <div className="acquire-order-ready">信息已完整，确认后将写入不可修改的阵容交易和财务流水。</div>}
       <Button aria-label="确认购买" type="primary" block onClick={() => void submit()} loading={busy} disabled={Boolean(purchaseBlockReason)}>确认购买{selectedPlayer ? ` · ${selectedPlayer.playerName}` : ''}</Button>

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
   AdminAccountSummarySchema,
+  AcquirePlayerRequestSchema,
   AdminAuthResponseSchema,
   AdminLeagueGrantSchema,
   AdminLoginRequestSchema,
@@ -1004,6 +1005,18 @@ describe('shared API contracts', () => {
 });
 
 describe('league team administration contracts', () => {
+  it('uses an explicit audit description when a player purchase omits its optional reason', () => {
+    const parsed = AcquirePlayerRequestSchema.parse({
+      seasonId: '11111111-1111-4111-8111-111111111111',
+      targetLeagueTeamId: '22222222-2222-4222-8222-222222222222',
+      playerCardId: '33333333-3333-4333-8333-333333333333',
+      amountMinor: 100,
+      idempotencyKey: 'purchase-without-reason'
+    });
+
+    assert.equal(parsed.reason, '购买球员（未填写原因）');
+  });
+
   it('validates combined administrator player candidate filters', () => {
     const packId = '11111111-1111-4111-8111-111111111111';
     assert.deepEqual(RosterPlayerCandidateQuerySchema.parse({

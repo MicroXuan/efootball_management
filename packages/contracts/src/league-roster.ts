@@ -347,6 +347,8 @@ const RosterMutationBaseSchema = z.object({
 });
 
 export const AcquirePlayerRequestSchema = RosterMutationBaseSchema.extend({
+  reason: z.string().trim().max(512).optional()
+    .transform((value) => value || '购买球员（未填写原因）'),
   targetLeagueTeamId: ResourceIdSchema,
   playerCardId: ResourceIdSchema,
   amountMinor: MoneyMinorSchema
