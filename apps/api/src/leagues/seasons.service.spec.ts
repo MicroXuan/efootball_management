@@ -315,4 +315,47 @@ describe('SeasonsService', () => {
       where: { seasonEntryId: invitation!.id }
     })).resolves.toBe(1);
   });
+
+  it('does not renew a withdrawn team into the next season', async () => {
+    const league = await createLeague('退赛续赛联赛');
+    const shell = await prisma.teamCatalogItem.create({
+      data: { sourceType: 'CUSTOM', nameZh: '退赛球队', shortName: '退赛' }
+    });
+    catalogIds.push(shell.id);
+    const team = await prisma.leagueTeam.create({
+      data: {
+        leagueId: league.id,
+        ownerUserId: teamOwnerId,
+        ownerAlias: '退赛用户',
+        catalogTeamId: shell.id,
+        teamNumber: 7,
+        name: '退赛球队',
+        shortName: '退赛',
+        defaultGameAccountId: teamAccountId,
+        status: 'ARCHIVED'
+      }
+    });
+    const first = await service.create(actorId, league.id, seasonInput(1), randomUUID());
+    await prisma.seasonEntry.create({
+      data: {
+        seasonId: first.id,
+        teamProfileId,
+        leagueTeamId: team.id,
+        ownerUserId: teamOwnerId,
+        gameAccountId: teamAccountId,
+        source: 'NEW_APPLICATION',
+        status: 'APPROVED',
+        teamNameSnapshot: team.name,
+        teamShortNameSnapshot: team.shortName,
+        teamNumberSnapshot: team.teamNumber
+      }
+    });
+    const second = await service.create(actorId, league.id, seasonInput(2), randomUUID());
+
+    await service.transition(actorId, second.id, 'REGISTRATION_OPEN', {
+      expectedVersion: second.version
+    }, randomUUID());
+
+    await expect(prisma.seasonEntry.count({ where: { seasonId: second.id } })).resolves.toBe(0);
+  });
 });

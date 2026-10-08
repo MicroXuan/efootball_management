@@ -15,7 +15,7 @@ function entry() {
 
 function prisma(overrides: Record<string, unknown> = {}) {
   return {
-    seasonEntry: { findFirst: jest.fn(async () => entry()) },
+    seasonEntry: { findFirst: jest.fn(async (_args?: unknown) => entry()) },
     standingsSnapshot: { findFirst: jest.fn(async () => ({ rows: [{ rank: 2, totalPoints: 13, played: 6, tiePending: false }] })) },
     competitionMatch: { findMany: jest.fn(async () => []) },
     valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
@@ -46,13 +46,17 @@ describe('LeagueWorkspaceService', () => {
   });
 
   it('returns snapshot team, division, rank, and enrolled module capabilities', async () => {
-    const service = workspaceService();
+    const database = prisma();
+    const service = workspaceService(database);
     const result = await service.get('user-1', 'league-1', 'season-1');
 
     expect(result.team.name).toBe('历史海港');
     expect(result.division?.displayName).toBe('冠军 A 组');
     expect(result.currentRank).toEqual({ rank: 2, points: 13, played: 6, tiePending: false });
     expect(Object.values(result.capabilities).every(Boolean)).toBe(true);
+    expect(database.seasonEntry.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ leagueTeam: { status: 'ACTIVE' } })
+    }));
   });
 
   it('rejects users without an approved entry', async () => {

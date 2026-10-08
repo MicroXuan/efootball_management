@@ -50,6 +50,13 @@ describe('TeamCatalogService', () => {
       expect(ajaxSearch.items).toEqual(expect.arrayContaining([
         expect.objectContaining({ id: ajax.id, isAssigned: true, assignedLeagueTeamId: team.id })
       ]));
+      await prisma.leagueTeam.update({ where: { id: team.id }, data: { status: 'ARCHIVED' } });
+      await expect(service.listAvailable(firstLeague.id, { keyword: 'ajax' })).resolves.toEqual({
+        items: expect.arrayContaining([
+          expect.objectContaining({ id: ajax.id, isAssigned: true, assignedLeagueTeamId: team.id })
+        ]),
+        nextCursor: null
+      });
       const dutchLeagueSearch = await service.listAvailable(secondLeague.id, { sourceLeagueName: '荷兰足球甲级联赛' });
       expect(dutchLeagueSearch.items).toEqual(expect.arrayContaining([
         expect.objectContaining({ id: ajax.id, isAssigned: false, assignedLeagueTeamId: null })

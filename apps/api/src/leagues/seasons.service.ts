@@ -228,7 +228,11 @@ export class SeasonsService {
   ): Promise<void> {
     if (!season.previousSeasonId) return;
     const previousEntries = await transaction.seasonEntry.findMany({
-      where: { seasonId: season.previousSeasonId, status: 'APPROVED' },
+      where: {
+        seasonId: season.previousSeasonId,
+        status: 'APPROVED',
+        leagueTeam: { status: 'ACTIVE' }
+      },
       include: {
         gameAccount: true,
         leagueTeam: { include: { defaultGameAccount: true } }

@@ -33,7 +33,11 @@ export class MyCompetitionsService {
     const registrations = await this.prisma.competitionRegistration.findMany({
       where: {
         applicantId: userId,
-        competition: { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] }
+        competition: { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] },
+        OR: [
+          { seasonEntryId: null },
+          { seasonEntry: { leagueTeam: { status: 'ACTIVE' } } }
+        ]
       },
       include: {
         competition: { include: { _count: { select: { participants: true } } } },
@@ -72,8 +76,8 @@ export class MyCompetitionsService {
         OR: [
           { homeParticipant: { individualUserId: userId } },
           { awayParticipant: { individualUserId: userId } },
-          { homeParticipant: { seasonEntry: { ownerUserId: userId } } },
-          { awayParticipant: { seasonEntry: { ownerUserId: userId } } }
+          { homeParticipant: { seasonEntry: { ownerUserId: userId, leagueTeam: { status: 'ACTIVE' } } } },
+          { awayParticipant: { seasonEntry: { ownerUserId: userId, leagueTeam: { status: 'ACTIVE' } } } }
         ]
       },
       include: {

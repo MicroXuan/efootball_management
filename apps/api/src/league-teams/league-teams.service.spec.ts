@@ -515,6 +515,9 @@ describe('LeagueTeamsService', () => {
       id: team.id,
       status: 'ARCHIVED'
     });
+    await expect(service.listMine(user.id)).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.listMineViews(user.id)).resolves.toEqual({ items: [], nextCursor: null });
     await expect(service.getDetail(team.id, user.id)).rejects.toMatchObject({ status: 404 });
+    await expect(service.getMyOverview(team.id, user.id)).rejects.toMatchObject({ status: 404 });
   });
 });

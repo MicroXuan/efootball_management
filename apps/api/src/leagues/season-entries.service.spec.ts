@@ -176,6 +176,18 @@ describe('SeasonEntriesService', () => {
       .rejects.toMatchObject({ code: 'GAME_ACCOUNT_INELIGIBLE' });
   });
 
+  it('rejects a season application from a withdrawn league team', async () => {
+    const owner = await createOwner('已退赛');
+    const { league, season } = await createSeason('退赛申请');
+    const team = await assignTeam(owner, league.id);
+    await prisma.leagueTeam.update({ where: { id: team.id }, data: { status: 'ARCHIVED' } });
+
+    await expect(service.apply(owner.user.id, season.id, {
+      gameAccountId: owner.account.id
+    }, randomUUID())).rejects.toMatchObject({ code: 'LEAGUE_TEAM_REQUIRED' });
+    await expect(prisma.seasonEntry.count({ where: { seasonId: season.id } })).resolves.toBe(0);
+  });
+
   it('refreshes a renewal invitation snapshot before confirming it', async () => {
     const owner = await createOwner('续赛');
     const { user, account, profile } = owner;

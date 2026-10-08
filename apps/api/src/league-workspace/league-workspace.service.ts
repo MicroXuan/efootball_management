@@ -20,7 +20,13 @@ export class LeagueWorkspaceService {
     const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     const entry = await this.prisma.seasonEntry.findFirst({
-      where: { ownerUserId: userId, seasonId, status: 'APPROVED', season: { leagueId, league: { isDeleted: false } } },
+      where: {
+        ownerUserId: userId,
+        seasonId,
+        status: 'APPROVED',
+        leagueTeam: { status: 'ACTIVE' },
+        season: { leagueId, league: { isDeleted: false } }
+      },
       include: {
         competitionParticipants: {
           where: { competition: { competitionType: 'DIVISION_LEAGUE' } },

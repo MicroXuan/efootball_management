@@ -244,7 +244,7 @@ export class LeagueTeamsService {
 
   async listMine(ownerUserId: string): Promise<LeagueTeamListResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId, league: { isDeleted: false } },
+      where: { ownerUserId, status: { not: 'ARCHIVED' }, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
@@ -254,7 +254,7 @@ export class LeagueTeamsService {
 
   async listMineViews(ownerUserId: string): Promise<MyLeagueTeamListResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId, league: { isDeleted: false } },
+      where: { ownerUserId, status: { not: 'ARCHIVED' }, league: { isDeleted: false } },
       include: {
         owner: true,
         _count: { select: { seasonEntries: true } },
