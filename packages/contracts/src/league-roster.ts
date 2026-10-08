@@ -12,18 +12,19 @@ const NullablePositiveMoneyMinorSchema = z.number().int().positive().max(MAX_UNS
 
 export const MoneyMinorSchema = z.number().int().positive().max(MAX_UNSIGNED_INT);
 export const DtRatingSchema = z.number().int().min(0).max(120);
+export const OverallRatingSchema = z.number().int().min(0).max(120);
 export const SalaryRuleStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'RETIRED']);
 
 export const SalaryTierSchema = z.object({
-  minDtRating: DtRatingSchema,
-  maxDtRating: DtRatingSchema,
+  minOverall: OverallRatingSchema,
+  maxOverall: OverallRatingSchema,
   salaryMinor: MoneyMinorSchema
 }).superRefine((tier, context) => {
-  if (tier.minDtRating > tier.maxDtRating) {
+  if (tier.minOverall > tier.maxOverall) {
     context.addIssue({
       code: 'custom',
-      path: ['maxDtRating'],
-      message: 'maxDtRating must be at or above minDtRating'
+      path: ['maxOverall'],
+      message: 'maxOverall must be at or above minOverall'
     });
   }
 });
@@ -32,21 +33,21 @@ export const SalaryTierListSchema = z.array(SalaryTierSchema).min(1).superRefine
   let expectedMinimum = 0;
 
   for (const [index, tier] of tiers.entries()) {
-    if (tier.minDtRating !== expectedMinimum) {
+    if (tier.minOverall !== expectedMinimum) {
       context.addIssue({
         code: 'custom',
-        path: [index, 'minDtRating'],
-        message: `minDtRating must be ${expectedMinimum} to avoid gaps or overlaps`
+        path: [index, 'minOverall'],
+        message: `minOverall must be ${expectedMinimum} to avoid gaps or overlaps`
       });
     }
-    expectedMinimum = tier.maxDtRating + 1;
+    expectedMinimum = tier.maxOverall + 1;
   }
 
   if (expectedMinimum !== 121) {
     context.addIssue({
       code: 'custom',
-      path: [tiers.length - 1, 'maxDtRating'],
-      message: 'salary tiers must cover DT ratings through 120'
+      path: [tiers.length - 1, 'maxOverall'],
+      message: 'salary tiers must cover overall ratings through 120'
     });
   }
 });
@@ -153,8 +154,7 @@ export const RosterEntrySchema = z.object({
   playerName: z.string().min(1),
   currentPlayerCardId: ResourceIdSchema,
   cardName: z.string().min(1),
-  maxOverall: z.number().int().min(1).max(120),
-  dtRating: DtRatingSchema,
+  maxOverall: OverallRatingSchema.min(1),
   salaryRuleVersionId: ResourceIdSchema,
   salaryMinor: MoneyMinorSchema,
   acquiredAt: TimestampSchema,
@@ -198,7 +198,7 @@ export const RosterMutationOwnershipSchema = z.object({
   leagueTeamId: ResourceIdSchema,
   playerId: ResourceIdSchema,
   currentPlayerCardId: ResourceIdSchema,
-  dtRating: DtRatingSchema,
+  maxOverall: OverallRatingSchema.min(1),
   salaryRuleVersionId: ResourceIdSchema,
   salaryMinor: MoneyMinorSchema,
   acquiredAt: TimestampSchema,
@@ -294,8 +294,7 @@ export const RosterCandidateCardSchema = z.object({
   imageUrl: z.string().nullable(),
   position: z.string().min(1),
   overallRating: z.number().int().positive(),
-  maxOverall: z.number().int().positive().nullable(),
-  dtRating: DtRatingSchema.nullable(),
+  maxOverall: OverallRatingSchema.min(1).nullable(),
   salaryMinor: NonNegativeMoneyMinorSchema.nullable(),
   recommended: z.boolean()
 });

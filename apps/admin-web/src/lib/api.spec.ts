@@ -70,6 +70,21 @@ describe('AdminApiClient', () => {
     expect(init.headers).not.toEqual(expect.objectContaining({ 'Content-Type': expect.any(String) }));
   });
 
+  it('omits the admin token when a public request explicitly skips authentication', async () => {
+    const fetcher = vi.fn().mockResolvedValue(ok({ ok: true }));
+    const client = new AdminApiClient({ fetcher });
+    client.accept(auth('admin-access-token', 'r'.repeat(32)));
+
+    await client.request('/v1/leagues/league-1', {
+      skipAuth: true,
+      schema: z.object({ ok: z.literal(true) })
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('/v1/leagues/league-1', expect.objectContaining({
+      headers: expect.not.objectContaining({ Authorization: expect.any(String) })
+    }));
+  });
+
   it('returns a safe typed error without echoing server secrets', async () => {
     const secret = 'access-secret-that-must-not-render';
     const fetcher = vi.fn().mockResolvedValue(ok({

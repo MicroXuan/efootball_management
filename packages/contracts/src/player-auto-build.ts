@@ -1,12 +1,15 @@
 import type { PlayerCardType, PlayerPosition } from './player-catalog.js';
 
 export const PESDATA_POSITION_AUTO_BUILD_VERSION = 'pesdata-position-auto-v1';
+export const PESDATA_FINAL_CARD_BUILD_VERSION = 'pesdata-final-card-v1';
 
 export type DerivedPlayerAutoBuild = {
   allocation: Record<string, number>;
   maxOverall: number;
-  dtRating: number;
-  algorithmVersion: typeof PESDATA_POSITION_AUTO_BUILD_VERSION;
+  dtRating: number | null;
+  algorithmVersion:
+    | typeof PESDATA_POSITION_AUTO_BUILD_VERSION
+    | typeof PESDATA_FINAL_CARD_BUILD_VERSION;
 };
 
 const categoryKeys = [
@@ -38,13 +41,21 @@ const automaticBuildWeights: Record<PlayerPosition, readonly number[]> = {
   CF: [222, 419, 382, 259, 49, 210, 36, 0, 0, 0]
 };
 
-export function derivePesdataPositionAutoBuild(input: {
+export function derivePesdataAutoBuild(input: {
   position: PlayerPosition;
   overallRating: number;
   maxLevel: number | string | null | undefined;
-  cardType?: PlayerCardType;
+  cardType: PlayerCardType;
 }): DerivedPlayerAutoBuild | null {
-  if (input.cardType === 'TRENDING') return null;
+  if (input.cardType === 'TRENDING') {
+    return {
+      allocation: {},
+      maxOverall: input.overallRating,
+      dtRating: null,
+      algorithmVersion: PESDATA_FINAL_CARD_BUILD_VERSION
+    };
+  }
+
   const maxLevel = typeof input.maxLevel === 'number'
     ? input.maxLevel
     : typeof input.maxLevel === 'string' && input.maxLevel.trim()
@@ -83,3 +94,5 @@ export function derivePesdataPositionAutoBuild(input: {
     algorithmVersion: PESDATA_POSITION_AUTO_BUILD_VERSION
   };
 }
+
+export const derivePesdataPositionAutoBuild = derivePesdataAutoBuild;

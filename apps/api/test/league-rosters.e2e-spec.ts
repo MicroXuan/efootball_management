@@ -284,6 +284,7 @@ describe('atomic league roster API', () => {
           leagueTeamId: f.teams[0]!.id,
           footballPlayerId: seeded.player.id,
           currentPlayerCardId: seeded.card.id,
+          maxOverallSnapshot: 93,
           dtRatingSnapshot: 93,
           salaryRuleVersionId: rule.id,
           salaryMinor: 200
@@ -343,7 +344,7 @@ describe('atomic league roster API', () => {
     const upgrade = await createCard(f.source.id, 'Advanced upgrade', player.player.id);
     await prisma.playerCardAutoBuild.updateMany({
       where: { playerCardId: upgrade.card.id },
-      data: { maxOverall: 94, dtRating: 94 }
+      data: { maxOverall: 94, dtRating: null }
     });
     const acquired = await request(app.getHttpServer())
       .post('/v1/admin/roster/acquisitions').set(auth())
@@ -376,6 +377,7 @@ describe('atomic league roster API', () => {
       .expect(201);
     expect(upgraded.body.ownership).toMatchObject({
       currentPlayerCardId: upgrade.card.id,
+      maxOverall: 94,
       salaryMinor: 300
     });
     expect(() => RosterMutationResponseSchema.parse(upgraded.body)).not.toThrow();

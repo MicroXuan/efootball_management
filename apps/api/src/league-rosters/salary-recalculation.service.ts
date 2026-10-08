@@ -58,7 +58,7 @@ export class SalaryRecalculationService {
             tx,
             input.leagueId,
             input.salaryRuleVersionId,
-            ownership.dtRatingSnapshot
+            ownership.maxOverallSnapshot
           );
           await tx.leaguePlayerOwnership.update({
             where: { id: ownership.id },

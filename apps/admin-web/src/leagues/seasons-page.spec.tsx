@@ -32,7 +32,7 @@ const team = {
 
 it('marks the current season and switches it with the league version', async () => {
   const request = vi.fn(async (path: string, options?: { method?: string }) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
+    if (path === `/v1/leagues/${leagueId}`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons` && !options?.method) return { items: [season(firstId, 1, 'S1'), season(secondId, 2, 'S2')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     if (path.endsWith(`/${secondId}/set-current`)) return { leagueId, currentSeasonId: secondId, version: 6 };
@@ -43,6 +43,10 @@ it('marks the current season and switches it with the league version', async () 
   </Routes></MemoryRouter>);
 
   expect((await screen.findAllByText('当前赛季')).length).toBeGreaterThan(0);
+  expect(request).toHaveBeenCalledWith(
+    `/v1/leagues/${leagueId}`,
+    expect.objectContaining({ skipAuth: true })
+  );
   const s2Row = screen.getByText('S2').closest('tr') as HTMLElement;
   await userEvent.click(within(s2Row).getByRole('button', { name: '设为当前赛季' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
@@ -58,7 +62,7 @@ it('renames a current non-draft season without exposing locked timeline fields',
     currentSeason: { ...league.currentSeason, displayName: opened.displayName, status: 'IN_PROGRESS' as const },
   };
   const request = vi.fn(async (path: string, options?: { method?: string; body?: unknown }) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return openedLeague;
+    if (path === `/v1/leagues/${leagueId}`) return openedLeague;
     if (path === `/v1/admin/leagues/${leagueId}/seasons` && !options?.method) {
       return { items: [opened], nextCursor: null };
     }
@@ -92,7 +96,7 @@ it('renames a current non-draft season without exposing locked timeline fields',
 
 it('does not preselect every existing team when enrolling teams', async () => {
   const request = vi.fn(async (path: string) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
+    if (path === `/v1/leagues/${leagueId}`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     throw new Error(`unexpected ${path}`);
@@ -108,7 +112,7 @@ it('does not preselect every existing team when enrolling teams', async () => {
 
 it('makes the current season and its entry action prominent', async () => {
   const request = vi.fn(async (path: string) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
+    if (path === `/v1/leagues/${leagueId}`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     throw new Error(`unexpected ${path}`);
@@ -124,7 +128,7 @@ it('makes the current season and its entry action prominent', async () => {
 
 it('offers a clear next action when no current season exists', async () => {
   const request = vi.fn(async (path: string) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return { ...league, currentSeason: null };
+    if (path === `/v1/leagues/${leagueId}`) return { ...league, currentSeason: null };
     if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [], nextCursor: null };
     throw new Error(`unexpected ${path}`);

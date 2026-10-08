@@ -4,7 +4,6 @@ export type BestCardCandidate = {
   externalId: string;
   algorithmVersion: string;
   maxOverall: number;
-  dtRating: number | null;
   releaseDate: Date | null;
 };
 
@@ -12,7 +11,6 @@ export type BestCardSelectionReason = {
   algorithmVersion: string;
   ordering: readonly [
     'maxOverall:desc',
-    'dtRating:desc:nulls-last',
     'releaseDate:desc:nulls-last',
     'externalId:asc'
   ];
@@ -20,7 +18,6 @@ export type BestCardSelectionReason = {
   winner: {
     externalId: string;
     maxOverall: number;
-    dtRating: number | null;
     releaseDate: string | null;
   };
 };
@@ -31,7 +28,6 @@ export type BestCardSelection = BestCardCandidate & {
 
 const ordering = [
   'maxOverall:desc',
-  'dtRating:desc:nulls-last',
   'releaseDate:desc:nulls-last',
   'externalId:asc'
 ] as const;
@@ -45,7 +41,6 @@ function descendingNullable(left: number | null, right: number | null): number {
 
 function compare(left: BestCardCandidate, right: BestCardCandidate): number {
   return right.maxOverall - left.maxOverall
-    || descendingNullable(left.dtRating, right.dtRating)
     || descendingNullable(left.releaseDate?.valueOf() ?? null, right.releaseDate?.valueOf() ?? null)
     || left.externalId.localeCompare(right.externalId, 'en-US');
 }
@@ -62,7 +57,6 @@ export function selectBestCard(builds: readonly BestCardCandidate[]): BestCardSe
       winner: {
         externalId: winner.externalId,
         maxOverall: winner.maxOverall,
-        dtRating: winner.dtRating,
         releaseDate: winner.releaseDate?.toISOString().slice(0, 10) ?? null
       }
     }

@@ -13,25 +13,25 @@ import { LeagueRosterError } from './league-roster.errors.js';
 
 export function defaultSalaryTiers() {
   return [
-    { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
+    { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
     ...Array.from({ length: 7 }, (_, index) => ({
-      minDtRating: 93 + index,
-      maxDtRating: 93 + index,
+      minOverall: 93 + index,
+      maxOverall: 93 + index,
       salaryMinor: 200 + index * 100
     })),
-    { minDtRating: 100, maxDtRating: 120, salaryMinor: 900 }
+    { minOverall: 100, maxOverall: 120, salaryMinor: 900 }
   ];
 }
 
-function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], dtRating: number) {
-  const tier = tiers.find(({ minDtRating, maxDtRating }) =>
-    dtRating >= minDtRating && dtRating <= maxDtRating);
+function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
+  const tier = tiers.find(({ minOverall, maxOverall }) =>
+    overall >= minOverall && overall <= maxOverall);
   if (!tier) {
     throw new LeagueRosterError(
       'SALARY_TIER_NOT_CONFIGURED',
-      'No salary tier covers the DT rating',
+      'No salary tier covers the automatic-build overall',
       422,
-      { dtRating }
+      { maxOverall: overall }
     );
   }
   return tier.salaryMinor;
@@ -78,7 +78,7 @@ export class SalaryRulesService {
           createdByAdminId: adminId,
           tiers: { create: input.tiers }
         },
-        include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+        include: { tiers: { orderBy: { minOverall: 'asc' } } }
       });
       await this.synchronizeRosterStatuses(tx, leagueId, input.salaryCapMinor);
       await this.audit.record(tx, {
@@ -130,20 +130,20 @@ export class SalaryRulesService {
     }
   }
 
-  async quote(leagueId: string, dtRating: number, at = new Date()) {
-    return this.quoteWithClient(this.prisma, leagueId, dtRating, at);
+  async quote(leagueId: string, overall: number, at = new Date()) {
+    return this.quoteWithClient(this.prisma, leagueId, overall, at);
   }
 
   async quoteWithClient(
     client: PrismaService | Prisma.TransactionClient,
     leagueId: string,
-    dtRating: number,
+    overall: number,
     at = new Date()
   ) {
     const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+      include: { tiers: { orderBy: { minOverall: 'asc' } } }
     });
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_CONFIGURED', 'No salary rule is active', 422);
@@ -151,8 +151,8 @@ export class SalaryRulesService {
     return {
       salaryRuleVersionId: rule.id,
       version: rule.version,
-      dtRating,
-      salaryMinor: salaryFor(rule.tiers, dtRating),
+      maxOverall: overall,
+      salaryMinor: salaryFor(rule.tiers, overall),
       salaryCapMinor: rule.salaryCapMinor
     };
   }
@@ -161,11 +161,11 @@ export class SalaryRulesService {
     client: PrismaService | Prisma.TransactionClient,
     leagueId: string,
     salaryRuleVersionId: string,
-    dtRating: number
+    overall: number
   ) {
     const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { id: salaryRuleVersionId, leagueId },
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+      include: { tiers: { orderBy: { minOverall: 'asc' } } }
     });
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_FOUND', 'Salary rule version was not found', 404);
@@ -173,8 +173,8 @@ export class SalaryRulesService {
     return {
       salaryRuleVersionId: rule.id,
       version: rule.version,
-      dtRating,
-      salaryMinor: salaryFor(rule.tiers, dtRating),
+      maxOverall: overall,
+      salaryMinor: salaryFor(rule.tiers, overall),
       salaryCapMinor: rule.salaryCapMinor
     };
   }
@@ -194,7 +194,7 @@ export class SalaryRulesService {
         projectedSalaryMinor: 0
       };
       aggregate.currentSalaryMinor += ownership.salaryMinor;
-      aggregate.projectedSalaryMinor += salaryFor(input.tiers, ownership.dtRatingSnapshot);
+      aggregate.projectedSalaryMinor += salaryFor(input.tiers, ownership.maxOverallSnapshot);
       teams.set(ownership.leagueTeamId, aggregate);
     }
     return {

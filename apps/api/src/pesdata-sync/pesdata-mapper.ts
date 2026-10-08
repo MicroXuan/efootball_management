@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
-  derivePesdataPositionAutoBuild,
+  derivePesdataAutoBuild,
   type PlayerCardType,
   type PlayerPosition
 } from '@efm/contracts';
@@ -180,18 +180,18 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
   const cleanAttributes = Object.fromEntries(
     Object.entries(attributes).filter(([, value]) => value !== undefined)
   );
-  const algorithmVersion = text(detail.algorithmVersion);
   const cardType = mapPesdataCardType(detail.cardType);
+  const sourceAlgorithmVersion = text(detail.algorithmVersion);
   const derivedBuild = detail.autoBuildAllocation == null
     && detail.autoBuildMaxOverall == null
     && detail.dtRating == null
-    && !algorithmVersion
-    ? derivePesdataPositionAutoBuild({
-      position: sourcePosition as PlayerPosition,
-      overallRating,
-      maxLevel: detail.maxLevel,
-      cardType
-    })
+    && !sourceAlgorithmVersion
+    ? derivePesdataAutoBuild({
+        position: sourcePosition as PlayerPosition,
+        overallRating,
+        maxLevel: detail.maxLevel,
+        cardType
+      })
     : null;
 
   const row: RawImportRow = {
@@ -220,11 +220,11 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     ...(detail.autoBuildMaxOverall != null || derivedBuild
       ? { autoBuildMaxOverall: detail.autoBuildMaxOverall ?? derivedBuild!.maxOverall }
       : {}),
-    ...(detail.dtRating != null || derivedBuild
-      ? { dtRating: detail.dtRating ?? derivedBuild!.dtRating }
+    ...(detail.dtRating != null || derivedBuild?.dtRating != null
+      ? { dtRating: detail.dtRating ?? derivedBuild!.dtRating! }
       : {}),
-    ...(algorithmVersion || derivedBuild
-      ? { algorithmVersion: algorithmVersion ?? derivedBuild!.algorithmVersion }
+    ...(sourceAlgorithmVersion || derivedBuild
+      ? { algorithmVersion: sourceAlgorithmVersion ?? derivedBuild!.algorithmVersion }
       : {})
   };
 

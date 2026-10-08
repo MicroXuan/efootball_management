@@ -8,6 +8,7 @@ import { createTestApp } from './test-app.js';
 config({ path: '../../.env', quiet: true });
 
 describe('competition lifecycle API', () => {
+  const relativeDate = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1_000).toISOString();
   const prisma = new PrismaService();
   const suffix = randomUUID();
   const openIds: [string, string, string] = [
@@ -33,10 +34,10 @@ describe('competition lifecycle API', () => {
     serverRegion: 'GLOBAL',
     participantType: 'INDIVIDUAL',
     format: 'ROUND_ROBIN',
-    registrationOpensAt: '2026-10-01T00:00:00.000Z',
-    registrationClosesAt: '2026-10-08T00:00:00.000Z',
-    startsAt: '2026-10-09T00:00:00.000Z',
-    endsAt: '2026-10-31T00:00:00.000Z',
+    registrationOpensAt: relativeDate(-1),
+    registrationClosesAt: relativeDate(1),
+    startsAt: relativeDate(2),
+    endsAt: relativeDate(30),
     participantLimit: 16
   };
 
@@ -140,7 +141,7 @@ describe('competition lifecycle API', () => {
       .expect(({ body: errorBody }) => expect(errorBody.error.code).toBe('IDEMPOTENCY_KEY_REQUIRED'));
     await request(app.getHttpServer()).post('/v1/admin/competitions')
       .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
-      .send({ ...body, registrationClosesAt: '2026-09-01T00:00:00.000Z' }).expect(400)
+      .send({ ...body, registrationClosesAt: relativeDate(-2) }).expect(400)
       .expect(({ body: errorBody }) => expect(errorBody.error.code).toBe('VALIDATION_FAILED'));
   });
 
@@ -180,8 +181,8 @@ describe('competition lifecycle API', () => {
 
   it('registers a player, exposes the review queue, approves, and withdraws', async () => {
     const created = await createCompetition(randomUUID(), {
-      registrationOpensAt: '2026-09-01T00:00:00.000Z',
-      registrationClosesAt: '2026-10-08T00:00:00.000Z'
+      registrationOpensAt: relativeDate(-1),
+      registrationClosesAt: relativeDate(1)
     });
     await request(app.getHttpServer())
       .post(`/v1/admin/competitions/${created.id}/open-registration`)

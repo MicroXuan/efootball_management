@@ -58,7 +58,7 @@ describe('AdminRosterQueriesService candidate filters', () => {
     const prisma = {
       leagueSalaryRuleVersion: {
         findFirst: async () => ({
-          tiers: [{ minDtRating: 90, maxDtRating: 99, salaryMinor: 500 }]
+          tiers: [{ minOverall: 90, maxOverall: 99, salaryMinor: 500 }]
         })
       },
       footballPlayer: {
@@ -84,7 +84,6 @@ describe('AdminRosterQueriesService candidate filters', () => {
     expect(result.items[0]?.cards[0]).toMatchObject({
       overallRating: 80,
       maxOverall: 95,
-      dtRating: 95,
       salaryMinor: 500
     });
   });

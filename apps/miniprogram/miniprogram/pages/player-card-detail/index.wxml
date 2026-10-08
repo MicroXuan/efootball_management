@@ -49,7 +49,6 @@
           <view><text class="build-label">基础总评</text><text class="build-value">{{card.overallRating}}</text></view>
           <text class="build-arrow">→</text>
           <view><text class="build-label">方案总评</text><text class="build-value is-accent">{{card.autoBuild.maxOverall}}</text></view>
-          <view wx:if="{{card.autoBuild.dtRating}}"><text class="build-label">DT 评分</text><text class="build-value">{{card.autoBuild.dtRating}}</text></view>
         </view>
         <view class="allocation-list">
           <view wx:for="{{card.autoBuild.allocationRows}}" wx:key="key" class="allocation-chip">

@@ -164,6 +164,7 @@ describe('league economy end-to-end flow', () => {
         leagueTeamId: teamIds[0]!,
         footballPlayerId: playerId,
         currentPlayerCardId: card.id,
+        maxOverallSnapshot: 94,
         dtRatingSnapshot: 94,
         salaryRuleVersionId: salaryRule.id,
         salaryMinor: 300

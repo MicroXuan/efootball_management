@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
-  derivePesdataPositionAutoBuild,
+  derivePesdataAutoBuild,
   type FinanceLedgerListResponse,
   type RosterPlayerCandidateQuery,
   type RosterPlayerCandidateListResponse,
@@ -18,7 +18,7 @@ export class AdminRosterQueriesService {
   async salaryRules(leagueId: string): Promise<SalaryRuleVersionListResponse> {
     const rules = await this.prisma.leagueSalaryRuleVersion.findMany({
       where: { leagueId },
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } },
+      include: { tiers: { orderBy: { minOverall: 'asc' } } },
       orderBy: { version: 'desc' }
     });
     return {
@@ -96,8 +96,7 @@ export class AdminRosterQueriesService {
         playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
         currentPlayerCardId: entry.currentPlayerCardId,
         cardName: entry.currentPlayerCard.cardName,
-        maxOverall: entry.currentPlayerCard.autoBuilds[0]?.maxOverall ?? entry.currentPlayerCard.overallRating,
-        dtRating: entry.dtRatingSnapshot,
+        maxOverall: entry.maxOverallSnapshot,
         salaryRuleVersionId: entry.salaryRuleVersionId,
         salaryMinor: entry.salaryMinor,
         acquiredAt: entry.acquiredAt.toISOString(),
@@ -124,7 +123,7 @@ export class AdminRosterQueriesService {
   async candidates(leagueId: string, query: RosterPlayerCandidateQuery): Promise<RosterPlayerCandidateListResponse> {
     const salaryRule = await this.prisma.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } },
+      include: { tiers: { orderBy: { minOverall: 'asc' } } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
     });
     const cardFilters = {
@@ -170,14 +169,13 @@ export class AdminRosterQueriesService {
           const build = card.autoBuilds[0];
           const attributes = objectRecord(card.attributes?.attributesJson);
           const sourceMetadata = objectRecord(attributes?.sourceMetadata);
-          const derivedBuild = build ? null : derivePesdataPositionAutoBuild({
+          const derivedBuild = build ? null : derivePesdataAutoBuild({
             position: card.position,
             overallRating: card.overallRating,
             maxLevel: sourceMetadata?.maxLevel as number | string | null | undefined,
             cardType: card.cardType
           });
           const maxOverall = build?.maxOverall ?? derivedBuild?.maxOverall ?? null;
-          const salaryRating = build?.dtRating ?? build?.maxOverall ?? derivedBuild?.dtRating ?? null;
           return {
             id: card.id,
             cardName: card.cardName,
@@ -185,10 +183,11 @@ export class AdminRosterQueriesService {
             position: card.position,
             overallRating: card.overallRating,
             maxOverall,
-            dtRating: salaryRating,
-            salaryMinor: salaryRating === null
+            salaryMinor: maxOverall === null
               ? null
-              : salaryRule?.tiers.find((tier) => salaryRating >= tier.minDtRating && salaryRating <= tier.maxDtRating)?.salaryMinor ?? null,
+              : salaryRule?.tiers.find((tier) =>
+                maxOverall >= tier.minOverall && maxOverall <= tier.maxOverall
+              )?.salaryMinor ?? null,
             recommended: player.bestCard?.playerCardId === card.id
               || (!player.cards.some((candidate) => candidate.id === player.bestCard?.playerCardId) && player.cards[0]?.id === card.id)
           };

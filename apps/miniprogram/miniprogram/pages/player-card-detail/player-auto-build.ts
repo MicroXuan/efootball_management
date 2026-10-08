@@ -1,6 +1,7 @@
 import type { PlayerCardType, PlayerPosition } from '@efm/contracts'
 
 const playerAutoBuildVersion = 'pesdata-position-auto-v1'
+const finalCardBuildVersion = 'pesdata-final-card-v1'
 
 const categoryKeys = [
   'dribbling', 'dexterity', 'shooting', 'lowerBodyStrength', 'passing',
@@ -29,7 +30,14 @@ export function derivePlayerAutoBuild(input: {
   maxLevel: number | string | null | undefined
   cardType?: PlayerCardType
 }) {
-  if (input.cardType === 'TRENDING') return null
+  if (input.cardType === 'TRENDING') {
+    return {
+      allocation: {},
+      maxOverall: input.overallRating,
+      dtRating: null,
+      algorithmVersion: finalCardBuildVersion,
+    }
+  }
   const maxLevel = typeof input.maxLevel === 'number'
     ? input.maxLevel
     : typeof input.maxLevel === 'string' && input.maxLevel.trim()

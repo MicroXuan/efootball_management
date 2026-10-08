@@ -9,11 +9,11 @@ import {
 import { z } from 'zod';
 import { adminApi, type AdminApi } from '../lib/api';
 
-type Tier = { minDtRating: number; maxDtRating: number; salaryMinor: number };
+type Tier = { minOverall: number; maxOverall: number; salaryMinor: number };
 const defaultTiers: Tier[] = [
-  { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
-  ...Array.from({ length: 7 }, (_, index) => ({ minDtRating: 93 + index, maxDtRating: 93 + index, salaryMinor: 200 + index * 100 })),
-  { minDtRating: 100, maxDtRating: 120, salaryMinor: 900 }
+  { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
+  ...Array.from({ length: 7 }, (_, index) => ({ minOverall: 93 + index, maxOverall: 93 + index, salaryMinor: 200 + index * 100 })),
+  { minOverall: 100, maxOverall: 120, salaryMinor: 900 }
 ];
 
 export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }: { api?: AdminApi; initialTiers?: Tier[] }) {
@@ -35,7 +35,7 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
   useEffect(() => { void load(); }, [load]);
   const valid = useMemo(() => {
     let next = 0;
-    for (const tier of tiers) { if (tier.minDtRating !== next || tier.maxDtRating < tier.minDtRating) return false; next = tier.maxDtRating + 1; }
+    for (const tier of tiers) { if (tier.minOverall !== next || tier.maxOverall < tier.minOverall) return false; next = tier.maxOverall + 1; }
     return next === 121;
   }, [tiers]);
   const updateTier = (index: number, salaryMinor: number | null) => setTiers((current) => current.map((tier, at) => at === index ? { ...tier, salaryMinor: salaryMinor ?? 0 } : tier));
@@ -58,17 +58,17 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
     finally { setBusy(false); }
   };
   return <div className="workspace-grid">
-    <Card className="form-card" title="工资帽与 DT 工资档位">
+    <Card className="form-card" title="工资帽与自动加点总评档位">
       {error ? <Alert role="alert" type="warning" showIcon title={error} /> : null}
       {!items.length ? <Alert type="info" showIcon title="尚未发布工资规则" /> : <Typography.Text type="secondary">当前版本 v{items[0]?.version}</Typography.Text>}
       <Form layout="vertical">
         <Form.Item label="工资帽"><InputNumber aria-label="工资帽" min={1} precision={0} value={cap} onChange={(value) => setCap(value ?? 0)} /></Form.Item>
       </Form>
-      <Table<Tier> pagination={false} rowKey={(row) => `${row.minDtRating}-${row.maxDtRating}`} dataSource={tiers} columns={[
-        { title: 'DT 范围', render: (_, row) => `${row.minDtRating}–${row.maxDtRating}` },
-        { title: '工资', render: (_, row, index) => <InputNumber aria-label={`DT ${row.minDtRating}-${row.maxDtRating} 工资`} min={1} precision={0} value={row.salaryMinor} onChange={(value) => updateTier(index, value)} /> }
+      <Table<Tier> pagination={false} rowKey={(row) => `${row.minOverall}-${row.maxOverall}`} dataSource={tiers} columns={[
+        { title: '自动加点总评范围', render: (_, row) => `${row.minOverall}–${row.maxOverall}` },
+        { title: '工资', render: (_, row, index) => <InputNumber aria-label={`总评 ${row.minOverall}-${row.maxOverall} 工资`} min={1} precision={0} value={row.salaryMinor} onChange={(value) => updateTier(index, value)} /> }
       ]} />
-      {!valid ? <Alert type="error" showIcon title="DT 档位必须无重叠、无空档并覆盖 0–120" /> : null}
+      {!valid ? <Alert type="error" showIcon title="自动加点总评档位必须无重叠、无空档并覆盖 0–120" /> : null}
       <Space><Button onClick={() => void runPreview()} loading={busy} disabled={!valid}>预览影响</Button><Button type="primary" onClick={() => void publish()} loading={busy} disabled={!valid || !preview}>发布新版本</Button></Space>
     </Card>
     <Card title="工资影响预览">
