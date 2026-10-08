@@ -20,11 +20,11 @@ function prisma(overrides: Record<string, unknown> = {}) {
     competitionMatch: { findMany: jest.fn(async () => []) },
     valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
     ...overrides
-  } as never;
+  };
 }
 
-function workspaceService(database = prisma()) {
-  return new LeagueWorkspaceService(database, {
+function workspaceService(database: ReturnType<typeof prisma> = prisma()) {
+  return new LeagueWorkspaceService(database as never, {
     requireVisible: jest.fn(async () => 'league-1'),
     notFound: () => new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404)
   } as never);
@@ -32,13 +32,13 @@ function workspaceService(database = prisma()) {
 
 describe('LeagueWorkspaceService', () => {
   it('returns the shared 404 before loading a workspace for a deleted league', async () => {
-    const database = prisma() as any;
+    const database = prisma();
     const visibility = {
       requireVisible: jest.fn(async () => {
         throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
       })
     };
-    const service = new (LeagueWorkspaceService as any)(database, visibility);
+    const service = new LeagueWorkspaceService(database as never, visibility as never);
 
     await expect(service.get('user-1', 'league-1', 'season-1'))
       .rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });

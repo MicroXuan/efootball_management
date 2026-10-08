@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 import type { ExecutionContext } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import type { Reflector } from '@nestjs/core';
 import type { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import type { AdminAuthorizationService } from './admin-authorization.service.js';
 import { AdminScopeGuard } from './admin-scope.guard.js';

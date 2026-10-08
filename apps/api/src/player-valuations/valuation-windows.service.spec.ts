@@ -70,12 +70,12 @@ describe('ValuationWindowsService', () => {
         throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
       })
     };
-    const service = new (ValuationWindowsService as any)(
-      prisma,
-      authorization,
-      audit,
-      receipts,
-      visibility
+    const service = new ValuationWindowsService(
+      prisma as never,
+      authorization as never,
+      audit as never,
+      receipts as never,
+      visibility as never
     );
 
     await expect(service.update('admin-1', 'window-1', {

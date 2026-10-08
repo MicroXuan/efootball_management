@@ -293,5 +293,48 @@ describe('league foundation lifecycle API', () => {
         teamNameSnapshot: '上海申花 S2'
       }));
     expect(closed1.body.status).toBe('ALLOCATION_REVIEW');
+
+    const receiptCount = await prisma.mutationReceipt.count({ where: { actorId: userIds[2]! } });
+    await prisma.league.update({
+      where: { id: createdLeague.body.id as string },
+      data: { isDeleted: true }
+    });
+
+    await request(app.getHttpServer()).get('/v1/leagues').expect(200)
+      .expect(({ body }) => {
+        expect(body.items.map((league: { id: string }) => league.id))
+          .not.toContain(createdLeague.body.id);
+        expect(body.items.map((league: { id: string }) => league.id))
+          .toContain(unrelatedLeague.id);
+      });
+    await request(app.getHttpServer()).get(`/v1/leagues/${createdLeague.body.id}`).expect(404);
+    await request(app.getHttpServer()).get(`/v1/leagues/${createdLeague.body.id}/seasons`).expect(404);
+    await request(app.getHttpServer()).get(`/v1/seasons/${season2.body.id}`).expect(404);
+    await request(app.getHttpServer()).get('/v1/me/league-teams')
+      .set('Authorization', authorization(playerToken)).expect(200)
+      .expect(({ body }) => expect(body.items).toEqual([]));
+    await request(app.getHttpServer()).get(`/v1/me/league-teams/${leagueTeam.id}`)
+      .set('Authorization', authorization(playerToken)).expect(404);
+    await request(app.getHttpServer())
+      .get(`/v1/me/leagues/${createdLeague.body.id}/workspace?seasonId=${season2.body.id}`)
+      .set('Authorization', authorization(playerToken)).expect(404);
+    await request(app.getHttpServer())
+      .post(`/v1/seasons/${season2.body.id}/applications`)
+      .set('Authorization', authorization(playerToken)).set('Idempotency-Key', idempotency())
+      .send({ gameAccountId: account.body.id }).expect(404);
+    await expect(prisma.mutationReceipt.count({ where: { actorId: userIds[2]! } }))
+      .resolves.toBe(receiptCount);
+
+    await prisma.league.update({
+      where: { id: createdLeague.body.id as string },
+      data: { isDeleted: false }
+    });
+    await request(app.getHttpServer()).get(`/v1/leagues/${createdLeague.body.id}`).expect(200);
+    await request(app.getHttpServer()).get(`/v1/seasons/${season2.body.id}`).expect(200);
+    await request(app.getHttpServer()).get(`/v1/me/league-teams/${leagueTeam.id}`)
+      .set('Authorization', authorization(playerToken)).expect(200);
+    await request(app.getHttpServer())
+      .get(`/v1/me/leagues/${createdLeague.body.id}/workspace?seasonId=${season2.body.id}`)
+      .set('Authorization', authorization(playerToken)).expect(200);
   });
 });

@@ -72,7 +72,7 @@ describe('TeamAssetsService', () => {
         throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
       })
     };
-    const service = new (TeamAssetsService as any)(prisma, visibility);
+    const service = new TeamAssetsService(prisma as never, visibility as never);
 
     await expect(service.getTeamAssets('user-1', 'team-1'))
       .rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });

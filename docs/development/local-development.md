@@ -156,6 +156,28 @@ pnpm --filter @efm/api test:e2e -- tiered-league.e2e-spec.ts --runInBand
 
 ## 8. 常见问题
 
+### 手动隐藏或恢复垃圾测试联赛
+
+`leagues.is_deleted` 是联赛的逻辑删除标记。设为 `TRUE` 后，联赛本身以及其赛季、球队、赛事、赛程、阵容、财务和身价等下属数据都会从后台与小程序隐藏，但数据库记录不会被物理删除；改回 `FALSE` 后，原数据会直接恢复可见。
+
+隐藏联赛：
+
+```sql
+UPDATE leagues
+SET is_deleted = TRUE, updated_at = NOW()
+WHERE id = '<league-id>';
+```
+
+恢复联赛：
+
+```sql
+UPDATE leagues
+SET is_deleted = FALSE, updated_at = NOW()
+WHERE id = '<league-id>';
+```
+
+请先用只读查询核对准确的联赛 ID，再执行更新。每次切换都会同步更新 `updated_at`。手动修改 `is_deleted` 后不需要重启 API、管理后台或小程序，下一次请求立即生效；只有首次部署包含数据库字段、迁移或 Prisma Client 变更的新代码时，才需要执行迁移并重启 API。
+
 - `ECONNREFUSED 127.0.0.1:3307`：MySQL 未启动或端口与 `.env` 不一致。
 - `Environment validation failed`：`.env` 缺少必填项，或密钥长度不足 32 个字符。
 - 微信开发者工具 CLI 提示服务端口关闭：打开“设置 → 安全设置 → 服务端口”，只在需要 CLI 自动化时开启。

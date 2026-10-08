@@ -37,10 +37,10 @@ describe('public competition list filters', () => {
         throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
       })
     };
-    const service = new (CompetitionsService as any)(
-      { competition: { findUnique } },
-      {},
-      visibility
+    const service = new CompetitionsService(
+      { competition: { findUnique } } as never,
+      {} as never,
+      visibility as never
     );
 
     await expect(service.getPublic('competition-1'))
@@ -55,7 +55,7 @@ describe('public competition list filters', () => {
         throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
       })
     };
-    const service = new (CompetitionsService as any)({}, receipts, visibility);
+    const service = new CompetitionsService({} as never, receipts as never, visibility as never);
 
     await expect(service.update('user-1', 'competition-1', {
       expectedVersion: 1,
