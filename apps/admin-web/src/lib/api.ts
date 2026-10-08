@@ -13,6 +13,7 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 type RequestOptions<T> = Omit<RequestInit, 'body'> & {
   schema: z.ZodType<T>;
   body?: unknown;
+  skipAuth?: boolean;
 };
 
 export class ApiError extends Error {
@@ -111,7 +112,7 @@ export class AdminApiClient implements AdminApi {
   }
 
   request<T>(path: string, options: RequestOptions<T>): Promise<T> {
-    return this.send(path, options, true);
+    return this.send(path, options, !options.skipAuth);
   }
 
   upload<T>(path: string, file: File, schema: z.ZodType<T>): Promise<T> {
@@ -156,12 +157,12 @@ export class AdminApiClient implements AdminApi {
     options: RequestOptions<T>,
     retryAfterRefresh: boolean
   ): Promise<T> {
-    const { schema, body, headers: optionHeaders, ...requestInit } = options;
+    const { schema, body, headers: optionHeaders, skipAuth, ...requestInit } = options;
     const isMultipart = typeof FormData !== 'undefined' && body instanceof FormData;
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...(body === undefined || isMultipart ? {} : { 'Content-Type': 'application/json' }),
-      ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
+      ...(!skipAuth && this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
       ...this.normalizeHeaders(optionHeaders)
     };
     const response = await this.fetcher(`${this.baseUrl}${path}`, {

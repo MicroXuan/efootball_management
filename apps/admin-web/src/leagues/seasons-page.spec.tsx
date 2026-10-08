@@ -32,7 +32,7 @@ const team = {
 
 it('marks the current season and switches it with the league version', async () => {
   const request = vi.fn(async (path: string, options?: { method?: string }) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
+    if (path === `/v1/leagues/${leagueId}`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons` && !options?.method) return { items: [season(firstId, 1, 'S1'), season(secondId, 2, 'S2')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     if (path.endsWith(`/${secondId}/set-current`)) return { leagueId, currentSeasonId: secondId, version: 6 };
@@ -43,6 +43,10 @@ it('marks the current season and switches it with the league version', async () 
   </Routes></MemoryRouter>);
 
   expect(await screen.findByText('当前赛季')).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith(
+    `/v1/leagues/${leagueId}`,
+    expect.objectContaining({ skipAuth: true })
+  );
   const s2Row = screen.getByText('S2').closest('tr') as HTMLElement;
   await userEvent.click(within(s2Row).getByRole('button', { name: '设为当前赛季' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
@@ -53,7 +57,7 @@ it('marks the current season and switches it with the league version', async () 
 
 it('does not preselect every existing team when enrolling teams', async () => {
   const request = vi.fn(async (path: string) => {
-    if (path === `/v1/admin/leagues/${leagueId}/workspace`) return league;
+    if (path === `/v1/leagues/${leagueId}`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
     throw new Error(`unexpected ${path}`);
