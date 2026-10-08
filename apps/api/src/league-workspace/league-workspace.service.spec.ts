@@ -15,7 +15,7 @@ function entry() {
 
 function prisma(overrides: Record<string, unknown> = {}) {
   return {
-    seasonEntry: { findFirst: jest.fn(async (_args?: unknown) => entry()) },
+    seasonEntry: { findFirst: jest.fn(async (args?: unknown) => { void args; return entry(); }) },
     standingsSnapshot: { findFirst: jest.fn(async () => ({ rows: [{ rank: 2, totalPoints: 13, played: 6, tiePending: false }] })) },
     competitionMatch: { findMany: jest.fn(async () => []) },
     valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
