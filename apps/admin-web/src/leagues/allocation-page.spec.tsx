@@ -140,8 +140,8 @@ it('shows the generated match preview instead of only updating the match count',
       matches: [{
         id: '99999999-9999-4999-8999-999999999999', competitionId, stageId,
         roundNumber: 1, matchNumber: 1,
-        homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE' },
-        awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE' },
+        homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/brighton.png' },
+        awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/arsenal.png' },
         plannedAt: null, status: 'SCHEDULED', version: 1, officialResult: null, resultVersions: [],
         createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
       }]
@@ -156,6 +156,8 @@ it('shows the generated match preview instead of only updating the match count',
   expect(screen.getByText('第 1 轮')).toBeInTheDocument();
   expect(screen.getByText('布莱顿 蓝白')).toBeInTheDocument();
   expect(screen.getByText('阿森纳')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '布莱顿 蓝白队徽' })).toHaveAttribute('src', 'https://static.example.com/brighton.png');
+  expect(screen.getByRole('img', { name: '阿森纳队徽' })).toHaveAttribute('src', 'https://static.example.com/arsenal.png');
 });
 
 it('shows an actionable error when schedule preview generation fails', async () => {

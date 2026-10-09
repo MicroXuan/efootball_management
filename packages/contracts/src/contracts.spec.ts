@@ -1156,15 +1156,28 @@ describe('league team administration contracts', () => {
       id: ids.user,
       displayName: '上海海港',
       participantType: 'TEAM',
-      teamLifecycleStatus: 'ARCHIVED'
+      teamLifecycleStatus: 'ARCHIVED',
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png'
     });
-    assert.equal(participant.teamLifecycleStatus, 'ARCHIVED');
-    assert.equal(CompetitionParticipantSummarySchema.parse({
+    assert.deepEqual(participant, {
+      id: ids.user,
+      displayName: '上海海港',
+      participantType: 'TEAM',
+      teamLifecycleStatus: 'ARCHIVED',
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png'
+    });
+    assert.deepEqual(CompetitionParticipantSummarySchema.parse({
       id: ids.user,
       displayName: '个人选手',
       participantType: 'INDIVIDUAL',
       teamLifecycleStatus: null
-    }).teamLifecycleStatus, null);
+    }), {
+      id: ids.user,
+      displayName: '个人选手',
+      participantType: 'INDIVIDUAL',
+      teamLifecycleStatus: null,
+      teamLogoUrl: null
+    });
     assert.throws(() => CompetitionParticipantSummarySchema.parse({
       id: ids.user,
       displayName: '缺少状态',

@@ -16,8 +16,8 @@ import { PrismaService } from '../database/prisma.service.js';
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } };
-    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true; leagueTeam: { select: { status: true } } } } } };
-    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true; leagueTeam: { select: { status: true } } } } } };
+    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true; teamLogoUrlSnapshot: true; leagueTeam: { select: { status: true } } } } } };
+    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true; teamLogoUrlSnapshot: true; leagueTeam: { select: { status: true } } } } } };
     officialResultVersion: true;
     resultVersions: true;
   };
@@ -82,8 +82,8 @@ export class MyCompetitionsService {
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
-        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true } } } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -131,8 +131,8 @@ export class MyCompetitionsService {
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
-        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, leagueTeam: { select: { status: true } } } } } },
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true } } } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -166,13 +166,15 @@ export class MyCompetitionsService {
         id: record.homeParticipant.id,
         displayName: record.homeParticipant.displayNameSnapshot,
         participantType: record.homeParticipant.participantType,
-        teamLifecycleStatus: this.lifecycleStatus(record.homeParticipant)
+        teamLifecycleStatus: this.lifecycleStatus(record.homeParticipant),
+        teamLogoUrl: record.homeParticipant.seasonEntry?.teamLogoUrlSnapshot ?? null
       },
       awayParticipant: {
         id: record.awayParticipant.id,
         displayName: record.awayParticipant.displayNameSnapshot,
         participantType: record.awayParticipant.participantType,
-        teamLifecycleStatus: this.lifecycleStatus(record.awayParticipant)
+        teamLifecycleStatus: this.lifecycleStatus(record.awayParticipant),
+        teamLogoUrl: record.awayParticipant.seasonEntry?.teamLogoUrlSnapshot ?? null
       },
       plannedAt: record.plannedAt?.toISOString() ?? null,
       status: record.status,

@@ -375,7 +375,8 @@ export class SchedulesService {
       id: participant.id,
       displayName: participant.displayNameSnapshot,
       participantType: participant.participantType,
-      teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null
+      teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null,
+      teamLogoUrl: participant.seasonEntry?.teamLogoUrlSnapshot ?? null
     };
   }
 

@@ -24,14 +24,56 @@ const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
   version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.object({
     id: z.string(), roundNumber: z.number(), matchNumber: z.number(),
-    homeParticipant: z.object({ displayName: z.string() }),
-    awayParticipant: z.object({ displayName: z.string() })
+    homeParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null) }),
+    awayParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null) })
   }))
 });
 type Confirmed = z.infer<typeof ConfirmedSchema>;
 type SchedulePreview = z.infer<typeof SchedulePreviewSchema>;
 
 const stageLabel = (code: string) => code === 'SUPER' ? '超级组' : `冠军 ${code.replace('CHAMPION_', '')} 组`;
+
+function TeamCrest({ name, url }: { name: string; url: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return <span className="fixture-team__crest fixture-team__crest--fallback" aria-label={`${name}队徽占位`}>
+      {name.trim().slice(0, 2).toUpperCase()}
+    </span>;
+  }
+  return <span className="fixture-team__crest">
+    <img src={url} alt={`${name}队徽`} onError={() => setFailed(true)} />
+  </span>;
+}
+
+function ScheduleBoard({ preview }: { preview: SchedulePreview }) {
+  const rounds = [...new Set(preview.matches.map((match) => match.roundNumber))]
+    .sort((left, right) => left - right);
+  return <div className="allocation-schedule-preview">
+    <div className="allocation-schedule-preview__heading">
+      <div><span>MATCHDAY</span><strong>赛程预览</strong></div>
+      <span>{preview.roundCount} 轮 · {preview.matchCount} 场</span>
+    </div>
+    <div className="fixture-round-list">{rounds.map((roundNumber) => {
+      const matches = preview.matches
+        .filter((match) => match.roundNumber === roundNumber)
+        .sort((left, right) => left.matchNumber - right.matchNumber);
+      return <section key={roundNumber} className="fixture-round">
+        <header><span>ROUND {String(roundNumber).padStart(2, '0')}</span><strong>第 {roundNumber} 轮</strong><small>{matches.length} 场</small></header>
+        <div className="fixture-round__matches">{matches.map((match) => <div key={match.id} className="fixture-match">
+          <div className="fixture-team fixture-team--home">
+            <span title={match.homeParticipant.displayName}>{match.homeParticipant.displayName}</span>
+            <TeamCrest name={match.homeParticipant.displayName} url={match.homeParticipant.teamLogoUrl} />
+          </div>
+          <div className="fixture-match__versus"><span>VS</span><small>#{match.matchNumber}</small></div>
+          <div className="fixture-team fixture-team--away">
+            <TeamCrest name={match.awayParticipant.displayName} url={match.awayParticipant.teamLogoUrl} />
+            <span title={match.awayParticipant.displayName}>{match.awayParticipant.displayName}</span>
+          </div>
+        </div>)}</div>
+      </section>;
+    })}</div>
+  </div>;
+}
 
 export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
@@ -218,21 +260,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
             <Button disabled={stage.status === 'PUBLISHED'} loading={scheduleBusyStageId === stage.id} onClick={() => void generateSchedule(stage.id)}>{preview ? '重新生成预览' : '生成预览'}</Button>
             <Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button>
           </Space>
-          {preview ? <div className="allocation-schedule-preview">
-            <strong>赛程预览</strong>
-            <Table
-              size="small"
-              pagination={false}
-              rowKey="id"
-              dataSource={preview.matches}
-              columns={[
-                { title: '轮次', render: (_, match) => `第 ${match.roundNumber} 轮` },
-                { title: '场次', dataIndex: 'matchNumber' },
-                { title: '主队', render: (_, match) => match.homeParticipant.displayName },
-                { title: '客队', render: (_, match) => match.awayParticipant.displayName }
-              ]}
-            />
-          </div> : null}
+          {preview ? <ScheduleBoard preview={preview} /> : null}
         </article>;
       })}</div>
     </Card> : null}
