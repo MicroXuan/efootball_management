@@ -16,3 +16,4 @@ export * from './player-import.js';
 export * from './platform-data-sync.js';
 export * from './platform-presentation.js';
 export * from './user.js';
+export * from './wechat-bot.js';

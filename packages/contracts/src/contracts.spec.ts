@@ -107,6 +107,16 @@ import {
   derivePesdataPositionAutoBuild
 } from './index.js';
 import {
+  AdminWechatBotDeviceSchema,
+  AdminWechatGroupBindingSchema,
+  WechatBindingCodeResponseSchema,
+  WechatBindingStatusSchema,
+  WechatBridgeHeartbeatSchema,
+  WechatInboundBatchSchema,
+  WechatOutboxAckSchema,
+  WechatOutboxClaimResponseSchema
+} from './wechat-bot.js';
+import {
   AuditLogSchema,
   CreateManualFinanceEntryRequestSchema,
   LeagueTransactionListResponseSchema,
@@ -2009,5 +2019,123 @@ describe('cup center contracts', () => {
       version: 1
     });
     assert.equal(cup.participantCount, 12);
+  });
+});
+
+describe('WeChat bot contracts', () => {
+  const deviceId = '11111111-1111-4111-8111-111111111111';
+  const bindingId = '22222222-2222-4222-8222-222222222222';
+  const leagueId = '33333333-3333-4333-8333-333333333333';
+  const now = '2026-10-09T12:00:00.000Z';
+
+  it('validates bridge heartbeat and bounded observed groups', () => {
+    const heartbeat = WechatBridgeHeartbeatSchema.parse({
+      wechatAccountId: 'wxid_robot',
+      wechatVersion: '4.1.15.13',
+      loginStatus: 'LOGGED_IN',
+      listenerWatermark: '9001',
+      screenLocked: false,
+      outboundQueueDepth: 0,
+      observedGroups: [{ wechatGroupId: 'room-1@chatroom', displayName: '测试联赛群' }]
+    });
+    assert.equal(heartbeat.observedGroups[0]?.displayName, '测试联赛群');
+    assert.throws(() => WechatBridgeHeartbeatSchema.parse({
+      wechatVersion: '4.1.15.13',
+      loginStatus: 'LOGGED_IN',
+      screenLocked: false,
+      outboundQueueDepth: 0,
+      observedGroups: Array.from({ length: 501 }, (_, index) => ({
+        wechatGroupId: `room-${index}@chatroom`,
+        displayName: `群 ${index}`
+      }))
+    }));
+  });
+
+  it('rejects non-text inbound payloads', () => {
+    const message = {
+      messageId: 'message-1',
+      conversationType: 'GROUP',
+      conversationId: 'room-1@chatroom',
+      senderId: 'wxid_member',
+      sentAt: now,
+      messageType: 'TEXT',
+      text: '查询赛程',
+      sequence: '1'
+    } as const;
+    assert.equal(WechatInboundBatchSchema.parse({ messages: [message] }).messages.length, 1);
+    assert.throws(() => WechatInboundBatchSchema.parse({
+      messages: [{ ...message, messageType: 'IMAGE' }]
+    }));
+    assert.throws(() => WechatInboundBatchSchema.parse({
+      messages: [{ ...message, text: 'x'.repeat(2_001) }]
+    }));
+    assert.throws(() => WechatInboundBatchSchema.parse({
+      messages: Array.from({ length: 101 }, (_, index) => ({ ...message, messageId: `message-${index}` }))
+    }));
+  });
+
+  it('validates outbox acknowledgements', () => {
+    assert.equal(WechatOutboxAckSchema.parse({
+      status: 'SENT',
+      readbackMessageId: 'wechat-message-2'
+    }).status, 'SENT');
+    assert.equal(WechatOutboxAckSchema.parse({
+      status: 'FAILED',
+      errorCode: 'WINDOW_NOT_FOUND',
+      errorMessage: '未找到目标群窗口'
+    }).status, 'FAILED');
+    assert.throws(() => WechatOutboxAckSchema.parse({ status: 'SENT' }));
+    assert.throws(() => WechatOutboxAckSchema.parse({ status: 'RETRYING' }));
+
+    const claim = WechatOutboxClaimResponseSchema.parse({
+      messages: [{
+        id: bindingId,
+        targetType: 'GROUP',
+        targetId: 'room-1@chatroom',
+        text: '赛程如下',
+        priority: 100,
+        scheduledAt: now
+      }]
+    });
+    assert.equal(claim.messages[0]?.targetType, 'GROUP');
+  });
+
+  it('parses binding/admin responses', () => {
+    assert.equal(WechatBindingCodeResponseSchema.parse({ code: '012345', expiresAt: now }).code, '012345');
+    assert.throws(() => WechatBindingCodeResponseSchema.parse({ code: '12345', expiresAt: now }));
+    assert.equal(WechatBindingStatusSchema.parse({ status: 'UNBOUND' }).status, 'UNBOUND');
+    assert.equal(WechatBindingStatusSchema.parse({
+      status: 'BOUND',
+      deviceName: '联赛机器人',
+      boundAt: now
+    }).status, 'BOUND');
+
+    const device = AdminWechatBotDeviceSchema.parse({
+      id: deviceId,
+      name: '联赛机器人',
+      status: 'ACTIVE',
+      loginStatus: 'LOGGED_IN',
+      circuitStatus: 'CLOSED',
+      lastHeartbeatAt: now,
+      wechatVersion: '4.1.15.13',
+      outboundQueueDepth: 0,
+      createdAt: now,
+      updatedAt: now
+    });
+    assert.equal(device.name, '联赛机器人');
+
+    const group = AdminWechatGroupBindingSchema.parse({
+      id: bindingId,
+      deviceId,
+      leagueId,
+      wechatGroupId: 'room-1@chatroom',
+      displayName: '测试联赛群',
+      enabled: true,
+      version: 1,
+      scheduleSourceIds: [],
+      createdAt: now,
+      updatedAt: now
+    });
+    assert.equal(group.leagueId, leagueId);
   });
 });

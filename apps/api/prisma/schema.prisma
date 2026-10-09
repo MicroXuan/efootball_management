@@ -356,6 +356,46 @@ enum MatchResultVersionStatus {
   SUPERSEDED
 }
 
+enum WechatBotDeviceStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WechatLoginStatus {
+  UNKNOWN
+  LOGGED_IN
+  LOGGED_OUT
+}
+
+enum WechatCircuitStatus {
+  CLOSED
+  OPEN
+}
+
+enum WechatIdentityBindingStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WechatConversationType {
+  GROUP
+  PRIVATE
+}
+
+enum WechatInboundProcessingStatus {
+  PENDING
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum WechatOutboxStatus {
+  PENDING
+  LEASED
+  SENT
+  FAILED
+}
+
 model User {
   id                               String                                 @id @default(uuid()) @db.Char(36)
   wechatOpenId                     String                                 @unique @map("wechat_open_id") @db.VarChar(128)
@@ -391,6 +431,8 @@ model User {
   valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
   auditLogs                        AuditLog[]                             @relation("AuditUserActor")
   playerFavorites                  UserPlayerFavorite[]
+  wechatIdentityBindings           WechatIdentityBinding[]                @relation("WechatIdentityUser")
+  wechatBindingCodes               WechatBindingCode[]                    @relation("WechatBindingCodeUser")
 
   @@map("users")
 }
@@ -528,6 +570,8 @@ model AdminAccount {
   cupGroupProposals            CupGroupProposal[]                @relation("CupGroupProposalCreator")
   cupBracketProposals          CupBracketProposal[]              @relation("CupBracketProposalCreator")
   submittedMatchResults        MatchResultVersion[]              @relation("MatchResultAdminSubmitter")
+  createdWechatBotDevices      WechatBotDevice[]                 @relation("WechatBotDeviceCreator")
+  createdWechatScheduleSources WechatGroupScheduleSource[]       @relation("WechatScheduleSourceCreator")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -606,6 +650,7 @@ model League {
   playerValuations        LeaguePlayerValuation[]
   playerValuationHistory  PlayerValuationHistory[]
   transactionFeeRules     LeagueTransactionFeeRuleVersion[]
+  wechatGroupBindings     WechatGroupBinding[]
 
   @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -1637,40 +1682,41 @@ model PlayerCardVersion {
 }
 
 model Competition {
-  id                   String                     @id @default(uuid()) @db.Char(36)
-  seasonId             String?                    @map("season_id") @db.Char(36)
-  competitionType      CompetitionType            @default(OPEN_EVENT) @map("competition_type")
-  name                 String                     @db.VarChar(80)
-  description          String                     @db.Text
-  platform             GamePlatform
-  serverRegion         String                     @map("server_region") @db.VarChar(32)
-  participantType      CompetitionParticipantType @default(INDIVIDUAL) @map("participant_type")
-  format               CompetitionFormat          @default(ROUND_ROBIN)
-  status               CompetitionStatus          @default(DRAFT)
-  registrationOpensAt  DateTime                   @map("registration_opens_at")
-  registrationClosesAt DateTime                   @map("registration_closes_at")
-  startsAt             DateTime                   @map("starts_at")
-  endsAt               DateTime                   @map("ends_at")
-  participantLimit     Int                        @map("participant_limit") @db.UnsignedInt
-  createdById          String?                    @map("created_by_id") @db.Char(36)
-  createdByAdminId     String?                    @map("created_by_admin_id") @db.Char(36)
-  activeRuleVersion    Int                        @default(1) @map("active_rule_version") @db.UnsignedInt
-  boundRuleVersion     Int?                       @map("bound_rule_version") @db.UnsignedInt
-  cancellationReason   String?                    @map("cancellation_reason") @db.VarChar(512)
-  version              Int                        @default(1) @db.UnsignedInt
-  createdAt            DateTime                   @default(now()) @map("created_at")
-  updatedAt            DateTime                   @updatedAt @map("updated_at")
-  creator              User?                      @relation("CompetitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  adminCreator         AdminAccount?              @relation("CompetitionAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  season               LeagueSeason?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  ruleVersions         CompetitionRuleVersion[]
-  registrations        CompetitionRegistration[]
-  participants         CompetitionParticipant[]
-  stages               CompetitionStage[]
-  standingsSnapshots   StandingsSnapshot[]
-  cupConfig            CupCompetitionConfig?
-  cupGroupProposals    CupGroupProposal[]
-  cupBracketProposals  CupBracketProposal[]
+  id                    String                      @id @default(uuid()) @db.Char(36)
+  seasonId              String?                     @map("season_id") @db.Char(36)
+  competitionType       CompetitionType             @default(OPEN_EVENT) @map("competition_type")
+  name                  String                      @db.VarChar(80)
+  description           String                      @db.Text
+  platform              GamePlatform
+  serverRegion          String                      @map("server_region") @db.VarChar(32)
+  participantType       CompetitionParticipantType  @default(INDIVIDUAL) @map("participant_type")
+  format                CompetitionFormat           @default(ROUND_ROBIN)
+  status                CompetitionStatus           @default(DRAFT)
+  registrationOpensAt   DateTime                    @map("registration_opens_at")
+  registrationClosesAt  DateTime                    @map("registration_closes_at")
+  startsAt              DateTime                    @map("starts_at")
+  endsAt                DateTime                    @map("ends_at")
+  participantLimit      Int                         @map("participant_limit") @db.UnsignedInt
+  createdById           String?                     @map("created_by_id") @db.Char(36)
+  createdByAdminId      String?                     @map("created_by_admin_id") @db.Char(36)
+  activeRuleVersion     Int                         @default(1) @map("active_rule_version") @db.UnsignedInt
+  boundRuleVersion      Int?                        @map("bound_rule_version") @db.UnsignedInt
+  cancellationReason    String?                     @map("cancellation_reason") @db.VarChar(512)
+  version               Int                         @default(1) @db.UnsignedInt
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+  creator               User?                       @relation("CompetitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator          AdminAccount?               @relation("CompetitionAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  season                LeagueSeason?               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  ruleVersions          CompetitionRuleVersion[]
+  registrations         CompetitionRegistration[]
+  participants          CompetitionParticipant[]
+  stages                CompetitionStage[]
+  standingsSnapshots    StandingsSnapshot[]
+  cupConfig             CupCompetitionConfig?
+  cupGroupProposals     CupGroupProposal[]
+  cupBracketProposals   CupBracketProposal[]
+  wechatScheduleSources WechatGroupScheduleSource[]
 
   @@index([status, registrationOpensAt, id], map: "competitions_public_list_idx")
   @@index([createdById], map: "competitions_creator_idx")
@@ -2143,4 +2189,197 @@ model PlatformPresentation {
   updatedAt             DateTime @updatedAt @map("updated_at")
 
   @@map("platform_presentations")
+}
+
+model WechatBotDevice {
+  id                   String                       @id @default(uuid()) @db.Char(36)
+  name                 String                       @db.VarChar(128)
+  tokenHash            String                       @map("token_hash") @db.VarChar(255)
+  wechatAccountId      String?                      @unique @map("wechat_account_id") @db.VarChar(256)
+  status               WechatBotDeviceStatus        @default(ACTIVE)
+  loginStatus          WechatLoginStatus            @default(UNKNOWN) @map("login_status")
+  wechatVersion        String?                      @map("wechat_version") @db.VarChar(64)
+  lastHeartbeatAt      DateTime?                    @map("last_heartbeat_at")
+  listenerWatermark    String?                      @map("listener_watermark") @db.VarChar(256)
+  outboundQueueDepth   Int                          @default(0) @map("outbound_queue_depth") @db.UnsignedInt
+  screenLocked         Boolean                      @default(false) @map("screen_locked")
+  circuitStatus        WechatCircuitStatus          @default(CLOSED) @map("circuit_status")
+  circuitReason        String?                      @map("circuit_reason") @db.VarChar(512)
+  circuitOpenedAt      DateTime?                    @map("circuit_opened_at")
+  createdByAdminId     String                       @map("created_by_admin_id") @db.Char(36)
+  createdAt            DateTime                     @default(now()) @map("created_at")
+  updatedAt            DateTime                     @updatedAt @map("updated_at")
+  createdByAdmin       AdminAccount                 @relation("WechatBotDeviceCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  observedGroups       WechatObservedGroup[]
+  groupBindings        WechatGroupBinding[]
+  identityBindings     WechatIdentityBinding[]
+  consumedBindingCodes WechatBindingCode[]          @relation("WechatBindingCodeConsumerDevice")
+  requestReceipts      WechatBridgeRequestReceipt[]
+  inboundMessages      WechatInboundMessage[]
+  outboxMessages       WechatOutboxMessage[]
+
+  @@index([status, lastHeartbeatAt], map: "wechat_bot_devices_status_heartbeat_idx")
+  @@index([createdByAdminId], map: "wechat_bot_devices_creator_idx")
+  @@map("wechat_bot_devices")
+}
+
+model WechatObservedGroup {
+  id              String              @id @default(uuid()) @db.Char(36)
+  deviceId        String              @map("device_id") @db.Char(36)
+  wechatGroupId   String              @map("wechat_group_id") @db.VarChar(256)
+  displayName     String              @map("display_name") @db.VarChar(128)
+  firstObservedAt DateTime            @default(now()) @map("first_observed_at")
+  lastObservedAt  DateTime            @default(now()) @map("last_observed_at")
+  device          WechatBotDevice     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  groupBinding    WechatGroupBinding?
+
+  @@unique([deviceId, wechatGroupId], map: "wechat_observed_groups_device_group_unique")
+  @@index([deviceId, lastObservedAt], map: "wechat_observed_groups_device_seen_idx")
+  @@map("wechat_observed_groups")
+}
+
+model WechatGroupBinding {
+  id              String                      @id @default(uuid()) @db.Char(36)
+  deviceId        String                      @map("device_id") @db.Char(36)
+  observedGroupId String                      @unique @map("observed_group_id") @db.Char(36)
+  wechatGroupId   String                      @map("wechat_group_id") @db.VarChar(256)
+  displayName     String                      @map("display_name") @db.VarChar(128)
+  leagueId        String                      @map("league_id") @db.Char(36)
+  enabled         Boolean                     @default(true)
+  lastConfirmedAt DateTime                    @default(now()) @map("last_confirmed_at")
+  version         Int                         @default(1) @db.UnsignedInt
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+  device          WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  observedGroup   WechatObservedGroup         @relation(fields: [observedGroupId], references: [id], onDelete: Restrict)
+  league          League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  scheduleSources WechatGroupScheduleSource[]
+  inboundMessages WechatInboundMessage[]
+
+  @@unique([deviceId, wechatGroupId], map: "wechat_group_bindings_device_group_unique")
+  @@index([leagueId, enabled], map: "wechat_group_bindings_league_enabled_idx")
+  @@map("wechat_group_bindings")
+}
+
+model WechatGroupScheduleSource {
+  id               String             @id @default(uuid()) @db.Char(36)
+  groupBindingId   String             @map("group_binding_id") @db.Char(36)
+  competitionId    String             @map("competition_id") @db.Char(36)
+  displayOrder     Int                @default(0) @map("display_order") @db.UnsignedInt
+  enabled          Boolean            @default(true)
+  createdByAdminId String             @map("created_by_admin_id") @db.Char(36)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  groupBinding     WechatGroupBinding @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
+  competition      Competition        @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount       @relation("WechatScheduleSourceCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+
+  @@unique([groupBindingId, competitionId], map: "wechat_group_schedule_sources_unique")
+  @@index([competitionId], map: "wechat_group_schedule_sources_competition_idx")
+  @@index([createdByAdminId], map: "wechat_group_schedule_sources_creator_idx")
+  @@map("wechat_group_schedule_sources")
+}
+
+model WechatIdentityBinding {
+  id              String                      @id @default(uuid()) @db.Char(36)
+  deviceId        String                      @map("device_id") @db.Char(36)
+  wechatContactId String                      @map("wechat_contact_id") @db.VarChar(256)
+  userId          String                      @map("user_id") @db.Char(36)
+  status          WechatIdentityBindingStatus @default(ACTIVE)
+  boundAt         DateTime                    @default(now()) @map("bound_at")
+  unboundAt       DateTime?                   @map("unbound_at")
+  revokedReason   String?                     @map("revoked_reason") @db.VarChar(512)
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+  device          WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  user            User                        @relation("WechatIdentityUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, wechatContactId], map: "wechat_identity_bindings_device_contact_unique")
+  @@unique([deviceId, userId], map: "wechat_identity_bindings_device_user_unique")
+  @@index([userId, status], map: "wechat_identity_bindings_user_status_idx")
+  @@map("wechat_identity_bindings")
+}
+
+model WechatBindingCode {
+  id                       String                @id @default(uuid()) @db.Char(36)
+  userId                   String                @map("user_id") @db.Char(36)
+  codeHash                 String                @unique @map("code_hash") @db.Char(64)
+  expiresAt                DateTime              @map("expires_at")
+  invalidatedAt            DateTime?             @map("invalidated_at")
+  consumedAt               DateTime?             @map("consumed_at")
+  consumedByDeviceId       String?               @map("consumed_by_device_id") @db.Char(36)
+  consumedByContactId      String?               @map("consumed_by_contact_id") @db.VarChar(256)
+  consumedByInboundId      String?               @unique @map("consumed_by_inbound_id") @db.Char(36)
+  createdAt                DateTime              @default(now()) @map("created_at")
+  user                     User                  @relation("WechatBindingCodeUser", fields: [userId], references: [id], onDelete: Restrict)
+  consumedByDevice         WechatBotDevice?      @relation("WechatBindingCodeConsumerDevice", fields: [consumedByDeviceId], references: [id], onDelete: Restrict)
+  consumedByInboundMessage WechatInboundMessage? @relation("WechatBindingCodeInbound", fields: [consumedByInboundId], references: [id], onDelete: Restrict)
+
+  @@index([userId, expiresAt], map: "wechat_binding_codes_user_expiry_idx")
+  @@index([consumedByDeviceId, consumedByContactId], map: "wechat_binding_codes_consumer_idx")
+  @@map("wechat_binding_codes")
+}
+
+model WechatBridgeRequestReceipt {
+  id         String          @id @default(uuid()) @db.Char(36)
+  deviceId   String          @map("device_id") @db.Char(36)
+  nonce      String          @db.VarChar(128)
+  receivedAt DateTime        @default(now()) @map("received_at")
+  device     WechatBotDevice @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, nonce], map: "wechat_bridge_request_receipts_nonce_unique")
+  @@index([receivedAt], map: "wechat_bridge_request_receipts_received_idx")
+  @@map("wechat_bridge_request_receipts")
+}
+
+model WechatInboundMessage {
+  id                  String                        @id @default(uuid()) @db.Char(36)
+  deviceId            String                        @map("device_id") @db.Char(36)
+  messageId           String                        @map("message_id") @db.VarChar(256)
+  conversationType    WechatConversationType        @map("conversation_type")
+  conversationId      String                        @map("conversation_id") @db.VarChar(256)
+  senderId            String                        @map("sender_id") @db.VarChar(256)
+  groupBindingId      String?                       @map("group_binding_id") @db.Char(36)
+  wechatSentAt        DateTime                      @map("wechat_sent_at")
+  sequence            String?                       @db.VarChar(128)
+  messageType         String                        @default("TEXT") @map("message_type") @db.VarChar(16)
+  commandText         String?                       @map("command_text") @db.VarChar(2000)
+  processingStatus    WechatInboundProcessingStatus @default(PENDING) @map("processing_status")
+  resultCode          String?                       @map("result_code") @db.VarChar(64)
+  processedAt         DateTime?                     @map("processed_at")
+  receivedAt          DateTime                      @default(now()) @map("received_at")
+  device              WechatBotDevice               @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  groupBinding        WechatGroupBinding?           @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
+  consumedBindingCode WechatBindingCode?            @relation("WechatBindingCodeInbound")
+
+  @@unique([deviceId, messageId], map: "wechat_inbound_messages_device_message_unique")
+  @@index([groupBindingId, wechatSentAt], map: "wechat_inbound_messages_group_time_idx")
+  @@index([senderId, receivedAt], map: "wechat_inbound_messages_sender_received_idx")
+  @@index([processingStatus, receivedAt], map: "wechat_inbound_messages_processing_idx")
+  @@map("wechat_inbound_messages")
+}
+
+model WechatOutboxMessage {
+  id                String                 @id @default(uuid()) @db.Char(36)
+  deviceId          String                 @map("device_id") @db.Char(36)
+  targetType        WechatConversationType @map("target_type")
+  targetId          String                 @map("target_id") @db.VarChar(256)
+  businessKey       String                 @unique @map("business_key") @db.VarChar(191)
+  text              String                 @db.VarChar(2000)
+  priority          Int                    @default(100) @db.UnsignedSmallInt
+  scheduledAt       DateTime               @default(now()) @map("scheduled_at")
+  status            WechatOutboxStatus     @default(PENDING)
+  leaseOwner        String?                @map("lease_owner") @db.VarChar(128)
+  leaseExpiresAt    DateTime?              @map("lease_expires_at")
+  attemptCount      Int                    @default(0) @map("attempt_count") @db.UnsignedInt
+  readbackMessageId String?                @map("readback_message_id") @db.VarChar(256)
+  failureCode       String?                @map("failure_code") @db.VarChar(64)
+  failureMessage    String?                @map("failure_message") @db.VarChar(512)
+  sentAt            DateTime?              @map("sent_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  device            WechatBotDevice        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@index([deviceId, status, scheduledAt, priority], map: "wechat_outbox_messages_claim_idx")
+  @@index([leaseExpiresAt], map: "wechat_outbox_messages_lease_idx")
+  @@map("wechat_outbox_messages")
 }
