@@ -115,6 +115,11 @@ export const CreateWechatBotDeviceRequestSchema = z.object({
   name: DisplayNameSchema
 });
 
+export const UpdateWechatBotDeviceStatusRequestSchema = z.object({
+  status: WechatBotDeviceStatusSchema,
+  reason: z.string().trim().min(1).max(512).optional()
+});
+
 export const WechatBotDeviceCredentialResponseSchema = z.object({
   device: AdminWechatBotDeviceSchema,
   token: z.string().min(32)
@@ -126,6 +131,10 @@ export const AdminWechatObservedGroupSchema = z.object({
   wechatGroupId: WechatStableIdSchema,
   displayName: DisplayNameSchema,
   lastObservedAt: TimestampSchema
+});
+
+export const AdminWechatObservedGroupListSchema = z.object({
+  items: z.array(AdminWechatObservedGroupSchema)
 });
 
 export const AdminWechatGroupBindingSchema = z.object({
@@ -157,6 +166,19 @@ export const SaveWechatGroupBindingRequestSchema = z.object({
   }
 });
 
+export const AdminWechatScheduleSourceOptionSchema = z.object({
+  id: ResourceIdSchema,
+  name: z.string().trim().min(1).max(80),
+  status: z.enum(['DRAFT', 'REGISTRATION_OPEN', 'REGISTRATION_CLOSED', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'])
+});
+
+export const AdminLeagueWechatBotConfigSchema = z.object({
+  bindings: z.array(AdminWechatGroupBindingSchema),
+  devices: z.array(AdminWechatBotDeviceSchema),
+  observedGroups: z.array(AdminWechatObservedGroupSchema),
+  scheduleSourceOptions: z.array(AdminWechatScheduleSourceOptionSchema)
+});
+
 export type WechatBridgeHeartbeat = z.infer<typeof WechatBridgeHeartbeatSchema>;
 export type WechatConversationType = z.infer<typeof WechatConversationTypeSchema>;
 export type WechatInboundBatch = z.infer<typeof WechatInboundBatchSchema>;
@@ -169,3 +191,6 @@ export type WechatBindingCodeResponse = z.infer<typeof WechatBindingCodeResponse
 export type AdminWechatBotDevice = z.infer<typeof AdminWechatBotDeviceSchema>;
 export type AdminWechatGroupBinding = z.infer<typeof AdminWechatGroupBindingSchema>;
 export type SaveWechatGroupBindingRequest = z.infer<typeof SaveWechatGroupBindingRequestSchema>;
+export type CreateWechatBotDeviceRequest = z.infer<typeof CreateWechatBotDeviceRequestSchema>;
+export type UpdateWechatBotDeviceStatusRequest = z.infer<typeof UpdateWechatBotDeviceStatusRequestSchema>;
+export type AdminLeagueWechatBotConfig = z.infer<typeof AdminLeagueWechatBotConfigSchema>;

@@ -107,8 +107,11 @@ import {
   derivePesdataPositionAutoBuild
 } from './index.js';
 import {
+  AdminLeagueWechatBotConfigSchema,
   AdminWechatBotDeviceSchema,
   AdminWechatGroupBindingSchema,
+  AdminWechatObservedGroupListSchema,
+  UpdateWechatBotDeviceStatusRequestSchema,
   WechatBindingCodeResponseSchema,
   WechatBindingStatusSchema,
   WechatBridgeHeartbeatSchema,
@@ -2137,5 +2140,23 @@ describe('WeChat bot contracts', () => {
       updatedAt: now
     });
     assert.equal(group.leagueId, leagueId);
+
+    assert.equal(UpdateWechatBotDeviceStatusRequestSchema.parse({ status: 'DISABLED' }).status, 'DISABLED');
+    assert.throws(() => UpdateWechatBotDeviceStatusRequestSchema.parse({ status: 'DELETED' }));
+    assert.equal(AdminWechatObservedGroupListSchema.parse({
+      items: [{
+        id: bindingId,
+        deviceId,
+        wechatGroupId: 'room-1@chatroom',
+        displayName: '测试联赛群',
+        lastObservedAt: now
+      }]
+    }).items.length, 1);
+    assert.equal(AdminLeagueWechatBotConfigSchema.parse({
+      bindings: [group],
+      devices: [device],
+      observedGroups: [],
+      scheduleSourceOptions: [{ id: bindingId, name: '甲级联赛', status: 'IN_PROGRESS' }]
+    }).scheduleSourceOptions[0]?.name, '甲级联赛');
   });
 });
