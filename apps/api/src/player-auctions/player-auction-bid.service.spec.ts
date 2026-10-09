@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused transactional Prisma test doubles */
 import { jest } from '@jest/globals';
 import { PlayerAuctionBidService } from './player-auction-bid.service.js';
 

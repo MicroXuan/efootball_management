@@ -33,6 +33,12 @@ const DETAIL_INCLUDE = {
 
 type AuctionClient = Prisma.TransactionClient | PrismaService;
 type BatchRecord = Prisma.PlayerAuctionBatchGetPayload<{ include: typeof DETAIL_INCLUDE }>;
+type BatchSummaryInput = Pick<BatchRecord, 'id' | 'leagueId' | 'groupBindingId' | 'name' | 'status' | 'currentLotId' | 'version' | 'createdAt' | 'updatedAt' | 'groupBinding'> & {
+  _count?: { lots: number };
+  lots?: BatchRecord['lots'];
+};
+type LotRecord = BatchRecord['lots'][number];
+type ReviewRecord = NonNullable<LotRecord['review']>;
 
 @Injectable()
 export class AdminPlayerAuctionsService {
@@ -269,7 +275,7 @@ export class AdminPlayerAuctionsService {
     if (batch.status !== 'DRAFT') throw new PlayerAuctionError('AUCTION_DRAFT_REQUIRED', '只有草稿拍卖可以编辑', 409);
   }
 
-  private summary(batch: any) {
+  private summary(batch: BatchSummaryInput) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
       groupDisplayName: batch.groupBinding.displayName, name: batch.name, status: batch.status,
@@ -278,17 +284,17 @@ export class AdminPlayerAuctionsService {
     };
   }
 
-  private view(batch: any) {
+  private view(batch: BatchRecord) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
       name: batch.name, status: batch.status, currentLotId: batch.currentLotId, version: batch.version,
       startedAt: batch.startedAt?.toISOString() ?? null, completedAt: batch.completedAt?.toISOString() ?? null,
       cancelledAt: batch.cancelledAt?.toISOString() ?? null, createdAt: batch.createdAt.toISOString(),
-      updatedAt: batch.updatedAt.toISOString(), lots: (batch.lots ?? []).map((lot: any) => this.lotView(lot))
+      updatedAt: batch.updatedAt.toISOString(), lots: batch.lots.map((lot) => this.lotView(lot))
     };
   }
 
-  private lotView(lot: any) {
+  private lotView(lot: LotRecord) {
     return {
       id: lot.id, displayOrder: lot.displayOrder, playerId: lot.footballPlayerId,
       playerCardId: lot.playerCardId, playerName: lot.playerNameSnapshot,
@@ -296,7 +302,7 @@ export class AdminPlayerAuctionsService {
       minimumIncrement: lot.minimumIncrement, status: lot.status, currentPrice: lot.currentPrice,
       currentHighestBidId: lot.currentHighestBidId, deadlineAt: lot.deadlineAt?.toISOString() ?? null,
       deadlineEpoch: lot.deadlineEpoch, pausedRemainingMs: lot.pausedRemainingMs, version: lot.version,
-      bids: (lot.bids ?? []).map((bid: any) => ({
+      bids: lot.bids.map((bid) => ({
         id: bid.id, leagueTeamId: bid.leagueTeamId, teamName: bid.leagueTeam?.name ?? null,
         userId: bid.userId, amount: bid.amount, result: bid.result, rejectionReason: bid.rejectionReason,
         wechatMessageId: bid.wechatMessageId, wechatSortKey: bid.wechatSortKey,
@@ -308,7 +314,7 @@ export class AdminPlayerAuctionsService {
     };
   }
 
-  private reviewView(review: any) {
+  private reviewView(review: ReviewRecord) {
     return {
       id: review.id, decision: review.decision, computedWinnerTeamId: review.computedWinnerTeamId,
       computedWinnerTeamName: review.computedWinnerTeam?.name ?? null, computedPrice: review.computedPrice,

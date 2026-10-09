@@ -1,4 +1,5 @@
-import { Inject, Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatOutboxService } from '../wechat-bot/wechat-outbox.service.js';
 import { PlayerAuctionClock } from './player-auction-clock.js';

@@ -7,7 +7,7 @@
 - 个人单循环赛事、报名、赛程、比分确认与积分榜；
 - 长期联赛、联赛专属球队、多赛季报名、工资帽、转会窗口与只读小程序球队档案；
 - 独立后台管理系统：平台管理员、联赛管理员、阵容交易、卡片升级和不可变财务流水；
-- 微信群机器人服务端基础：一次性身份绑定、群与联赛绑定、赛程查询、可靠 inbox/outbox 和设备运维；
+- 微信群机器人与人工审核型球员拍卖：一次性身份绑定、赛程查询、纯数字竞价、可恢复倒计时、可靠 inbox/outbox 和设备运维；
 - NestJS API、Prisma/MySQL 数据层和微信原生小程序。
 
 ## 本地启动
@@ -37,6 +37,7 @@ git diff --check
 - [个人赛事闭环本地验收](docs/development/competition-loop.md)
 - [后台管理系统本地开发与验收](docs/development/admin-web-local-development.zh-CN.md)
 - [微信群机器人基础验收与运维](docs/development/wechat-bot-foundation-verification.zh-CN.md)
+- [微信群球员拍卖验收手册](docs/development/player-auction-bot-verification.zh-CN.md)
 - [Windows 微信 Bridge 部署、验收与回滚](docs/deployment/windows-wechat-bridge.zh-CN.md)
 - [联赛球队迁移与回滚手册](docs/development/league-team-migration.zh-CN.md)
 - [联赛赛季体系实施路线图](docs/superpowers/plans/2026-09-26-league-season-pyramid-roadmap.md)

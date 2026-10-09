@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused command-router test doubles */
 import { PlayerAuctionCommandHandler } from './player-auction-command.handler.js';
 import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
 

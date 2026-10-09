@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused recovery transaction test doubles */
 import { jest } from '@jest/globals';
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 

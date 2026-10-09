@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { PlayerAuctionBidResult, Prisma } from '../generated/prisma/client.js';
+import type { PlayerAuctionBidResult } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js';

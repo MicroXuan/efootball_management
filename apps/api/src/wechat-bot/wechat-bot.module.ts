@@ -43,6 +43,6 @@ import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
     WechatRetentionService,
     WechatScheduleQueryService
   ],
-  exports: [WechatBindingService, WechatBridgeService, WechatOutboxService, WechatRetentionService]
+  exports: [WECHAT_BOT_CONFIG, WechatBindingService, WechatBridgeService, WechatOutboxService, WechatRetentionService]
 })
 export class WechatBotModule {}

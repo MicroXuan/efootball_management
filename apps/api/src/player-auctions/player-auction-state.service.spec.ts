@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused state-machine transaction test doubles */
 import { jest } from '@jest/globals';
 import { PlayerAuctionStateService } from './player-auction-state.service.js';
 

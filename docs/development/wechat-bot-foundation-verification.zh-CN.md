@@ -1,6 +1,6 @@
 # 微信群机器人基础验收与运维
 
-本文用于验收目前已经完成的服务端、小程序绑定页和后台配置页。当前版本能可靠处理身份绑定、`帮助`、`查询赛程`、`我的赛程`，但还没有启用真实 Windows 微信收发，也没有自动拍卖状态机。
+本文用于验收服务端、小程序绑定页和后台配置页。当前版本能可靠处理身份绑定、`帮助`、`查询赛程`、`我的赛程`；球员拍卖请继续执行[微信群球员拍卖验收手册](./player-auction-bot-verification.zh-CN.md)。真实 Windows 微信发送仍默认关闭，必须在目标电脑验收后显式启用。
 
 ## 当前安全边界
 
@@ -137,4 +137,4 @@ ORDER BY created_at DESC LIMIT 20;
 
 ## Windows Bridge 状态
 
-本阶段只完成 API、数据模型、小程序与管理后台。`apps/wechat-bridge` 尚未实现，因此真实读取或发送微信消息必须保持关闭。后续严格按 `docs/superpowers/plans/2026-10-09-windows-wechat-bridge-implementation-plan.md` 实施，并通过 `doctor`、`--dry-send` 和目标电脑验收门禁后，才允许显式启用真实发送。
+仓库已包含 `apps/wechat-bridge`，但真实发送仍默认关闭。必须按 [Windows 微信 Bridge 部署与验收](../deployment/windows-wechat-bridge.zh-CN.md)通过 `doctor`、`--dry-send` 和目标电脑验收门禁后，才允许显式启用真实发送。

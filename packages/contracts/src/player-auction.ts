@@ -208,4 +208,3 @@ export type PreparePlayerAuctionBatchRequest = z.infer<typeof PreparePlayerAucti
 export type CancelPlayerAuctionBatchRequest = z.infer<typeof CancelPlayerAuctionBatchRequestSchema>;
 export type ReviewPlayerAuctionLotRequest = z.infer<typeof ReviewPlayerAuctionLotRequestSchema>;
 export type PlayerAuctionBatchDetail = z.infer<typeof PlayerAuctionBatchDetailSchema>;
-

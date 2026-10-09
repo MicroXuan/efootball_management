@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused worker Prisma test doubles */
 import { PlayerAuctionWorker } from './player-auction-worker.js';
 
 describe('PlayerAuctionWorker', () => {
