@@ -11,3 +11,14 @@ apps/miniprogram/project.private.config.json
 apps/api/src/generated/
 .mysql/
 .data/
+apps/wechat-bridge/.venv/
+apps/wechat-bridge/.pytest_cache/
+apps/wechat-bridge/**/__pycache__/
+apps/wechat-bridge/**/*.pyc
+apps/wechat-bridge/config.toml
+apps/wechat-bridge/state/
+apps/wechat-bridge/*.sqlite*
+apps/wechat-bridge/**/*.sqlite*
+apps/wechat-bridge/diagnostics/
+apps/wechat-bridge/screenshots/
+apps/wechat-bridge/**/*.key

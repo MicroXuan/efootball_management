@@ -1,0 +1,17 @@
+[bridge]
+# 生产环境必须使用 HTTPS；本机联调可使用 http://127.0.0.1:3000。
+environment = "production"
+api_url = "https://league.example.com"
+device_id = "00000000-0000-4000-8000-000000000000"
+state_dir = "state"
+
+# 目标电脑验收通过前必须保持 false。
+send_enabled = false
+expected_wechat_version = "4.1.15.13"
+poll_interval_seconds = 2.0
+heartbeat_interval_seconds = 20.0
+inbound_batch_size = 50
+outbox_claim_limit = 20
+request_timeout_seconds = 15.0
+
+# 设备令牌只能放在 EFM_WECHAT_BRIDGE_TOKEN 环境变量中，禁止写入此文件。
