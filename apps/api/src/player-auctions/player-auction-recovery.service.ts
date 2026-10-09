@@ -39,16 +39,20 @@ export class PlayerAuctionRecoveryService {
     const cutoff = new Date(Date.now() - this.config.heartbeatTimeoutMs);
     const devices = await this.prisma.wechatBotDevice.findMany({
       where: {
-        status: 'ACTIVE',
         OR: [
+          { status: 'DISABLED' },
+          { status: 'ACTIVE', OR: [
           { lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: cutoff } },
           { circuitStatus: 'OPEN' }, { loginStatus: { not: 'LOGGED_IN' } }, { screenLocked: true }
+          ] }
         ]
       },
-      select: { id: true, circuitStatus: true, loginStatus: true, screenLocked: true, lastHeartbeatAt: true }
+      select: { id: true, status: true, circuitStatus: true, loginStatus: true, screenLocked: true, lastHeartbeatAt: true }
     });
     for (const device of devices) {
-      const reason = device.circuitStatus === 'OPEN'
+      const reason = device.status === 'DISABLED'
+        ? 'DEVICE_DISABLED'
+        : device.circuitStatus === 'OPEN'
         ? 'SEND_CIRCUIT_OPEN'
         : device.screenLocked
           ? 'WINDOW_SESSION_LOCKED'
@@ -67,7 +71,7 @@ export class PlayerAuctionRecoveryService {
     for (const group of groups) await this.state.enterRecovery(group.groupBindingId, 'APPLICATION_RESTART_AMBIGUITY');
   }
 
-  recover(batchId: string, actorUserId: string) {
+  recover(batchId: string, actorUserId: string, announce = true) {
     return this.prisma.$transaction(async (tx) => {
       const batch = await tx.playerAuctionBatch.findUnique({
         where: { id: batchId }, include: { groupBinding: { select: { deviceId: true, wechatGroupId: true } } }
@@ -84,9 +88,9 @@ export class PlayerAuctionRecoveryService {
       if (!lot || lot.status !== 'PAUSED') throw new PlayerAuctionError('AUCTION_STATE_INVALID', '恢复状态不一致', 409);
       const now = await this.locks.now(tx);
       const deadlineAt = new Date(now.getTime() + 30_000);
-      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } } });
+      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } } });
       await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', recoveryDetectedAt: null, recoveryReason: null, version: { increment: 1 } } });
-      if (batch.groupBinding) {
+      if (announce && batch.groupBinding) {
         await this.outbox.enqueue({
           deviceId: batch.groupBinding.deviceId, targetType: 'GROUP', targetId: batch.groupBinding.wechatGroupId,
           businessKey: `auction:${batch.id}:recovery:${lot.id}:${deadlineAt.getTime()}`,

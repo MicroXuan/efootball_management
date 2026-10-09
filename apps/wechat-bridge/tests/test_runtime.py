@@ -206,6 +206,25 @@ def test_ambiguous_send_is_acknowledged_once_and_stops_later_sends(tmp_path: Pat
     assert spool.outbox_record(outgoing().id).status == "AMBIGUOUS"  # type: ignore[union-attr]
 
 
+def test_retryable_failed_send_can_be_reclaimed_and_succeed(tmp_path: Path) -> None:
+    api = FakeApi()
+    api.claimed = [outgoing()]
+    transport = FakeWechatTransport(send_results=[
+        SendResult(status=SendStatus.FAILED, error_code="WINDOW_NOT_READY"),
+        SendResult(status=SendStatus.SENT, readback_message_id="wechat-id-after-retry"),
+    ])
+    runtime, _, _, spool = make_runtime(tmp_path, api=api, transport=transport, enable_send=True)
+    assert runtime.doctor().passed is True
+
+    assert runtime.send_once() == 1
+    assert spool.outbox_record(outgoing().id).status == "PENDING"  # type: ignore[union-attr]
+    api.claimed = [outgoing()]
+    assert runtime.send_once() == 1
+
+    assert [ack.status for _, ack in api.acks] == ["FAILED", "SENT"]
+    assert spool.outbox_record(outgoing().id).status == "COMPLETED"  # type: ignore[union-attr]
+
+
 def test_lock_transition_stops_before_claiming_or_consuming_outbox(tmp_path: Path) -> None:
     runtime, transport, api, _ = make_runtime(tmp_path, enable_send=True)
     assert runtime.doctor().passed is True

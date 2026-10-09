@@ -66,6 +66,26 @@ export class WechatOutboxService {
       });
       const claimed = [];
       for (const candidate of candidates) {
+        const countdown = /^auction:([^:]+):epoch:(\d+):countdown:(\d+)$/.exec(candidate.businessKey);
+        if (countdown) {
+          const lot = await transaction.playerAuctionLot.findUnique({
+            where: { id: countdown[1]! },
+            select: { status: true, deadlineAt: true, deadlineEpoch: true, lastCountdownMark: true }
+          });
+          const epoch = Number(countdown[2]);
+          const mark = Number(countdown[3]);
+          const valid = lot?.status === 'ACTIVE'
+            && lot.deadlineEpoch === epoch
+            && lot.lastCountdownMark === mark
+            && Boolean(lot.deadlineAt && lot.deadlineAt.getTime() > now.getTime());
+          if (!valid) {
+            await transaction.wechatOutboxMessage.updateMany({
+              where: { id: candidate.id, status: 'PENDING' },
+              data: { status: 'FAILED', failureCode: 'STALE_AUCTION_COUNTDOWN', failureMessage: 'Countdown epoch is no longer current' }
+            });
+            continue;
+          }
+        }
         const updated = await transaction.wechatOutboxMessage.updateMany({
           where: { id: candidate.id, status: 'PENDING' },
           data: { status: 'LEASED', leaseOwner, leaseExpiresAt }

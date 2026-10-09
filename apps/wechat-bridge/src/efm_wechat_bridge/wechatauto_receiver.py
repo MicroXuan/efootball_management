@@ -12,6 +12,7 @@ from .dependency_safety import initialize_wechat_dependency, silence_wechat_logg
 from .transport import SendResult, SendStatus, TransportHealth
 
 _BINDING_COMMAND = re.compile(r"^绑定\s+\d{6}$")
+_GROUP_COMMAND = re.compile(r"^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.@:-]{1,256}$")
 _TEXT_TYPES = {1, "1", "TEXT", "文本"}
 
@@ -198,6 +199,8 @@ class WechatautoReceiver:
             return None
         text = text.strip()
         if not text or len(text) > 2_000:
+            return None
+        if group and not _GROUP_COMMAND.fullmatch(text):
             return None
         if not group and not _BINDING_COMMAND.fullmatch(text):
             return None

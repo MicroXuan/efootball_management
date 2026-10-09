@@ -201,6 +201,19 @@ class BridgeSpool:
             if cursor.rowcount != 1:
                 raise KeyError(f"unknown or non-pending outbox task: {task_id}")
 
+    def retry_outbox(self, task_id: UUID | str, error_code: str) -> None:
+        with closing(self._connect()) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE outbox_spool
+                SET status = 'PENDING', last_error_code = ?, completed_at = NULL
+                WHERE task_id = ? AND status = 'IN_FLIGHT'
+                """,
+                (error_code, str(task_id)),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"unknown or non-in-flight outbox task: {task_id}")
+
     def scan_cursors(self) -> dict[str, int]:
         with closing(self._connect()) as connection:
             row = connection.execute(
@@ -292,6 +305,16 @@ class BridgeSpool:
         with closing(self._connect()) as connection:
             cursor = connection.execute(
                 "DELETE FROM outbox_spool WHERE status = 'COMPLETED' AND completed_at < ?",
+                (before.astimezone(UTC).isoformat(),),
+            )
+            return cursor.rowcount
+
+    def purge_acknowledged(self, *, before: datetime) -> int:
+        if before.tzinfo is None:
+            raise ValueError("before must include a timezone")
+        with closing(self._connect()) as connection:
+            cursor = connection.execute(
+                "DELETE FROM inbound_spool WHERE status = 'ACKED' AND acked_at < ?",
                 (before.astimezone(UTC).isoformat(),),
             )
             return cursor.rowcount

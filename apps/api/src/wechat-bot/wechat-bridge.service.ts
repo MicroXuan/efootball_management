@@ -62,11 +62,15 @@ export class WechatBridgeService {
         where: { deviceId_messageId: { deviceId, messageId: message.messageId } }
       });
       if (duplicate) {
+        if (duplicate.processingStatus === 'PENDING') await this.router?.route(duplicate.id);
+        const resumed = duplicate.processingStatus === 'PENDING'
+          ? await this.prisma.wechatInboundMessage.findUnique({ where: { id: duplicate.id } })
+          : duplicate;
         results.push({
           messageId: message.messageId,
           status: 'DUPLICATE',
           inboundId: duplicate.id,
-          resultCode: duplicate.resultCode
+          resultCode: resumed?.resultCode ?? duplicate.resultCode
         });
         continue;
       }

@@ -33,32 +33,35 @@ export class PlayerAuctionBidService {
       if (!lot) throw new PlayerAuctionError('AUCTION_INACTIVE', '当前没有进行中的拍卖', 409);
       const now = await this.locks.now(tx);
       const identity = await tx.wechatIdentityBinding.findFirst({
-        where: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId, status: 'ACTIVE' }
+        where: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId, status: 'ACTIVE' },
+        include: { user: { select: { status: true } } }
       });
       let team = identity ? await tx.leagueTeam.findFirst({ where: { ownerUserId: identity.userId, leagueId: batch.leagueId, status: 'ACTIVE' } }) : null;
       let result: PlayerAuctionBidResult = 'VALID';
       let rejectionReason: string | null = null;
       if (!Number.isSafeInteger(amount) || amount <= 0 || amount > MAX_AMOUNT) {
         result = 'OVERFLOW'; rejectionReason = '出价必须是有效的正整数';
-      } else if (!identity) {
-        result = 'UNBOUND'; rejectionReason = '微信身份尚未绑定';
+      } else if (!identity || identity.user.status !== 'ACTIVE') {
+        result = 'UNBOUND'; rejectionReason = identity ? '用户已停用' : '微信身份尚未绑定';
       } else if (!team) {
         const other = await tx.leagueTeam.findFirst({ where: { ownerUserId: identity.userId, status: 'ACTIVE' } });
         result = other ? 'WRONG_LEAGUE' : 'NO_ACTIVE_TEAM';
         rejectionReason = other ? '球队不属于当前联赛' : '没有当前联赛的有效球队';
         team = other;
+      } else if (lot.startedAt && inbound.wechatSentAt.getTime() < lot.startedAt.getTime()) {
+        result = 'INACTIVE'; rejectionReason = '出价消息早于当前拍卖时段';
       } else if (batch.status === 'RECOVERY_REQUIRED') {
-        result = 'RECOVERY_REQUIRED'; rejectionReason = '拍卖正在等待恢复';
+        const detectedAt = batch.recoveryDetectedAt?.getTime();
+        const originalDeadline = detectedAt === undefined ? undefined : detectedAt + (lot.pausedRemainingMs ?? 0);
+        if (detectedAt === undefined || inbound.wechatSentAt.getTime() > detectedAt || inbound.wechatSentAt.getTime() >= (originalDeadline ?? 0)) {
+          result = 'RECOVERY_REQUIRED'; rejectionReason = '拍卖正在等待恢复';
+        }
       } else if (batch.status === 'PAUSED' || lot.status === 'PAUSED') {
         result = 'PAUSED'; rejectionReason = '拍卖已暂停';
       } else if (batch.status !== 'ACTIVE' || lot.status !== 'ACTIVE') {
         result = 'INACTIVE'; rejectionReason = '拍卖未进行';
       } else if (!lot.deadlineAt || inbound.wechatSentAt.getTime() >= lot.deadlineAt.getTime()) {
         result = 'DEADLINE_PASSED'; rejectionReason = '出价已超过截止时间';
-      } else if (lot.currentPrice === null && amount < lot.startingPrice) {
-        result = 'BELOW_STARTING_PRICE'; rejectionReason = '出价低于起拍价';
-      } else if (lot.currentPrice !== null && amount < lot.currentPrice + lot.minimumIncrement) {
-        result = 'BELOW_MINIMUM_INCREMENT'; rejectionReason = '出价未达到最低加价幅度';
       }
       const bid = await tx.playerAuctionBid.create({
         data: {
@@ -70,15 +73,51 @@ export class PlayerAuctionBidService {
           receivedAt: inbound.receivedAt, becameHighestAt: result === 'VALID' ? now : null
         }
       });
-      if (result === 'VALID') {
-        const deadlineAt = new Date(now.getTime() + 30_000);
+      const monetaryResults: PlayerAuctionBidResult[] = ['VALID', 'BELOW_STARTING_PRICE', 'BELOW_MINIMUM_INCREMENT'];
+      let requiredMinimum: number | undefined;
+      if (monetaryResults.includes(result)) {
+        const ordered = await tx.playerAuctionBid.findMany({
+          where: { lotId: lot.id, result: { in: monetaryResults } },
+          orderBy: [{ wechatSentAt: 'asc' }, { wechatSortKey: 'asc' }, { wechatMessageId: 'asc' }, { id: 'asc' }]
+        });
+        let currentPrice: number | null = null;
+        let highestBidId: string | null = null;
+        for (const candidate of ordered) {
+          const minimum = currentPrice === null ? lot.startingPrice : currentPrice + lot.minimumIncrement;
+          const nextResult: PlayerAuctionBidResult = candidate.amount < minimum
+            ? currentPrice === null ? 'BELOW_STARTING_PRICE' : 'BELOW_MINIMUM_INCREMENT'
+            : 'VALID';
+          await tx.playerAuctionBid.update({
+            where: { id: candidate.id },
+            data: {
+              result: nextResult,
+              rejectionReason: nextResult === 'VALID' ? null : nextResult === 'BELOW_STARTING_PRICE' ? '出价低于起拍价' : '出价未达到最低加价幅度',
+              becameHighestAt: nextResult === 'VALID' ? candidate.wechatSentAt : null
+            }
+          });
+          if (candidate.id === bid.id) {
+            result = nextResult;
+            rejectionReason = nextResult === 'VALID' ? null : nextResult === 'BELOW_STARTING_PRICE' ? '出价低于起拍价' : '出价未达到最低加价幅度';
+            if (nextResult !== 'VALID') requiredMinimum = minimum;
+          }
+          if (nextResult === 'VALID') {
+            currentPrice = candidate.amount;
+            highestBidId = candidate.id;
+          }
+        }
+        const replayingRecovery = batch.status === 'RECOVERY_REQUIRED';
+        const deadlineAt = result === 'VALID' && !replayingRecovery ? new Date(now.getTime() + 30_000) : null;
         await tx.playerAuctionLot.update({
           where: { id: lot.id },
-          data: { currentPrice: amount, currentHighestBidId: bid.id, deadlineAt, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } }
+          data: {
+            currentPrice, currentHighestBidId: highestBidId,
+            ...(deadlineAt ? { deadlineAt, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30 } : {}),
+            version: { increment: 1 }
+          }
         });
-        return { ...bid, teamName: team!.name, deadlineAt };
+        return { ...bid, result, rejectionReason, teamName: team!.name, deadlineAt, requiredMinimum };
       }
-      return { ...bid, teamName: team?.leagueId === batch.leagueId ? team.name : null };
+      return { ...bid, result, rejectionReason, teamName: team?.leagueId === batch.leagueId ? team.name : null, requiredMinimum };
     }, { isolationLevel: 'ReadCommitted' });
   }
 }

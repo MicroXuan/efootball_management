@@ -29,9 +29,10 @@ export class PlayerAuctionCommandHandler {
     try {
       if (PURE_INTEGER.test(command)) {
         const result = await this.bids.placeBid(inbound.id, Number(command));
+        const requiredMinimum = 'requiredMinimum' in result ? result.requiredMinimum : undefined;
         text = result.result === 'VALID'
           ? this.formatter.validBid(result.teamName ?? '未知球队', result.amount)
-          : this.formatter.invalidBid(result.result, result.result === 'BELOW_MINIMUM_INCREMENT' ? result.amount : undefined);
+          : this.formatter.invalidBid(result.result, requiredMinimum);
       } else {
         const identity = await this.prisma.wechatIdentityBinding.findUnique({
           where: { deviceId_wechatContactId: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId } }
@@ -39,12 +40,20 @@ export class PlayerAuctionCommandHandler {
         if (!identity || identity.status !== 'ACTIVE') {
           text = '请先在小程序获取验证码并完成微信身份绑定。';
         } else {
+          const activeBatch = command === '继续拍卖'
+            ? await this.prisma.playerAuctionBatch.findFirst({
+                where: { groupBindingId: inbound.groupBindingId, status: { in: ['PAUSED', 'RECOVERY_REQUIRED'] } },
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
+              })
+            : null;
           const transition = command === '开始拍卖'
             ? await this.state.start(inbound.groupBindingId, identity.userId)
             : command === '暂停拍卖'
               ? await this.state.pause(inbound.groupBindingId, identity.userId)
               : command === '继续拍卖'
-                ? await this.state.resume(inbound.groupBindingId, identity.userId)
+                ? activeBatch?.status === 'RECOVERY_REQUIRED'
+                  ? await this.recovery.recover(activeBatch.id, identity.userId, false)
+                  : await this.state.resume(inbound.groupBindingId, identity.userId)
                 : command === '下一位'
                   ? await this.state.next(inbound.groupBindingId, identity.userId)
                   : await this.state.cancel(inbound.groupBindingId, identity.userId);
@@ -54,9 +63,13 @@ export class PlayerAuctionCommandHandler {
               ? '拍卖已由管理员暂停。'
               : transition.transition === 'CANCELLED'
                 ? '本批次拍卖已由管理员取消。'
+                : transition.transition === 'RECOVERED'
+                  ? '拍卖已由管理员恢复，当前球员重新开始 30 秒倒计时。'
                 : transition.transition === 'RESUMED'
                   ? '拍卖已继续，保留暂停时的剩余倒计时。'
-                  : '拍卖已开始，倒计时 30 秒。';
+                  : transition.lotId
+                    ? await this.openingText(transition.batchId, transition.lotId, transition.transition === 'STARTED')
+                    : '拍卖已开始，倒计时 30 秒。';
         }
       }
     } catch (error) {
@@ -74,5 +87,25 @@ export class PlayerAuctionCommandHandler {
       priority: 500
     });
     return true;
+  }
+
+  private async openingText(batchId: string, lotId: string, includeQueue: boolean) {
+    const [lot, lots] = await Promise.all([
+      this.prisma.playerAuctionLot.findUnique({ where: { id: lotId } }),
+      includeQueue
+        ? this.prisma.playerAuctionLot.findMany({ where: { batchId }, orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] })
+        : Promise.resolve([])
+    ]);
+    if (!lot) return '拍卖已开始，倒计时 30 秒。';
+    const opening = this.formatter.opening({
+      displayOrder: lot.displayOrder,
+      playerName: lot.playerNameSnapshot,
+      playerSnapshot: lot.playerSnapshot as Record<string, unknown>,
+      startingPrice: lot.startingPrice,
+      minimumIncrement: lot.minimumIncrement
+    });
+    return includeQueue
+      ? `${this.formatter.queue(lots.map((item) => ({ displayOrder: item.displayOrder, playerName: item.playerNameSnapshot, startingPrice: item.startingPrice })))}\n\n${opening}`
+      : opening;
   }
 }

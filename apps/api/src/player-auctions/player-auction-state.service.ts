@@ -47,7 +47,7 @@ export class PlayerAuctionStateService {
       const now = await this.locks.now(tx);
       const remaining = lot.pausedRemainingMs ?? FULL_DURATION_MS;
       const deadlineAt = new Date(now.getTime() + remaining);
-      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
+      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
       await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', version: { increment: 1 } } });
       return { transition: 'RESUMED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
     });
@@ -82,7 +82,11 @@ export class PlayerAuctionStateService {
       const batch = await this.batchForGroup(tx, group.id, ['READY', 'ACTIVE', 'PAUSED', 'RECOVERY_REQUIRED']);
       await this.locks.lockBatch(tx, batch.id);
       const now = await this.locks.now(tx);
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'CANCELLED', cancelledAt: now, version: { increment: 1 } } });
+      await tx.playerAuctionLot.updateMany({
+        where: { batchId: batch.id, status: { in: ['QUEUED', 'ACTIVE', 'PAUSED'] } },
+        data: { status: 'VOID', deadlineAt: null, pausedRemainingMs: null, closedAt: now, deadlineEpoch: { increment: 1 }, version: { increment: 1 } }
+      });
+      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'CANCELLED', currentLotId: null, cancelledAt: now, version: { increment: 1 } } });
       return { transition: 'CANCELLED' as const, batchId: batch.id };
     });
   }

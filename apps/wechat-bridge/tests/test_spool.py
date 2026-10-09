@@ -119,6 +119,25 @@ def test_purges_only_completed_outbox_older_than_retention(tmp_path: Path) -> No
     assert spool.outbox_record(ambiguous.id) is not None
 
 
+def test_retries_failed_outbox_and_purges_acknowledged_inbound_bodies(tmp_path: Path) -> None:
+    path = tmp_path / "bridge.sqlite3"
+    spool = BridgeSpool(path)
+    outgoing = task()
+    spool.remember_outbox(outgoing)
+    spool.mark_outbox_in_flight(outgoing.id)
+    spool.retry_outbox(outgoing.id, "WINDOW_NOT_READY")
+    assert spool.outbox_record(outgoing.id).status == "PENDING"  # type: ignore[union-attr]
+
+    spool.append_inbound(event("old-acked"), sort_key="0001")
+    spool.ack_inbound(["old-acked"], watermark="0001")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE inbound_spool SET acked_at = ? WHERE message_id = ?",
+            ((datetime.now(UTC) - timedelta(days=8)).isoformat(), "old-acked"),
+        )
+    assert spool.purge_acknowledged(before=datetime.now(UTC) - timedelta(days=7)) == 1
+
+
 def test_supports_concurrent_readers_and_writers(tmp_path: Path) -> None:
     spool = BridgeSpool(tmp_path / "bridge.sqlite3")
 

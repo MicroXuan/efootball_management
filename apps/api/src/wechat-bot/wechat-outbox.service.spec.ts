@@ -156,6 +156,16 @@ describe('WechatOutboxService', () => {
     expect(await service.claim('device-1', 20)).toEqual({ messages: [] });
   });
 
+  it('fails a stale auction countdown instead of leasing it to the Windows bridge', async () => {
+    const { service, messages } = createHarness({
+      playerAuctionLot: { findUnique: jest.fn(async () => ({ status: 'ACTIVE', deadlineEpoch: 3, lastCountdownMark: 10, deadlineAt: new Date(Date.now() + 10_000) })) }
+    });
+    const row = await service.enqueue({ ...input, businessKey: 'auction:lot-1:epoch:2:countdown:20', text: '20' });
+
+    await expect(service.claim('device-1', 20)).resolves.toEqual({ messages: [] });
+    expect(messages.get(row.id)).toMatchObject({ status: 'FAILED', failureCode: 'STALE_AUCTION_COUNTDOWN' });
+  });
+
   it('requires a read-back id for SENT and opens the circuit at the maximum failed attempt', async () => {
     const { service, messages, device } = createHarness();
     const row = await service.enqueue(input);

@@ -191,11 +191,16 @@ export class AdminPlayerAuctionsService {
       if (['COMPLETED', 'CANCELLED'].includes(batch.status)) {
         throw new PlayerAuctionError('AUCTION_CANNOT_CANCEL', '已结束的拍卖不能取消', 409);
       }
+      const now = new Date();
       const updated = await tx.playerAuctionBatch.updateMany({
         where: { id: batchId, leagueId, version: input.expectedVersion, status: batch.status },
-        data: { status: 'CANCELLED', cancelledAt: new Date(), version: { increment: 1 } }
+        data: { status: 'CANCELLED', currentLotId: null, cancelledAt: now, version: { increment: 1 } }
       });
       if (updated.count !== 1) throw auctionVersionConflict();
+      await tx.playerAuctionLot.updateMany({
+        where: { batchId, status: { in: ['QUEUED', 'ACTIVE', 'PAUSED'] } },
+        data: { status: 'VOID', deadlineAt: null, pausedRemainingMs: null, closedAt: now, deadlineEpoch: { increment: 1 }, version: { increment: 1 } }
+      });
       await this.audit.record(tx, {
         actorAdminId, leagueId, action: 'admin.player-auction.cancel', resourceType: 'PlayerAuctionBatch',
         resourceId: batchId, reason: input.reason, metadata: { previousStatus: batch.status }

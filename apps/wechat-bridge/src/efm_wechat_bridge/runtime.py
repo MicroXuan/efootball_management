@@ -119,6 +119,9 @@ class BridgeRuntime:
         try:
             response = self.api.heartbeat(self._heartbeat_payload(health, groups))
             self._apply_authorized_groups(response)
+            retention_cutoff = datetime.now(UTC) - timedelta(days=7)
+            self.spool.purge_acknowledged(before=retention_cutoff)
+            self.spool.purge_completed(before=retention_cutoff)
             if health.ready:
                 self._doctor_passed_at = datetime.now(UTC)
             return True
@@ -206,7 +209,7 @@ class BridgeRuntime:
             else:
                 code = result.error_code or "WECHAT_SEND_FAILED"
                 ack = SendAck(status="FAILED", error_code=code, error_message="send failed before confirmation")
-                self.spool.complete_outbox(task.id, ack)
+                self.spool.retry_outbox(task.id, code)
                 self.api.ack_outbox(task.id, ack)
             processed += 1
             if result.status is SendStatus.AMBIGUOUS:

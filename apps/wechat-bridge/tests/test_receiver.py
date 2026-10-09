@@ -69,6 +69,7 @@ def test_rejects_disabled_self_non_text_oversized_and_malformed_rows() -> None:
 
     rejected = [
         raw_message(conversation_id="disabled@chatroom"),
+        raw_message(content="大家晚上好，这是普通群聊"),
         raw_message(sender_username="robot-wxid"),
         raw_message(sender_id=2, sender_username=""),
         raw_message(type="图片"),

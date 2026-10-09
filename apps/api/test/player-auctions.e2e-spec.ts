@@ -193,7 +193,9 @@ describe('Player auction group acceptance', () => {
     await groupMessage(contacts[0]!, '开始拍卖');
     const first = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
     const startReply = await prisma.wechatOutboxMessage.findFirst({ where: { deviceId }, orderBy: { createdAt: 'desc' } });
-    expect({ status: first.status, reply: startReply?.text }).toEqual({ status: 'ACTIVE', reply: '拍卖已开始，倒计时 30 秒。' });
+    expect(first.status).toBe('ACTIVE');
+    expect(startReply?.text).toContain('接下来即将拍卖的球员：');
+    expect(startReply?.text).toContain('提名拍卖：第1名球员拍卖开始！');
 
     await groupMessage(contacts[0]!, '40');
     expect((await prisma.playerAuctionBid.findFirstOrThrow({ where: { lotId: first.id, amount: 40 } })).result).toBe('BELOW_STARTING_PRICE');
@@ -217,7 +219,6 @@ describe('Player auction group acceptance', () => {
     await groupMessage(contacts[0]!, '下一位');
     await groupMessage(contacts[0]!, '90');
     await closeLot(batch.lots[2]!.id);
-    await groupMessage(contacts[0]!, '下一位');
     expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } })).status).toBe('COMPLETED');
 
     for (const lotId of [batch.lots[0]!.id, batch.lots[2]!.id]) {
@@ -228,7 +229,7 @@ describe('Player auction group acceptance', () => {
     const messages = await prisma.wechatOutboxMessage.findMany({ where: { deviceId }, select: { text: true } });
     expect(messages.some((message) => message.text === '【上海申花】出价有效：⭐50⭐，倒计时重置为 30 秒。')).toBe(true);
     expect(messages.some((message) => message.text === '【成都蓉城】出价有效：⭐70⭐，倒计时重置为 30 秒。')).toBe(true);
-    for (const message of messages.filter((item) => item.text.includes('⭐'))) {
+    for (const message of messages.filter((item) => item.text.includes('出价有效'))) {
       expect(message.text.match(/⭐/g)).toHaveLength(2);
       expect(message.text).toMatch(/⭐\d+⭐/);
     }
@@ -253,8 +254,9 @@ describe('Player auction group acceptance', () => {
     expect(duplicateUpload.result.status).toBe('DUPLICATE');
     expect((await prisma.playerAuctionBid.findUniqueOrThrow({ where: { inboundMessageId: firstUpload.result.inboundId! } })).result).toBe('RECOVERY_REQUIRED');
 
-    const recovered = await recovery.recover(batch.id, userIds[0]!);
-    expect(recovered.deadlineAt.getTime()).toBeGreaterThan(Date.now() + 29_000);
+    await groupMessage(contacts[0]!, '继续拍卖');
+    const recoveredLot = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
+    expect(recoveredLot.deadlineAt!.getTime()).toBeGreaterThan(Date.now() + 29_000);
     await closeLot(batch.lots[0]!.id);
     const lot = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
     await request(app.getHttpServer()).post(`/v1/admin/leagues/${leagueId}/player-auctions/${batch.id}/lots/${lot.id}/review`)

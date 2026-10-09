@@ -58,13 +58,14 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
   const submitReview = async (lot: PlayerAuctionBatchDetail['lots'][number]) => {
     const decision = decisionByLot[lot.id] ?? 'CONFIRM';
     const reason = reasonByLot[lot.id]?.trim();
-    if (decision === 'ADJUST' && (!teamByLot[lot.id] || !priceByLot[lot.id] || !reason)) {
+    const reviewedPrice = priceByLot[lot.id] ?? lot.currentPrice ?? lot.startingPrice;
+    if (decision === 'ADJUST' && (!teamByLot[lot.id] || !reviewedPrice || !reason)) {
       setError('调整结果时必须选择球队、填写价格和原因'); return;
     }
     if (decision === 'VOID' && !reason) { setError('作废结果必须填写原因'); return; }
     setBusyLotId(lot.id); setError(undefined); setNotice(undefined);
     const body = decision === 'ADJUST'
-      ? { decision, expectedVersion: lot.version, reviewedTeamId: teamByLot[lot.id], reviewedPrice: priceByLot[lot.id], reason }
+      ? { decision, expectedVersion: lot.version, reviewedTeamId: teamByLot[lot.id], reviewedPrice, reason }
       : { decision, expectedVersion: lot.version, ...(reason ? { reason } : {}) };
     try {
       await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}/lots/${lot.id}/review`, {
