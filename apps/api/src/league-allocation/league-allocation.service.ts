@@ -174,7 +174,7 @@ export class LeagueAllocationService {
       throw new LeagueAllocationError('SEASON_NOT_IN_LEAGUE', '赛季不属于当前联赛', 404);
     }
     const proposal = await this.prisma.seasonAllocationProposal.findFirst({
-      where: { seasonId },
+      where: { seasonId, status: { in: ['DRAFT', 'CONFIRMED'] } },
       include: PROPOSAL_INCLUDE,
       orderBy: { version: 'desc' }
     });

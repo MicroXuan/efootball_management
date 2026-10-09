@@ -443,6 +443,18 @@ export class LeagueTeamsService {
           throw new LeagueError('VERSION_CONFLICT', 'League team has changed', 409);
         }
         if (toStatus === 'ARCHIVED') {
+          await transaction.seasonAllocationProposal.updateMany({
+            where: {
+              status: 'DRAFT',
+              season: { status: { in: ['DRAFT', 'REGISTRATION_OPEN', 'ALLOCATION_REVIEW'] } },
+              rows: {
+                some: {
+                  seasonEntry: { leagueTeamId: teamId, status: 'APPROVED' }
+                }
+              }
+            },
+            data: { status: 'SUPERSEDED' }
+          });
           await transaction.seasonEntry.updateMany({
             where: {
               leagueTeamId: teamId,

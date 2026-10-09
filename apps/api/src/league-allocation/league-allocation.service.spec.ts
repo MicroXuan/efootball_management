@@ -92,7 +92,7 @@ function harness(seasonOverrides: Record<string, unknown> = {}) {
     audit as never,
     { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
-  return { service, transaction, receipts, audit, season };
+  return { service, transaction, receipts, audit, prisma, season };
 }
 
 function confirmationHarness(options: { published?: boolean; seasonVersion?: number } = {}) {
@@ -221,6 +221,17 @@ describe('LeagueAllocationService', () => {
       code: 'SEASON_NOT_IN_ALLOCATION_REVIEW',
       message: expect.stringContaining('分组确认')
     });
+  });
+
+  it('does not restore superseded allocation drafts after a refresh', async () => {
+    const { service, prisma } = harness();
+
+    await expect(service.latest('admin-1', 'league-1', 'season-1')).rejects.toMatchObject({
+      code: 'ALLOCATION_PROPOSAL_NOT_FOUND'
+    });
+    expect(prisma.seasonAllocationProposal.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { seasonId: 'season-1', status: { in: ['DRAFT', 'CONFIRMED'] } }
+    }));
   });
 
   it('replays the same idempotency key and creates a new version for a new key', async () => {

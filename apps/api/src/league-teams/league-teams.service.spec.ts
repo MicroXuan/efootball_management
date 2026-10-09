@@ -47,6 +47,12 @@ describe('LeagueTeamsService', () => {
     await prisma.auditLog.deleteMany({ where: { actorAdminId: { in: adminIds } } });
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId: { in: adminIds } } });
     await prisma.financeLedgerEntry.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.seasonAllocationProposalRow.deleteMany({
+      where: { proposal: { season: { leagueId: { in: leagueIds } } } }
+    });
+    await prisma.seasonAllocationProposal.deleteMany({
+      where: { season: { leagueId: { in: leagueIds } } }
+    });
     await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
     await prisma.league.updateMany({
       where: { id: { in: leagueIds } },
@@ -393,6 +399,27 @@ describe('LeagueTeamsService', () => {
       catalogTeamId: shell.id
     }, randomUUID());
     const seasonId = league.currentSeasonId!;
+    const seasonEntry = await prisma.seasonEntry.findUniqueOrThrow({
+      where: { seasonId_leagueTeamId: { seasonId, leagueTeamId: team.id } }
+    });
+    const allocationProposal = await prisma.seasonAllocationProposal.create({
+      data: {
+        seasonId,
+        version: 1,
+        algorithmVersion: 'tiered-v1',
+        randomSeed: 1,
+        createdByAdminId: actorId,
+        rows: {
+          create: {
+            seasonEntryId: seasonEntry.id,
+            teamName: seasonEntry.teamNameSnapshot,
+            suggestedStageCode: 'CHAMPION_A',
+            source: 'FIRST_SEASON',
+            reason: '测试分组草案'
+          }
+        }
+      }
+    });
     const ledger = await prisma.financeLedgerEntry.create({
       data: {
         leagueId: league.id,
@@ -431,6 +458,9 @@ describe('LeagueTeamsService', () => {
     await expect(prisma.seasonEntry.findUnique({
       where: { seasonId_leagueTeamId: { seasonId, leagueTeamId: team.id } }
     })).resolves.toMatchObject({ status: 'WITHDRAWN' });
+    await expect(prisma.seasonAllocationProposal.findUnique({
+      where: { id: allocationProposal.id }
+    })).resolves.toMatchObject({ status: 'SUPERSEDED' });
     await expect(prisma.financeLedgerEntry.findUnique({ where: { id: ledger.id } })).resolves.toMatchObject({
       amountMinor: 300,
       note: '退出前历史账本'
