@@ -5,4 +5,5 @@ export type WechatBotRuntimeConfig = {
   outboxMaxAttempts: number;
   heartbeatTimeoutMs: number;
   commandRetentionHours: number;
+  bindingCodePepper: string;
 };

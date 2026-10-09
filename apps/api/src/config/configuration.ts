@@ -17,7 +17,8 @@ export function configuration() {
       outboxLeaseMs: environment.WECHAT_BOT_OUTBOX_LEASE_MS,
       outboxMaxAttempts: environment.WECHAT_BOT_OUTBOX_MAX_ATTEMPTS,
       heartbeatTimeoutMs: environment.WECHAT_BOT_HEARTBEAT_TIMEOUT_MS,
-      commandRetentionHours: environment.WECHAT_BOT_COMMAND_RETENTION_HOURS
+      commandRetentionHours: environment.WECHAT_BOT_COMMAND_RETENTION_HOURS,
+      bindingCodePepper: environment.REFRESH_TOKEN_PEPPER
     },
     pesdata: {
       baseUrl: environment.PESDATA_BASE_URL,

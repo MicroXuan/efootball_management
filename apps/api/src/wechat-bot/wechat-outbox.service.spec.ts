@@ -9,7 +9,8 @@ const config = {
   outboxLeaseMs: 30_000,
   outboxMaxAttempts: 3,
   heartbeatTimeoutMs: 60_000,
-  commandRetentionHours: 24
+  commandRetentionHours: 24,
+  bindingCodePepper: 'test-binding-code-pepper-with-32-characters'
 };
 
 describe('WechatBridgeService', () => {

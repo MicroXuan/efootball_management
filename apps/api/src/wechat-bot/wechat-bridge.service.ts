@@ -1,13 +1,17 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
+import { WechatCommandRouterService } from './wechat-command-router.service.js';
 
 const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$/;
 const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
 
 @Injectable()
 export class WechatBridgeService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional() @Inject(WechatCommandRouterService) private readonly router?: WechatCommandRouterService
+  ) {}
 
   async heartbeat(deviceId: string, input: WechatBridgeHeartbeat) {
     const now = new Date();
@@ -85,6 +89,7 @@ export class WechatBridgeService {
             commandText
           }
         });
+        await this.router?.route(row.id);
         results.push({ messageId: message.messageId, status: 'ACCEPTED', inboundId: row.id, resultCode: null });
       } catch (error) {
         if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002')) throw error;
