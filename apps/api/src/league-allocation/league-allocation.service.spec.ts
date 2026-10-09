@@ -192,7 +192,7 @@ function confirmationHarness(options: { published?: boolean; seasonVersion?: num
 }
 
 describe('LeagueAllocationService', () => {
-  it('uses only approved entries and never creates a super group for the first season', async () => {
+  it('uses only approved entries from active teams and never creates a super group for the first season', async () => {
     const { service, transaction } = harness();
 
     const result = await service.generate('admin-1', 'league-1', 'season-1', {
@@ -202,7 +202,9 @@ describe('LeagueAllocationService', () => {
 
     expect(transaction.leagueSeason.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       include: expect.objectContaining({
-        entries: expect.objectContaining({ where: { status: 'APPROVED' } })
+        entries: expect.objectContaining({
+          where: { status: 'APPROVED', leagueTeam: { status: 'ACTIVE' } }
+        })
       })
     }));
     expect(result.rows).toHaveLength(19);

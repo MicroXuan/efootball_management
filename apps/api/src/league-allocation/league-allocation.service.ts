@@ -20,7 +20,10 @@ import { LeagueVisibilityService } from '../league-visibility/league-visibility.
 const ALGORITHM_VERSION = 'tiered-v1';
 const SEASON_INCLUDE = {
   entries: {
-    where: { status: 'APPROVED' as const },
+    where: {
+      status: 'APPROVED' as const,
+      leagueTeam: { status: 'ACTIVE' as const }
+    },
     select: {
       id: true,
       teamNameSnapshot: true,

@@ -442,6 +442,20 @@ export class LeagueTeamsService {
         if (changed.count !== 1) {
           throw new LeagueError('VERSION_CONFLICT', 'League team has changed', 409);
         }
+        if (toStatus === 'ARCHIVED') {
+          await transaction.seasonEntry.updateMany({
+            where: {
+              leagueTeamId: teamId,
+              status: 'APPROVED',
+              season: { status: { in: ['DRAFT', 'REGISTRATION_OPEN', 'ALLOCATION_REVIEW'] } }
+            },
+            data: {
+              status: 'WITHDRAWN',
+              withdrawnAt: new Date(),
+              version: { increment: 1 }
+            }
+          });
+        }
         const updated = await this.record(transaction, teamId);
         await this.audit.record(transaction, {
           actorAdminId,
