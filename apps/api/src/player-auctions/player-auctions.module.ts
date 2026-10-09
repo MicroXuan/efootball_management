@@ -12,6 +12,9 @@ import { PlayerAuctionClock } from './player-auction-clock.js';
 import { PlayerAuctionWorker } from './player-auction-worker.js';
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK } from './player-auction-recovery.hook.js';
+import { PlayerAuctionCommandHandler } from './player-auction-command.handler.js';
+import { PLAYER_AUCTION_COMMAND_HANDLER } from './player-auction-command.hook.js';
+import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
 
 @Global()
 @Module({
@@ -20,16 +23,20 @@ import { PLAYER_AUCTION_RECOVERY_HOOK } from './player-auction-recovery.hook.js'
   providers: [
     AdminPlayerAuctionsService,
     PlayerAuctionBidService,
+    PlayerAuctionCommandHandler,
     PlayerAuctionClock,
     PlayerAuctionLockRepository,
     PlayerAuctionRecoveryService,
+    PlayerAuctionMessageFormatter,
     PlayerAuctionStateService,
     PlayerAuctionWorker,
-    { provide: PLAYER_AUCTION_RECOVERY_HOOK, useExisting: PlayerAuctionRecoveryService }
+    { provide: PLAYER_AUCTION_RECOVERY_HOOK, useExisting: PlayerAuctionRecoveryService },
+    { provide: PLAYER_AUCTION_COMMAND_HANDLER, useExisting: PlayerAuctionCommandHandler }
   ],
   exports: [
     AdminPlayerAuctionsService,
     PlayerAuctionBidService,
+    PLAYER_AUCTION_COMMAND_HANDLER,
     PlayerAuctionRecoveryService,
     PlayerAuctionStateService,
     PLAYER_AUCTION_RECOVERY_HOOK

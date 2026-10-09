@@ -1,9 +1,11 @@
-import { HttpException, Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatBindingService } from './wechat-binding.service.js';
 import { WECHAT_HELP_TEXT } from './wechat-message-formatter.js';
 import { WechatOutboxService } from './wechat-outbox.service.js';
 import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
+import { PLAYER_AUCTION_COMMAND_HANDLER, type PlayerAuctionCommandHook } from '../player-auctions/player-auction-command.hook.js';
 
 const PRIVATE_BINDING_COMMAND = /^绑定\s+(\d{6})$/;
 
@@ -13,7 +15,8 @@ export class WechatCommandRouterService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(WechatBindingService) private readonly bindings: WechatBindingService,
     @Inject(WechatScheduleQueryService) private readonly schedules: WechatScheduleQueryService,
-    @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService
+    @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService,
+    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef
   ) {}
 
   async route(inboundId: string): Promise<void> {
@@ -27,6 +30,12 @@ export class WechatCommandRouterService {
 
     if (!inbound.groupBindingId) {
       await this.finish(inbound.id, 'IGNORED', 'GROUP_NOT_BOUND');
+      return;
+    }
+
+    const auction = this.moduleRef?.get<PlayerAuctionCommandHook>(PLAYER_AUCTION_COMMAND_HANDLER, { strict: false });
+    if (auction && await auction.handle(inbound.id)) {
+      await this.finish(inbound.id, 'PROCESSED', 'AUCTION_HANDLED');
       return;
     }
 
