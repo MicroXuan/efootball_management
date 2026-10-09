@@ -1157,14 +1157,16 @@ describe('league team administration contracts', () => {
       displayName: '上海海港',
       participantType: 'TEAM',
       teamLifecycleStatus: 'ARCHIVED',
-      teamLogoUrl: 'https://static.example.com/shanghai-port.png'
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png',
+      ownerDisplayName: '海港玩家'
     });
     assert.deepEqual(participant, {
       id: ids.user,
       displayName: '上海海港',
       participantType: 'TEAM',
       teamLifecycleStatus: 'ARCHIVED',
-      teamLogoUrl: 'https://static.example.com/shanghai-port.png'
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png',
+      ownerDisplayName: '海港玩家'
     });
     assert.deepEqual(CompetitionParticipantSummarySchema.parse({
       id: ids.user,
@@ -1176,7 +1178,8 @@ describe('league team administration contracts', () => {
       displayName: '个人选手',
       participantType: 'INDIVIDUAL',
       teamLifecycleStatus: null,
-      teamLogoUrl: null
+      teamLogoUrl: null,
+      ownerDisplayName: null
     });
     assert.throws(() => CompetitionParticipantSummarySchema.parse({
       id: ids.user,
@@ -1580,6 +1583,7 @@ describe('tiered league contracts', () => {
       proposalId: ids.proposal,
       seasonEntryId: ids.entry,
       teamName: '上海海港',
+      ownerDisplayName: '海港玩家',
       suggestedStageCode: stage.stageCode,
       source: 'FIRST_SEASON',
       previousRank: null,
@@ -1589,7 +1593,7 @@ describe('tiered league contracts', () => {
       tiePending: false,
       reason: '首赛季均分'
     });
-    assert.equal(SeasonAllocationProposalSchema.parse({
+    const proposal = SeasonAllocationProposalSchema.parse({
       id: ids.proposal,
       seasonId: ids.season,
       version: 1,
@@ -1598,7 +1602,9 @@ describe('tiered league contracts', () => {
       randomSeed: 20261003,
       rows: [row],
       createdAt
-    }).rows[0]?.suggestedStageCode, 'CHAMPION_A');
+    });
+    assert.equal(proposal.rows[0]?.suggestedStageCode, 'CHAMPION_A');
+    assert.equal(proposal.rows[0]?.ownerDisplayName, '海港玩家');
     assert.equal(SeasonAllocationDecisionSchema.parse({
       id: ids.row,
       proposalId: ids.proposal,

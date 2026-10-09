@@ -197,6 +197,7 @@ describe('tiered stage schedules', () => {
       displayNameSnapshot: `球队 ${index + 1}`,
       seasonEntry: {
         teamLogoUrlSnapshot: index === 0 ? 'https://static.example.com/team-1.png' : null,
+        owner: { displayName: `玩家 ${index + 1}` },
         leagueTeam: { status: 'ACTIVE' }
       }
     }));
@@ -278,7 +279,8 @@ describe('tiered stage schedules', () => {
     expect(teamOne).toMatchObject({
       displayName: '球队 1',
       teamLifecycleStatus: 'ACTIVE',
-      teamLogoUrl: 'https://static.example.com/team-1.png'
+      teamLogoUrl: 'https://static.example.com/team-1.png',
+      ownerDisplayName: '玩家 1'
     });
   });
 

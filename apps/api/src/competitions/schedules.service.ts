@@ -24,8 +24,8 @@ export const SCHEDULE_GENERATOR = Symbol('SCHEDULE_GENERATOR');
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
-    homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
-    awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
+    homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true; owner: true } } } };
+    awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true; owner: true } } } };
     officialResultVersion: true;
   };
 }>;
@@ -335,8 +335,8 @@ export class SchedulesService {
     return client.competitionMatch.findMany({
       where: { stageId },
       include: {
-        homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
-        awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+        homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true, owner: true } } } },
+        awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true, owner: true } } } },
         officialResultVersion: true
       },
       orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }]
@@ -376,7 +376,8 @@ export class SchedulesService {
       displayName: participant.displayNameSnapshot,
       participantType: participant.participantType,
       teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null,
-      teamLogoUrl: participant.seasonEntry?.teamLogoUrlSnapshot ?? null
+      teamLogoUrl: participant.seasonEntry?.teamLogoUrlSnapshot ?? null,
+      ownerDisplayName: participant.seasonEntry?.owner.displayName ?? null
     };
   }
 

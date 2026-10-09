@@ -24,8 +24,8 @@ const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
   version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.object({
     id: z.string(), roundNumber: z.number(), matchNumber: z.number(),
-    homeParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null) }),
-    awayParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null) })
+    homeParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null), ownerDisplayName: z.string().nullable().default(null) }),
+    awayParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null), ownerDisplayName: z.string().nullable().default(null) })
   }))
 });
 type Confirmed = z.infer<typeof ConfirmedSchema>;
@@ -61,13 +61,19 @@ function ScheduleBoard({ preview }: { preview: SchedulePreview }) {
         <header><span>ROUND {String(roundNumber).padStart(2, '0')}</span><strong>第 {roundNumber} 轮</strong><small>{matches.length} 场</small></header>
         <div className="fixture-round__matches">{matches.map((match) => <div key={match.id} className="fixture-match">
           <div className="fixture-team fixture-team--home">
-            <span title={match.homeParticipant.displayName}>{match.homeParticipant.displayName}</span>
+            <span className="fixture-team__identity">
+              <strong title={match.homeParticipant.displayName}>{match.homeParticipant.displayName}</strong>
+              {match.homeParticipant.ownerDisplayName ? <small>玩家：{match.homeParticipant.ownerDisplayName}</small> : null}
+            </span>
             <TeamCrest name={match.homeParticipant.displayName} url={match.homeParticipant.teamLogoUrl} />
           </div>
           <div className="fixture-match__versus"><span>VS</span><small>#{match.matchNumber}</small></div>
           <div className="fixture-team fixture-team--away">
             <TeamCrest name={match.awayParticipant.displayName} url={match.awayParticipant.teamLogoUrl} />
-            <span title={match.awayParticipant.displayName}>{match.awayParticipant.displayName}</span>
+            <span className="fixture-team__identity">
+              <strong title={match.awayParticipant.displayName}>{match.awayParticipant.displayName}</strong>
+              {match.awayParticipant.ownerDisplayName ? <small>玩家：{match.awayParticipant.ownerDisplayName}</small> : null}
+            </span>
           </div>
         </div>)}</div>
       </section>;
@@ -239,7 +245,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
     {!proposal ? <Card><Empty description="当前赛季暂无分组建议" /></Card> : <Card title={`建议版本 ${proposal.version}`} className="data-card">
       {season?.isFirstSeason ? <Alert type="info" showIcon title="首赛季仅设置冠军组，不创建超级组" /> : null}
       <Table rowKey="seasonEntryId" pagination={false} dataSource={proposal.rows} columns={[
-        { title: '球队', dataIndex: 'teamName' },
+        { title: '球队', render: (_, row) => <span className="allocation-team-identity"><strong>{row.teamName}</strong><small>玩家：{row.ownerDisplayName}</small></span> },
         { title: '系统建议', render: (_, row) => <Tag>{stageLabel(row.suggestedStageCode)}</Tag> },
         { title: '最终组别', render: (_, row) => <Select aria-label={`${row.teamName}最终组别`} disabled={Boolean(confirmed)} value={targets[row.seasonEntryId]} options={stageOptions} onChange={(value) => setTargets((current) => ({ ...current, [row.seasonEntryId]: value }))} /> },
         { title: '调整说明', render: (_, row) => targets[row.seasonEntryId] !== row.suggestedStageCode ? <Input aria-label={`${row.teamName}调整原因`} disabled={Boolean(confirmed)} placeholder="必填调整原因" value={reasons[row.seasonEntryId] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [row.seasonEntryId]: event.target.value }))} /> : <span className="muted-copy">沿用建议</span> },

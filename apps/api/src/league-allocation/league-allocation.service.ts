@@ -33,7 +33,10 @@ const SEASON_INCLUDE = {
   }
 } satisfies Prisma.LeagueSeasonInclude;
 const PROPOSAL_INCLUDE = {
-  rows: { orderBy: [{ suggestedStageCode: 'asc' as const }, { id: 'asc' as const }] }
+  rows: {
+    orderBy: [{ suggestedStageCode: 'asc' as const }, { id: 'asc' as const }],
+    include: { seasonEntry: { select: { owner: { select: { displayName: true } } } } }
+  }
 } satisfies Prisma.SeasonAllocationProposalInclude;
 
 type ProposalRecord = Prisma.SeasonAllocationProposalGetPayload<{ include: typeof PROPOSAL_INCLUDE }>;
@@ -594,6 +597,7 @@ export class LeagueAllocationService {
         proposalId: row.proposalId,
         seasonEntryId: row.seasonEntryId,
         teamName: row.teamName,
+        ownerDisplayName: row.seasonEntry.owner.displayName,
         suggestedStageCode: row.suggestedStageCode,
         source: row.source,
         previousRank: row.previousRank,

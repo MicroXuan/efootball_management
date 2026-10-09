@@ -20,7 +20,7 @@ const season = {
 const proposal = {
   id: proposalId, seasonId, version: 1, status: 'DRAFT' as const, algorithmVersion: 'tiered-v1',
   randomSeed: 7, createdAt: timestamp, rows: [{
-    id: rowId, proposalId, seasonEntryId: entryId, teamName: '上海海港',
+    id: rowId, proposalId, seasonEntryId: entryId, teamName: '上海海港', ownerDisplayName: '海港玩家',
     suggestedStageCode: 'CHAMPION_A', source: 'FIRST_SEASON' as const,
     previousRank: null, pointsPerMatch: null, goalDifferencePerMatch: null, goalsForPerMatch: null,
     tiePending: false, reason: '首赛季均分'
@@ -42,6 +42,7 @@ it('shows the first-season champion-only hint and requires a reason for manual a
   renderPage(request);
 
   expect(await screen.findByText('首赛季仅设置冠军组，不创建超级组')).toBeInTheDocument();
+  expect(screen.getByText('玩家：海港玩家')).toBeInTheDocument();
   expect(screen.queryByText('超级组')).not.toBeInTheDocument();
   await userEvent.click(screen.getByLabelText('上海海港最终组别'));
   await userEvent.click(await screen.findByText('冠军 B 组'));
@@ -140,8 +141,8 @@ it('shows the generated match preview instead of only updating the match count',
       matches: [{
         id: '99999999-9999-4999-8999-999999999999', competitionId, stageId,
         roundNumber: 1, matchNumber: 1,
-        homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/brighton.png' },
-        awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/arsenal.png' },
+        homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/brighton.png', ownerDisplayName: '布莱顿玩家' },
+        awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/arsenal.png', ownerDisplayName: '阿森纳玩家' },
         plannedAt: null, status: 'SCHEDULED', version: 1, officialResult: null, resultVersions: [],
         createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
       }]
@@ -158,6 +159,8 @@ it('shows the generated match preview instead of only updating the match count',
   expect(screen.getByText('阿森纳')).toBeInTheDocument();
   expect(screen.getByRole('img', { name: '布莱顿 蓝白队徽' })).toHaveAttribute('src', 'https://static.example.com/brighton.png');
   expect(screen.getByRole('img', { name: '阿森纳队徽' })).toHaveAttribute('src', 'https://static.example.com/arsenal.png');
+  expect(screen.getByText('玩家：布莱顿玩家')).toBeInTheDocument();
+  expect(screen.getByText('玩家：阿森纳玩家')).toBeInTheDocument();
 });
 
 it('shows an actionable error when schedule preview generation fails', async () => {

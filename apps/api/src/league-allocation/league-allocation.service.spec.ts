@@ -7,6 +7,7 @@ function approvedEntries(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     id: `entry-${index + 1}`,
     teamNameSnapshot: `球队 ${index + 1}`,
+    owner: { displayName: `玩家 ${index + 1}` },
     previousSeasonEntryId: null,
     status: 'APPROVED'
   }));
@@ -55,6 +56,7 @@ function harness(seasonOverrides: Record<string, unknown> = {}) {
           rows: data.rows.create.map((row: Record<string, unknown>, index: number) => ({
             id: `row-${proposalVersion}-${index + 1}`,
             proposalId: `proposal-${proposalVersion}`,
+            seasonEntry: season.entries.find((entry) => entry.id === row.seasonEntryId),
             ...row
           }))
         };
@@ -209,6 +211,7 @@ describe('LeagueAllocationService', () => {
     }));
     expect(result.rows).toHaveLength(19);
     expect(result.rows.some((row) => row.suggestedStageCode === 'SUPER')).toBe(false);
+    expect(result.rows[0]).toMatchObject({ teamName: expect.any(String), ownerDisplayName: expect.stringMatching(/^玩家 /) });
   });
 
   it('rejects generation outside allocation review with a Chinese business message', async () => {

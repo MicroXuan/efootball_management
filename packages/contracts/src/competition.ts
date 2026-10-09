@@ -538,7 +538,8 @@ export const CompetitionParticipantSummarySchema = z.object({
   displayName: z.string(),
   participantType: CompetitionParticipantTypeSchema,
   teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable(),
-  teamLogoUrl: z.string().url().nullable().default(null)
+  teamLogoUrl: z.string().url().nullable().default(null),
+  ownerDisplayName: z.string().trim().min(1).max(32).nullable().default(null)
 });
 
 export const CompetitionStageSummarySchema = z.object({
