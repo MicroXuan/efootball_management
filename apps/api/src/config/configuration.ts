@@ -13,6 +13,12 @@ export function configuration() {
       gatewayMode: environment.WECHAT_GATEWAY_MODE,
       devOpenId: environment.DEV_WECHAT_OPEN_ID
     },
+    wechatBot: {
+      outboxLeaseMs: environment.WECHAT_BOT_OUTBOX_LEASE_MS,
+      outboxMaxAttempts: environment.WECHAT_BOT_OUTBOX_MAX_ATTEMPTS,
+      heartbeatTimeoutMs: environment.WECHAT_BOT_HEARTBEAT_TIMEOUT_MS,
+      commandRetentionHours: environment.WECHAT_BOT_COMMAND_RETENTION_HOURS
+    },
     pesdata: {
       baseUrl: environment.PESDATA_BASE_URL,
       siteVersion: environment.PESDATA_SITE_VERSION,

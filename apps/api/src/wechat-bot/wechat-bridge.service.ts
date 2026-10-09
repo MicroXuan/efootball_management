@@ -1,0 +1,99 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
+import { PrismaService } from '../database/prisma.service.js';
+
+const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$/;
+const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
+
+@Injectable()
+export class WechatBridgeService {
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async heartbeat(deviceId: string, input: WechatBridgeHeartbeat) {
+    const now = new Date();
+    await this.prisma.wechatBotDevice.update({
+      where: { id: deviceId },
+      data: {
+        ...(input.wechatAccountId !== undefined ? { wechatAccountId: input.wechatAccountId } : {}),
+        wechatVersion: input.wechatVersion,
+        loginStatus: input.loginStatus,
+        ...(input.listenerWatermark !== undefined ? { listenerWatermark: input.listenerWatermark } : {}),
+        screenLocked: input.screenLocked,
+        outboundQueueDepth: input.outboundQueueDepth,
+        lastHeartbeatAt: now
+      }
+    });
+    await Promise.all(input.observedGroups.map((group) => this.prisma.wechatObservedGroup.upsert({
+      where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: group.wechatGroupId } },
+      create: {
+        deviceId,
+        wechatGroupId: group.wechatGroupId,
+        displayName: group.displayName,
+        firstObservedAt: now,
+        lastObservedAt: now
+      },
+      update: { displayName: group.displayName, lastObservedAt: now }
+    })));
+    return { acceptedAt: now.toISOString() };
+  }
+
+  async acceptBatch(deviceId: string, input: WechatInboundBatch): Promise<WechatInboundBatchResult> {
+    const results: WechatInboundBatchResult['results'] = [];
+    for (const message of input.messages) {
+      const duplicate = await this.prisma.wechatInboundMessage.findUnique({
+        where: { deviceId_messageId: { deviceId, messageId: message.messageId } }
+      });
+      if (duplicate) {
+        results.push({
+          messageId: message.messageId,
+          status: 'DUPLICATE',
+          inboundId: duplicate.id,
+          resultCode: duplicate.resultCode
+        });
+        continue;
+      }
+
+      const commandText = message.text.trim();
+      let groupBindingId: string | null = null;
+      if (message.conversationType === 'GROUP') {
+        const binding = await this.prisma.wechatGroupBinding.findUnique({
+          where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: message.conversationId } },
+          select: { id: true, enabled: true }
+        });
+        if (!binding?.enabled || !GROUP_COMMAND.test(commandText)) {
+          results.push({ messageId: message.messageId, status: 'IGNORED', inboundId: null, resultCode: 'IGNORED' });
+          continue;
+        }
+        groupBindingId = binding.id;
+      } else if (!PRIVATE_BINDING_COMMAND.test(commandText)) {
+        results.push({ messageId: message.messageId, status: 'IGNORED', inboundId: null, resultCode: 'IGNORED' });
+        continue;
+      }
+
+      try {
+        const row = await this.prisma.wechatInboundMessage.create({
+          data: {
+            deviceId,
+            messageId: message.messageId,
+            conversationType: message.conversationType,
+            conversationId: message.conversationId,
+            senderId: message.senderId,
+            groupBindingId,
+            wechatSentAt: new Date(message.sentAt),
+            ...(message.sequence !== undefined ? { sequence: message.sequence } : {}),
+            messageType: message.messageType,
+            commandText
+          }
+        });
+        results.push({ messageId: message.messageId, status: 'ACCEPTED', inboundId: row.id, resultCode: null });
+      } catch (error) {
+        if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002')) throw error;
+        const row = await this.prisma.wechatInboundMessage.findUniqueOrThrow({
+          where: { deviceId_messageId: { deviceId, messageId: message.messageId } }
+        });
+        results.push({ messageId: message.messageId, status: 'DUPLICATE', inboundId: row.id, resultCode: row.resultCode });
+      }
+    }
+    return { results };
+  }
+}

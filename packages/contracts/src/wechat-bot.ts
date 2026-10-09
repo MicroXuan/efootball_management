@@ -158,6 +158,7 @@ export const SaveWechatGroupBindingRequestSchema = z.object({
 });
 
 export type WechatBridgeHeartbeat = z.infer<typeof WechatBridgeHeartbeatSchema>;
+export type WechatConversationType = z.infer<typeof WechatConversationTypeSchema>;
 export type WechatInboundBatch = z.infer<typeof WechatInboundBatchSchema>;
 export type WechatInboundBatchResult = z.infer<typeof WechatInboundBatchResultSchema>;
 export type WechatOutboxClaimRequest = z.infer<typeof WechatOutboxClaimRequestSchema>;

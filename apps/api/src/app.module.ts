@@ -27,6 +27,7 @@ import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
+import { WechatBotModule } from './wechat-bot/wechat-bot.module.js';
 
 @Module({
   imports: [
@@ -60,7 +61,8 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
     PesdataSyncModule,
     StorageModule,
     TeamCatalogModule,
-    UsersModule
+    UsersModule,
+    WechatBotModule
   ]
 })
 export class AppModule {}
