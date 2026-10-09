@@ -116,3 +116,71 @@ it('restores confirmed stages after reload and advances the season version only 
     expect.stringContaining(stageB), expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: 5 } })
   ));
 });
+
+it('shows the generated match preview instead of only updating the match count', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const competitionId = '66666666-6666-4666-8666-666666666666';
+  const confirmedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId, seasonVersion: 4, seasonStatus: 'READY' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A' as const, reason: null }],
+      stages: [{
+        id: stageId, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组',
+        participantCount: 4, matchCount: 0, status: 'DRAFT' as const, version: 1
+      }]
+    }
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return confirmedProposal;
+    if (path.endsWith('/schedule/generate') && options?.method === 'POST') return {
+      id: stageId, competitionId, status: 'DRAFT', version: 2, roundCount: 3, matchCount: 6,
+      matches: [{
+        id: '99999999-9999-4999-8999-999999999999', competitionId, stageId,
+        roundNumber: 1, matchNumber: 1,
+        homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE' },
+        awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE' },
+        plannedAt: null, status: 'SCHEDULED', version: 1, officialResult: null, resultVersions: [],
+        createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
+      }]
+    };
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '生成预览' }));
+
+  expect(await screen.findByText('赛程预览已生成，共 6 场')).toBeInTheDocument();
+  expect(screen.getByText('第 1 轮')).toBeInTheDocument();
+  expect(screen.getByText('布莱顿 蓝白')).toBeInTheDocument();
+  expect(screen.getByText('阿森纳')).toBeInTheDocument();
+});
+
+it('shows an actionable error when schedule preview generation fails', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const confirmedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId: '66666666-6666-4666-8666-666666666666', seasonVersion: 4, seasonStatus: 'READY' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A' as const, reason: null }],
+      stages: [{
+        id: stageId, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组',
+        participantCount: 4, matchCount: 0, status: 'DRAFT' as const, version: 1
+      }]
+    }
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return confirmedProposal;
+    if (path.endsWith('/schedule/generate') && options?.method === 'POST') throw new Error('network failed');
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '生成预览' }));
+
+  expect(await screen.findByText('生成赛程预览失败，请刷新后重试')).toBeInTheDocument();
+});

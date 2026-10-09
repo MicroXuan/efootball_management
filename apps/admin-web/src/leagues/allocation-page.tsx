@@ -22,9 +22,14 @@ const ConfirmedSchema = z.object({
 });
 const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
-  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.unknown())
+  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.object({
+    id: z.string(), roundNumber: z.number(), matchNumber: z.number(),
+    homeParticipant: z.object({ displayName: z.string() }),
+    awayParticipant: z.object({ displayName: z.string() })
+  }))
 });
 type Confirmed = z.infer<typeof ConfirmedSchema>;
+type SchedulePreview = z.infer<typeof SchedulePreviewSchema>;
 
 const stageLabel = (code: string) => code === 'SUPER' ? '超级组' : `冠军 ${code.replace('CHAMPION_', '')} 组`;
 
@@ -37,9 +42,12 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [scheduleVersions, setScheduleVersions] = useState<Record<string, number>>({});
+  const [schedulePreviews, setSchedulePreviews] = useState<Record<string, SchedulePreview>>({});
+  const [scheduleBusyStageId, setScheduleBusyStageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const mutationKey = useMutationKey();
   const season = seasons.find((item) => item.id === seasonId) ?? null;
 
@@ -133,19 +141,29 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   };
 
   const generateSchedule = async (stageId: string) => {
-    const version = confirmed?.stages.find((stage) => stage.id === stageId)?.version ?? scheduleVersions[stageId] ?? 1;
-    const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/generate`, {
-      method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
-      body: { expectedStageVersion: version }
-    });
-    mutationKey.reset();
-    setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
-    setConfirmed((current) => current ? {
-      ...current,
-      stages: current.stages.map((stage) => stage.id === stageId
-        ? { ...stage, version: preview.version, matchCount: preview.matchCount }
-        : stage)
-    } : current);
+    const stage = confirmed?.stages.find((item) => item.id === stageId);
+    const version = stage?.version ?? scheduleVersions[stageId] ?? 1;
+    setScheduleBusyStageId(stageId); setError(null); setNotice(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/generate`, {
+        method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
+        body: { expectedStageVersion: version }
+      });
+      mutationKey.reset();
+      setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setNotice(`赛程预览已生成，共 ${preview.matchCount} 场`);
+      setConfirmed((current) => current ? {
+        ...current,
+        stages: current.stages.map((item) => item.id === stageId
+          ? { ...item, version: preview.version, matchCount: preview.matchCount }
+          : item)
+      } : current);
+    } catch {
+      setError('生成赛程预览失败，请刷新后重试');
+    } finally {
+      setScheduleBusyStageId(null);
+    }
   };
 
   const publishSchedule = async (stageId: string) => {
@@ -175,6 +193,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
       <p>先审阅系统建议，再确认正式组别；赛程发布后不可换组。</p>
     </Card>
     {error ? <Alert role="alert" showIcon type="error" title={error} /> : null}
+    {notice ? <Alert role="status" showIcon type="success" title={notice} /> : null}
     {!proposal ? <Card><Empty description="当前赛季暂无分组建议" /></Card> : <Card title={`建议版本 ${proposal.version}`} className="data-card">
       {season?.isFirstSeason ? <Alert type="info" showIcon title="首赛季仅设置冠军组，不创建超级组" /> : null}
       <Table rowKey="seasonEntryId" pagination={false} dataSource={proposal.rows} columns={[
@@ -186,6 +205,36 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
       ]} />
       <Button type="primary" disabled={Boolean(confirmed)} loading={submitting} onClick={() => void confirm()}>确认正式分组</Button>
     </Card>}
-    {confirmed ? <Card title="正式组别与赛程" className="data-card"><div className="allocation-stage-grid">{confirmed.stages.map((stage) => <article key={stage.id} className="allocation-stage-card"><div><Tag color={stage.status === 'PUBLISHED' ? 'green' : 'gold'}>{stage.displayName}</Tag><strong>{stage.participantCount} 支球队</strong><span className="muted-copy">{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? `${stage.matchCount} 场待发布` : '尚未生成赛程'}</span></div><Space><Button disabled={stage.status === 'PUBLISHED'} onClick={() => void generateSchedule(stage.id)}>生成预览</Button><Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button></Space></article>)}</div></Card> : null}
+    {confirmed ? <Card title="正式组别与赛程" className="data-card">
+      <div className="allocation-stage-grid">{confirmed.stages.map((stage) => {
+        const preview = schedulePreviews[stage.id];
+        return <article key={stage.id} className="allocation-stage-card">
+          <div className="allocation-stage-card__summary">
+            <Tag color={stage.status === 'PUBLISHED' ? 'green' : 'gold'}>{stage.displayName}</Tag>
+            <strong>{stage.participantCount} 支球队</strong>
+            <span className="muted-copy">{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? `${stage.matchCount} 场待发布` : '尚未生成赛程'}</span>
+          </div>
+          <Space>
+            <Button disabled={stage.status === 'PUBLISHED'} loading={scheduleBusyStageId === stage.id} onClick={() => void generateSchedule(stage.id)}>{preview ? '重新生成预览' : '生成预览'}</Button>
+            <Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button>
+          </Space>
+          {preview ? <div className="allocation-schedule-preview">
+            <strong>赛程预览</strong>
+            <Table
+              size="small"
+              pagination={false}
+              rowKey="id"
+              dataSource={preview.matches}
+              columns={[
+                { title: '轮次', render: (_, match) => `第 ${match.roundNumber} 轮` },
+                { title: '场次', dataIndex: 'matchNumber' },
+                { title: '主队', render: (_, match) => match.homeParticipant.displayName },
+                { title: '客队', render: (_, match) => match.awayParticipant.displayName }
+              ]}
+            />
+          </div> : null}
+        </article>;
+      })}</div>
+    </Card> : null}
   </div>;
 }
