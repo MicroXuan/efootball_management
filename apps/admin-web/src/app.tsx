@@ -28,6 +28,9 @@ const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => (
 const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
 const ValuationReviewsPage = lazy(() => import('./valuations/valuation-reviews-page').then((module) => ({ default: module.ValuationReviewsPage })));
 const WechatBotPage = lazy(() => import('./leagues/wechat-bot-page').then((module) => ({ default: module.WechatBotPage })));
+const AuctionListPage = lazy(() => import('./auctions/auction-list-page').then((module) => ({ default: module.AuctionListPage })));
+const AuctionEditorPage = lazy(() => import('./auctions/auction-editor-page').then((module) => ({ default: module.AuctionEditorPage })));
+const AuctionDetailPage = lazy(() => import('./auctions/auction-detail-page').then((module) => ({ default: module.AuctionDetailPage })));
 
 function DefaultRoute() {
   const { identity } = useAdminSession();
@@ -73,6 +76,10 @@ export function App() {
               <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
               <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />
+              <Route path="auctions" element={deferred(<AuctionListPage api={adminApi} />)} />
+              <Route path="auctions/new" element={deferred(<AuctionEditorPage api={adminApi} />)} />
+              <Route path="auctions/:batchId/edit" element={deferred(<AuctionEditorPage api={adminApi} />)} />
+              <Route path="auctions/:batchId" element={deferred(<AuctionDetailPage api={adminApi} />)} />
             </Route>
           </Route></Route>
           <Route path="*" element={<Navigate to="/" replace />} />
