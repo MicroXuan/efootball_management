@@ -272,3 +272,62 @@ describe('cup match results', () => {
     );
   });
 });
+
+describe('league administrator match results', () => {
+  it('records the admin actor, publishes an official score, and audits the change', async () => {
+    const match = {
+      id: 'match-1', stageId: 'stage-1', version: 1, status: 'AWAITING_RESULT',
+      officialResultVersion: null,
+      stage: {
+        id: 'stage-1', status: 'PUBLISHED', format: 'ROUND_ROBIN', competitionId: 'competition-1',
+        competition: { id: 'competition-1', seasonId: 'season-1', status: 'IN_PROGRESS', competitionType: 'DIVISION_LEAGUE', season: { leagueId: 'league-1' } }
+      },
+      homeParticipant: { id: 'home', individualUserId: null, seasonEntry: { ownerUserId: 'home-owner', leagueTeam: { status: 'ACTIVE' } } },
+      awayParticipant: { id: 'away', individualUserId: null, seasonEntry: { ownerUserId: 'away-owner', leagueTeam: { status: 'ACTIVE' } } }
+    };
+    const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: {
+        findUnique: jest.fn(async () => match),
+        updateMany: jest.fn(async () => ({ count: 1 }))
+      },
+      matchResultVersion: {
+        aggregate: jest.fn(async () => ({ _max: { version: null } })),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: 'result-1', status: 'OFFICIAL', reason: null, createdAt: new Date('2026-10-08'), ...data
+        }))
+      }
+    };
+    const receipts = { execute: jest.fn(async (
+      _actor: string, _operation: string, _key: string,
+      work: (client: typeof transaction) => Promise<unknown>
+    ) => work(transaction)) };
+    const standings = { recalculate: jest.fn(async () => ({})) };
+    const authorization = { requireLeagueAccess: jest.fn(async () => ({ id: 'admin-1' })) };
+    const audit = { record: jest.fn(async () => ({})) };
+    const service = new ResultsService(
+      transaction as never, {} as never, standings as never, {} as never,
+      { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn(() => new Error('not found')) } as never,
+      receipts as never,
+      authorization as never,
+      audit as never
+    );
+    const record = (service as unknown as {
+      recordByLeagueAdmin: (
+        adminId: string, leagueId: string, competitionId: string, matchId: string,
+        input: { homeScore: number; awayScore: number; expectedVersion: number }, key: string
+      ) => Promise<{ status: string; submittedByMe: boolean }>
+    }).recordByLeagueAdmin;
+
+    await expect(record.call(service, 'admin-1', 'league-1', 'competition-1', 'match-1', {
+      homeScore: 2, awayScore: 1, expectedVersion: 1
+    }, 'admin-result')).resolves.toMatchObject({ status: 'OFFICIAL', submittedByMe: true });
+    expect(transaction.matchResultVersion.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      submittedById: null, submittedByAdminId: 'admin-1', homeScore: 2, awayScore: 1
+    }) });
+    expect(standings.recalculate).toHaveBeenCalledWith(transaction, 'competition-1', 'result-1', 'stage-1');
+    expect(audit.record).toHaveBeenCalledWith(transaction, expect.objectContaining({
+      actorAdminId: 'admin-1', leagueId: 'league-1', action: 'admin.competition-result.record'
+    }));
+  });
+});

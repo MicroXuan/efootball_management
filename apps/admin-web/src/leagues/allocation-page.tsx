@@ -1,9 +1,12 @@
-import { Alert, Button, Card, Empty, Input, Select, Space, Spin, Table, Tag } from 'antd';
+import { Alert, Button, Card, Empty, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   LeagueSeasonSummarySchema,
+  CompetitionMatchResponseSchema,
+  MatchResultVersionResponseSchema,
   SeasonAllocationProposalSchema,
+  type CompetitionMatchResponse,
   type LeagueSeasonSummary,
   type SeasonAllocationProposal
 } from '@efm/contracts';
@@ -22,11 +25,7 @@ const ConfirmedSchema = z.object({
 });
 const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
-  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.object({
-    id: z.string(), roundNumber: z.number(), matchNumber: z.number(),
-    homeParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null), ownerDisplayName: z.string().nullable().default(null) }),
-    awayParticipant: z.object({ displayName: z.string(), teamLogoUrl: z.string().url().nullable().default(null), ownerDisplayName: z.string().nullable().default(null) })
-  }))
+  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(CompetitionMatchResponseSchema)
 });
 type Confirmed = z.infer<typeof ConfirmedSchema>;
 type SchedulePreview = z.infer<typeof SchedulePreviewSchema>;
@@ -45,7 +44,10 @@ function TeamCrest({ name, url }: { name: string; url: string | null }) {
   </span>;
 }
 
-function ScheduleBoard({ preview }: { preview: SchedulePreview }) {
+function ScheduleBoard({ preview, onEditScore }: {
+  preview: SchedulePreview;
+  onEditScore?: (match: CompetitionMatchResponse) => void;
+}) {
   const rounds = [...new Set(preview.matches.map((match) => match.roundNumber))]
     .sort((left, right) => left - right);
   return <div className="allocation-schedule-preview">
@@ -67,7 +69,16 @@ function ScheduleBoard({ preview }: { preview: SchedulePreview }) {
             </span>
             <TeamCrest name={match.homeParticipant.displayName} url={match.homeParticipant.teamLogoUrl} />
           </div>
-          <div className="fixture-match__versus"><span>VS</span><small>#{match.matchNumber}</small></div>
+          <div className="fixture-match__versus">
+            <span>{match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</span>
+            <small>#{match.matchNumber}</small>
+            {onEditScore ? <Button
+              size="small"
+              type="link"
+              disabled={match.homeParticipant.teamLifecycleStatus === 'ARCHIVED' || match.awayParticipant.teamLifecycleStatus === 'ARCHIVED'}
+              onClick={() => onEditScore(match)}
+            >{match.officialResult ? '修改比分' : '录入比分'}</Button> : null}
+          </div>
           <div className="fixture-team fixture-team--away">
             <TeamCrest name={match.awayParticipant.displayName} url={match.awayParticipant.teamLogoUrl} />
             <span className="fixture-team__identity">
@@ -91,7 +102,13 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [scheduleVersions, setScheduleVersions] = useState<Record<string, number>>({});
   const [schedulePreviews, setSchedulePreviews] = useState<Record<string, SchedulePreview>>({});
+  const [scheduleModes, setScheduleModes] = useState<Record<string, 'view' | 'manage'>>({});
   const [scheduleBusyStageId, setScheduleBusyStageId] = useState<string | null>(null);
+  const [scoreEditor, setScoreEditor] = useState<CompetitionMatchResponse | null>(null);
+  const [homeScore, setHomeScore] = useState<number | null>(null);
+  const [awayScore, setAwayScore] = useState<number | null>(null);
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [scoreBusy, setScoreBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +250,93 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
     } : current);
   };
 
+  const openPublishedSchedule = async (stageId: string, mode: 'view' | 'manage') => {
+    if (scheduleModes[stageId] === mode) {
+      setScheduleModes((current) => {
+        const next = { ...current };
+        delete next[stageId];
+        return next;
+      });
+      return;
+    }
+    if (schedulePreviews[stageId]) {
+      setScheduleModes((current) => ({ ...current, [stageId]: mode }));
+      return;
+    }
+    setScheduleBusyStageId(stageId); setError(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule`, {
+        schema: SchedulePreviewSchema
+      });
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setScheduleModes((current) => ({ ...current, [stageId]: mode }));
+    } catch {
+      setError('已发布赛程加载失败，请刷新后重试');
+    } finally {
+      setScheduleBusyStageId(null);
+    }
+  };
+
+  const openScoreEditor = (match: CompetitionMatchResponse) => {
+    setScoreEditor(match);
+    setHomeScore(match.officialResult?.homeScore ?? null);
+    setAwayScore(match.officialResult?.awayScore ?? null);
+    setCorrectionReason('');
+    setError(null);
+  };
+
+  const submitScore = async () => {
+    if (!confirmed || !scoreEditor || homeScore === null || awayScore === null) return;
+    if (scoreEditor.officialResult && !correctionReason.trim()) {
+      setError('修改已有官方比分时必须填写修正原因');
+      return;
+    }
+    setScoreBusy(true); setError(null); setNotice(null);
+    try {
+      const result = await api.request(
+        `/v1/admin/leagues/${leagueId}/competitions/${confirmed.competitionId}/matches/${scoreEditor.id}/results`,
+        {
+          method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: MatchResultVersionResponseSchema,
+          body: {
+            homeScore, awayScore, expectedVersion: scoreEditor.version,
+            reason: correctionReason.trim() || null
+          }
+        }
+      );
+      mutationKey.reset();
+      setSchedulePreviews((current) => Object.fromEntries(Object.entries(current).map(([stageId, preview]) => [
+        stageId,
+        {
+          ...preview,
+          matches: preview.matches.map((match) => match.id === scoreEditor.id ? {
+            ...match,
+            version: match.version + 1,
+            status: 'ADMIN_DECIDED' as const,
+            officialResult: {
+              resultVersionId: result.id,
+              version: result.version,
+              homeScore: result.homeScore,
+              awayScore: result.awayScore,
+              status: 'OFFICIAL' as const
+            }
+          } : match)
+        }
+      ])));
+      setScoreEditor(null);
+      setNotice(`官方比分已更新：${result.homeScore} : ${result.awayScore}`);
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') {
+        setError('该场比赛已被其他管理员更新，请重新打开赛程');
+      } else if (caught instanceof ApiError && caught.code === 'RESULT_CORRECTION_REASON_REQUIRED') {
+        setError('修改已有官方比分时必须填写修正原因');
+      } else {
+        setError('官方比分提交失败，请检查赛事状态后重试');
+      }
+    } finally {
+      setScoreBusy(false);
+    }
+  };
+
   if (loading) return <div className="loading-block"><Spin /></div>;
   return <div className="allocation-workspace">
     <Card className="allocation-toolbar">
@@ -263,12 +367,46 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
             <span className="muted-copy">{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? `${stage.matchCount} 场待发布` : '尚未生成赛程'}</span>
           </div>
           <Space>
-            <Button disabled={stage.status === 'PUBLISHED'} loading={scheduleBusyStageId === stage.id} onClick={() => void generateSchedule(stage.id)}>{preview ? '重新生成预览' : '生成预览'}</Button>
+            {stage.status === 'PUBLISHED'
+              ? <>
+                <Button loading={scheduleBusyStageId === stage.id && !preview} onClick={() => void openPublishedSchedule(stage.id, 'view')}>{scheduleModes[stage.id] === 'view' ? '收起赛程' : '查看赛程'}</Button>
+                <Button type={scheduleModes[stage.id] === 'manage' ? 'primary' : 'default'} loading={scheduleBusyStageId === stage.id && !preview} onClick={() => void openPublishedSchedule(stage.id, 'manage')}>{scheduleModes[stage.id] === 'manage' ? '收起比分管理' : '比分管理'}</Button>
+              </>
+              : <Button loading={scheduleBusyStageId === stage.id} onClick={() => void generateSchedule(stage.id)}>{preview ? '重新生成预览' : '生成预览'}</Button>}
             <Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button>
           </Space>
-          {preview ? <ScheduleBoard preview={preview} /> : null}
+          {preview && (stage.status !== 'PUBLISHED' || scheduleModes[stage.id])
+            ? <ScheduleBoard preview={preview} onEditScore={scheduleModes[stage.id] === 'manage' ? openScoreEditor : undefined} />
+            : null}
         </article>;
       })}</div>
     </Card> : null}
+    <Modal
+      open={Boolean(scoreEditor)}
+      title={scoreEditor?.officialResult ? '修改官方比分' : '录入官方比分'}
+      okText="确认提交"
+      cancelText="取消"
+      confirmLoading={scoreBusy}
+      onOk={() => void submitScore()}
+      onCancel={() => { if (!scoreBusy) setScoreEditor(null); }}
+    >
+      {scoreEditor ? <div className="score-editor">
+        <div className="score-editor__fixture">
+          <strong>{scoreEditor.homeParticipant.displayName}</strong><span>对阵</span><strong>{scoreEditor.awayParticipant.displayName}</strong>
+        </div>
+        <div className="score-editor__inputs">
+          <InputNumber aria-label="主队比分" min={0} max={99} precision={0} value={homeScore} onChange={setHomeScore} placeholder="主队" />
+          <span>:</span>
+          <InputNumber aria-label="客队比分" min={0} max={99} precision={0} value={awayScore} onChange={setAwayScore} placeholder="客队" />
+        </div>
+        {scoreEditor.officialResult ? <Input.TextArea
+          aria-label="比分修正原因"
+          value={correctionReason}
+          onChange={(event) => setCorrectionReason(event.target.value)}
+          placeholder="修改已有官方比分时必须填写原因"
+          maxLength={512}
+        /> : null}
+      </div> : null}
+    </Modal>
   </div>;
 }

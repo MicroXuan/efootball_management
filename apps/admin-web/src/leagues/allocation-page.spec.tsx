@@ -189,3 +189,55 @@ it('shows an actionable error when schedule preview generation fails', async () 
 
   expect(await screen.findByText('生成赛程预览失败，请刷新后重试')).toBeInTheDocument();
 });
+
+it('lets an administrator reopen a published schedule and record its official score', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const competitionId = '66666666-6666-4666-8666-666666666666';
+  const matchId = '99999999-9999-4999-8999-999999999999';
+  const publishedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId, seasonVersion: 5, seasonStatus: 'IN_PROGRESS' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A' as const, reason: null }],
+      stages: [{
+        id: stageId, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组',
+        participantCount: 4, matchCount: 6, status: 'PUBLISHED' as const, version: 3
+      }]
+    }
+  };
+  const publishedSchedule = {
+    id: stageId, competitionId, status: 'PUBLISHED' as const, version: 3, roundCount: 3, matchCount: 6,
+    matches: [{
+      id: matchId, competitionId, stageId, roundNumber: 1, matchNumber: 1,
+      homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: null, ownerDisplayName: '布莱顿玩家' },
+      awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: null, ownerDisplayName: '阿森纳玩家' },
+      plannedAt: null, status: 'AWAITING_RESULT', version: 1, officialResult: null, resultVersions: [],
+      createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
+    }]
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [{ ...season, status: 'IN_PROGRESS' as const, version: 5 }], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return publishedProposal;
+    if (path.endsWith(`/competition-stages/${stageId}/schedule`)) return publishedSchedule;
+    if (path.endsWith(`/competitions/${competitionId}/matches/${matchId}/results`) && options?.method === 'POST') {
+      return { id: 'result-1', matchId, version: 1, homeScore: 2, awayScore: 1, status: 'OFFICIAL', submissionSide: 'MANAGER', submittedByMe: true, reason: null, createdAt: timestamp };
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '查看赛程' }));
+  expect(await screen.findByText('玩家：布莱顿玩家')).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: /比分管理$/ }));
+  await userEvent.click(screen.getByRole('button', { name: '录入比分' }));
+  await userEvent.type(screen.getByLabelText('主队比分'), '2');
+  await userEvent.type(screen.getByLabelText('客队比分'), '1');
+  await userEvent.click(screen.getByRole('button', { name: '确认提交' }));
+
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/competitions/${competitionId}/matches/${matchId}/results`,
+    expect.objectContaining({ method: 'POST', body: { homeScore: 2, awayScore: 1, expectedVersion: 1, reason: null } })
+  ));
+  expect(await screen.findByText('2 : 1')).toBeInTheDocument();
+});

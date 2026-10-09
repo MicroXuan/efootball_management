@@ -181,6 +181,12 @@ export class SchedulesService {
     return this.readStagePreview(this.prisma, stageId);
   }
 
+  async previewStageForLeague(leagueId: string, stageId: string): Promise<SchedulePreview> {
+    const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
+    if (stageLeagueId !== leagueId) throw this.visibility.notFound();
+    return this.readStagePreview(this.prisma, stageId);
+  }
+
   async generate(actorId: string, competitionId: string, key: string): Promise<SchedulePreview> {
     await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.schedule.generate:${competitionId}`, key, async (transaction) => {

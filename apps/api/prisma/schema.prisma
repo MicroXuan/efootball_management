@@ -527,6 +527,7 @@ model AdminAccount {
   teamCatalogSyncRuns          TeamCatalogSyncRun[]              @relation("TeamCatalogSyncActor")
   cupGroupProposals            CupGroupProposal[]                @relation("CupGroupProposalCreator")
   cupBracketProposals          CupBracketProposal[]              @relation("CupBracketProposalCreator")
+  submittedMatchResults        MatchResultVersion[]              @relation("MatchResultAdminSubmitter")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -2040,7 +2041,8 @@ model MatchResultVersion {
   version            Int                       @db.UnsignedInt
   homeScore          Int                       @map("home_score") @db.UnsignedTinyInt
   awayScore          Int                       @map("away_score") @db.UnsignedTinyInt
-  submittedById      String                    @map("submitted_by_id") @db.Char(36)
+  submittedById      String?                   @map("submitted_by_id") @db.Char(36)
+  submittedByAdminId String?                   @map("submitted_by_admin_id") @db.Char(36)
   submissionSide     MatchResultSubmissionSide @map("submission_side")
   status             MatchResultVersionStatus  @default(PROPOSED)
   reason             String?                   @db.VarChar(512)
@@ -2048,13 +2050,15 @@ model MatchResultVersion {
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
   match              CompetitionMatch          @relation("MatchResultHistory", fields: [matchId], references: [id], onDelete: Restrict)
-  submitter          User                      @relation("MatchResultSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  submitter          User?                     @relation("MatchResultSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  adminSubmitter     AdminAccount?             @relation("MatchResultAdminSubmitter", fields: [submittedByAdminId], references: [id], onDelete: Restrict)
   officialForMatch   CompetitionMatch?         @relation("OfficialMatchResult")
   triggeredSnapshots StandingsSnapshot[]
 
   @@unique([matchId, version], map: "match_result_versions_version_unique")
   @@index([matchId, status], map: "match_result_versions_status_idx")
   @@index([submittedById], map: "match_result_versions_submitter_idx")
+  @@index([submittedByAdminId], map: "match_result_versions_admin_submitter_idx")
   @@map("match_result_versions")
 }
 
