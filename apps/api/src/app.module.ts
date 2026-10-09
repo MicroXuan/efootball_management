@@ -28,6 +28,7 @@ import { UsersModule } from './users/users.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
 import { WechatBotModule } from './wechat-bot/wechat-bot.module.js';
+import { PlayerAuctionsModule } from './player-auctions/player-auctions.module.js';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { WechatBotModule } from './wechat-bot/wechat-bot.module.js';
     PlayerCatalogModule,
     PlayerFavoritesModule,
     PlayerBuildsModule,
+    PlayerAuctionsModule,
     PlayerImportModule,
     PlatformDataSyncModule,
     PlatformPresentationModule,
