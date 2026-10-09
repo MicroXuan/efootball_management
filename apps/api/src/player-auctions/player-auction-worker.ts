@@ -1,0 +1,84 @@
+import { Inject, Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service.js';
+import { WechatOutboxService } from '../wechat-bot/wechat-outbox.service.js';
+import { PlayerAuctionClock } from './player-auction-clock.js';
+import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js';
+import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
+
+const MARKS = [20, 10, 5, 4, 3, 2, 1] as const;
+
+@Injectable()
+export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDestroy {
+  private timer?: NodeJS.Timeout;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PlayerAuctionClock) private readonly clock: PlayerAuctionClock,
+    @Inject(PlayerAuctionLockRepository) private readonly locks: PlayerAuctionLockRepository,
+    @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService,
+    @Inject(PlayerAuctionRecoveryService) private readonly recovery: PlayerAuctionRecoveryService
+  ) {}
+
+  async onApplicationBootstrap() {
+    await this.recovery.recoverOverdueOnBootstrap();
+    this.timer = setInterval(() => void this.tick(), 500);
+    this.timer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
+  }
+
+  async tick() {
+    await this.recovery.scanUnavailableDevices();
+    const now = this.clock.now();
+    const lots = await this.prisma.playerAuctionLot.findMany({
+      where: { status: 'ACTIVE', deadlineAt: { not: null } },
+      include: { batch: { include: { groupBinding: { select: { deviceId: true, wechatGroupId: true } } } } },
+      orderBy: [{ deadlineAt: 'asc' }, { id: 'asc' }],
+      take: 100
+    });
+    for (const lot of lots) {
+      if (!lot.deadlineAt) continue;
+      const remainingMs = lot.deadlineAt.getTime() - now.getTime();
+      if (remainingMs <= 0) {
+        await this.closeDueLot(lot.id, lot.deadlineEpoch);
+        continue;
+      }
+      const remainingSeconds = Math.ceil(remainingMs / 1_000);
+      const previous = lot.lastCountdownMark ?? 30;
+      const crossed = MARKS.filter((mark) => mark < previous && remainingSeconds <= mark);
+      const mark = crossed.length ? Math.min(...crossed) : null;
+      if (mark === null) continue;
+      const advanced = await this.prisma.playerAuctionLot.updateMany({
+        where: { id: lot.id, status: 'ACTIVE', deadlineEpoch: lot.deadlineEpoch, lastCountdownMark: previous },
+        data: { lastCountdownMark: mark }
+      });
+      if (advanced.count !== 1) continue;
+      const congestion = await this.prisma.wechatOutboxMessage.count({
+        where: { deviceId: lot.batch.groupBinding.deviceId, status: { in: ['PENDING', 'LEASED'] } }
+      });
+      if (congestion >= 50) continue;
+      await this.outbox.enqueue({
+        deviceId: lot.batch.groupBinding.deviceId, targetType: 'GROUP', targetId: lot.batch.groupBinding.wechatGroupId,
+        businessKey: `auction:${lot.id}:epoch:${lot.deadlineEpoch}:countdown:${mark}`,
+        text: String(mark), priority: 400
+      });
+    }
+  }
+
+  closeDueLot(lotId: string, epoch: number) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.locks.lockLot(tx, lotId);
+      const lot = await tx.playerAuctionLot.findUnique({ where: { id: lotId } });
+      if (!lot || lot.status !== 'ACTIVE' || lot.deadlineEpoch !== epoch || !lot.deadlineAt) return false;
+      const now = await this.locks.now(tx);
+      if (lot.deadlineAt.getTime() > now.getTime()) return false;
+      const update = await tx.playerAuctionLot.updateMany({
+        where: { id: lotId, status: 'ACTIVE', deadlineEpoch: epoch },
+        data: { status: lot.currentHighestBidId ? 'PENDING_REVIEW' : 'NO_BID', deadlineAt: null, closedAt: now, version: { increment: 1 } }
+      });
+      return update.count === 1;
+    });
+  }
+}

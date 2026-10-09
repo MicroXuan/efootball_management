@@ -1,7 +1,9 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatCommandRouterService } from './wechat-command-router.service.js';
+import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
 
 const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$/;
 const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
@@ -10,7 +12,8 @@ const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
 export class WechatBridgeService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Optional() @Inject(WechatCommandRouterService) private readonly router?: WechatCommandRouterService
+    @Optional() @Inject(WechatCommandRouterService) private readonly router?: WechatCommandRouterService,
+    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef
   ) {}
 
   async heartbeat(deviceId: string, input: WechatBridgeHeartbeat) {
@@ -27,6 +30,12 @@ export class WechatBridgeService {
         lastHeartbeatAt: now
       }
     });
+    const recovery = this.moduleRef?.get<PlayerAuctionRecoveryHook>(PLAYER_AUCTION_RECOVERY_HOOK, { strict: false });
+    if (input.loginStatus !== 'LOGGED_IN' || input.screenLocked) {
+      await recovery?.onBridgeUnavailable(deviceId, input.screenLocked ? 'WINDOW_SESSION_LOCKED' : 'WECHAT_NOT_LOGGED_IN');
+    } else {
+      recovery?.bridgeAvailable(deviceId);
+    }
     await Promise.all(input.observedGroups.map((group) => this.prisma.wechatObservedGroup.upsert({
       where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: group.wechatGroupId } },
       create: {

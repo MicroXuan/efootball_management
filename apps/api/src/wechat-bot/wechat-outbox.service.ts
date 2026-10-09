@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { WechatConversationType, WechatOutboxAck, WechatOutboxClaimResponse } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { WECHAT_BOT_CONFIG } from './wechat-bot.config.js';
 import type { WechatBotRuntimeConfig } from './wechat-bot.config.js';
+import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
 
 export type EnqueueWechatMessageInput = {
   deviceId: string;
@@ -19,7 +21,8 @@ export type EnqueueWechatMessageInput = {
 export class WechatOutboxService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(WECHAT_BOT_CONFIG) private readonly config: WechatBotRuntimeConfig
+    @Inject(WECHAT_BOT_CONFIG) private readonly config: WechatBotRuntimeConfig,
+    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef
   ) {}
 
   async enqueue(input: EnqueueWechatMessageInput) {
@@ -127,6 +130,7 @@ export class WechatOutboxService {
           }
         })
       ]);
+      await this.recovery()?.onBridgeUnavailable(deviceId, 'SEND_CIRCUIT_OPEN');
       return updated;
     }
 
@@ -153,6 +157,7 @@ export class WechatOutboxService {
           }
         })
       ]);
+      await this.recovery()?.onBridgeUnavailable(deviceId, 'SEND_CIRCUIT_OPEN');
       return updated;
     }
 
@@ -168,5 +173,9 @@ export class WechatOutboxService {
         leaseExpiresAt: null
       }
     });
+  }
+
+  private recovery() {
+    return this.moduleRef?.get<PlayerAuctionRecoveryHook>(PLAYER_AUCTION_RECOVERY_HOOK, { strict: false });
   }
 }
