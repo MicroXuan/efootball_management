@@ -299,7 +299,7 @@ export class LeagueTeamsService {
         where: { leagueTeamId: teamId, status: 'ACTIVE' },
         include: {
           footballPlayer: true,
-          currentPlayerCard: true
+          currentPlayerCard: { include: { attributes: true } }
         },
         orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
       }),
@@ -321,21 +321,26 @@ export class LeagueTeamsService {
     return {
       team,
       leagueName: league.name,
-      roster: roster.map((entry) => ({
-        id: entry.id,
-        leagueId: entry.leagueId,
-        leagueTeamId: entry.leagueTeamId,
-        playerId: entry.footballPlayerId,
-        playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
-        currentPlayerCardId: entry.currentPlayerCardId,
-        cardName: entry.currentPlayerCard.cardName,
-        maxOverall: entry.maxOverallSnapshot,
-        salaryRuleVersionId: entry.salaryRuleVersionId,
-        salaryMinor: entry.salaryMinor,
-        acquiredAt: entry.acquiredAt.toISOString(),
-        status: entry.status,
-        version: entry.version
-      })),
+      roster: roster.map((entry) => {
+        const attributes = this.attributes(entry.currentPlayerCard.attributes?.attributesJson);
+        return {
+          id: entry.id,
+          leagueId: entry.leagueId,
+          leagueTeamId: entry.leagueTeamId,
+          playerId: entry.footballPlayerId,
+          playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
+          currentPlayerCardId: entry.currentPlayerCardId,
+          cardName: entry.currentPlayerCard.cardName,
+          position: entry.currentPlayerCard.position,
+          heightCm: this.integer(attributes.heightCm ?? attributes.height),
+          maxOverall: entry.maxOverallSnapshot,
+          salaryRuleVersionId: entry.salaryRuleVersionId,
+          salaryMinor: entry.salaryMinor,
+          acquiredAt: entry.acquiredAt.toISOString(),
+          status: entry.status,
+          version: entry.version
+        };
+      }),
       ledger: ledger.map((entry) => ({
         id: entry.id,
         leagueId: entry.leagueId,
@@ -608,6 +613,16 @@ export class LeagueTeamsService {
       defaultGameAccountId: team.defaultGameAccountId,
       participatingSeasonCount: team._count.seasonEntries
     };
+  }
+
+  private attributes(value: unknown): Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  }
+
+  private integer(value: unknown): number | null {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
   }
 
   private notFound(code: string, message: string) {

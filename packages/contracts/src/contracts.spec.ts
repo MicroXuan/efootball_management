@@ -53,6 +53,7 @@ import {
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
   MoneyMinorSchema,
+  MyLeagueTeamOverviewSchema,
   NormalizedPlayerCardRecordSchema,
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
@@ -1483,6 +1484,23 @@ describe('league team administration contracts', () => {
     });
     assert.equal(rosterEntry.playerId, ids.player);
     assert.equal(Object.hasOwn(rosterEntry, 'dtRating'), false);
+
+    const overview = MyLeagueTeamOverviewSchema.parse({
+      team: {
+        ...team,
+        ownerDisplayName: '小宣',
+        defaultGameAccountId: null,
+        participatingSeasonCount: 2
+      },
+      leagueName: '九星联赛',
+      roster: [{ ...rosterEntry, position: 'CB', heightCm: 190 }],
+      ledger: [],
+      currentWindow: null
+    });
+    assert.deepEqual(
+      { position: overview.roster[0]?.position, heightCm: overview.roster[0]?.heightCm },
+      { position: 'CB', heightCm: 190 }
+    );
 
     const transaction = RosterTransactionSchema.parse({
       id: ids.transaction,

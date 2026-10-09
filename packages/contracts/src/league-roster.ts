@@ -326,10 +326,14 @@ export const MyLeagueTeamListResponseSchema = z.object({
   items: z.array(MyLeagueTeamSummarySchema),
   nextCursor: z.string().nullable()
 });
+export const MyLeagueTeamRosterEntrySchema = RosterEntrySchema.extend({
+  position: PlayerPositionSchema,
+  heightCm: z.number().int().positive().nullable()
+});
 export const MyLeagueTeamOverviewSchema = z.object({
   team: LeagueTeamDetailSchema,
   leagueName: z.string().min(1),
-  roster: z.array(RosterEntrySchema),
+  roster: z.array(MyLeagueTeamRosterEntrySchema),
   ledger: z.array(FinanceLedgerListItemSchema),
   currentWindow: z.object({
     name: z.string().min(1),
