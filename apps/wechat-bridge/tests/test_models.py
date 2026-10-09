@@ -67,3 +67,10 @@ def test_send_ack_requires_result_specific_fields() -> None:
         SendAck(status="SENT")
     with pytest.raises(ValidationError):
         SendAck(status="FAILED", error_code="WINDOW_LOCKED")
+
+    ambiguous = SendAck(
+        status="AMBIGUOUS",
+        error_code="WECHAT_SEND_UNCONFIRMED",
+        error_message="send outcome requires operator reconciliation",
+    )
+    assert ambiguous.status == "AMBIGUOUS"

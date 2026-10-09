@@ -66,6 +66,9 @@ class WechatGuiSender:
         self._dry_run = dry_run
         self._readback_timeout_seconds = readback_timeout_seconds
 
+    def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
+        self._expected_titles = dict(groups)
+
     def send(self, task: OutboxTask) -> SendResult:
         with self._send_lock:
             return self._send_serial(task)
@@ -259,4 +262,3 @@ class WechatautoGuiDriver:
             if time.monotonic() >= deadline:
                 return None
             self._sleep(min(0.5, max(0.0, deadline - time.monotonic())))
-

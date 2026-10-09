@@ -115,6 +115,7 @@ import {
   WechatBindingCodeResponseSchema,
   WechatBindingStatusSchema,
   WechatBridgeHeartbeatSchema,
+  WechatBridgeHeartbeatResponseSchema,
   WechatInboundBatchSchema,
   WechatOutboxAckSchema,
   WechatOutboxClaimResponseSchema
@@ -2087,6 +2088,11 @@ describe('WeChat bot contracts', () => {
       errorCode: 'WINDOW_NOT_FOUND',
       errorMessage: '未找到目标群窗口'
     }).status, 'FAILED');
+    assert.equal(WechatOutboxAckSchema.parse({
+      status: 'AMBIGUOUS',
+      errorCode: 'WECHAT_SEND_UNCONFIRMED',
+      errorMessage: '发送结果需要人工核对'
+    }).status, 'AMBIGUOUS');
     assert.throws(() => WechatOutboxAckSchema.parse({ status: 'SENT' }));
     assert.throws(() => WechatOutboxAckSchema.parse({ status: 'RETRYING' }));
 
@@ -2101,6 +2107,18 @@ describe('WeChat bot contracts', () => {
       }]
     });
     assert.equal(claim.messages[0]?.targetType, 'GROUP');
+  });
+
+  it('validates heartbeat authorization configuration', () => {
+    const response = WechatBridgeHeartbeatResponseSchema.parse({
+      acceptedAt: now,
+      enabledGroups: [{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]
+    });
+    assert.equal(response.enabledGroups[0]?.displayName, '测试群');
+    assert.throws(() => WechatBridgeHeartbeatResponseSchema.parse({
+      acceptedAt: now,
+      enabledGroups: [{ wechatGroupId: '', displayName: '测试群' }]
+    }));
   });
 
   it('parses binding/admin responses', () => {

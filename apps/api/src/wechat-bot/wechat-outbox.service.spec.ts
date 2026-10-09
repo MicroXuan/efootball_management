@@ -17,10 +17,11 @@ describe('WechatBridgeService', () => {
   it('upserts observed groups from a heartbeat', async () => {
     const prisma: any = {
       wechatBotDevice: { update: jest.fn(async ({ data }: any) => data) },
-      wechatObservedGroup: { upsert: jest.fn(async ({ create }: any) => create) }
+      wechatObservedGroup: { upsert: jest.fn(async ({ create }: any) => create) },
+      wechatGroupBinding: { findMany: jest.fn(async () => [{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]) }
     };
     const service = new WechatBridgeService(prisma);
-    await service.heartbeat('device-1', {
+    const response = await service.heartbeat('device-1', {
       wechatAccountId: 'wxid_robot',
       wechatVersion: '4.1.15.13',
       loginStatus: 'LOGGED_IN',
@@ -32,6 +33,7 @@ describe('WechatBridgeService', () => {
     expect(prisma.wechatObservedGroup.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { deviceId_wechatGroupId: { deviceId: 'device-1', wechatGroupId: 'room-1@chatroom' } }
     }));
+    expect(response.enabledGroups).toEqual([{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]);
   });
 
   it('persists only enabled group commands and private binding commands, with duplicate results', async () => {
@@ -167,6 +169,21 @@ describe('WechatOutboxService', () => {
       });
     }
     expect(messages.get(row.id)?.status).toBe('FAILED');
+    expect(device.circuitStatus).toBe('OPEN');
+  });
+
+  it('never retries an ambiguous send and opens the circuit immediately', async () => {
+    const { service, messages, device } = createHarness();
+    const row = await service.enqueue(input);
+
+    await service.ack('device-1', row.id, {
+      status: 'AMBIGUOUS',
+      errorCode: 'WECHAT_SEND_UNCONFIRMED',
+      errorMessage: 'send outcome requires operator reconciliation'
+    });
+
+    expect(messages.get(row.id)?.status).toBe('FAILED');
+    expect(messages.get(row.id)?.attemptCount).toBe(1);
     expect(device.circuitStatus).toBe('OPEN');
   });
 });

@@ -52,7 +52,7 @@ class OutboxTask(AwareDateTimeModel):
 
 
 class SendAck(BridgeModel):
-    status: Literal["SENT", "FAILED"]
+    status: Literal["SENT", "FAILED", "AMBIGUOUS"]
     readback_message_id: StableId | None = None
     error_code: Annotated[str, Field(min_length=1, max_length=64)] | None = None
     error_message: Annotated[str, Field(min_length=1, max_length=512)] | None = None
@@ -66,7 +66,7 @@ class SendAck(BridgeModel):
                 raise ValueError("SENT acknowledgement cannot contain error fields")
         else:
             if not self.error_code or not self.error_message:
-                raise ValueError("FAILED acknowledgement requires error_code and error_message")
+                raise ValueError("non-SENT acknowledgement requires error_code and error_message")
             if self.readback_message_id:
-                raise ValueError("FAILED acknowledgement cannot contain readback_message_id")
+                raise ValueError("non-SENT acknowledgement cannot contain readback_message_id")
         return self

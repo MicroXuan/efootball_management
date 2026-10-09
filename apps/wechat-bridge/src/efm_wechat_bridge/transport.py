@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from collections.abc import Mapping
 from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -62,3 +63,53 @@ class WechatTransport(Protocol):
 
     def send(self, task: OutboxTask) -> SendResult: ...
 
+
+class ConfigurableWechatTransport(WechatTransport, Protocol):
+    def configure_authorized_groups(self, groups: Mapping[str, str]) -> None: ...
+
+
+class LiveWechatTransport:
+    """Composes independently replaceable database receive and GUI send adapters."""
+
+    def __init__(self, *, receiver: object, sender: object, session_guard: object) -> None:
+        self._receiver = receiver
+        self._sender = sender
+        self._session_guard = session_guard
+
+    def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
+        getattr(self._receiver, "configure_authorized_groups")(groups)
+        getattr(self._sender, "configure_authorized_groups")(groups)
+
+    def health(self) -> TransportHealth:
+        receiver_health = getattr(self._receiver, "health")()
+        session = getattr(self._session_guard, "check")(require_foreground=False)
+        if not receiver_health.ready:
+            return receiver_health
+        if not session.ready:
+            return TransportHealth(
+                ready=False,
+                login_status=receiver_health.login_status,
+                wechat_version=receiver_health.wechat_version,
+                screen_locked=session.error_code == "WINDOW_SESSION_LOCKED",
+                database_available=True,
+                sender_available=False,
+                error_code=session.error_code,
+                detail=session.error_code,
+            )
+        return TransportHealth(
+            ready=True,
+            login_status=receiver_health.login_status,
+            wechat_version=receiver_health.wechat_version,
+            screen_locked=False,
+            database_available=True,
+            sender_available=True,
+        )
+
+    def observed_groups(self) -> list[ObservedGroup]:
+        return getattr(self._receiver, "observed_groups")()
+
+    def poll(self, after_watermark: str | None) -> list[InboundEvent]:
+        return getattr(self._receiver, "poll")(after_watermark)
+
+    def send(self, task: OutboxTask) -> SendResult:
+        return getattr(self._sender, "send")(task)

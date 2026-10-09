@@ -45,6 +45,9 @@ class WechatautoReceiver:
         self._expected_wechat_version = expected_wechat_version
         self._version_provider = version_provider
 
+    def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
+        self._enabled_group_ids = frozenset(groups)
+
     @classmethod
     def from_live(
         cls,
@@ -252,4 +255,3 @@ class WechatautoReceiver:
                 return None
             return parsed.astimezone(UTC) if parsed.tzinfo else None
         return None
-

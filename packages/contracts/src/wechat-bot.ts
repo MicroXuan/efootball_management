@@ -25,6 +25,11 @@ export const WechatBridgeHeartbeatSchema = z.object({
   observedGroups: z.array(WechatObservedGroupInputSchema).max(500)
 });
 
+export const WechatBridgeHeartbeatResponseSchema = z.object({
+  acceptedAt: TimestampSchema,
+  enabledGroups: z.array(WechatObservedGroupInputSchema).max(500)
+});
+
 export const WechatInboundMessageSchema = z.object({
   messageId: WechatStableIdSchema,
   conversationType: WechatConversationTypeSchema,
@@ -73,6 +78,12 @@ export const WechatOutboxAckSchema = z.discriminatedUnion('status', [
   }),
   z.object({
     status: z.literal('FAILED'),
+    errorCode: z.string().trim().min(1).max(64),
+    errorMessage: z.string().trim().min(1).max(512),
+    readbackMessageId: z.never().optional()
+  }),
+  z.object({
+    status: z.literal('AMBIGUOUS'),
     errorCode: z.string().trim().min(1).max(64),
     errorMessage: z.string().trim().min(1).max(512),
     readbackMessageId: z.never().optional()
@@ -180,6 +191,7 @@ export const AdminLeagueWechatBotConfigSchema = z.object({
 });
 
 export type WechatBridgeHeartbeat = z.infer<typeof WechatBridgeHeartbeatSchema>;
+export type WechatBridgeHeartbeatResponse = z.infer<typeof WechatBridgeHeartbeatResponseSchema>;
 export type WechatConversationType = z.infer<typeof WechatConversationTypeSchema>;
 export type WechatInboundBatch = z.infer<typeof WechatInboundBatchSchema>;
 export type WechatInboundBatchResult = z.infer<typeof WechatInboundBatchResultSchema>;

@@ -38,7 +38,12 @@ export class WechatBridgeService {
       },
       update: { displayName: group.displayName, lastObservedAt: now }
     })));
-    return { acceptedAt: now.toISOString() };
+    const enabledGroups = await this.prisma.wechatGroupBinding.findMany({
+      where: { deviceId, enabled: true },
+      select: { wechatGroupId: true, displayName: true },
+      orderBy: [{ wechatGroupId: 'asc' }]
+    });
+    return { acceptedAt: now.toISOString(), enabledGroups };
   }
 
   async acceptBatch(deviceId: string, input: WechatInboundBatch): Promise<WechatInboundBatchResult> {

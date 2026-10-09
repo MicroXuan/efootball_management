@@ -105,6 +105,31 @@ export class WechatOutboxService {
       });
     }
 
+    if (input.status === 'AMBIGUOUS') {
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.wechatOutboxMessage.update({
+          where: { id: message.id },
+          data: {
+            status: 'FAILED',
+            attemptCount: message.attemptCount + 1,
+            failureCode: input.errorCode,
+            failureMessage: input.errorMessage,
+            leaseOwner: null,
+            leaseExpiresAt: null
+          }
+        }),
+        this.prisma.wechatBotDevice.update({
+          where: { id: deviceId },
+          data: {
+            circuitStatus: 'OPEN',
+            circuitReason: `${input.errorCode}: ${input.errorMessage}`.slice(0, 512),
+            circuitOpenedAt: new Date()
+          }
+        })
+      ]);
+      return updated;
+    }
+
     const attemptCount = message.attemptCount + 1;
     if (attemptCount >= this.config.outboxMaxAttempts) {
       const [updated] = await this.prisma.$transaction([

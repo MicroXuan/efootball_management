@@ -12,6 +12,9 @@ dependencies = [
   "pydantic>=2.12,<3",
 ]
 
+[project.scripts]
+efm-wechat-bridge = "efm_wechat_bridge.cli:main"
+
 [project.optional-dependencies]
 windows = ["wechatauto-replica==1.2.5.1"]
 dev = ["pytest>=8.4,<9"]

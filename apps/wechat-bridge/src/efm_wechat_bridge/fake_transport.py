@@ -32,6 +32,7 @@ class FakeWechatTransport:
         self._send_results = deque(send_results)
         self._robot_user_id = robot_user_id
         self.sent_tasks: list[OutboxTask] = []
+        self.authorized_groups: dict[str, str] = {}
 
     def set_health(self, health: TransportHealth) -> None:
         self._health = health
@@ -41,6 +42,9 @@ class FakeWechatTransport:
 
     def inject_send_result(self, result: SendResult) -> None:
         self._send_results.append(result)
+
+    def configure_authorized_groups(self, groups: dict[str, str]) -> None:
+        self.authorized_groups = dict(groups)
 
     def health(self) -> TransportHealth:
         return self._health.model_copy(deep=True)
@@ -65,4 +69,3 @@ class FakeWechatTransport:
         if self._send_results:
             return self._send_results.popleft().model_copy(deep=True)
         return SendResult(status=SendStatus.FAILED, error_code="FAKE_SEND_RESULT_MISSING")
-
