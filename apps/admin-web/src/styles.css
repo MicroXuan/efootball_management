@@ -359,6 +359,11 @@ select { font: inherit; }
 .fixture-match__versus span { color: #172126; font-size: 12px; font-weight: 900; letter-spacing: .12em; }
 .fixture-match__versus small { color: #8b989d; font-size: 10px; }
 .fixture-match__versus .ant-btn { height: 24px; padding-inline: 4px; font-size: 11px; }
+.fixture-match__versus .fixture-score-action { min-width: 56px; padding-inline: 8px; border: 1px solid transparent; border-radius: 999px; font-weight: 750; line-height: 22px; transition: color .16s ease, background-color .16s ease, border-color .16s ease; }
+.fixture-match__versus .fixture-score-action--pending { border-color: #b6e85a; background: #efffd6; color: #426400; }
+.fixture-match__versus .fixture-score-action--pending:not(:disabled):hover { border-color: #9ed72e; background: #ddff9b; color: #294500; }
+.fixture-match__versus .fixture-score-action--recorded { border-color: #ccd7c4; background: #f2f6ef; color: #66755e; }
+.fixture-match__versus .fixture-score-action--recorded:not(:disabled):hover { border-color: #abbba1; background: #e7eee2; color: #44513f; }
 .score-editor { display: grid; gap: 18px; padding-top: 8px; }
 .score-editor__fixture { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; text-align: center; }
 .score-editor__fixture span { color: var(--admin-text-secondary); font-size: 12px; }

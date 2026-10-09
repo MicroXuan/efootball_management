@@ -230,7 +230,9 @@ it('lets an administrator reopen a published schedule and record its official sc
   await userEvent.click(await screen.findByRole('button', { name: '查看赛程' }));
   expect(await screen.findByText('玩家：布莱顿玩家')).toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button', { name: /比分管理$/ }));
-  await userEvent.click(screen.getByRole('button', { name: '录入比分' }));
+  const recordScoreButton = screen.getByRole('button', { name: '录入比分' });
+  expect(recordScoreButton).toHaveClass('fixture-score-action--pending');
+  await userEvent.click(recordScoreButton);
   await userEvent.type(screen.getByLabelText('主队比分'), '2');
   await userEvent.type(screen.getByLabelText('客队比分'), '1');
   await userEvent.click(screen.getByRole('button', { name: '确认提交' }));
@@ -240,4 +242,5 @@ it('lets an administrator reopen a published schedule and record its official sc
     expect.objectContaining({ method: 'POST', body: { homeScore: 2, awayScore: 1, expectedVersion: 1, reason: null } })
   ));
   expect(await screen.findByText('2 : 1')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '修改比分' })).toHaveClass('fixture-score-action--recorded');
 });

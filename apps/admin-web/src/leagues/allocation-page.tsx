@@ -75,6 +75,7 @@ function ScheduleBoard({ preview, onEditScore }: {
             {onEditScore ? <Button
               size="small"
               type="link"
+              className={`fixture-score-action ${match.officialResult ? 'fixture-score-action--recorded' : 'fixture-score-action--pending'}`}
               disabled={match.homeParticipant.teamLifecycleStatus === 'ARCHIVED' || match.awayParticipant.teamLifecycleStatus === 'ARCHIVED'}
               onClick={() => onEditScore(match)}
             >{match.officialResult ? '修改比分' : '录入比分'}</Button> : null}
