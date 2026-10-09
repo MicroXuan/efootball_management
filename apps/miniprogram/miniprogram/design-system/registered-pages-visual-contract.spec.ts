@@ -122,4 +122,16 @@ describe('registered browsing pages visual boundary', () => {
       expect(markup, page).toContain('efm-equal-tabs')
     }
   })
+
+  it('keeps the favorite control as a compact badge inside the player card', () => {
+    const styles = readFileSync(resolve(miniRoot, 'pages/favorites/index.wxss'), 'utf8')
+
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*top:\s*8rpx/s)
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*right:\s*8rpx/s)
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*width:\s*44rpx/s)
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*min-width:\s*44rpx/s)
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*max-width:\s*44rpx/s)
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*height:\s*44rpx/s)
+    expect(styles).toMatch(/\.remove-button\s*\{[^}]*border-radius:\s*50%/s)
+  })
 })
