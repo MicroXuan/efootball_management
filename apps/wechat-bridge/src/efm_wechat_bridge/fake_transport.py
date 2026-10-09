@@ -33,6 +33,7 @@ class FakeWechatTransport:
         self._robot_user_id = robot_user_id
         self.sent_tasks: list[OutboxTask] = []
         self.authorized_groups: dict[str, str] = {}
+        self.scanned: dict[str, int] = {}
 
     def set_health(self, health: TransportHealth) -> None:
         self._health = health
@@ -54,15 +55,19 @@ class FakeWechatTransport:
         return [unique[key].model_copy(deep=True) for key in sorted(unique)]
 
     def poll(self, after_watermark: str | None) -> list[InboundEvent]:
+        legacy_watermark = None if after_watermark and after_watermark.startswith("{") else after_watermark
         return sorted(
             (
                 event.model_copy(deep=True)
                 for event in self._inbound
                 if event.sender_id != self._robot_user_id
-                and (after_watermark is None or (event.sequence or "") > after_watermark)
+                and (legacy_watermark is None or (event.sequence or "") > legacy_watermark)
             ),
             key=lambda event: (event.sequence or "", event.message_id),
         )
+
+    def scanned_cursors(self) -> dict[str, int]:
+        return dict(self.scanned)
 
     def send(self, task: OutboxTask) -> SendResult:
         self.sent_tasks.append(task.model_copy(deep=True))

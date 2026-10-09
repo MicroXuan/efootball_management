@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from uuid import UUID
 
 from .models import InboundEvent, OutboxTask, SendAck
 
-OutboxLocalStatus = Literal["PENDING", "AMBIGUOUS", "COMPLETED"]
+OutboxLocalStatus = Literal["PENDING", "IN_FLIGHT", "AMBIGUOUS", "COMPLETED"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +68,7 @@ class BridgeSpool:
                     task_id TEXT PRIMARY KEY,
                     payload_json TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'PENDING'
-                        CHECK (status IN ('PENDING', 'AMBIGUOUS', 'COMPLETED')),
+                        CHECK (status IN ('PENDING', 'IN_FLIGHT', 'AMBIGUOUS', 'COMPLETED')),
                     readback_message_id TEXT,
                     last_error_code TEXT,
                     created_at TEXT NOT NULL,
@@ -82,6 +83,28 @@ class BridgeSpool:
                     updated_at TEXT NOT NULL
                 );
             """)
+
+            definition = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='outbox_spool'"
+            ).fetchone()
+            if definition and "IN_FLIGHT" not in str(definition[0]):
+                connection.executescript("""
+                    ALTER TABLE outbox_spool RENAME TO outbox_spool_legacy;
+                    CREATE TABLE outbox_spool (
+                        task_id TEXT PRIMARY KEY,
+                        payload_json TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'PENDING'
+                            CHECK (status IN ('PENDING', 'IN_FLIGHT', 'AMBIGUOUS', 'COMPLETED')),
+                        readback_message_id TEXT,
+                        last_error_code TEXT,
+                        created_at TEXT NOT NULL,
+                        completed_at TEXT
+                    );
+                    INSERT INTO outbox_spool SELECT * FROM outbox_spool_legacy;
+                    DROP TABLE outbox_spool_legacy;
+                    CREATE INDEX outbox_spool_status_created_idx
+                        ON outbox_spool(status, created_at);
+                """)
 
     def append_inbound(self, event: InboundEvent, *, sort_key: str) -> bool:
         if not sort_key:
@@ -169,6 +192,51 @@ class BridgeSpool:
             )
             return cursor.rowcount == 1
 
+    def mark_outbox_in_flight(self, task_id: UUID | str) -> None:
+        with closing(self._connect()) as connection:
+            cursor = connection.execute(
+                "UPDATE outbox_spool SET status = 'IN_FLIGHT' WHERE task_id = ? AND status = 'PENDING'",
+                (str(task_id),),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"unknown or non-pending outbox task: {task_id}")
+
+    def scan_cursors(self) -> dict[str, int]:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT value FROM bridge_metadata WHERE key = 'conversation_scan_cursors'"
+            ).fetchone()
+        if not row:
+            return {}
+        try:
+            raw = json.loads(str(row["value"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            str(key): int(value)
+            for key, value in raw.items()
+            if isinstance(key, str) and isinstance(value, int) and value >= 0
+        }
+
+    def update_scan_cursors(self, cursors: dict[str, int]) -> None:
+        safe = {
+            key: value for key, value in sorted(cursors.items())
+            if key and isinstance(value, int) and value >= 0
+        }
+        now = datetime.now(UTC).isoformat()
+        payload = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+        with closing(self._connect()) as connection:
+            connection.execute(
+                """
+                INSERT INTO bridge_metadata(key, value, updated_at)
+                VALUES ('conversation_scan_cursors', ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (payload, now),
+            )
+
     def mark_outbox_ambiguous(self, task_id: UUID | str, error_code: str) -> None:
         if not error_code:
             raise ValueError("error_code must not be empty")
@@ -241,7 +309,7 @@ class BridgeSpool:
             ).fetchone()
         return SpoolHealthSnapshot(
             pending_inbound=pending_inbound,
-            pending_outbox=outbox_counts.get("PENDING", 0),
+            pending_outbox=outbox_counts.get("PENDING", 0) + outbox_counts.get("IN_FLIGHT", 0),
             ambiguous_outbox=outbox_counts.get("AMBIGUOUS", 0),
             watermark=str(row["value"]) if row else None,
         )

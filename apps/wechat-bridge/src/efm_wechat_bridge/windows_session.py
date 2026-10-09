@@ -80,7 +80,7 @@ class NativeWindowsProbe:
     def inspect(self) -> SessionSnapshot:
         if platform.system() != "Windows":
             return SessionSnapshot(False, False, False, False, False, None, None, False)
-        interactive = self._interactive_session()
+        interactive = self._interactive_session() and self._session_connected()
         unlocked = self._input_desktop_available()
         window, process_path = self._find_wechat_window()
         self._window_handle = window
@@ -113,6 +113,30 @@ class NativeWindowsProbe:
         session_id = ctypes.c_uint(0)
         ok = ctypes.windll.kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id))
         return bool(ok) and session_id.value != 0
+
+    @staticmethod
+    def _session_connected() -> bool:
+        session_id = ctypes.c_uint(0)
+        kernel32 = ctypes.windll.kernel32
+        if not kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id)):
+            return False
+        buffer = ctypes.c_void_p()
+        size = ctypes.c_ulong(0)
+        # WTS_CURRENT_SERVER_HANDLE, WTSConnectState; WTSActive == 0.
+        wtsapi32 = ctypes.windll.wtsapi32
+        ok = wtsapi32.WTSQuerySessionInformationW(
+            0,
+            session_id.value,
+            8,
+            ctypes.byref(buffer),
+            ctypes.byref(size),
+        )
+        if not ok or not buffer.value or size.value < ctypes.sizeof(ctypes.c_int):
+            return False
+        try:
+            return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_int)).contents.value == 0
+        finally:
+            wtsapi32.WTSFreeMemory(buffer)
 
     @staticmethod
     def _input_desktop_available() -> bool:
@@ -170,4 +194,3 @@ class NativeWindowsProbe:
             return None
         value = completed.stdout.strip()
         return value if completed.returncode == 0 and value else None
-

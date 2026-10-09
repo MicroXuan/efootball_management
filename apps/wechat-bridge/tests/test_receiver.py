@@ -90,6 +90,19 @@ class FakeDatabase:
             {"username": "other@chatroom", "nickname": "其他群"},
         ]
 
+    def get_nickname(self, username: str) -> str:
+        return {
+            "contact-wxid": "联系人",
+            "league@chatroom": "联赛群",
+            "other@chatroom": "其他群",
+        }[username]
+
+    def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+        return {
+            "server_id": f"server-{username}-{local_id}",
+            "sort_seq": local_id,
+        }
+
     def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
         assert since_seq == 8000
         assert limit == 200
@@ -147,3 +160,83 @@ def test_health_sanitizes_database_failures() -> None:
     assert "secret" not in (health.detail or "")
     assert "wxid_sensitive" not in (health.detail or "")
 
+
+def test_pinned_library_rows_are_hydrated_with_server_id_and_contact_name() -> None:
+    class PinnedShapeDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "league@chatroom", "unread": 1, "summary": "120"}]
+
+        def get_nickname(self, username: str) -> str:
+            assert username == "league@chatroom"
+            return "CELL 联赛群"
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{
+                "local_id": 81,
+                "type": "文本",
+                "sender_id": 18,
+                "sender_username": "member-wxid",
+                "create_time": NOW_TS,
+                "content": "120",
+                "sort_seq": 8001,
+            }]
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            assert (username, local_id) == ("league@chatroom", 81)
+            return {"server_id": 900000000001, "sort_seq": 8001}
+
+    receiver = WechatautoReceiver(
+        database=PinnedShapeDatabase(),
+        enabled_group_ids={"league@chatroom"},
+        robot_user_id="robot-wxid",
+    )
+
+    assert receiver.observed_groups()[0].display_name == "CELL 联赛群"
+    assert receiver.poll(None)[0].message_id == "900000000001"
+
+
+def test_poll_paginates_and_tracks_each_conversation_without_skipping_filtered_rows() -> None:
+    class BacklogDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}, {"username": "league@chatroom"}]
+
+        def get_nickname(self, username: str) -> str:
+            return username
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            if username == "contact-wxid" and since_seq == 0:
+                return [raw_message(
+                    conversation_id=username,
+                    server_id=f"private-{index}",
+                    local_id=index,
+                    sort_seq=index,
+                    sender_username=username,
+                    content="普通私聊",
+                ) for index in range(1, 201)]
+            if username == "contact-wxid" and since_seq == 200:
+                return [raw_message(
+                    conversation_id=username,
+                    server_id="binding-201",
+                    local_id=201,
+                    sort_seq=201,
+                    sender_username=username,
+                    content="绑定 123456",
+                )]
+            if username == "league@chatroom":
+                return [raw_message(server_id="group-10", local_id=10, sort_seq=10)] if since_seq < 10 else []
+            return []
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"server_id": f"server-{username}-{local_id}", "sort_seq": local_id}
+
+    receiver = WechatautoReceiver(
+        database=BacklogDatabase(),
+        enabled_group_ids={"league@chatroom"},
+        robot_user_id="robot-wxid",
+    )
+
+    events = receiver.poll('{"contact-wxid":0,"league@chatroom":0}')
+
+    assert [event.text for event in events] == ["查询赛程", "绑定 123456"]
+    assert receiver.scanned_cursors() == {"contact-wxid": 201, "league@chatroom": 10}
+    assert receiver.private_targets() == {"contact-wxid": "contact-wxid"}

@@ -56,6 +56,19 @@ def test_returns_a_bounded_stable_order_and_advances_watermark_only_on_ack(tmp_p
     assert [item.message_id for item in spool.pending_inbound(limit=2)] == ["message-c"]
 
 
+def test_persists_per_conversation_scan_cursors_and_in_flight_state(tmp_path: Path) -> None:
+    spool = BridgeSpool(tmp_path / "bridge.sqlite3")
+    spool.update_scan_cursors({"group@chatroom": 201, "contact-wxid": 88})
+    outgoing = task()
+    spool.remember_outbox(outgoing)
+    spool.mark_outbox_in_flight(outgoing.id)
+
+    restarted = BridgeSpool(tmp_path / "bridge.sqlite3")
+
+    assert restarted.scan_cursors() == {"contact-wxid": 88, "group@chatroom": 201}
+    assert restarted.outbox_record(outgoing.id).status == "IN_FLIGHT"  # type: ignore[union-attr]
+
+
 def test_reopens_with_unacknowledged_messages_after_an_api_commit_crash(tmp_path: Path) -> None:
     path = tmp_path / "bridge.sqlite3"
     first_process = BridgeSpool(path)

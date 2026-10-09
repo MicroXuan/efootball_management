@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import threading
 import time
+import sys
+from types import SimpleNamespace
 from datetime import UTC, datetime
 from uuid import UUID
 
+import pytest
+
 from efm_wechat_bridge.models import OutboxTask
 from efm_wechat_bridge.transport import SendStatus
-from efm_wechat_bridge.wechat_gui_sender import ConversationTarget, WechatGuiSender
+from efm_wechat_bridge.wechat_gui_sender import ConversationTarget, WechatGuiSender, WechatautoGuiDriver
 from efm_wechat_bridge.windows_session import SessionCheck
 
 
@@ -185,3 +189,107 @@ def test_sends_are_process_serialized() -> None:
     assert results == [SendStatus.SENT] * 4
     assert driver.max_active == 1
 
+
+def test_private_binding_reply_uses_narrow_authorized_contact_map() -> None:
+    driver = Driver()
+    driver.target = ConversationTarget(stable_id="contact-wxid", title="负责人")
+    private_task = task().model_copy(update={"target_type": "PRIVATE", "target_id": "contact-wxid"})
+    gui_sender = sender(driver)
+    gui_sender.configure_authorized_private_targets({"contact-wxid": "负责人"})
+
+    assert gui_sender.send(private_task).status is SendStatus.SENT
+
+
+def test_live_driver_uses_contact_database_and_strict_current_uia_title() -> None:
+    class Database:
+        def get_nickname(self, stable_id: str) -> str:
+            return "CELL 联赛群"
+
+        def search_contact(self, title: str) -> list[dict[str, str]]:
+            return [{"username": "league@chatroom", "remark": title, "nick_name": ""}]
+
+    class Uia:
+        current = "CELL 联赛群分群"
+
+        def current_chat(self) -> str:
+            return self.current
+
+        def open_chat(self, title: str) -> bool:
+            self.current = title
+            return True
+
+    class Gui:
+        def __init__(self) -> None:
+            self.uia = Uia()
+
+        def _get_uia(self) -> Uia:
+            return self.uia
+
+    gui = Gui()
+    live = WechatautoGuiDriver(gui=gui, database=Database())
+    target = live.resolve_exact("league@chatroom")
+
+    assert target == ConversationTarget(stable_id="league@chatroom", title="CELL 联赛群")
+    live._current = target
+    assert live.current_title() is None
+    assert live.open_exact(target) is True
+    assert live.current_title() == "CELL 联赛群"
+
+
+def test_live_driver_rejects_duplicate_display_names_and_marker_failures() -> None:
+    class Database:
+        def get_nickname(self, stable_id: str) -> str:
+            return "同名群"
+
+        def search_contact(self, title: str) -> list[dict[str, str]]:
+            return [
+                {"username": "one@chatroom", "remark": title, "nick_name": ""},
+                {"username": "two@chatroom", "remark": title, "nick_name": ""},
+            ]
+
+        def get_messages(self, stable_id: str, limit: int = 10) -> list[dict[str, object]]:
+            raise OSError("database temporarily unavailable")
+
+    live = WechatautoGuiDriver(gui=object(), database=Database())
+
+    assert live.resolve_exact("one@chatroom") is None
+    try:
+        live.capture_readback_marker("one@chatroom")
+    except RuntimeError as error:
+        assert str(error) == "READBACK_MARKER_UNAVAILABLE"
+    else:
+        raise AssertionError("marker capture must fail closed")
+
+
+def test_live_driver_uses_exactly_one_physical_enter() -> None:
+    class Input:
+        def __init__(self) -> None:
+            self.keys: list[int] = []
+
+        def key(self, key: int) -> None:
+            self.keys.append(key)
+
+    class Gui:
+        def __init__(self) -> None:
+            self._input = Input()
+
+    gui = Gui()
+    live = WechatautoGuiDriver(gui=gui, database=object())
+
+    assert live.press_enter() is True
+    assert gui._input.keys == [0x0D]
+
+
+def test_live_driver_refuses_to_destroy_non_text_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = SimpleNamespace(
+        CF_UNICODETEXT=13,
+        OpenClipboard=lambda: None,
+        CloseClipboard=lambda: None,
+        IsClipboardFormatAvailable=lambda _format: False,
+        CountClipboardFormats=lambda: 1,
+    )
+    monkeypatch.setitem(sys.modules, "win32clipboard", fake)
+    live = WechatautoGuiDriver(gui=object(), database=object())
+
+    with pytest.raises(RuntimeError, match="UNSUPPORTED_CLIPBOARD_CONTENT"):
+        live.capture_clipboard()

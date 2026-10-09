@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
@@ -240,3 +240,39 @@ def test_supervised_runtime_stops_within_bound_and_logs_only_safe_codes(tmp_path
     for line in log_text.splitlines():
         json.loads(line)
 
+
+def test_successful_heartbeat_refreshes_long_running_send_gate(tmp_path: Path) -> None:
+    runtime, _, api, _ = make_runtime(tmp_path, enable_send=True)
+    assert runtime.doctor().passed is True
+    runtime._doctor_passed_at = datetime.now(UTC) - timedelta(minutes=11)
+    api.claimed = [outgoing()]
+
+    assert runtime.heartbeat_once() is True
+    assert runtime.send_once() == 1
+
+
+def test_restarted_in_flight_send_becomes_ambiguous_without_resending(tmp_path: Path) -> None:
+    api = FakeApi()
+    api.claimed = [outgoing()]
+    transport = FakeWechatTransport(send_results=[
+        SendResult(status=SendStatus.SENT, readback_message_id="must-not-send")
+    ])
+    runtime, _, _, spool = make_runtime(tmp_path, api=api, transport=transport, enable_send=True)
+    spool.remember_outbox(outgoing())
+    spool.mark_outbox_in_flight(outgoing().id)
+    assert runtime.doctor().passed is True
+
+    assert runtime.send_once() == 1
+
+    assert transport.sent_tasks == []
+    assert api.acks[0][1].status == "AMBIGUOUS"
+    assert spool.outbox_record(outgoing().id).status == "AMBIGUOUS"  # type: ignore[union-attr]
+
+
+def test_runtime_persists_per_conversation_scan_cursors_only_after_upload(tmp_path: Path) -> None:
+    runtime, transport, _, spool = make_runtime(tmp_path)
+    transport.inject_inbound(inbound(sequence="0010"))
+    transport.scanned = {"league@chatroom": 10, "contact-wxid": 200}
+
+    assert runtime.receive_upload_once() == 1
+    assert spool.scan_cursors() == {"league@chatroom": 10, "contact-wxid": 200}

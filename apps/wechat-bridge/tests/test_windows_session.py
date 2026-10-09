@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from efm_wechat_bridge.windows_session import SessionSnapshot, WindowsSessionGuard
+from efm_wechat_bridge.windows_session import NativeWindowsProbe, SessionSnapshot, WindowsSessionGuard
 
 
 class Probe:
@@ -66,3 +66,14 @@ def test_requires_confirmed_foreground_ownership_before_input() -> None:
     assert result.error_code == "WECHAT_FOREGROUND_FAILED"
     assert probe.foreground_calls == 1
 
+
+def test_native_probe_requires_active_wts_connection(monkeypatch) -> None:
+    monkeypatch.setattr("efm_wechat_bridge.windows_session.platform.system", lambda: "Windows")
+    monkeypatch.setattr(NativeWindowsProbe, "_interactive_session", staticmethod(lambda: True))
+    monkeypatch.setattr(NativeWindowsProbe, "_session_connected", staticmethod(lambda: False))
+    monkeypatch.setattr(NativeWindowsProbe, "_input_desktop_available", staticmethod(lambda: True))
+    monkeypatch.setattr(NativeWindowsProbe, "_find_wechat_window", staticmethod(lambda: (None, None)))
+
+    snapshot = NativeWindowsProbe().inspect()
+
+    assert snapshot.interactive is False

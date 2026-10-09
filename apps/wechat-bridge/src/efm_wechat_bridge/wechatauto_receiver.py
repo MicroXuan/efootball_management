@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import platform
 import re
+import json
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from .models import InboundEvent, ObservedGroup, OutboxTask
+from .dependency_safety import initialize_wechat_dependency, silence_wechat_logging
 from .transport import SendResult, SendStatus, TransportHealth
 
 _BINDING_COMMAND = re.compile(r"^绑定\s+\d{6}$")
@@ -44,6 +46,8 @@ class WechatautoReceiver:
         self._robot_user_id = robot_user_id
         self._expected_wechat_version = expected_wechat_version
         self._version_provider = version_provider
+        self._scanned_cursors: dict[str, int] = {}
+        self._private_targets: dict[str, str] = {}
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         self._enabled_group_ids = frozenset(groups)
@@ -63,7 +67,8 @@ class WechatautoReceiver:
         except (ImportError, OSError) as error:
             raise RuntimeError("WECHATAUTO_IMPORT_FAILED") from error
         try:
-            database = WeChatDB()
+            silence_wechat_logging()
+            database = initialize_wechat_dependency(WeChatDB)
         except Exception as error:
             raise RuntimeError("WECHAT_DATABASE_INITIALIZATION_FAILED") from error
         return cls(
@@ -106,7 +111,7 @@ class WechatautoReceiver:
                     for key in ("nickname", "display_name", "name", "remark")
                     if (value := self._safe_string(session.get(key)))
                 ),
-                username,
+                self._nickname(username),
             )
             groups[username] = ObservedGroup(
                 wechat_group_id=username,
@@ -115,34 +120,56 @@ class WechatautoReceiver:
         return [groups[key] for key in sorted(groups)]
 
     def poll(self, after_watermark: str | None) -> list[InboundEvent]:
-        since_seq = self._parse_watermark(after_watermark)
+        cursors = self._parse_cursors(after_watermark)
         rows: list[dict[str, object]] = []
+        scanned: dict[str, int] = dict(cursors)
         for session in self._sessions():
             username = self._safe_string(session.get("username"))
             if not username:
                 continue
             if username.endswith("@chatroom") and username not in self._enabled_group_ids:
                 continue
-            try:
-                messages = getattr(self._database, "get_new_messages")(
-                    username,
-                    since_seq=since_seq,
-                    limit=200,
-                )
-            except Exception:
-                continue
-            for raw in messages:
-                if isinstance(raw, Mapping):
-                    row = dict(raw)
+            cursor = cursors.get(username, cursors.get("*", 0))
+            for _ in range(100):
+                try:
+                    messages = getattr(self._database, "get_new_messages")(
+                        username,
+                        since_seq=cursor,
+                        limit=200,
+                    )
+                except Exception:
+                    break
+                page_max = cursor
+                for raw in messages:
+                    if not isinstance(raw, Mapping):
+                        continue
+                    row = self._hydrate_raw_message(username, raw)
                     row.setdefault("conversation_id", username)
                     rows.append(row)
+                    page_max = max(page_max, self._positive_int(row.get("sort_seq")) or 0)
+                if page_max <= cursor:
+                    break
+                cursor = page_max
+                scanned[username] = cursor
+                if len(messages) < 200:
+                    break
+
+        self._scanned_cursors = {key: value for key, value in scanned.items() if key != "*"}
 
         unique: dict[str, InboundEvent] = {}
         for raw in rows:
             event = self.normalize(raw)
             if event is not None:
                 unique[event.message_id] = event
+                if event.conversation_type == "PRIVATE":
+                    self._private_targets[event.conversation_id] = self._nickname(event.conversation_id)
         return sorted(unique.values(), key=lambda event: (event.sequence or "", event.message_id))
+
+    def scanned_cursors(self) -> dict[str, int]:
+        return dict(self._scanned_cursors)
+
+    def private_targets(self) -> dict[str, str]:
+        return dict(self._private_targets)
 
     def normalize(self, raw: Mapping[str, object]) -> InboundEvent | None:
         conversation_id = self._safe_string(raw.get("conversation_id"))
@@ -199,6 +226,46 @@ class WechatautoReceiver:
         except Exception:
             return []
         return [session for session in sessions if isinstance(session, Mapping)]
+
+    def _nickname(self, username: str) -> str:
+        try:
+            value = self._safe_string(getattr(self._database, "get_nickname")(username))
+        except Exception:
+            value = None
+        return (value or username)[:128]
+
+    def _hydrate_raw_message(self, username: str, raw: Mapping[str, object]) -> dict[str, object]:
+        row = dict(raw)
+        if self._safe_string(row.get("server_id")):
+            return row
+        local_id = self._positive_int(row.get("local_id"))
+        if local_id is None:
+            return row
+        try:
+            full = getattr(self._database, "get_message_row")(username, local_id)
+        except Exception:
+            return row
+        if not isinstance(full, Mapping) or self._positive_int(full.get("sort_seq")) != self._positive_int(row.get("sort_seq")):
+            return row
+        row["server_id"] = full.get("server_id")
+        return row
+
+    @classmethod
+    def _parse_cursors(cls, value: str | None) -> dict[str, int]:
+        if value:
+            try:
+                raw = json.loads(value)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                raw = None
+            if isinstance(raw, dict):
+                parsed: dict[str, int] = {}
+                for key, item in raw.items():
+                    cursor = cls._positive_int(item)
+                    if isinstance(key, str) and cursor is not None:
+                        parsed[key] = cursor
+                return parsed
+        legacy = cls._parse_watermark(value)
+        return {"*": legacy} if legacy else {}
 
     def _unhealthy(self, code: str, *, version: str | None = None) -> TransportHealth:
         return TransportHealth(

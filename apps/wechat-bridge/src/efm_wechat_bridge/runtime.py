@@ -119,6 +119,8 @@ class BridgeRuntime:
         try:
             response = self.api.heartbeat(self._heartbeat_payload(health, groups))
             self._apply_authorized_groups(response)
+            if health.ready:
+                self._doctor_passed_at = datetime.now(UTC)
             return True
         except Exception as error:
             self.logger.emit("heartbeat_failed", code=self._error_code(error, "BRIDGE_API_UNAVAILABLE"))
@@ -126,11 +128,13 @@ class BridgeRuntime:
 
     def receive_upload_once(self) -> int:
         try:
-            events = self.transport.poll(self.spool.watermark())
+            cursor_payload = json.dumps(self.spool.scan_cursors(), separators=(",", ":"))
+            events = self.transport.poll(cursor_payload)
             for event in events:
                 self.spool.append_inbound(event, sort_key=event.sequence or event.message_id)
             pending = self.spool.pending_inbound(limit=self.settings.inbound_batch_size)
             if not pending:
+                self._persist_scan_cursors()
                 return 0
             results = self.api.upload_messages(pending)
             by_id = {
@@ -143,6 +147,7 @@ class BridgeRuntime:
                 return 0
             watermark = max((event.sequence or event.message_id) for event in pending)
             self.spool.ack_inbound([event.message_id for event in pending], watermark=watermark)
+            self._persist_scan_cursors()
             return len(pending)
         except Exception as error:
             self.logger.emit("inbound_cycle_failed", code=self._error_code(error, "INBOUND_CYCLE_FAILED"))
@@ -168,10 +173,12 @@ class BridgeRuntime:
                 self.api.ack_outbox(task.id, ack)
                 processed += 1
                 continue
-            if existing and existing.status == "AMBIGUOUS":
+            if existing and existing.status in {"IN_FLIGHT", "AMBIGUOUS"}:
+                if existing.status == "IN_FLIGHT":
+                    self.spool.mark_outbox_ambiguous(task.id, "PROCESS_RESTART_DURING_SEND")
                 ack = SendAck(
                     status="AMBIGUOUS",
-                    error_code=existing.last_error_code or "WECHAT_SEND_UNCONFIRMED",
+                    error_code=existing.last_error_code or "PROCESS_RESTART_DURING_SEND",
                     error_message="send outcome requires operator reconciliation",
                 )
                 self.api.ack_outbox(task.id, ack)
@@ -180,6 +187,7 @@ class BridgeRuntime:
                 break
 
             self.spool.remember_outbox(task)
+            self.spool.mark_outbox_in_flight(task.id)
             result = self.transport.send(task)
             if result.status is SendStatus.SENT:
                 ack = SendAck(status="SENT", readback_message_id=result.readback_message_id)
@@ -204,6 +212,11 @@ class BridgeRuntime:
             if result.status is SendStatus.AMBIGUOUS:
                 break
         return processed
+
+    def _persist_scan_cursors(self) -> None:
+        getter = getattr(self.transport, "scanned_cursors", None)
+        if callable(getter):
+            self.spool.update_scan_cursors(getter())
 
     def run_forever(self) -> None:
         workers = [
@@ -310,4 +323,3 @@ class BridgeRuntime:
             if candidate.isupper() and 1 <= len(candidate) <= 64:
                 return candidate
         return fallback
-

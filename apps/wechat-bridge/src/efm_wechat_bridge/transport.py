@@ -109,7 +109,13 @@ class LiveWechatTransport:
         return getattr(self._receiver, "observed_groups")()
 
     def poll(self, after_watermark: str | None) -> list[InboundEvent]:
-        return getattr(self._receiver, "poll")(after_watermark)
+        events = getattr(self._receiver, "poll")(after_watermark)
+        private_targets = getattr(self._receiver, "private_targets", lambda: {})()
+        getattr(self._sender, "configure_authorized_private_targets")(private_targets)
+        return events
+
+    def scanned_cursors(self) -> dict[str, int]:
+        return getattr(self._receiver, "scanned_cursors")()
 
     def send(self, task: OutboxTask) -> SendResult:
         return getattr(self._sender, "send")(task)

@@ -3,11 +3,13 @@ from __future__ import annotations
 import platform
 import threading
 import time
+from datetime import UTC, datetime
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 from .models import OutboxTask
+from .dependency_safety import initialize_wechat_dependency, silence_wechat_logging
 from .transport import SendResult, SendStatus
 from .windows_session import SessionCheck
 
@@ -63,11 +65,15 @@ class WechatGuiSender:
         self._session_guard = session_guard
         self._driver = driver
         self._expected_titles = dict(expected_titles)
+        self._authorized_private_targets: dict[str, str] = {}
         self._dry_run = dry_run
         self._readback_timeout_seconds = readback_timeout_seconds
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         self._expected_titles = dict(groups)
+
+    def configure_authorized_private_targets(self, targets: Mapping[str, str]) -> None:
+        self._authorized_private_targets = dict(targets)
 
     def send(self, task: OutboxTask) -> SendResult:
         with self._send_lock:
@@ -78,7 +84,11 @@ class WechatGuiSender:
         if not session.ready:
             return SendResult(status=SendStatus.FAILED, error_code=session.error_code)
 
-        expected_title = self._expected_titles.get(task.target_id)
+        expected_title = (
+            self._expected_titles.get(task.target_id)
+            if task.target_type == "GROUP"
+            else self._authorized_private_targets.get(task.target_id)
+        )
         if not expected_title:
             return SendResult(status=SendStatus.FAILED, error_code="CONVERSATION_NOT_AUTHORIZED")
         target = self._driver.resolve_exact(task.target_id)
@@ -154,32 +164,37 @@ class WechatautoGuiDriver:
         except (ImportError, OSError) as error:
             raise RuntimeError("WECHATAUTO_IMPORT_FAILED") from error
         try:
-            return cls(gui=WeChatGUI(), database=WeChatDB())
+            silence_wechat_logging()
+            gui = initialize_wechat_dependency(WeChatGUI)
+            database = initialize_wechat_dependency(WeChatDB)
+            return cls(gui=gui, database=database)
         except Exception as error:
             raise RuntimeError("WECHAT_SENDER_INITIALIZATION_FAILED") from error
 
     def resolve_exact(self, stable_id: str) -> ConversationTarget | None:
         try:
-            sessions = getattr(self._database, "get_sessions")(limit=500)
+            title = str(getattr(self._database, "get_nickname")(stable_id) or "").strip()
+            matches = getattr(self._database, "search_contact")(title)
         except Exception:
             return None
-        for session in sessions:
-            if not isinstance(session, dict) or str(session.get("username") or "") != stable_id:
-                continue
-            title = next(
-                (
-                    str(session[key]).strip()
-                    for key in ("nickname", "display_name", "name", "remark")
-                    if session.get(key) and str(session[key]).strip()
-                ),
-                None,
-            )
-            return ConversationTarget(stable_id=stable_id, title=title) if title else None
-        return None
+        exact_ids = {
+            str(item.get("username") or "")
+            for item in matches
+            if isinstance(item, dict)
+            and title
+            and title in {
+                str(item.get("remark") or "").strip(),
+                str(item.get("nick_name") or "").strip(),
+            }
+        }
+        if exact_ids != {stable_id}:
+            return None
+        return ConversationTarget(stable_id=stable_id, title=title)
 
     def open_exact(self, target: ConversationTarget) -> bool:
         try:
-            opened = bool(getattr(self._gui, "open_chat")(target.title, exact=True))
+            uia = getattr(self._gui, "_get_uia")()
+            opened = bool(uia and uia.open_chat(target.title) and uia.current_chat() == target.title)
         except Exception:
             return False
         self._current = target if opened else None
@@ -189,8 +204,9 @@ class WechatautoGuiDriver:
         if self._current is None:
             return None
         try:
-            checker = getattr(self._gui, "_chat_is_open")
-            return self._current.title if checker(self._current.title) else None
+            uia = getattr(self._gui, "_get_uia")()
+            actual = str(uia.current_chat() or "").strip() if uia else ""
+            return actual if actual == self._current.title else None
         except Exception:
             return None
 
@@ -201,6 +217,8 @@ class WechatautoGuiDriver:
         try:
             if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
                 return ("text", win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT))
+            if win32clipboard.CountClipboardFormats():
+                raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
             return ("empty", None)
         finally:
             win32clipboard.CloseClipboard()
@@ -220,12 +238,15 @@ class WechatautoGuiDriver:
     def capture_readback_marker(self, stable_id: str) -> object:
         try:
             rows = getattr(self._database, "get_messages")(stable_id, limit=10)
-        except Exception:
-            rows = []
+        except Exception as error:
+            raise RuntimeError("READBACK_MARKER_UNAVAILABLE") from error
         return {
-            (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
-            for row in rows
-            if isinstance(row, dict)
+            "captured_at": datetime.now(UTC).timestamp(),
+            "identities": {
+                (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
+                for row in rows
+                if isinstance(row, dict)
+            },
         }
 
     def paste_text(self, text: str) -> bool:
@@ -235,7 +256,8 @@ class WechatautoGuiDriver:
             return False
 
     def press_enter(self) -> bool:
-        return bool(getattr(self._gui, "click_send")())
+        getattr(self._gui, "_input").key(0x0D)
+        return True
 
     def read_back(
         self,
@@ -244,7 +266,8 @@ class WechatautoGuiDriver:
         marker: object,
         timeout_seconds: float,
     ) -> str | None:
-        previous = marker if isinstance(marker, set) else set()
+        previous = marker.get("identities", set()) if isinstance(marker, dict) else set()
+        captured_at = float(marker.get("captured_at", 0)) if isinstance(marker, dict) else 0
         deadline = time.monotonic() + timeout_seconds
         while True:
             try:
@@ -255,7 +278,13 @@ class WechatautoGuiDriver:
                 if not isinstance(row, dict):
                     continue
                 identity = (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
-                if identity in previous or row.get("sender_id") != 2 or row.get("content") != text:
+                created = float(row.get("create_time") or 0)
+                if (
+                    identity in previous
+                    or created < captured_at - 5
+                    or row.get("sender_id") != 2
+                    or row.get("content") != text
+                ):
                     continue
                 server_id = str(row.get("server_id") or "").strip()
                 return server_id or f"local:{identity[0]}:{identity[1]}"
