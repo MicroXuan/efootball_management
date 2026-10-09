@@ -396,9 +396,9 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
           <strong>{scoreEditor.homeParticipant.displayName}</strong><span>对阵</span><strong>{scoreEditor.awayParticipant.displayName}</strong>
         </div>
         <div className="score-editor__inputs">
-          <InputNumber aria-label="主队比分" min={0} max={99} precision={0} value={homeScore} onChange={setHomeScore} placeholder="主队" />
+          <InputNumber aria-label="主队比分" controls={false} min={0} max={99} precision={0} value={homeScore} onChange={setHomeScore} placeholder="主队" />
           <span>:</span>
-          <InputNumber aria-label="客队比分" min={0} max={99} precision={0} value={awayScore} onChange={setAwayScore} placeholder="客队" />
+          <InputNumber aria-label="客队比分" controls={false} min={0} max={99} precision={0} value={awayScore} onChange={setAwayScore} placeholder="客队" />
         </div>
         {scoreEditor.officialResult ? <Input.TextArea
           aria-label="比分修正原因"

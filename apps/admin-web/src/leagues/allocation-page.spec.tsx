@@ -233,6 +233,8 @@ it('lets an administrator reopen a published schedule and record its official sc
   const recordScoreButton = screen.getByRole('button', { name: '录入比分' });
   expect(recordScoreButton).toHaveClass('fixture-score-action--pending');
   await userEvent.click(recordScoreButton);
+  expect(screen.queryAllByLabelText('Increase Value')).toHaveLength(0);
+  expect(screen.queryAllByLabelText('Decrease Value')).toHaveLength(0);
   await userEvent.type(screen.getByLabelText('主队比分'), '2');
   await userEvent.type(screen.getByLabelText('客队比分'), '1');
   await userEvent.click(screen.getByRole('button', { name: '确认提交' }));
