@@ -19,6 +19,7 @@
     "pages/league-transactions/index",
     "pages/team-finance/index",
     "pages/favorites/index",
+    "pages/wechat-bot-binding/index",
     "pages/player-card-detail/index"
   ],
   "window": {
