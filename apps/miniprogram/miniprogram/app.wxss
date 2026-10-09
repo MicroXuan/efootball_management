@@ -49,6 +49,28 @@ button::after {
   border: 0;
 }
 
+.efm-equal-tabs {
+  width: 100%;
+  box-sizing: border-box;
+  align-items: stretch;
+}
+
+.efm-equal-tabs > button {
+  width: 100%;
+  min-width: 0;
+  height: 72rpx;
+  min-height: 72rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 12rpx;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .players-page,
 .competitions-page,
 .leagues-page,

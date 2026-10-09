@@ -19,13 +19,13 @@
 
     <view class="filter-panel">
       <text class="filter-label">交易方向</text>
-      <view class="filter-row">
+      <view class="filter-row efm-equal-tabs">
         <button class="filter-button {{directionFilter === 'ALL' ? 'is-active' : ''}}" data-filter="ALL" bindtap="switchDirection">全部</button>
         <button class="filter-button {{directionFilter === 'BUY' ? 'is-active' : ''}}" data-filter="BUY" bindtap="switchDirection">买入</button>
         <button class="filter-button {{directionFilter === 'SELL' ? 'is-active' : ''}}" data-filter="SELL" bindtap="switchDirection">卖出</button>
       </view>
       <text class="filter-label second-label">操作类型</text>
-      <view class="filter-row">
+      <view class="filter-row efm-equal-tabs">
         <button class="filter-button {{typeFilter === 'ALL' ? 'is-active' : ''}}" data-filter="ALL" bindtap="switchType">全部</button>
         <button class="filter-button {{typeFilter === 'TRANSFER' ? 'is-active' : ''}}" data-filter="TRANSFER" bindtap="switchType">转会</button>
         <button class="filter-button {{typeFilter === 'ADMIN' ? 'is-active' : ''}}" data-filter="ADMIN" bindtap="switchType">管理调整</button>

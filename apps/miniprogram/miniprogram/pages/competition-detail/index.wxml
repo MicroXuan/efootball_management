@@ -15,7 +15,7 @@
       </view>
     </view>
 
-    <view class="tabs {{showBracket ? 'tabs--four' : ''}}">
+    <view class="tabs efm-equal-tabs {{showBracket ? 'tabs--four' : ''}}">
       <button class="tab {{activeTab === 'overview' ? 'is-active' : ''}}" data-tab="overview" bindtap="switchTab">概览</button>
       <button class="tab {{activeTab === 'schedule' ? 'is-active' : ''}}" data-tab="schedule" bindtap="switchTab">赛程</button>
       <button class="tab {{activeTab === 'standings' ? 'is-active' : ''}}" data-tab="standings" bindtap="switchTab">积分榜</button>

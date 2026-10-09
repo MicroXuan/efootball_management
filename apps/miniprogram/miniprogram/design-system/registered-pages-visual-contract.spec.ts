@@ -107,4 +107,19 @@ describe('registered browsing pages visual boundary', () => {
       expect(config.usingComponents?.['entity-artwork']).toBe('/components/entity-artwork/index')
     },
   )
+
+  it('keeps fixed tab groups equal-width and inside the page gutter', () => {
+    const styles = readFileSync(resolve(miniRoot, 'app.wxss'), 'utf8')
+
+    expect(styles).toContain('.efm-equal-tabs > button')
+    expect(styles).toMatch(/\.efm-equal-tabs\s*>\s*button\s*\{[^}]*width:\s*100%/s)
+    expect(styles).toMatch(/\.efm-equal-tabs\s*>\s*button\s*\{[^}]*min-width:\s*0/s)
+    expect(styles).toMatch(/\.efm-equal-tabs\s*>\s*button\s*\{[^}]*height:\s*72rpx/s)
+    expect(styles).toMatch(/\.efm-equal-tabs\s*>\s*button\s*\{[^}]*box-sizing:\s*border-box/s)
+
+    for (const page of ['leagues', 'competition-detail', 'league-transactions', 'team-assets']) {
+      const markup = readFileSync(resolve(miniRoot, `pages/${page}/index.wxml`), 'utf8')
+      expect(markup, page).toContain('efm-equal-tabs')
+    }
+  })
 })

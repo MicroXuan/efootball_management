@@ -82,7 +82,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .league-tabs {
   margin-top: 24rpx;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8rpx;
   padding: 8rpx;
   border: 2rpx solid #2d393f;
@@ -91,8 +91,6 @@ page { background: #0e1417; color: #f4f7f8; }
 }
 
 .league-tabs button {
-  min-height: 76rpx;
-  margin: 0;
   border: 0;
   border-radius: 14rpx;
   color: #aab5ba;

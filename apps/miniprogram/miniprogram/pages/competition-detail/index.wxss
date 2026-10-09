@@ -11,9 +11,9 @@ page { background: #0e1417; color: #f4f7f8; }
 .score-label, .score-value { display: block; }
 .score-label { color: #7e8b91; font-size: 17rpx; }
 .score-value { margin-top: 7rpx; color: #aab5ba; font-size: 22rpx; }
-.tabs { margin: 26rpx 0; display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 2rpx solid #344047; }
-.tabs.tabs--four { grid-template-columns: repeat(4, 1fr); }
-.tab { margin: 0; padding: 20rpx 0; border: 0; border-radius:20rpx; background: transparent; color: #7e8b91; font-size: 23rpx; }
+.tabs { margin: 26rpx 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 2rpx solid #344047; }
+.tabs.tabs--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tab { border: 0; border-radius:20rpx; background: transparent; color: #7e8b91; font-size: 23rpx; }
 .tab::after { border: 0; }
 .tab.is-active { border-bottom: 4rpx solid #b6f13a; color: #eaffE8; }
 .section-stack { display: flex; flex-direction: column; gap: 20rpx; }
