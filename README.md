@@ -37,7 +37,8 @@ git diff --check
 - [个人赛事闭环本地验收](docs/development/competition-loop.md)
 - [后台管理系统本地开发与验收](docs/development/admin-web-local-development.zh-CN.md)
 - [微信群机器人基础验收与运维](docs/development/wechat-bot-foundation-verification.zh-CN.md)
+- [Windows 微信 Bridge 部署、验收与回滚](docs/deployment/windows-wechat-bridge.zh-CN.md)
 - [联赛球队迁移与回滚手册](docs/development/league-team-migration.zh-CN.md)
 - [联赛赛季体系实施路线图](docs/superpowers/plans/2026-09-26-league-season-pyramid-roadmap.md)
 
-当前版本已完成微信群机器人服务端与管理界面；真实 Windows 微信收发桥接仍默认关闭，需完成目标电脑验收后才能启用。自动拍卖状态机将在后续阶段接入，现阶段不会因群消息自动修改球队资金或阵容。
+当前版本包含默认关闭发送的 Windows 微信 Bridge。仓库侧自动化测试不能替代目标 Windows 电脑验收；完成部署文档中的测试群清单前不得启用真实发送。自动拍卖只记录报价与人工审核结果，不应自动修改球队资金或阵容。
