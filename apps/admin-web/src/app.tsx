@@ -14,6 +14,7 @@ const AuditPage = lazy(() => import('./platform/audit-page').then((module) => ({
 const LeaguesPage = lazy(() => import('./platform/leagues-page').then((module) => ({ default: module.LeaguesPage })));
 const PlatformPresentationCard = lazy(() => import('./platform/platform-presentation-card').then((module) => ({ default: module.PlatformPresentationCard })));
 const DataSyncPage = lazy(() => import('./platform/data-sync/data-sync-page').then((module) => ({ default: module.DataSyncPage })));
+const WechatBotDevicesPage = lazy(() => import('./platform/wechat-bot-devices-page').then((module) => ({ default: module.WechatBotDevicesPage })));
 const LeagueShell = lazy(() => import('./leagues/league-shell').then((module) => ({ default: module.LeagueShell })));
 const TeamDetailPage = lazy(() => import('./leagues/team-detail-page').then((module) => ({ default: module.TeamDetailPage })));
 const TeamsPage = lazy(() => import('./leagues/teams-page').then((module) => ({ default: module.TeamsPage })));
@@ -26,6 +27,7 @@ const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => (
 const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
 const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
 const ValuationReviewsPage = lazy(() => import('./valuations/valuation-reviews-page').then((module) => ({ default: module.ValuationReviewsPage })));
+const WechatBotPage = lazy(() => import('./leagues/wechat-bot-page').then((module) => ({ default: module.WechatBotPage })));
 
 function DefaultRoute() {
   const { identity } = useAdminSession();
@@ -54,6 +56,7 @@ export function App() {
               <Route path="platform/leagues" element={deferred(<LeaguesPage api={adminApi} />)} />
               <Route path="platform/presentation" element={deferred(<PlatformPresentationCard api={adminApi} />)} />
               <Route path="platform/data-sync" element={deferred(<DataSyncPage api={adminApi} />)} />
+              <Route path="platform/wechat-bot" element={deferred(<WechatBotDevicesPage api={adminApi} />)} />
               <Route path="platform/admins" element={deferred(<AdminAccountsPage api={adminApi} />)} />
               <Route path="platform/audit" element={deferred(<AuditPage api={adminApi} />)} />
             </Route>
@@ -69,6 +72,7 @@ export function App() {
               <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
               <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
+              <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />
             </Route>
           </Route></Route>
           <Route path="*" element={<Navigate to="/" replace />} />
