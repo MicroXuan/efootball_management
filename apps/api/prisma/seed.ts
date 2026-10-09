@@ -38,6 +38,7 @@ const competitionPermissions = [
 const leaguePermissions = [
   ['league.create', 'Create leagues'],
   ['league.manage', 'Manage a league'],
+  ['league.auction.manage', 'Manage league player auctions'],
   ['season.manage', 'Manage a league season'],
   ['season.registration.review', 'Review season entries']
 ] as const;
@@ -145,15 +146,15 @@ await prisma.$transaction(async (transaction) => {
     }
   }
 
-  for (const [index, [code, name]] of leaguePermissions.entries()) {
+  for (const [code, name] of leaguePermissions) {
     const permission = await transaction.permission.upsert({
       where: { code },
       update: { name },
       create: { code, name }
     });
-    const rolesToGrant = index === 0
+    const rolesToGrant = code === 'league.create'
       ? [platformAdmin]
-      : index === 1
+      : code === 'league.manage' || code === 'league.auction.manage'
         ? [platformAdmin, leagueManager]
         : [platformAdmin, leagueManager, seasonManager];
 

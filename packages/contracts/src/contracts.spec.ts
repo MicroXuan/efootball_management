@@ -107,6 +107,16 @@ import {
   derivePesdataPositionAutoBuild
 } from './index.js';
 import {
+  CreatePlayerAuctionBatchRequestSchema,
+  PlayerAuctionBatchDetailSchema,
+  PlayerAuctionBatchStatusSchema,
+  PlayerAuctionBidResultSchema,
+  PlayerAuctionLotStatusSchema,
+  ReplacePlayerAuctionLotsRequestSchema,
+  ReviewPlayerAuctionLotRequestSchema,
+  formatAuctionMoney
+} from './player-auction.js';
+import {
   AdminLeagueWechatBotConfigSchema,
   AdminWechatBotDeviceSchema,
   AdminWechatGroupBindingSchema,
@@ -2176,5 +2186,134 @@ describe('WeChat bot contracts', () => {
       observedGroups: [],
       scheduleSourceOptions: [{ id: bindingId, name: '甲级联赛', status: 'IN_PROGRESS' }]
     }).scheduleSourceOptions[0]?.name, '甲级联赛');
+  });
+});
+
+describe('player auction contracts', () => {
+  const leagueId = '11111111-1111-4111-8111-111111111111';
+  const groupBindingId = '22222222-2222-4222-8222-222222222222';
+  const batchId = '33333333-3333-4333-8333-333333333333';
+  const lotId = '44444444-4444-4444-8444-444444444444';
+  const playerId = '55555555-5555-4555-8555-555555555555';
+  const teamId = '66666666-6666-4666-8666-666666666666';
+  const bidId = '77777777-7777-4777-8777-777777777777';
+  const now = '2026-10-09T12:00:00.000Z';
+
+  it('accepts the complete batch, lot, and bid status vocabulary', () => {
+    for (const status of ['DRAFT', 'READY', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', 'RECOVERY_REQUIRED']) {
+      assert.equal(PlayerAuctionBatchStatusSchema.parse(status), status);
+    }
+    for (const status of ['QUEUED', 'ACTIVE', 'PAUSED', 'PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID']) {
+      assert.equal(PlayerAuctionLotStatusSchema.parse(status), status);
+    }
+    for (const result of ['VALID', 'BELOW_STARTING_PRICE', 'BELOW_MINIMUM_INCREMENT', 'UNBOUND', 'NO_ACTIVE_TEAM', 'INACTIVE', 'PAUSED', 'RECOVERY_REQUIRED', 'DEADLINE_PASSED', 'DUPLICATE', 'OVERFLOW']) {
+      assert.equal(PlayerAuctionBidResultSchema.parse(result), result);
+    }
+  });
+
+  it('requires positive integer pricing, unique explicit order, and optimistic versions', () => {
+    assert.equal(CreatePlayerAuctionBatchRequestSchema.parse({
+      groupBindingId,
+      name: '十月拍卖',
+      expectedVersion: 2
+    }).expectedVersion, 2);
+    const request = ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [
+        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, displayOrder: 2, startingPrice: 80, minimumIncrement: 20 }
+      ]
+    });
+    assert.equal(request.lots[1]?.displayOrder, 2);
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [{ playerId, displayOrder: 1, startingPrice: 0, minimumIncrement: 10 }]
+    }));
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [
+        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, displayOrder: 1, startingPrice: 80, minimumIncrement: 20 }
+      ]
+    }));
+  });
+
+  it('requires reasons for adjusted and void reviews', () => {
+    assert.equal(ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'CONFIRM',
+      expectedVersion: 3
+    }).decision, 'CONFIRM');
+    assert.throws(() => ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'ADJUST',
+      reviewedTeamId: teamId,
+      reviewedPrice: 140,
+      expectedVersion: 3
+    }));
+    assert.equal(ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'ADJUST',
+      reviewedTeamId: teamId,
+      reviewedPrice: 140,
+      reason: '群内记录核对后修正',
+      expectedVersion: 3
+    }).reviewedPrice, 140);
+    assert.throws(() => ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'VOID',
+      expectedVersion: 3,
+      reason: ' '
+    }));
+  });
+
+  it('parses a detail snapshot with ISO timestamps and keeps money formatting derived', () => {
+    const detail = PlayerAuctionBatchDetailSchema.parse({
+      id: batchId,
+      leagueId,
+      groupBindingId,
+      name: '十月拍卖',
+      status: 'ACTIVE',
+      currentLotId: lotId,
+      version: 4,
+      startedAt: now,
+      completedAt: null,
+      cancelledAt: null,
+      createdAt: now,
+      updatedAt: now,
+      lots: [{
+        id: lotId,
+        displayOrder: 1,
+        playerId,
+        playerCardId: null,
+        playerName: '车范根',
+        playerSnapshot: { position: 'CF', overall: 96 },
+        startingPrice: 50,
+        minimumIncrement: 10,
+        status: 'ACTIVE',
+        currentPrice: 120,
+        currentHighestBidId: bidId,
+        deadlineAt: now,
+        deadlineEpoch: 2,
+        pausedRemainingMs: null,
+        version: 3,
+        bids: [{
+          id: bidId,
+          leagueTeamId: teamId,
+          teamName: '上海申花',
+          userId: leagueId,
+          amount: 120,
+          result: 'VALID',
+          rejectionReason: null,
+          wechatMessageId: 'wechat-1',
+          wechatSortKey: '0001',
+          wechatSentAt: now,
+          receivedAt: now
+        }],
+        review: null,
+        startedAt: now,
+        closedAt: null,
+        reviewedAt: null
+      }]
+    });
+    assert.equal(detail.lots[0]?.currentPrice, 120);
+    assert.equal(formatAuctionMoney(120), '⭐120⭐');
+    assert.equal('currentPriceDisplay' in detail.lots[0]!, false);
   });
 });

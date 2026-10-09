@@ -13,6 +13,7 @@ export * from './player-valuation.js';
 export * from './player-catalog.js';
 export * from './player-auto-build.js';
 export * from './player-import.js';
+export * from './player-auction.js';
 export * from './platform-data-sync.js';
 export * from './platform-presentation.js';
 export * from './user.js';

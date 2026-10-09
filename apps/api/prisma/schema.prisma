@@ -396,6 +396,47 @@ enum WechatOutboxStatus {
   FAILED
 }
 
+enum PlayerAuctionBatchStatus {
+  DRAFT
+  READY
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  RECOVERY_REQUIRED
+}
+
+enum PlayerAuctionLotStatus {
+  QUEUED
+  ACTIVE
+  PAUSED
+  PENDING_REVIEW
+  REVIEWED
+  VOID
+  NO_BID
+}
+
+enum PlayerAuctionBidResult {
+  VALID
+  BELOW_STARTING_PRICE
+  BELOW_MINIMUM_INCREMENT
+  UNBOUND
+  NO_ACTIVE_TEAM
+  WRONG_LEAGUE
+  INACTIVE
+  PAUSED
+  RECOVERY_REQUIRED
+  DEADLINE_PASSED
+  DUPLICATE
+  OVERFLOW
+}
+
+enum PlayerAuctionReviewDecision {
+  CONFIRM
+  ADJUST
+  VOID
+}
+
 model User {
   id                               String                                 @id @default(uuid()) @db.Char(36)
   wechatOpenId                     String                                 @unique @map("wechat_open_id") @db.VarChar(128)
@@ -433,6 +474,7 @@ model User {
   playerFavorites                  UserPlayerFavorite[]
   wechatIdentityBindings           WechatIdentityBinding[]                @relation("WechatIdentityUser")
   wechatBindingCodes               WechatBindingCode[]                    @relation("WechatBindingCodeUser")
+  playerAuctionBids                PlayerAuctionBid[]                     @relation("PlayerAuctionBidUser")
 
   @@map("users")
 }
@@ -572,6 +614,8 @@ model AdminAccount {
   submittedMatchResults        MatchResultVersion[]              @relation("MatchResultAdminSubmitter")
   createdWechatBotDevices      WechatBotDevice[]                 @relation("WechatBotDeviceCreator")
   createdWechatScheduleSources WechatGroupScheduleSource[]       @relation("WechatScheduleSourceCreator")
+  createdPlayerAuctionBatches  PlayerAuctionBatch[]               @relation("PlayerAuctionBatchCreator")
+  reviewedPlayerAuctionLots    PlayerAuctionReview[]              @relation("PlayerAuctionReviewAdmin")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -651,6 +695,7 @@ model League {
   playerValuationHistory  PlayerValuationHistory[]
   transactionFeeRules     LeagueTransactionFeeRuleVersion[]
   wechatGroupBindings     WechatGroupBinding[]
+  playerAuctionBatches    PlayerAuctionBatch[]
 
   @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -707,6 +752,9 @@ model LeagueTeam {
   valuationSubmissions       ValuationSubmission[]
   shellHistory               LeagueTeamShellHistory[]  @relation("ShellHistoryTeam")
   relatedShellHistory        LeagueTeamShellHistory[]  @relation("ShellHistoryRelatedTeam")
+  playerAuctionBids          PlayerAuctionBid[]        @relation("PlayerAuctionBidTeam")
+  computedAuctionReviews     PlayerAuctionReview[]     @relation("PlayerAuctionComputedWinnerTeam")
+  reviewedAuctionReviews     PlayerAuctionReview[]     @relation("PlayerAuctionReviewedWinnerTeam")
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
   @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
@@ -1339,6 +1387,7 @@ model FootballPlayer {
   valuationHistory             PlayerValuationHistory[]
   importRecords                ImportRecord[]
   favoritedBy                  UserPlayerFavorite[]
+  playerAuctionLots            PlayerAuctionLot[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
   @@index([normalizedNameEn], map: "football_players_name_en_idx")
@@ -1429,6 +1478,7 @@ model PlayerCard {
   newRosterTransactions        RosterTransaction[]      @relation("RosterTransactionNewCard")
   versions                     PlayerCardVersion[]
   importRecords                ImportRecord[]
+  playerAuctionLots            PlayerAuctionLot[]
 
   @@unique([sourceId, externalId], map: "player_cards_identity_unique")
   @@index([position, cardType, overallRating], map: "player_cards_filter_idx")
@@ -2255,6 +2305,7 @@ model WechatGroupBinding {
   league          League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   scheduleSources WechatGroupScheduleSource[]
   inboundMessages WechatInboundMessage[]
+  playerAuctionBatches PlayerAuctionBatch[]
 
   @@unique([deviceId, wechatGroupId], map: "wechat_group_bindings_device_group_unique")
   @@index([leagueId, enabled], map: "wechat_group_bindings_league_enabled_idx")
@@ -2292,6 +2343,7 @@ model WechatIdentityBinding {
   updatedAt       DateTime                    @updatedAt @map("updated_at")
   device          WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   user            User                        @relation("WechatIdentityUser", fields: [userId], references: [id], onDelete: Restrict)
+  playerAuctionBids PlayerAuctionBid[]
 
   @@unique([deviceId, wechatContactId], map: "wechat_identity_bindings_device_contact_unique")
   @@unique([deviceId, userId], map: "wechat_identity_bindings_device_user_unique")
@@ -2350,6 +2402,7 @@ model WechatInboundMessage {
   device              WechatBotDevice               @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   groupBinding        WechatGroupBinding?           @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
   consumedBindingCode WechatBindingCode?            @relation("WechatBindingCodeInbound")
+  playerAuctionBid    PlayerAuctionBid?
 
   @@unique([deviceId, messageId], map: "wechat_inbound_messages_device_message_unique")
   @@index([groupBindingId, wechatSentAt], map: "wechat_inbound_messages_group_time_idx")
@@ -2382,4 +2435,123 @@ model WechatOutboxMessage {
   @@index([deviceId, status, scheduledAt, priority], map: "wechat_outbox_messages_claim_idx")
   @@index([leaseExpiresAt], map: "wechat_outbox_messages_lease_idx")
   @@map("wechat_outbox_messages")
+}
+
+model PlayerAuctionBatch {
+  id                    String                   @id @default(uuid()) @db.Char(36)
+  leagueId              String                   @map("league_id") @db.Char(36)
+  groupBindingId        String                   @map("group_binding_id") @db.Char(36)
+  name                  String                   @db.VarChar(128)
+  status                PlayerAuctionBatchStatus @default(DRAFT)
+  currentLotId          String?                  @unique @map("current_lot_id") @db.Char(36)
+  createdByAdminId      String                   @map("created_by_admin_id") @db.Char(36)
+  recoveryDetectedAt    DateTime?                @map("recovery_detected_at")
+  recoveryReason        String?                  @map("recovery_reason") @db.VarChar(512)
+  version               Int                      @default(1) @db.UnsignedInt
+  startedAt             DateTime?                @map("started_at")
+  completedAt           DateTime?                @map("completed_at")
+  cancelledAt           DateTime?                @map("cancelled_at")
+  createdAt             DateTime                 @default(now()) @map("created_at")
+  updatedAt             DateTime                 @updatedAt @map("updated_at")
+  league                League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  groupBinding          WechatGroupBinding       @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
+  createdByAdmin        AdminAccount             @relation("PlayerAuctionBatchCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  currentLot            PlayerAuctionLot?        @relation("PlayerAuctionCurrentLot", fields: [currentLotId], references: [id], onDelete: Restrict)
+  lots                  PlayerAuctionLot[]        @relation("PlayerAuctionBatchLots")
+
+  @@index([leagueId, status, createdAt], map: "player_auction_batches_league_status_idx")
+  @@index([groupBindingId, status], map: "player_auction_batches_group_status_idx")
+  @@index([createdByAdminId], map: "player_auction_batches_creator_idx")
+  @@map("player_auction_batches")
+}
+
+model PlayerAuctionLot {
+  id                     String                   @id @default(uuid()) @db.Char(36)
+  batchId                String                   @map("batch_id") @db.Char(36)
+  footballPlayerId       String                   @map("football_player_id") @db.Char(36)
+  playerCardId           String?                  @map("player_card_id") @db.Char(36)
+  displayOrder           Int                      @map("display_order") @db.UnsignedInt
+  playerNameSnapshot     String                   @map("player_name_snapshot") @db.VarChar(128)
+  playerSnapshot         Json                     @map("player_snapshot")
+  startingPrice          Int                      @map("starting_price") @db.UnsignedInt
+  minimumIncrement       Int                      @map("minimum_increment") @db.UnsignedInt
+  status                 PlayerAuctionLotStatus   @default(QUEUED)
+  currentPrice           Int?                     @map("current_price") @db.UnsignedInt
+  currentHighestBidId    String?                  @unique @map("current_highest_bid_id") @db.Char(36)
+  deadlineAt             DateTime?                @map("deadline_at")
+  deadlineEpoch          Int                      @default(0) @map("deadline_epoch") @db.UnsignedInt
+  lastCountdownMark      Int?                     @map("last_countdown_mark") @db.UnsignedTinyInt
+  pausedRemainingMs      Int?                     @map("paused_remaining_ms") @db.UnsignedInt
+  version                Int                      @default(1) @db.UnsignedInt
+  startedAt              DateTime?                @map("started_at")
+  closedAt               DateTime?                @map("closed_at")
+  reviewedAt             DateTime?                @map("reviewed_at")
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+  batch                  PlayerAuctionBatch       @relation("PlayerAuctionBatchLots", fields: [batchId], references: [id], onDelete: Restrict)
+  currentForBatch        PlayerAuctionBatch?      @relation("PlayerAuctionCurrentLot")
+  footballPlayer         FootballPlayer           @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  playerCard             PlayerCard?              @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
+  currentHighestBid      PlayerAuctionBid?        @relation("PlayerAuctionLotHighestBid", fields: [currentHighestBidId], references: [id], onDelete: Restrict)
+  bids                   PlayerAuctionBid[]       @relation("PlayerAuctionLotBids")
+  review                 PlayerAuctionReview?
+
+  @@unique([batchId, displayOrder], map: "player_auction_lots_batch_order_unique")
+  @@index([batchId, status], map: "player_auction_lots_batch_status_idx")
+  @@index([footballPlayerId], map: "player_auction_lots_player_idx")
+  @@index([playerCardId], map: "player_auction_lots_card_idx")
+  @@index([status, deadlineAt], map: "player_auction_lots_deadline_idx")
+  @@map("player_auction_lots")
+}
+
+model PlayerAuctionBid {
+  id                String                   @id @default(uuid()) @db.Char(36)
+  lotId             String                   @map("lot_id") @db.Char(36)
+  inboundMessageId  String                   @unique @map("inbound_message_id") @db.Char(36)
+  leagueTeamId      String?                  @map("league_team_id") @db.Char(36)
+  userId            String?                  @map("user_id") @db.Char(36)
+  identityBindingId String?                  @map("identity_binding_id") @db.Char(36)
+  amount            Int                      @db.UnsignedInt
+  result            PlayerAuctionBidResult
+  rejectionReason   String?                  @map("rejection_reason") @db.VarChar(512)
+  wechatMessageId   String                   @map("wechat_message_id") @db.VarChar(256)
+  wechatSortKey     String                   @map("wechat_sort_key") @db.VarChar(128)
+  wechatSentAt      DateTime                 @map("wechat_sent_at")
+  receivedAt        DateTime                 @map("received_at")
+  becameHighestAt   DateTime?                @map("became_highest_at")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  lot               PlayerAuctionLot         @relation("PlayerAuctionLotBids", fields: [lotId], references: [id], onDelete: Restrict)
+  highestForLot     PlayerAuctionLot?         @relation("PlayerAuctionLotHighestBid")
+  inboundMessage    WechatInboundMessage     @relation(fields: [inboundMessageId], references: [id], onDelete: Restrict)
+  leagueTeam        LeagueTeam?              @relation("PlayerAuctionBidTeam", fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  user              User?                    @relation("PlayerAuctionBidUser", fields: [userId], references: [id], onDelete: Restrict)
+  identityBinding   WechatIdentityBinding?   @relation(fields: [identityBindingId], references: [id], onDelete: Restrict)
+
+  @@index([lotId, wechatSentAt, wechatSortKey, wechatMessageId], map: "player_auction_bids_order_idx")
+  @@index([leagueTeamId, createdAt], map: "player_auction_bids_team_idx")
+  @@index([identityBindingId], map: "player_auction_bids_identity_idx")
+  @@map("player_auction_bids")
+}
+
+model PlayerAuctionReview {
+  id                       String                      @id @default(uuid()) @db.Char(36)
+  lotId                    String                      @unique @map("lot_id") @db.Char(36)
+  decision                 PlayerAuctionReviewDecision
+  computedWinnerTeamId     String?                     @map("computed_winner_team_id") @db.Char(36)
+  computedPrice            Int?                        @map("computed_price") @db.UnsignedInt
+  reviewedWinnerTeamId     String?                     @map("reviewed_winner_team_id") @db.Char(36)
+  reviewedPrice            Int?                        @map("reviewed_price") @db.UnsignedInt
+  reviewedByAdminId        String                      @map("reviewed_by_admin_id") @db.Char(36)
+  reason                   String?                     @db.VarChar(512)
+  reviewedAt               DateTime                    @default(now()) @map("reviewed_at")
+  createdAt                DateTime                    @default(now()) @map("created_at")
+  lot                      PlayerAuctionLot            @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  computedWinnerTeam       LeagueTeam?                 @relation("PlayerAuctionComputedWinnerTeam", fields: [computedWinnerTeamId], references: [id], onDelete: Restrict)
+  reviewedWinnerTeam       LeagueTeam?                 @relation("PlayerAuctionReviewedWinnerTeam", fields: [reviewedWinnerTeamId], references: [id], onDelete: Restrict)
+  reviewedByAdmin          AdminAccount                @relation("PlayerAuctionReviewAdmin", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([computedWinnerTeamId], map: "player_auction_reviews_computed_team_idx")
+  @@index([reviewedWinnerTeamId], map: "player_auction_reviews_reviewed_team_idx")
+  @@index([reviewedByAdminId], map: "player_auction_reviews_admin_idx")
+  @@map("player_auction_reviews")
 }
