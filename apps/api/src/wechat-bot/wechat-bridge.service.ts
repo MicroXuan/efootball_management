@@ -5,7 +5,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { WechatCommandRouterService } from './wechat-command-router.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
 
-const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$/;
+const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|\d+)$/;
 const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
 
 @Injectable()

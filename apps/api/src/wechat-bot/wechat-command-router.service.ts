@@ -2,12 +2,15 @@ import { HttpException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatBindingService } from './wechat-binding.service.js';
-import { WECHAT_HELP_TEXT } from './wechat-message-formatter.js';
+import { formatWechatHelp } from './wechat-message-formatter.js';
 import { WechatOutboxService } from './wechat-outbox.service.js';
 import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
 import { PLAYER_AUCTION_COMMAND_HANDLER, type PlayerAuctionCommandHook } from '../player-auctions/player-auction-command.hook.js';
 
 const PRIVATE_BINDING_COMMAND = /^绑定\s+(\d{6})$/;
+const PURE_INTEGER = /^\d+$/;
+const AUCTION_MANAGER_COMMANDS = new Set(['开始拍卖', '暂停拍卖', '继续拍卖', '取消拍卖']);
+const SCHEDULE_COMMANDS = new Set(['查询赛程', '我的赛程']);
 
 @Injectable()
 export class WechatCommandRouterService {
@@ -33,14 +36,39 @@ export class WechatCommandRouterService {
       return;
     }
 
-    const auction = this.moduleRef?.get<PlayerAuctionCommandHook>(PLAYER_AUCTION_COMMAND_HANDLER, { strict: false });
-    if (auction && await auction.handle(inbound.id)) {
-      await this.finish(inbound.id, 'PROCESSED', 'AUCTION_HANDLED');
+    const binding = await this.prisma.wechatGroupBinding.findFirst({
+      where: { id: inbound.groupBindingId, enabled: true },
+      select: { capabilities: { select: { capability: true } } }
+    });
+    if (!binding) {
+      await this.finish(inbound.id, 'IGNORED', 'GROUP_NOT_BOUND');
+      return;
+    }
+    const capabilities = binding.capabilities.map((item) => item.capability);
+    const hasSchedule = capabilities.includes('SCHEDULE_QUERY');
+    const hasAuction = capabilities.includes('PLAYER_AUCTION');
+    const isAuctionCommand = PURE_INTEGER.test(inbound.commandText) || AUCTION_MANAGER_COMMANDS.has(inbound.commandText);
+    const isScheduleCommand = SCHEDULE_COMMANDS.has(inbound.commandText);
+
+    if (isAuctionCommand) {
+      if (!hasAuction) {
+        await this.finish(inbound.id, 'IGNORED', 'AUCTION_CAPABILITY_DISABLED');
+        return;
+      }
+      const auction = this.moduleRef?.get<PlayerAuctionCommandHook>(PLAYER_AUCTION_COMMAND_HANDLER, { strict: false });
+      if (auction && await auction.handle(inbound.id)) {
+        await this.finish(inbound.id, 'PROCESSED', 'AUCTION_HANDLED');
+        return;
+      }
+    }
+
+    if (isScheduleCommand && !hasSchedule) {
+      await this.finish(inbound.id, 'IGNORED', 'SCHEDULE_CAPABILITY_DISABLED');
       return;
     }
 
     if (inbound.commandText === '帮助') {
-      await this.reply(inbound, [WECHAT_HELP_TEXT]);
+      await this.reply(inbound, [formatWechatHelp(capabilities)]);
       await this.finish(inbound.id, 'PROCESSED', 'HELP_REPLIED');
       return;
     }
