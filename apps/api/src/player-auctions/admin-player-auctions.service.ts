@@ -242,10 +242,13 @@ export class AdminPlayerAuctionsService {
         include: { currentHighestBid: { include: { leagueTeam: { select: { name: true } } } }, review: true }
       });
       if (!lot) throw new PlayerAuctionError('AUCTION_LOT_NOT_FOUND', '拍卖球员不存在', 404);
-      if (lot.status !== 'PENDING_REVIEW' || lot.review) {
+      if (!['PENDING_REVIEW', 'NO_BID'].includes(lot.status) || lot.review) {
         throw new PlayerAuctionError('AUCTION_REVIEW_NOT_ALLOWED', '当前拍卖结果不能审核', 409);
       }
       if (lot.version !== input.expectedVersion) throw auctionVersionConflict();
+      if (lot.status === 'NO_BID' && input.decision === 'ADJUST') {
+        throw new PlayerAuctionError('AUCTION_REVIEW_NOT_ALLOWED', '无人出价结果不能调整为成交结果', 409);
+      }
       let reviewedTeamId = lot.currentHighestBid?.leagueTeamId ?? null;
       let reviewedPrice = lot.currentPrice;
       if (input.decision === 'ADJUST') {
@@ -274,7 +277,7 @@ export class AdminPlayerAuctionsService {
         }
       });
       const update = await tx.playerAuctionLot.updateMany({
-        where: { id: lotId, batchId, version: input.expectedVersion, status: 'PENDING_REVIEW' },
+        where: { id: lotId, batchId, version: input.expectedVersion, status: lot.status },
         data: { status: input.decision === 'VOID' ? 'VOID' : 'REVIEWED', reviewedAt: review.reviewedAt, version: { increment: 1 } }
       });
       if (update.count !== 1) throw auctionVersionConflict();

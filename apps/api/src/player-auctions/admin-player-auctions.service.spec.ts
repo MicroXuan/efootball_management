@@ -159,4 +159,51 @@ describe('AdminPlayerAuctionsService', () => {
     }) }));
     expect(result.review.computedPrice).toBe(120);
   });
+
+  it('confirms a no-bid result without changing the automatically active next lot', async () => {
+    const { service, tx, batch } = harness();
+    batch.status = 'ACTIVE';
+    batch.currentLotId = 'lot-2';
+    batch.lots = [{
+      id: 'lot-1', batchId: 'batch-1', status: 'NO_BID', version: 3,
+      currentPrice: null, currentHighestBid: null, review: null
+    }];
+
+    const result = await service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
+      decision: 'CONFIRM', expectedVersion: 3
+    }, 'review-no-bid-confirm');
+
+    expect(tx.playerAuctionReview.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      decision: 'CONFIRM', computedWinnerTeamId: null, computedPrice: null,
+      reviewedWinnerTeamId: null, reviewedPrice: null
+    }) }));
+    expect(tx.playerAuctionLot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'NO_BID' }),
+      data: expect.objectContaining({ status: 'REVIEWED' })
+    }));
+    expect(result).toMatchObject({ lotId: 'lot-1', status: 'REVIEWED' });
+    expect(batch.currentLotId).toBe('lot-2');
+    expect(tx.playerAuctionBatch.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows voiding a no-bid result but rejects adjusting one', async () => {
+    const voidHarness = harness();
+    voidHarness.batch.lots = [{
+      id: 'lot-1', batchId: 'batch-1', status: 'NO_BID', version: 4,
+      currentPrice: null, currentHighestBid: null, review: null
+    }];
+
+    await expect(voidHarness.service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
+      decision: 'VOID', expectedVersion: 4, reason: '球员资料错误'
+    }, 'review-no-bid-void')).resolves.toMatchObject({ status: 'VOID' });
+
+    const adjustHarness = harness();
+    adjustHarness.batch.lots = [{
+      id: 'lot-1', batchId: 'batch-1', status: 'NO_BID', version: 4,
+      currentPrice: null, currentHighestBid: null, review: null
+    }];
+    await expect(adjustHarness.service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
+      decision: 'ADJUST', expectedVersion: 4, reviewedTeamId: 'team-1', reviewedPrice: 100, reason: '人工调整'
+    }, 'review-no-bid-adjust')).rejects.toMatchObject({ code: 'AUCTION_REVIEW_NOT_ALLOWED' });
+  });
 });
