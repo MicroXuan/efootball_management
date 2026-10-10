@@ -3,7 +3,8 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import type {
   CreateWechatBotDeviceRequest,
   SaveWechatGroupBindingRequest,
-  UpdateWechatBotDeviceStatusRequest
+  UpdateWechatBotDeviceStatusRequest,
+  WechatGroupCapabilityType
 } from '@efm/contracts';
 import { hash } from 'bcryptjs';
 import { AuditLogService } from '../admin/audit-log.service.js';
@@ -35,6 +36,7 @@ type GroupBindingViewInput = {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  capabilities?: Array<{ capability: WechatGroupCapabilityType }>;
   scheduleSources?: Array<{ competitionId: string }>;
 };
 
@@ -152,7 +154,10 @@ export class AdminWechatBotService {
     const [bindings, devices, observedGroups, competitions] = await Promise.all([
       this.prisma.wechatGroupBinding.findMany({
         where: { leagueId },
-        include: { scheduleSources: { select: { competitionId: true }, orderBy: { displayOrder: 'asc' } } },
+        include: {
+          capabilities: { select: { capability: true }, orderBy: { capability: 'asc' } },
+          scheduleSources: { select: { competitionId: true }, orderBy: { displayOrder: 'asc' } }
+        },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
       }),
       this.prisma.wechatBotDevice.findMany({
@@ -224,16 +229,50 @@ export class AdminWechatBotService {
 
     return this.prisma.$transaction(async (transaction) => {
       const binding = existing
-        ? await transaction.wechatGroupBinding.update({
-            where: { id: existing.id },
-            data: {
-              observedGroupId: observed.id,
-              displayName: observed.displayName,
-              enabled: input.enabled,
-              lastConfirmedAt: new Date(),
-              version: { increment: 1 }
+        ? await (async () => {
+            await transaction.$queryRaw`SELECT id FROM wechat_group_bindings WHERE id = ${existing.id} FOR UPDATE`;
+            const lockedExisting = await transaction.wechatGroupBinding.findUnique({
+              where: { id: existing.id },
+              include: { capabilities: { select: { capability: true } } }
+            });
+            if (!lockedExisting || lockedExisting.leagueId !== leagueId) {
+              throw new ConflictException({ code: 'WECHAT_GROUP_ALREADY_BOUND', message: '该微信群已绑定其他联赛' });
             }
-          })
+            if (input.expectedVersion !== undefined && lockedExisting.version !== input.expectedVersion) {
+              throw new ConflictException({ code: 'VERSION_CONFLICT', message: '配置已更新，请刷新后重试' });
+            }
+
+            const hadAuctionCapability = lockedExisting.capabilities.some(
+              (item) => item.capability === 'PLAYER_AUCTION'
+            );
+            const removesAuctionCapability = !input.capabilities.includes('PLAYER_AUCTION');
+            if (hadAuctionCapability && (!input.enabled || removesAuctionCapability)) {
+              const protectedBatch = await transaction.playerAuctionBatch.findFirst({
+                where: {
+                  groupBindingId: lockedExisting.id,
+                  status: { in: ['READY', 'ACTIVE', 'PAUSED', 'RECOVERY_REQUIRED'] }
+                },
+                select: { id: true }
+              });
+              if (protectedBatch) {
+                throw new ConflictException({
+                  code: 'WECHAT_GROUP_HAS_ACTIVE_AUCTION',
+                  message: '该微信群存在未结束的球员拍卖，暂不能停用或移除拍卖功能'
+                });
+              }
+            }
+
+            return transaction.wechatGroupBinding.update({
+              where: { id: lockedExisting.id },
+              data: {
+                observedGroupId: observed.id,
+                displayName: observed.displayName,
+                enabled: input.enabled,
+                lastConfirmedAt: new Date(),
+                version: { increment: 1 }
+              }
+            });
+          })()
         : await transaction.wechatGroupBinding.create({
             data: {
               deviceId: input.deviceId,
@@ -241,9 +280,19 @@ export class AdminWechatBotService {
               wechatGroupId: observed.wechatGroupId,
               displayName: observed.displayName,
               leagueId,
-              enabled: input.enabled
+              enabled: input.enabled,
             }
           });
+      await transaction.wechatGroupCapability.deleteMany({ where: { groupBindingId: binding.id } });
+      if (input.capabilities.length > 0) {
+        await transaction.wechatGroupCapability.createMany({
+          data: input.capabilities.map((capability) => ({
+            groupBindingId: binding.id,
+            capability,
+            createdByAdminId: adminId
+          }))
+        });
+      }
       await transaction.wechatGroupScheduleSource.deleteMany({ where: { groupBindingId: binding.id } });
       if (input.scheduleSourceIds.length > 0) {
         await transaction.wechatGroupScheduleSource.createMany({
@@ -265,10 +314,15 @@ export class AdminWechatBotService {
           deviceId: input.deviceId,
           observedGroupId: input.observedGroupId,
           enabled: input.enabled,
+          capabilities: input.capabilities,
           scheduleSourceIds: input.scheduleSourceIds
         }
       });
-      return this.bindingView({ ...binding, scheduleSources: input.scheduleSourceIds.map((competitionId) => ({ competitionId })) });
+      return this.bindingView({
+        ...binding,
+        capabilities: input.capabilities.map((capability) => ({ capability })),
+        scheduleSources: input.scheduleSourceIds.map((competitionId) => ({ competitionId }))
+      });
     });
   }
 
@@ -319,6 +373,7 @@ export class AdminWechatBotService {
       displayName: binding.displayName,
       enabled: binding.enabled,
       version: binding.version,
+      capabilities: binding.capabilities?.map((item) => item.capability) ?? [],
       scheduleSourceIds: binding.scheduleSources?.map((source) => source.competitionId) ?? [],
       createdAt: binding.createdAt.toISOString(),
       updatedAt: binding.updatedAt.toISOString()
