@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { LeagueWorkspaceService } from './league-workspace.service.js';
+import { LeagueError } from '../leagues/league.errors.js';
 
 function entry() {
   return {
@@ -14,34 +15,59 @@ function entry() {
 
 function prisma(overrides: Record<string, unknown> = {}) {
   return {
-    seasonEntry: { findFirst: jest.fn(async () => entry()) },
+    seasonEntry: { findFirst: jest.fn(async (args?: unknown) => { void args; return entry(); }) },
     standingsSnapshot: { findFirst: jest.fn(async () => ({ rows: [{ rank: 2, totalPoints: 13, played: 6, tiePending: false }] })) },
     competitionMatch: { findMany: jest.fn(async () => []) },
     valuationWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
     ...overrides
-  } as never;
+  };
+}
+
+function workspaceService(database: ReturnType<typeof prisma> = prisma()) {
+  return new LeagueWorkspaceService(database as never, {
+    requireVisible: jest.fn(async () => 'league-1'),
+    notFound: () => new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404)
+  } as never);
 }
 
 describe('LeagueWorkspaceService', () => {
+  it('returns the shared 404 before loading a workspace for a deleted league', async () => {
+    const database = prisma();
+    const visibility = {
+      requireVisible: jest.fn(async () => {
+        throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
+      })
+    };
+    const service = new LeagueWorkspaceService(database as never, visibility as never);
+
+    await expect(service.get('user-1', 'league-1', 'season-1'))
+      .rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });
+    expect(database.seasonEntry.findFirst).not.toHaveBeenCalled();
+  });
+
   it('returns snapshot team, division, rank, and enrolled module capabilities', async () => {
-    const service = new LeagueWorkspaceService(prisma());
+    const database = prisma();
+    const service = workspaceService(database);
     const result = await service.get('user-1', 'league-1', 'season-1');
 
     expect(result.team.name).toBe('历史海港');
     expect(result.division?.displayName).toBe('冠军 A 组');
     expect(result.currentRank).toEqual({ rank: 2, points: 13, played: 6, tiePending: false });
     expect(Object.values(result.capabilities).every(Boolean)).toBe(true);
+    expect(database.seasonEntry.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ leagueTeam: { status: 'ACTIVE' } })
+    }));
   });
 
   it('rejects users without an approved entry', async () => {
-    const service = new LeagueWorkspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => null) } }));
+    const service = workspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => null) } }));
     await expect(service.get('user-1', 'league-1', 'season-1')).rejects.toMatchObject({ status: 403 });
   });
 
   it('returns explicit empty states when no division data or match exists', async () => {
     const value = entry();
     value.competitionParticipants[0]!.stageMemberships = [];
-    const service = new LeagueWorkspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => value) } }));
+    const service = workspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => value) } }));
     const result = await service.get('user-1', 'league-1', 'season-1');
     expect(result.division).toBeNull();
     expect(result.currentRank).toBeNull();
@@ -56,7 +82,7 @@ describe('LeagueWorkspaceService', () => {
       competition: { competitionType: 'GROUP_KNOCKOUT_CUP' },
       stageMemberships: [{ stage: { id: 'cup-group', stageCode: 'GROUP_A', displayName: 'A 组' } }]
     });
-    const service = new LeagueWorkspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => value) } }));
+    const service = workspaceService(prisma({ seasonEntry: { findFirst: jest.fn(async () => value) } }));
 
     const result = await service.get('user-1', 'league-1', 'season-1');
 
@@ -64,7 +90,7 @@ describe('LeagueWorkspaceService', () => {
   });
 
   it('does not expose valuation management when the season has no valuation window', async () => {
-    const service = new LeagueWorkspaceService(prisma({ valuationWindow: { findFirst: jest.fn(async () => null) } }));
+    const service = workspaceService(prisma({ valuationWindow: { findFirst: jest.fn(async () => null) } }));
     const result = await service.get('user-1', 'league-1', 'season-1');
     expect(result.capabilities.canManageValuations).toBe(false);
   });
@@ -74,7 +100,7 @@ describe('LeagueWorkspaceService', () => {
       id, plannedAt, roundNumber, matchNumber, homeParticipantId: 'participant-1', awayParticipantId: `opponent-${id}`,
       homeParticipant: { displayNameSnapshot: '历史海港' }, awayParticipant: { displayNameSnapshot: `对手${id}` }
     });
-    const service = new LeagueWorkspaceService(prisma({
+    const service = workspaceService(prisma({
       competitionMatch: { findMany: jest.fn(async () => [
         match('late', new Date('2026-11-02T10:00:00Z'), 2, 2),
         match('unplanned', null, 1, 1),

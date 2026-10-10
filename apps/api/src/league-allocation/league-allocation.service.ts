@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ConfirmSeasonAllocationRequest,
   GenerateSeasonAllocationRequest,
@@ -15,11 +15,15 @@ import {
   type PreviousSeasonStanding
 } from './domain/allocation.js';
 import { LeagueAllocationError } from './league-allocation.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const ALGORITHM_VERSION = 'tiered-v1';
 const SEASON_INCLUDE = {
   entries: {
-    where: { status: 'APPROVED' as const },
+    where: {
+      status: 'APPROVED' as const,
+      leagueTeam: { status: 'ACTIVE' as const }
+    },
     select: {
       id: true,
       teamNameSnapshot: true,
@@ -29,19 +33,27 @@ const SEASON_INCLUDE = {
   }
 } satisfies Prisma.LeagueSeasonInclude;
 const PROPOSAL_INCLUDE = {
-  rows: { orderBy: [{ suggestedStageCode: 'asc' as const }, { id: 'asc' as const }] }
+  rows: {
+    orderBy: [{ suggestedStageCode: 'asc' as const }, { id: 'asc' as const }],
+    include: { seasonEntry: { select: { owner: { select: { displayName: true } } } } }
+  }
 } satisfies Prisma.SeasonAllocationProposalInclude;
 
 type ProposalRecord = Prisma.SeasonAllocationProposalGetPayload<{ include: typeof PROPOSAL_INCLUDE }>;
 
 @Injectable()
 export class LeagueAllocationService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async generate(
     actorAdminId: string,
@@ -50,6 +62,7 @@ export class LeagueAllocationService {
     input: GenerateSeasonAllocationRequest,
     key: string
   ) {
+    await this.requireVisibleSeason(leagueId, seasonId);
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,
@@ -154,6 +167,7 @@ export class LeagueAllocationService {
   }
 
   async latest(actorAdminId: string, leagueId: string, seasonId: string) {
+    await this.requireVisibleSeason(leagueId, seasonId);
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     const season = await this.prisma.leagueSeason.findUnique({
       where: { id: seasonId },
@@ -163,7 +177,7 @@ export class LeagueAllocationService {
       throw new LeagueAllocationError('SEASON_NOT_IN_LEAGUE', '赛季不属于当前联赛', 404);
     }
     const proposal = await this.prisma.seasonAllocationProposal.findFirst({
-      where: { seasonId },
+      where: { seasonId, status: { in: ['DRAFT', 'CONFIRMED'] } },
       include: PROPOSAL_INCLUDE,
       orderBy: { version: 'desc' }
     });
@@ -215,6 +229,7 @@ export class LeagueAllocationService {
     input: ConfirmSeasonAllocationRequest,
     key: string
   ) {
+    await this.requireVisibleSeason(leagueId, seasonId);
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,
@@ -440,6 +455,7 @@ export class LeagueAllocationService {
     input: SeasonTransitionRequest,
     key: string
   ) {
+    await this.requireVisibleSeason(leagueId, seasonId);
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,
@@ -496,6 +512,12 @@ export class LeagueAllocationService {
       },
       input
     );
+  }
+
+  private async requireVisibleSeason(leagueId: string, seasonId: string) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
   }
 
   private async previousStandings(
@@ -575,6 +597,7 @@ export class LeagueAllocationService {
         proposalId: row.proposalId,
         seasonEntryId: row.seasonEntryId,
         teamName: row.teamName,
+        ownerDisplayName: row.seasonEntry.owner.displayName,
         suggestedStageCode: row.suggestedStageCode,
         source: row.source,
         previousRank: row.previousRank,

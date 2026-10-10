@@ -95,7 +95,8 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
     { execute } as never,
     { execute } as never,
     audit as never,
-    { now: () => now } as never
+    { now: () => now } as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
   return { service, transaction, authorization, audit };
 }

@@ -41,6 +41,11 @@ describe('premium admin theme', () => {
     expect(styles).toContain('.ant-input-affix-wrapper .ant-input:focus-visible');
   });
 
+  it('draws only one focus ring for a numeric input', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    expect(styles).toMatch(/\.ant-input-number-input:focus-visible\s*\{[^}]*outline:\s*none\s*!important/);
+  });
+
   it('does not apply the global control height twice inside an input wrapper', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     expect(styles).toMatch(/\.ant-input-affix-wrapper\s*>\s*\.ant-input\s*\{[^}]*min-height:\s*0/);

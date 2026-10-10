@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   CreateSalaryRuleVersionRequestSchema,
   PreviewSalaryRuleRequestSchema,
@@ -10,28 +10,29 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { LeagueRosterError } from './league-roster.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 export function defaultSalaryTiers() {
   return [
-    { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
+    { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
     ...Array.from({ length: 7 }, (_, index) => ({
-      minDtRating: 93 + index,
-      maxDtRating: 93 + index,
+      minOverall: 93 + index,
+      maxOverall: 93 + index,
       salaryMinor: 200 + index * 100
     })),
-    { minDtRating: 100, maxDtRating: 120, salaryMinor: 900 }
+    { minOverall: 100, maxOverall: 120, salaryMinor: 900 }
   ];
 }
 
-function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], dtRating: number) {
-  const tier = tiers.find(({ minDtRating, maxDtRating }) =>
-    dtRating >= minDtRating && dtRating <= maxDtRating);
+function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
+  const tier = tiers.find(({ minOverall, maxOverall }) =>
+    overall >= minOverall && overall <= maxOverall);
   if (!tier) {
     throw new LeagueRosterError(
       'SALARY_TIER_NOT_CONFIGURED',
-      'No salary tier covers the DT rating',
+      'No salary tier covers the automatic-build overall',
       422,
-      { dtRating }
+      { maxOverall: overall }
     );
   }
   return tier.salaryMinor;
@@ -39,14 +40,20 @@ function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], dtRating: number) {
 
 @Injectable()
 export class SalaryRulesService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async createVersion(adminId: string, leagueId: string, raw: CreateSalaryRuleVersionRequest) {
     const input = CreateSalaryRuleVersionRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     await this.authorization.requireLeagueManager(adminId, leagueId);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`);
@@ -78,7 +85,7 @@ export class SalaryRulesService {
           createdByAdminId: adminId,
           tiers: { create: input.tiers }
         },
-        include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+        include: { tiers: { orderBy: { minOverall: 'asc' } } }
       });
       await this.synchronizeRosterStatuses(tx, leagueId, input.salaryCapMinor);
       await this.audit.record(tx, {
@@ -98,6 +105,10 @@ export class SalaryRulesService {
     leagueId: string,
     salaryCapMinor: number
   ) {
+    await this.visibility.requireVisible(
+      { type: 'LEAGUE', id: leagueId },
+      tx
+    );
     const teams = await tx.leagueTeam.findMany({
       where: { leagueId },
       select: { id: true },
@@ -130,20 +141,21 @@ export class SalaryRulesService {
     }
   }
 
-  async quote(leagueId: string, dtRating: number, at = new Date()) {
-    return this.quoteWithClient(this.prisma, leagueId, dtRating, at);
+  async quote(leagueId: string, overall: number, at = new Date()) {
+    return this.quoteWithClient(this.prisma, leagueId, overall, at);
   }
 
   async quoteWithClient(
     client: PrismaService | Prisma.TransactionClient,
     leagueId: string,
-    dtRating: number,
+    overall: number,
     at = new Date()
   ) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
     const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
       orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+      include: { tiers: { orderBy: { minOverall: 'asc' } } }
     });
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_CONFIGURED', 'No salary rule is active', 422);
@@ -151,8 +163,8 @@ export class SalaryRulesService {
     return {
       salaryRuleVersionId: rule.id,
       version: rule.version,
-      dtRating,
-      salaryMinor: salaryFor(rule.tiers, dtRating),
+      maxOverall: overall,
+      salaryMinor: salaryFor(rule.tiers, overall),
       salaryCapMinor: rule.salaryCapMinor
     };
   }
@@ -161,11 +173,12 @@ export class SalaryRulesService {
     client: PrismaService | Prisma.TransactionClient,
     leagueId: string,
     salaryRuleVersionId: string,
-    dtRating: number
+    overall: number
   ) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
     const rule = await client.leagueSalaryRuleVersion.findFirst({
       where: { id: salaryRuleVersionId, leagueId },
-      include: { tiers: { orderBy: { minDtRating: 'asc' } } }
+      include: { tiers: { orderBy: { minOverall: 'asc' } } }
     });
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_FOUND', 'Salary rule version was not found', 404);
@@ -173,14 +186,15 @@ export class SalaryRulesService {
     return {
       salaryRuleVersionId: rule.id,
       version: rule.version,
-      dtRating,
-      salaryMinor: salaryFor(rule.tiers, dtRating),
+      maxOverall: overall,
+      salaryMinor: salaryFor(rule.tiers, overall),
       salaryCapMinor: rule.salaryCapMinor
     };
   }
 
   async previewRecalculation(leagueId: string, raw: PreviewSalaryRuleRequest) {
     const input = PreviewSalaryRuleRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const ownerships = await this.prisma.leaguePlayerOwnership.findMany({
       where: { leagueId, status: 'ACTIVE' },
       include: { leagueTeam: { select: { name: true } } },
@@ -194,7 +208,7 @@ export class SalaryRulesService {
         projectedSalaryMinor: 0
       };
       aggregate.currentSalaryMinor += ownership.salaryMinor;
-      aggregate.projectedSalaryMinor += salaryFor(input.tiers, ownership.dtRatingSnapshot);
+      aggregate.projectedSalaryMinor += salaryFor(input.tiers, ownership.maxOverallSnapshot);
       teams.set(ownership.leagueTeamId, aggregate);
     }
     return {

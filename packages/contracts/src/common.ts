@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const ResourceIdSchema = z.uuid();
+export const ExpectedVersionSchema = z.number().int().positive();
 
 export const ApiErrorSchema = z.object({
   error: z.object({

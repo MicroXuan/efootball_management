@@ -50,7 +50,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   const purchaseBlockReason = useMemo(() => {
     if (!selected) return '请先选择一张球员卡';
     if (selectedPlayer?.ownedByTeamId) return '该球员在本联赛已归属其他球队';
-    if (selected.dtRating === null) return '缺少自动加点总评，不能加入阵容';
+    if (selected.maxOverall === null) return '缺少自动加点结果，不能加入阵容';
     if (selected.salaryMinor === null) return '未找到适用的工资规则';
     if (summary.rosterCount >= 25) return '阵容已满 25 人，请先移出球员';
     if (projectedSalary !== null && projectedSalary > summary.salaryCapMinor) return '购买后将超过球队工资帽';
@@ -96,8 +96,8 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
     } finally { setBusy(false); }
   };
 
-  const blockDescription = selected?.dtRating === null
-    ? '系统暂时无法根据成长等级计算这张卡的自动加点总评，请选择其他卡片，或先完成球员卡数据同步。'
+  const blockDescription = selected?.maxOverall === null
+    ? '系统没有找到这张卡的完整自动加点结果，请选择其他卡片，或先完成球员卡数据同步。'
     : undefined;
 
   return <Drawer
@@ -117,7 +117,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
         <Form.Item label="成交金额" required><InputNumber aria-label="成交金额" min={1} precision={0} value={amountMinor} placeholder="输入金额" onChange={(value) => { setAmountMinor(value); mutationKey.reset(); }} /></Form.Item>
         <Form.Item label="操作原因（选填）"><Input aria-label="操作原因" value={reason} placeholder="例如：补强中后卫" onChange={(event) => { setReason(event.target.value); mutationKey.reset(); }} /></Form.Item>
       </Form>
-      {purchaseBlockReason ? <Alert type={selected?.dtRating === null ? 'error' : 'warning'} showIcon title={purchaseBlockReason} description={blockDescription} /> : <div className="acquire-order-ready">信息已完整，确认后将写入不可修改的阵容交易和财务流水。</div>}
+      {purchaseBlockReason ? <Alert type={selected?.maxOverall === null ? 'error' : 'warning'} showIcon title={purchaseBlockReason} description={blockDescription} /> : <div className="acquire-order-ready">信息已完整，确认后将写入不可修改的阵容交易和财务流水。</div>}
       <Button aria-label="确认购买" type="primary" block onClick={() => void submit()} loading={busy} disabled={Boolean(purchaseBlockReason)}>确认购买{selectedPlayer ? ` · ${selectedPlayer.playerName}` : ''}</Button>
     </div>}
   >

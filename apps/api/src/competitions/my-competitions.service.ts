@@ -16,8 +16,8 @@ import { PrismaService } from '../database/prisma.service.js';
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } };
-    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } };
-    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } };
+    homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true; teamLogoUrlSnapshot: true; owner: { select: { displayName: true } }; leagueTeam: { select: { status: true } } } } } };
+    awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true; teamLogoUrlSnapshot: true; owner: { select: { displayName: true } }; leagueTeam: { select: { status: true } } } } } };
     officialResultVersion: true;
     resultVersions: true;
   };
@@ -31,7 +31,14 @@ export class MyCompetitionsService {
 
   async listCompetitions(userId: string, query: MyCompetitionListQuery): Promise<MyCompetitionListResponse> {
     const registrations = await this.prisma.competitionRegistration.findMany({
-      where: { applicantId: userId },
+      where: {
+        applicantId: userId,
+        competition: { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] },
+        OR: [
+          { seasonEntryId: null },
+          { seasonEntry: { leagueTeam: { status: 'ACTIVE' } } }
+        ]
+      },
       include: {
         competition: { include: { _count: { select: { participants: true } } } },
         seasonEntry: { select: { teamNameSnapshot: true } }
@@ -59,18 +66,24 @@ export class MyCompetitionsService {
   async listMatches(userId: string, query: MyMatchListQuery): Promise<MyMatchListResponse> {
     const records = await this.prisma.competitionMatch.findMany({
       where: {
-        stage: { status: 'PUBLISHED', competition: { status: { not: 'CANCELLED' } } },
+        stage: {
+          status: 'PUBLISHED',
+          competition: {
+            status: { not: 'CANCELLED' },
+            OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }]
+          }
+        },
         OR: [
           { homeParticipant: { individualUserId: userId } },
           { awayParticipant: { individualUserId: userId } },
-          { homeParticipant: { seasonEntry: { ownerUserId: userId } } },
-          { awayParticipant: { seasonEntry: { ownerUserId: userId } } }
+          { homeParticipant: { seasonEntry: { ownerUserId: userId, leagueTeam: { status: 'ACTIVE' } } } },
+          { awayParticipant: { seasonEntry: { ownerUserId: userId, leagueTeam: { status: 'ACTIVE' } } } }
         ]
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
-        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, owner: { select: { displayName: true } }, leagueTeam: { select: { status: true } } } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, owner: { select: { displayName: true } }, leagueTeam: { select: { status: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -110,13 +123,16 @@ export class MyCompetitionsService {
   private async matchesForParticipant(participantId: string): Promise<MatchRecord[]> {
     const records = await this.prisma.competitionMatch.findMany({
       where: {
-        stage: { status: 'PUBLISHED' },
+        stage: {
+          status: 'PUBLISHED',
+          competition: { OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }] }
+        },
         OR: [{ homeParticipantId: participantId }, { awayParticipantId: participantId }]
       },
       include: {
         stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
-        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
-        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true } } } },
+        homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, owner: { select: { displayName: true } }, leagueTeam: { select: { status: true } } } } } },
+        awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamLogoUrlSnapshot: true, owner: { select: { displayName: true } }, leagueTeam: { select: { status: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
       }
@@ -149,12 +165,18 @@ export class MyCompetitionsService {
       homeParticipant: {
         id: record.homeParticipant.id,
         displayName: record.homeParticipant.displayNameSnapshot,
-        participantType: record.homeParticipant.participantType
+        participantType: record.homeParticipant.participantType,
+        teamLifecycleStatus: this.lifecycleStatus(record.homeParticipant),
+        teamLogoUrl: record.homeParticipant.seasonEntry?.teamLogoUrlSnapshot ?? null,
+        ownerDisplayName: record.homeParticipant.seasonEntry?.owner.displayName ?? null
       },
       awayParticipant: {
         id: record.awayParticipant.id,
         displayName: record.awayParticipant.displayNameSnapshot,
-        participantType: record.awayParticipant.participantType
+        participantType: record.awayParticipant.participantType,
+        teamLifecycleStatus: this.lifecycleStatus(record.awayParticipant),
+        teamLogoUrl: record.awayParticipant.seasonEntry?.teamLogoUrlSnapshot ?? null,
+        ownerDisplayName: record.awayParticipant.seasonEntry?.owner.displayName ?? null
       },
       plannedAt: record.plannedAt?.toISOString() ?? null,
       status: record.status,
@@ -185,6 +207,11 @@ export class MyCompetitionsService {
       reason: result.reason,
       createdAt: result.createdAt.toISOString()
     };
+  }
+
+  private lifecycleStatus(participant: MatchRecord['homeParticipant']): 'ACTIVE' | 'ARCHIVED' | null {
+    const status = participant.seasonEntry?.leagueTeam?.status;
+    return status === 'ACTIVE' || status === 'ARCHIVED' ? status : null;
   }
 
   private registration(

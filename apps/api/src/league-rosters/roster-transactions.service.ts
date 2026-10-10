@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   AcquirePlayerRequestSchema,
   EmergencyCorrectRosterRequestSchema,
@@ -20,13 +20,14 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
+import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { SalaryRulesService } from './salary-rules.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
-import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const MAX_ROSTER_SIZE = 25;
 type AppliedTransactionFee = {
@@ -37,6 +38,8 @@ type AppliedTransactionFee = {
 
 @Injectable()
 export class RosterTransactionsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
@@ -47,11 +50,16 @@ export class RosterTransactionsService {
     @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
     @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService,
     @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
-    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService
-  ) {}
+    @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
     const input = AcquirePlayerRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    await this.visibility.requireVisible({ type: 'TEAM', id: input.targetLeagueTeamId });
     const scope = await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, scope.leagueId);
 
@@ -75,14 +83,6 @@ export class RosterTransactionsService {
               422
             );
           }
-          if (build.dtRating === null) {
-            throw new LeagueRosterError(
-              'PLAYER_DT_RATING_MISSING',
-              'The selected player card has no DT rating',
-              422
-            );
-          }
-
           const footballPlayerId = build.playerCard.playerId;
           await this.locks.lockOwnership(tx, lockedScope.leagueId, footballPlayerId);
           const existing = await tx.leaguePlayerOwnership.findUnique({
@@ -111,7 +111,7 @@ export class RosterTransactionsService {
           const quote = await this.salaryRules.quoteWithClient(
             tx,
             lockedScope.leagueId,
-            build.dtRating,
+            build.maxOverall,
             at
           );
           const currentSalaryMinor = roster._sum.salaryMinor ?? 0;
@@ -136,7 +136,7 @@ export class RosterTransactionsService {
               data: {
                 leagueTeamId: input.targetLeagueTeamId,
                 currentPlayerCardId: input.playerCardId,
-                dtRatingSnapshot: build.dtRating,
+                maxOverallSnapshot: build.maxOverall,
                 salaryRuleVersionId: quote.salaryRuleVersionId,
                 salaryMinor: quote.salaryMinor,
                 acquiredAt: at,
@@ -150,7 +150,7 @@ export class RosterTransactionsService {
                 leagueTeamId: input.targetLeagueTeamId,
                 footballPlayerId,
                 currentPlayerCardId: input.playerCardId,
-                dtRatingSnapshot: build.dtRating,
+                maxOverallSnapshot: build.maxOverall,
                 salaryRuleVersionId: quote.salaryRuleVersionId,
                 salaryMinor: quote.salaryMinor,
                 acquiredAt: at
@@ -222,6 +222,8 @@ export class RosterTransactionsService {
 
   async release(raw: ReleasePlayerRequest, adminId: string, at = new Date()) {
     const input = ReleasePlayerRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
     const current = await this.prisma.leaguePlayerOwnership.findUnique({
       where: { id: input.ownershipId }
     });
@@ -304,7 +306,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          locked.dtRatingSnapshot,
+          locked.maxOverallSnapshot,
           at
         );
         await this.setRosterStatus(
@@ -323,6 +325,9 @@ export class RosterTransactionsService {
 
   async transfer(raw: TransferPlayerRequest, adminId: string, at = new Date()) {
     const input = TransferPlayerRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    await this.visibility.requireVisible({ type: 'TEAM', id: input.targetLeagueTeamId });
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.loadScope(input.seasonId, input.targetLeagueTeamId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
@@ -355,7 +360,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          locked.dtRatingSnapshot,
+          locked.maxOverallSnapshot,
           at
         );
         const projectedSalaryMinor = targetRoster.salaryMinor + quote.salaryMinor;
@@ -472,6 +477,8 @@ export class RosterTransactionsService {
 
   async upgradeCard(raw: UpgradePlayerCardRequest, adminId: string, at = new Date()) {
     const input = UpgradePlayerCardRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
 
@@ -499,7 +506,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          build.dtRating,
+          build.maxOverall,
           at
         );
         const roster = await this.rosterAggregate(tx, locked.leagueTeamId);
@@ -517,7 +524,7 @@ export class RosterTransactionsService {
           where: { id: locked.id },
           data: {
             currentPlayerCardId: input.newPlayerCardId,
-            dtRatingSnapshot: build.dtRating,
+            maxOverallSnapshot: build.maxOverall,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }
@@ -586,6 +593,11 @@ export class RosterTransactionsService {
 
   async emergencyCorrect(raw: EmergencyCorrectRosterRequest, adminId: string, at = new Date()) {
     const input = EmergencyCorrectRosterRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
+    if (input.targetLeagueTeamId) {
+      await this.visibility.requireVisible({ type: 'TEAM', id: input.targetLeagueTeamId });
+    }
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requirePlatformAdmin(adminId);
     const targetTeamId = input.targetLeagueTeamId ?? current.leagueTeamId;
@@ -620,7 +632,7 @@ export class RosterTransactionsService {
         const quote = await this.salaryRules.quoteWithClient(
           tx,
           locked.leagueId,
-          build.dtRating,
+          build.maxOverall,
           at
         );
         const targetRoster = await this.rosterAggregate(tx, targetTeamId);
@@ -645,7 +657,7 @@ export class RosterTransactionsService {
           data: {
             leagueTeamId: targetTeamId,
             currentPlayerCardId: newCardId,
-            dtRatingSnapshot: build.dtRating,
+            maxOverallSnapshot: build.maxOverall,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }
@@ -702,6 +714,8 @@ export class RosterTransactionsService {
 
   async updateLifecycleStatus(raw: UpdateRosterLifecycleRequest, adminId: string) {
     const input = UpdateRosterLifecycleRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'OWNERSHIP', id: input.ownershipId });
+    await this.visibility.requireVisible({ type: 'SEASON', id: input.seasonId });
     const current = await this.loadOwnership(input.ownershipId, input.seasonId);
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
 
@@ -814,14 +828,7 @@ export class RosterTransactionsService {
         422
       );
     }
-    if (build.dtRating === null) {
-      throw new LeagueRosterError(
-        'PLAYER_DT_RATING_MISSING',
-        'The selected player card has no DT rating',
-        422
-      );
-    }
-    return { ...build, dtRating: build.dtRating };
+    return build;
   }
 
   private async rosterAggregate(client: Prisma.TransactionClient, leagueTeamId: string) {
@@ -892,6 +899,9 @@ export class RosterTransactionsService {
     if (season.leagueId !== team.leagueId) {
       throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and league team differ', 409);
     }
+    if (team.status === 'ARCHIVED') {
+      throw new LeagueRosterError('TEAM_ARCHIVED', 'League team has withdrawn', 409);
+    }
     if (team.status !== 'ACTIVE' || team.teamNumber === null) {
       throw new LeagueRosterError(
         'LEAGUE_TEAM_NOT_ELIGIBLE',
@@ -919,7 +929,7 @@ export class RosterTransactionsService {
       leagueTeamId: string;
       footballPlayerId: string;
       currentPlayerCardId: string;
-      dtRatingSnapshot: number;
+      maxOverallSnapshot: number;
       salaryRuleVersionId: string;
       salaryMinor: number;
       acquiredAt: Date;
@@ -981,7 +991,7 @@ export class RosterTransactionsService {
     leagueTeamId: string;
     footballPlayerId: string;
     currentPlayerCardId: string;
-    dtRatingSnapshot: number;
+    maxOverallSnapshot: number;
     salaryRuleVersionId: string;
     salaryMinor: number;
     acquiredAt: Date;
@@ -994,7 +1004,7 @@ export class RosterTransactionsService {
       leagueTeamId: ownership.leagueTeamId,
       playerId: ownership.footballPlayerId,
       currentPlayerCardId: ownership.currentPlayerCardId,
-      dtRating: ownership.dtRatingSnapshot,
+      maxOverall: ownership.maxOverallSnapshot,
       salaryRuleVersionId: ownership.salaryRuleVersionId,
       salaryMinor: ownership.salaryMinor,
       acquiredAt: ownership.acquiredAt.toISOString(),

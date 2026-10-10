@@ -15,7 +15,7 @@
       </view>
     </view>
 
-    <view class="tabs {{showBracket ? 'tabs--four' : ''}}">
+    <view class="tabs efm-equal-tabs {{showBracket ? 'tabs--four' : ''}}">
       <button class="tab {{activeTab === 'overview' ? 'is-active' : ''}}" data-tab="overview" bindtap="switchTab">概览</button>
       <button class="tab {{activeTab === 'schedule' ? 'is-active' : ''}}" data-tab="schedule" bindtap="switchTab">赛程</button>
       <button class="tab {{activeTab === 'standings' ? 'is-active' : ''}}" data-tab="standings" bindtap="switchTab">积分榜</button>
@@ -62,7 +62,7 @@
       <view wx:if="{{matches.length === 0}}" class="empty-panel">赛程发布后会显示在这里。</view>
       <view wx:for="{{matches}}" wx:key="id" class="match-card">
         <text class="round">第 {{item.roundNumber}} 轮 · 第 {{item.matchNumber}} 场</text>
-        <view class="versus"><text>{{item.homeParticipant.displayName}}</text><text class="vs">对阵</text><text>{{item.awayParticipant.displayName}}</text></view>
+        <view class="versus"><text>{{item.homeParticipant.displayName}}{{item.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{item.awayParticipant.displayName}}{{item.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
         <text wx:if="{{item.officialResult}}" class="official-score">{{item.officialResult.homeScore}} : {{item.officialResult.awayScore}}</text>
       </view>
     </view>
@@ -71,7 +71,7 @@
       <view wx:if="{{standingsIsEmpty}}" class="empty-panel">第一场官方比分产生后，积分榜会自动生成。</view>
       <view wx:else class="standing-table">
         <view class="standing-row standing-head"><text>#</text><text>球员</text><text>赛</text><text>净胜</text><text>积分</text></view>
-        <view wx:for="{{standings.rows}}" wx:key="participantId" class="standing-row"><text>{{item.rank}}</text><text>{{item.displayName}}</text><text>{{item.played}}</text><text>{{item.goalDifference}}</text><text class="points">{{item.totalPoints}}</text></view>
+        <view wx:for="{{standings.rows}}" wx:key="participantId" class="standing-row"><text>{{item.rank}}</text><text>{{item.displayName}}{{item.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text>{{item.played}}</text><text>{{item.goalDifference}}</text><text class="points">{{item.totalPoints}}</text></view>
       </view>
     </view>
 
@@ -88,8 +88,8 @@
               <view class="bracket-round-head"><text>{{item.displayName}}</text><text>{{item.status === 'PUBLISHED' ? '进行中' : '待开始'}}</text></view>
               <view class="bracket-pairings">
                 <view wx:for="{{item.pairings}}" wx:for-item="pairing" wx:key="id" class="bracket-pairing">
-                  <view class="bracket-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text></view>
-                  <view class="bracket-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text></view>
+                  <view class="bracket-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}{{pairing.homeParticipant && pairing.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text>{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text></view>
+                  <view class="bracket-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}{{pairing.awayParticipant && pairing.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text>{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text></view>
                 </view>
               </view>
             </view>

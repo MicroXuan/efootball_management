@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   CreateLeagueTeamRequestSchema,
+  LeagueTeamAdminListStatusSchema,
+  LeagueTeamLifecycleRequestSchema,
   ChangeTeamShellRequestSchema,
   RefreshTeamShellRequestSchema,
   ResourceIdSchema,
@@ -9,6 +11,8 @@ import {
   UpdateLeagueTeamRequestSchema,
   type ChangeTeamShellRequest,
   type ParsedCreateLeagueTeamRequest,
+  type LeagueTeamAdminListStatus,
+  type LeagueTeamLifecycleRequest,
   type RefreshTeamShellRequest,
   type SwapTeamShellRequest,
   type TransferTeamShellRequest,
@@ -32,8 +36,12 @@ export class AdminLeagueTeamsController {
   ) {}
 
   @Get()
-  list(@Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string) {
-    return this.teams.listForLeague(leagueId);
+  list(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Query('status', new ZodValidationPipe(LeagueTeamAdminListStatusSchema.optional().default('ACTIVE')))
+    status: LeagueTeamAdminListStatus
+  ) {
+    return this.teams.listForLeague(leagueId, status);
   }
 
   @Get(':teamId')
@@ -41,7 +49,29 @@ export class AdminLeagueTeamsController {
     @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
     @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string
   ) {
-    return this.teams.getDetail(teamId, undefined, leagueId);
+    return this.teams.getAdminDetail(teamId, leagueId);
+  }
+
+  @Post(':teamId/archive')
+  archive(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(LeagueTeamLifecycleRequestSchema)) body: LeagueTeamLifecycleRequest
+  ) {
+    return this.teams.archive(admin.id, leagueId, teamId, body, this.key(key));
+  }
+
+  @Post(':teamId/restore')
+  restore(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('teamId', new ZodValidationPipe(ResourceIdSchema)) teamId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(LeagueTeamLifecycleRequestSchema)) body: LeagueTeamLifecycleRequest
+  ) {
+    return this.teams.restore(admin.id, leagueId, teamId, body, this.key(key));
   }
 
   @Post()

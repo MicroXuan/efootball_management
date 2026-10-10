@@ -7,6 +7,7 @@ function approvedEntries(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     id: `entry-${index + 1}`,
     teamNameSnapshot: `球队 ${index + 1}`,
+    owner: { displayName: `玩家 ${index + 1}` },
     previousSeasonEntryId: null,
     status: 'APPROVED'
   }));
@@ -55,6 +56,7 @@ function harness(seasonOverrides: Record<string, unknown> = {}) {
           rows: data.rows.create.map((row: Record<string, unknown>, index: number) => ({
             id: `row-${proposalVersion}-${index + 1}`,
             proposalId: `proposal-${proposalVersion}`,
+            seasonEntry: season.entries.find((entry) => entry.id === row.seasonEntryId),
             ...row
           }))
         };
@@ -89,9 +91,10 @@ function harness(seasonOverrides: Record<string, unknown> = {}) {
     prisma as never,
     authorization as never,
     receipts as never,
-    audit as never
+    audit as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
-  return { service, transaction, receipts, audit, season };
+  return { service, transaction, receipts, audit, prisma, season };
 }
 
 function confirmationHarness(options: { published?: boolean; seasonVersion?: number } = {}) {
@@ -184,13 +187,14 @@ function confirmationHarness(options: { published?: boolean; seasonVersion?: num
     transaction as never,
     authorization as never,
     receipts as never,
-    audit as never
+    audit as never,
+    { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
   );
   return { service, transaction, proposal, season };
 }
 
 describe('LeagueAllocationService', () => {
-  it('uses only approved entries and never creates a super group for the first season', async () => {
+  it('uses only approved entries from active teams and never creates a super group for the first season', async () => {
     const { service, transaction } = harness();
 
     const result = await service.generate('admin-1', 'league-1', 'season-1', {
@@ -200,11 +204,14 @@ describe('LeagueAllocationService', () => {
 
     expect(transaction.leagueSeason.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       include: expect.objectContaining({
-        entries: expect.objectContaining({ where: { status: 'APPROVED' } })
+        entries: expect.objectContaining({
+          where: { status: 'APPROVED', leagueTeam: { status: 'ACTIVE' } }
+        })
       })
     }));
     expect(result.rows).toHaveLength(19);
     expect(result.rows.some((row) => row.suggestedStageCode === 'SUPER')).toBe(false);
+    expect(result.rows[0]).toMatchObject({ teamName: expect.any(String), ownerDisplayName: expect.stringMatching(/^玩家 /) });
   });
 
   it('rejects generation outside allocation review with a Chinese business message', async () => {
@@ -217,6 +224,17 @@ describe('LeagueAllocationService', () => {
       code: 'SEASON_NOT_IN_ALLOCATION_REVIEW',
       message: expect.stringContaining('分组确认')
     });
+  });
+
+  it('does not restore superseded allocation drafts after a refresh', async () => {
+    const { service, prisma } = harness();
+
+    await expect(service.latest('admin-1', 'league-1', 'season-1')).rejects.toMatchObject({
+      code: 'ALLOCATION_PROPOSAL_NOT_FOUND'
+    });
+    expect(prisma.seasonAllocationProposal.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { seasonId: 'season-1', status: { in: ['DRAFT', 'CONFIRMED'] } }
+    }));
   });
 
   it('replays the same idempotency key and creates a new version for a new key', async () => {

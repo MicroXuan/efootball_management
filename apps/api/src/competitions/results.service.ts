@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ManagerMatchResultRequest,
   MatchResultVersionResponse,
@@ -13,26 +13,39 @@ import type { CompetitionTransaction } from './competition.types.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { StandingsService } from './standings.service.js';
 import { CupProgressionService } from './cup-progression.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
     stage: { include: { competition: true } };
-    homeParticipant: { include: { seasonEntry: true } };
-    awayParticipant: { include: { seasonEntry: true } };
+    homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
+    awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
     officialResultVersion: true;
   };
 }>;
 
 @Injectable()
 export class ResultsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
     @Inject(StandingsService) private readonly standings: StandingsService,
-    @Inject(CupProgressionService) private readonly cupProgression: CupProgressionService
-  ) {}
+    @Inject(CupProgressionService) private readonly cupProgression: CupProgressionService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
+    @Optional() @Inject(AdminMutationReceiptService) private readonly adminReceipts?: AdminMutationReceiptService,
+    @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService,
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
+  async submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
+    await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.submit:${matchId}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.playerMatch(transaction, userId, matchId);
@@ -59,7 +72,8 @@ export class ResultsService {
     });
   }
 
-  confirm(userId: string, matchId: string, resultVersion: number, input: VersionedMutationRequest, key: string) {
+  async confirm(userId: string, matchId: string, resultVersion: number, input: VersionedMutationRequest, key: string) {
+    await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.confirm:${matchId}:${resultVersion}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.playerMatch(transaction, userId, matchId);
@@ -86,7 +100,8 @@ export class ResultsService {
     });
   }
 
-  reject(userId: string, matchId: string, resultVersion: number, input: RejectMatchResultRequest, key: string) {
+  async reject(userId: string, matchId: string, resultVersion: number, input: RejectMatchResultRequest, key: string) {
+    await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.reject:${matchId}:${resultVersion}`, key, async (transaction) => {
       if (!input.reason?.trim()) {
         throw new CompetitionError('RESULT_REJECTION_REASON_REQUIRED', 'Rejection reason is required', 400);
@@ -114,13 +129,16 @@ export class ResultsService {
     });
   }
 
-  recordByManager(
+  async recordByManager(
     actorId: string,
     competitionId: string,
     matchId: string,
     input: ManagerMatchResultRequest,
     key: string
   ) {
+    const matchLeagueId = await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
+    const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (matchLeagueId !== competitionLeagueId) throw this.visibility.notFound();
     return this.receipts.execute(actorId, `match.result.manager:${matchId}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.managerMatch(transaction, competitionId, matchId);
@@ -157,6 +175,84 @@ export class ResultsService {
     });
   }
 
+  async recordByLeagueAdmin(
+    actorAdminId: string,
+    leagueId: string,
+    competitionId: string,
+    matchId: string,
+    input: ManagerMatchResultRequest,
+    key: string
+  ): Promise<MatchResultVersionResponse> {
+    if (!this.adminReceipts || !this.adminAuthorization || !this.audit) {
+      throw new Error('League administrator result dependencies are not configured');
+    }
+    const [matchLeagueId, competitionLeagueId] = await Promise.all([
+      this.visibility.requireVisible({ type: 'MATCH', id: matchId }),
+      this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId })
+    ]);
+    if (matchLeagueId !== leagueId || competitionLeagueId !== leagueId) {
+      throw this.visibility.notFound();
+    }
+    await this.adminAuthorization.requireLeagueAccess(actorAdminId, leagueId);
+    return this.adminReceipts.execute(
+      actorAdminId,
+      `admin.competition-result.record:${matchId}`,
+      key,
+      async (transaction) => {
+        await this.lockMatch(transaction, matchId);
+        const match = await this.managerMatch(transaction, competitionId, matchId);
+        this.assertInProgress(match);
+        assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+        this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
+        if (match.officialResultVersion && !input.reason?.trim()) {
+          throw new CompetitionError('RESULT_CORRECTION_REASON_REQUIRED', '修改已有官方比分时必须填写修正原因', 400);
+        }
+        const official = await transaction.matchResultVersion.create({
+          data: {
+            matchId,
+            version: await this.nextVersion(transaction, matchId),
+            homeScore: input.homeScore,
+            awayScore: input.awayScore,
+            submittedById: null,
+            submittedByAdminId: actorAdminId,
+            submissionSide: 'MANAGER',
+            status: 'OFFICIAL',
+            reason: input.reason?.trim() || null
+          }
+        });
+        if (match.officialResultVersion) {
+          await transaction.matchResultVersion.update({
+            where: { id: match.officialResultVersion.id }, data: { status: 'SUPERSEDED' }
+          });
+        }
+        const updated = await transaction.competitionMatch.updateMany({
+          where: { id: matchId, version: input.expectedVersion },
+          data: { officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 } }
+        });
+        if (updated.count !== 1) throw this.versionConflict();
+        await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore);
+        await this.audit!.record(transaction, {
+          actorAdminId,
+          leagueId,
+          action: 'admin.competition-result.record',
+          resourceType: 'CompetitionMatch',
+          resourceId: matchId,
+          reason: input.reason?.trim() || null,
+          metadata: {
+            competitionId,
+            stageId: match.stageId,
+            homeScore: input.homeScore,
+            awayScore: input.awayScore,
+            corrected: Boolean(match.officialResultVersion),
+            previousResultVersionId: match.officialResultVersion?.id ?? null
+          }
+        });
+        return { ...this.response(official, ''), submittedByMe: true };
+      },
+      input
+    );
+  }
+
   private async playerMatch(transaction: CompetitionTransaction, userId: string, matchId: string): Promise<MatchRecord> {
     const match = await this.match(transaction, matchId);
     if (!this.owns(match.homeParticipant, userId) && !this.owns(match.awayParticipant, userId)) {
@@ -178,12 +274,15 @@ export class ResultsService {
       where: { id: matchId },
       include: {
         stage: { include: { competition: true } },
-        homeParticipant: { include: { seasonEntry: true } },
-        awayParticipant: { include: { seasonEntry: true } },
+        homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+        awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
         officialResultVersion: true
       }
     });
     if (!match) throw new CompetitionError('MATCH_NOT_FOUND', 'Match was not found', 404);
+    const archived = [match.homeParticipant, match.awayParticipant]
+      .some((participant) => participant.seasonEntry?.leagueTeam?.status === 'ARCHIVED');
+    if (archived) throw new CompetitionError('TEAM_ARCHIVED', 'League team has withdrawn', 409);
     return match;
   }
 

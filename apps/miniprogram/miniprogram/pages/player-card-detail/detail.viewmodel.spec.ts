@@ -222,15 +222,18 @@ describe('player card detail view model', () => {
     })
   })
 
-  it('labels trending cards as finished cards instead of an unimplemented build', () => {
+  it('derives a fixed build for a legacy trending card', () => {
     const view = toCardDetailViewModel(detail({
       cardType: 'TRENDING',
       attributes: { sourceMetadata: { maxLevel: '0' } },
     }))
 
-    expect(view.autoBuild).toMatchObject({
-      available: false,
-      unavailableReason: '状态火热卡为成品卡，无需分配成长点。',
+    expect(view.autoBuild).toEqual({
+      available: true,
+      maxOverall: 96,
+      dtRating: null,
+      allocationRows: [],
+      unavailableReason: '',
     })
   })
 

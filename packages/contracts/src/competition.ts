@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { ResourceIdSchema } from './common.js';
+import { ExpectedVersionSchema, ResourceIdSchema } from './common.js';
+import { LeagueTeamLifecycleStatusSchema } from './league-team.js';
+
+export { ExpectedVersionSchema } from './common.js';
 import { GamePlatformSchema } from './game-account.js';
 
 export const CompetitionStatusSchema = z.enum([
@@ -59,7 +62,6 @@ export const CompetitionStageCodeSchema = z.string().regex(
 );
 
 export const IdempotencyKeySchema = z.string().trim().min(1).max(128);
-export const ExpectedVersionSchema = z.number().int().positive();
 const TimestampSchema = z.iso.datetime();
 const ScoreSchema = z.number().int().min(0).max(99);
 
@@ -395,7 +397,8 @@ export const CupBracketProposalSchema = z.object({
 
 export const CupBracketParticipantSchema = z.object({
   id: ResourceIdSchema,
-  displayName: z.string().trim().min(1).max(64)
+  displayName: z.string().trim().min(1).max(64),
+  teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable()
 });
 
 export const CupBracketMatchSummarySchema = z.object({
@@ -533,7 +536,10 @@ export const CompetitionDetailSchema = CompetitionSummarySchema.extend({
 export const CompetitionParticipantSummarySchema = z.object({
   id: ResourceIdSchema,
   displayName: z.string(),
-  participantType: CompetitionParticipantTypeSchema
+  participantType: CompetitionParticipantTypeSchema,
+  teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable(),
+  teamLogoUrl: z.string().url().nullable().default(null),
+  ownerDisplayName: z.string().trim().min(1).max(32).nullable().default(null)
 });
 
 export const CompetitionStageSummarySchema = z.object({
@@ -590,6 +596,7 @@ export const CompetitionMatchResponseSchema = z.object({
 export const StandingsRowResponseSchema = z.object({
   participantId: ResourceIdSchema,
   displayName: z.string(),
+  teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable(),
   played: z.number().int().nonnegative(),
   wins: z.number().int().nonnegative(),
   draws: z.number().int().nonnegative(),

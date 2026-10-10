@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Spin } from 'antd';
+import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Spin, Tag } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { LeagueTeamDetailSchema, type LeagueTeamDetail } from '@efm/contracts';
@@ -20,6 +20,8 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<'archive' | 'restore' | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState('');
   const [form] = Form.useForm<Fields>();
   const mutationKey = useMutationKey();
   const load = useCallback(async () => {
@@ -58,6 +60,23 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
       } else setError('保存失败，请稍后重试');
     } finally { setSubmitting(false); }
   };
+  const changeLifecycle = async () => {
+    if (!detail || !lifecycleAction || !lifecycleReason.trim() || submitting) return;
+    setSubmitting(true); setError(null);
+    try {
+      const updated = await api.request(`/v1/admin/leagues/${leagueId}/teams/${teamId}/${lifecycleAction}`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': mutationKey.current() },
+        schema: LeagueTeamDetailSchema,
+        body: { expectedVersion: detail.version, reason: lifecycleReason.trim() }
+      });
+      setDetail(updated); setLifecycleAction(null); setLifecycleReason(''); mutationKey.reset();
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') {
+        await load(); mutationKey.reset(); setError('数据已被其他管理员更新，已为你加载最新版本');
+      } else setError(lifecycleAction === 'archive' ? '退出联赛失败，请稍后重试' : '恢复球队失败，请稍后重试');
+    } finally { setSubmitting(false); }
+  };
   if (loading && !detail) return <div className="loading-block"><Spin /></div>;
   return <div className="team-detail-page">
     <nav className="team-detail-breadcrumb" aria-label="球队详情面包屑"><Link to={`/leagues/${leagueId}/teams`}>球队列表</Link><span> / 球队详情</span></nav>
@@ -69,10 +88,14 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
           { key: 'identity', label: '球队身份', children: `${detail.teamNumber}-${detail.name}（${detail.ownerAlias}）` },
           { key: 'roster', label: '阵容', children: `${detail.activePlayerCount}/25` },
           { key: 'salary', label: '工资', children: `${detail.salaryTotalMinor} / ${detail.salaryCapMinor}` },
-          { key: 'shell', label: '队壳价值', children: detail.shellValueMinor }
+          { key: 'shell', label: '队壳价值', children: detail.shellValueMinor },
+          { key: 'lifecycle', label: '联赛状态', children: detail.status === 'ARCHIVED' ? <Tag>已退赛</Tag> : <Tag color="success">现役</Tag> }
         ]} />
+        <Button danger={detail.status !== 'ARCHIVED'} onClick={() => setLifecycleAction(detail.status === 'ARCHIVED' ? 'restore' : 'archive')}>
+          {detail.status === 'ARCHIVED' ? '恢复球队' : '退出联赛'}
+        </Button>
       </Card>
-      <Card
+      {detail.status !== 'ARCHIVED' ? <><Card
         className="detail-card team-detail-card team-detail-roster-card"
         title={<h2>阵容管理</h2>}
         extra={<Link aria-label="管理阵容" to={`/leagues/${leagueId}/teams/${teamId}/roster`}><Button type="primary" icon={<AdminIcon name="teams" />}>管理阵容</Button></Link>}
@@ -93,6 +116,18 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
         <p className="team-detail-section-copy">队名、简称和队徽属于队壳；更换或转让不会改变球队阵容、财务和比赛成绩。</p>
         <TeamShellActions api={api} leagueId={leagueId} team={detail} onCompleted={load} />
       </Card>
+      </> : <Alert type="info" showIcon title="该球队已退出联赛" description="历史阵容、财务与比赛记录仍会保留；恢复球队后才可继续业务操作。" />}
+      <Modal
+        open={lifecycleAction !== null}
+        title={lifecycleAction === 'archive' ? '确认退出联赛' : '确认恢复球队'}
+        okText={lifecycleAction === 'archive' ? '确认退出' : '确认恢复'}
+        okButtonProps={{ danger: lifecycleAction === 'archive', disabled: !lifecycleReason.trim(), loading: submitting }}
+        cancelButtonProps={{ disabled: submitting }}
+        onOk={() => void changeLifecycle()}
+        onCancel={() => { if (!submitting) { setLifecycleAction(null); setLifecycleReason(''); mutationKey.reset(); } }}
+      >
+        <Input.TextArea aria-label="操作原因" maxLength={512} value={lifecycleReason} onChange={(event) => { setLifecycleReason(event.target.value); mutationKey.reset(); }} placeholder="请填写操作原因" />
+      </Modal>
     </> : null}
   </div>;
 }

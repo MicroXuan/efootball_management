@@ -341,6 +341,7 @@ export const SeasonAllocationProposalRowSchema = z.object({
   proposalId: ResourceIdSchema,
   seasonEntryId: ResourceIdSchema,
   teamName: z.string().trim().min(1).max(64),
+  ownerDisplayName: z.string().trim().min(1).max(32),
   suggestedStageCode: CompetitionStageCodeSchema,
   source: SeasonAllocationSourceSchema,
   previousRank: z.number().int().positive().nullable(),

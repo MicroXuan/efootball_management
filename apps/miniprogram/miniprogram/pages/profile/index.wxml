@@ -37,6 +37,12 @@
         <text class="chevron">›</text>
       </view>
 
+      <view class="favorites-entry" bindtap="openWechatBotBinding" role="button">
+        <view class="favorites-icon">🤖</view>
+        <view class="favorites-copy"><text class="favorites-title">绑定群机器人</text><text class="favorites-detail">绑定微信身份，使用“我的赛程”等群命令</text></view>
+        <text class="chevron">›</text>
+      </view>
+
       <view class="section-head">
         <view><text class="section-kicker">已绑定球队</text><text class="section-title">已绑定联赛球队</text></view>
         <text class="team-count">{{profile.teams.length}} 支</text>

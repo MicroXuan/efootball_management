@@ -87,7 +87,7 @@ function mockRoutes(options: {
       if (error) throw error;
       return baseTeam;
     }
-    if (path.endsWith('/teams')) {
+    if (path.includes('/teams?status=')) {
       const error = options.teamLoadErrors?.[teamLoadAttempt++];
       if (error) throw error;
       return { items: options.teams ?? [], nextCursor: null };
@@ -122,6 +122,22 @@ describe('league teams page', () => {
     expect(await screen.findByText('暂无球队')).toBeInTheDocument();
     expect(screen.queryByText('PESDATA 队壳同步')).not.toBeInTheDocument();
     expect(request.mock.calls.map(([path]) => String(path)).join(' ')).not.toContain('/sync-runs');
+  });
+
+  it('loads withdrawn teams separately and hides the create form', async () => {
+    const archived = { ...baseTeam, status: 'ARCHIVED' as const };
+    const request = mockRoutes({ teams: [archived] });
+    renderPage(request);
+    await screen.findByText('7-阿贾克斯');
+
+    await userEvent.click(screen.getByRole('tab', { name: '已退出' }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      `/v1/admin/leagues/${leagueId}/teams?status=ARCHIVED`,
+      expect.any(Object)
+    ));
+    expect(screen.getByText('已退赛')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建球队' })).not.toBeInTheDocument();
   });
 
   it('filters by team identity, number, owner, and normalized keyword', () => {
@@ -222,7 +238,7 @@ describe('league teams page', () => {
     renderPage(request);
     expect(await screen.findByRole('alert')).toHaveTextContent('球队列表加载失败');
     await userEvent.click(screen.getByRole('button', { name: '重新加载' }));
-    await waitFor(() => expect(request.mock.calls.filter(([path]) => path.endsWith('/teams'))).toHaveLength(2));
+    await waitFor(() => expect(request.mock.calls.filter(([path]) => path.includes('/teams?status='))).toHaveLength(2));
     expect(await screen.findByText('暂无球队')).toBeInTheDocument();
   });
 

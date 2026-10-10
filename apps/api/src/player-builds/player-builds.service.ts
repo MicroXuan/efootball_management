@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { derivePesdataPositionAutoBuild } from '@efm/contracts';
+import { derivePesdataAutoBuild } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { selectBestCard } from './player-build-selector.js';
@@ -17,6 +17,18 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+function maxLevelFromAttributes(value: unknown): number | string | null | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const sourceMetadata = (value as Record<string, unknown>).sourceMetadata;
+  if (typeof sourceMetadata !== 'object' || sourceMetadata === null || Array.isArray(sourceMetadata)) {
+    return undefined;
+  }
+  const maxLevel = (sourceMetadata as Record<string, unknown>).maxLevel;
+  return typeof maxLevel === 'number' || typeof maxLevel === 'string' || maxLevel === null
+    ? maxLevel
+    : undefined;
+}
+
 @Injectable()
 export class PlayerBuildsService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
@@ -31,41 +43,32 @@ export class PlayerBuildsService {
       orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }],
       include: { playerCard: true }
     });
-    if (existing?.dtRating != null) return existing;
-    if (existing) {
-      return client.playerCardAutoBuild.update({
-        where: { id: existing.id },
-        data: { dtRating: existing.maxOverall, calculatedAt: new Date() },
-        include: { playerCard: true }
-      });
-    }
+    if (existing) return existing;
 
     const card = await client.playerCard.findUnique({
       where: { id: playerCardId },
       include: { attributes: true }
     });
     if (!card) return null;
-    const attributes = objectRecord(card.attributes?.attributesJson);
-    const sourceMetadata = objectRecord(attributes?.sourceMetadata);
-    const build = derivePesdataPositionAutoBuild({
+    const derived = derivePesdataAutoBuild({
       position: card.position,
       overallRating: card.overallRating,
-      maxLevel: sourceMetadata?.maxLevel as number | string | null | undefined,
+      maxLevel: maxLevelFromAttributes(card.attributes?.attributesJson),
       cardType: card.cardType
     });
-    if (!build) return null;
+    if (!derived) return null;
 
     await this.saveWithClient(client, playerCardId, {
-      autoBuildAllocation: build.allocation,
-      autoBuildMaxOverall: build.maxOverall,
-      dtRating: build.dtRating,
-      algorithmVersion: build.algorithmVersion
+      autoBuildAllocation: derived.allocation,
+      autoBuildMaxOverall: derived.maxOverall,
+      dtRating: derived.dtRating,
+      algorithmVersion: derived.algorithmVersion
     });
     return client.playerCardAutoBuild.findUniqueOrThrow({
       where: {
         playerCardId_algorithmVersion: {
           playerCardId,
-          algorithmVersion: build.algorithmVersion
+          algorithmVersion: derived.algorithmVersion
         }
       },
       include: { playerCard: true }
@@ -119,7 +122,6 @@ export class PlayerBuildsService {
       externalId: build.playerCard.externalId,
       algorithmVersion: build.algorithmVersion,
       maxOverall: build.maxOverall,
-      dtRating: build.dtRating,
       releaseDate: build.playerCard.cardPack?.releaseDate ?? null
     })));
     if (!selection) return saved;
@@ -141,10 +143,4 @@ export class PlayerBuildsService {
     });
     return saved;
   }
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
 }

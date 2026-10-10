@@ -142,6 +142,7 @@ describe('player valuation end-to-end flow', () => {
         leagueTeamId: teamId,
         footballPlayerId: playerId,
         currentPlayerCardId: card.id,
+        maxOverallSnapshot: 95,
         dtRatingSnapshot: 95,
         salaryRuleVersionId: salaryRule.id,
         salaryMinor: 400

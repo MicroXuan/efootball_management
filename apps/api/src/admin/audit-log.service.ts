@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 type AuditClient = PrismaService | Prisma.TransactionClient;
 type AuditInput = {
@@ -41,7 +42,10 @@ function sanitize(value: unknown): unknown {
 
 @Injectable()
 export class AuditLogService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(LeagueVisibilityService) private readonly visibility?: LeagueVisibilityService
+  ) {}
 
   record(client: AuditClient, input: AuditInput) {
     if (Boolean(input.actorAdminId) === Boolean(input.actorUserId)) {
@@ -69,8 +73,14 @@ export class AuditLogService {
   }
 
   async list(leagueId?: string) {
+    if (leagueId) {
+      if (!this.visibility) throw new Error('League visibility service is required to list scoped audit logs');
+      await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    }
     const logs = await this.prisma.auditLog.findMany({
-      ...(leagueId ? { where: { leagueId } } : {}),
+      where: leagueId
+        ? { leagueId, league: { isDeleted: false } }
+        : { OR: [{ leagueId: null }, { league: { isDeleted: false } }] },
       include: {
         actorAdmin: { select: { displayName: true } },
         actorUser: { select: { displayName: true } },

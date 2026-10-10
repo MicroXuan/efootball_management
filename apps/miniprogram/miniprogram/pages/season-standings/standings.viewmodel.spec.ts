@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { initialStageIndex, standingRows, standingsErrorMessage, standingsTabs, type StandingsRowResponse } from './standings.viewmodel'
 
 const row = (overrides: Partial<StandingsRowResponse> = {}): StandingsRowResponse => ({
-  participantId: 'participant-1', displayName: '海港', played: 4, wins: 3, draws: 1, losses: 0,
+  participantId: 'participant-1', displayName: '海港', teamLifecycleStatus: null, played: 4, wins: 3, draws: 1, losses: 0,
   goalsFor: 9, goalsAgainst: 3, goalDifference: 6, basePoints: 10, adjustmentPoints: 0,
   totalPoints: 10, rank: 1, tiePending: false, tieBreakValues: {}, ...overrides,
 })

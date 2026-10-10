@@ -39,6 +39,20 @@ it('presents a season rename as a specific operation', () => {
   });
 });
 
+it('presents an administrator-recorded official score as a competition operation', () => {
+  expect(presentAuditLog({
+    ...base,
+    action: 'admin.competition-result.record',
+    resourceType: 'CompetitionMatch',
+    subjectDisplayName: null,
+    metadata: { homeScore: 2, awayScore: 1, corrected: false },
+  })).toMatchObject({
+    action: '录入或修正官方比分',
+    subject: 'CELL 联赛',
+    summary: '平台管理员“小宣”对 CELL 联赛 执行了“录入或修正官方比分”',
+  });
+});
+
 it('presents a configured league center banner update explicitly', () => {
   expect(presentAuditLog({
     ...base,

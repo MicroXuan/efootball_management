@@ -63,6 +63,10 @@ Page({
     wx.navigateTo({ url: '/pages/favorites/index' })
   },
 
+  openWechatBotBinding() {
+    wx.navigateTo({ url: '/pages/wechat-bot-binding/index' })
+  },
+
   openTeam(event: TeamTapEvent) {
     const id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: `/pages/league-team-detail/index?id=${encodeURIComponent(id)}` })

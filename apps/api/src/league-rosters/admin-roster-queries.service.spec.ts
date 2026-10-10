@@ -43,7 +43,9 @@ describe('AdminRosterQueriesService candidate filters', () => {
         }
       }
     };
-    const service = new AdminRosterQueriesService(prisma as never);
+    const service = new AdminRosterQueriesService(prisma as never, {
+      requireVisible: async () => leagueId
+    } as never);
 
     const result = await service.candidates(leagueId, {
       keyword: '梅西', position: 'AMF', cardType: 'EPIC', cardPackId: packId
@@ -58,7 +60,7 @@ describe('AdminRosterQueriesService candidate filters', () => {
     const prisma = {
       leagueSalaryRuleVersion: {
         findFirst: async () => ({
-          tiers: [{ minDtRating: 90, maxDtRating: 99, salaryMinor: 500 }]
+          tiers: [{ minOverall: 90, maxOverall: 99, salaryMinor: 500 }]
         })
       },
       footballPlayer: {
@@ -77,14 +79,15 @@ describe('AdminRosterQueriesService candidate filters', () => {
         }]
       }
     };
-    const service = new AdminRosterQueriesService(prisma as never);
+    const service = new AdminRosterQueriesService(prisma as never, {
+      requireVisible: async () => leagueId
+    } as never);
 
     const result = await service.candidates(leagueId, { keyword: '罗德里格斯' });
 
     expect(result.items[0]?.cards[0]).toMatchObject({
       overallRating: 80,
       maxOverall: 95,
-      dtRating: 95,
       salaryMinor: 500
     });
   });

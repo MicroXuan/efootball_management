@@ -128,6 +128,57 @@ describe('LeaguesService', () => {
     });
   });
 
+  it('defaults new leagues to visible and omits them after logical deletion', async () => {
+    const created = await service.create(actorId, {
+      ...input,
+      name: '逻辑删除联赛'
+    }, `logical-delete-${suffix}`);
+    leagueIds.push(created.id);
+
+    const stored = await prisma.league.findUniqueOrThrow({ where: { id: created.id } });
+    expect(stored.isDeleted).toBe(false);
+
+    await prisma.league.update({ where: { id: created.id }, data: { isDeleted: true } });
+
+    const page = await service.listPublic({ limit: 100 });
+    expect(page.items.some((league) => league.id === created.id)).toBe(false);
+  });
+
+  it('rejects deleted league detail and update without persisting a receipt, then restores access', async () => {
+    const created = await service.create(actorId, {
+      ...input,
+      name: '可恢复联赛'
+    }, `logical-restore-create-${suffix}`);
+    leagueIds.push(created.id);
+    await prisma.league.update({ where: { id: created.id }, data: { isDeleted: true } });
+    const updateKey = `logical-restore-update-${suffix}`;
+    const expected = {
+      status: 404,
+      response: { code: 'LEAGUE_NOT_FOUND', message: 'League was not found' }
+    };
+
+    await expect(service.getPublic(created.id)).rejects.toMatchObject(expected);
+    await expect(service.update(actorId, created.id, {
+      name: '不应写入的名称',
+      expectedVersion: created.version
+    }, updateKey)).rejects.toMatchObject(expected);
+    await expect(prisma.mutationReceipt.count({
+      where: { actorId, operation: `league.update:${created.id}`, key: updateKey }
+    })).resolves.toBe(0);
+    await expect(prisma.league.findUniqueOrThrow({ where: { id: created.id } })).resolves.toMatchObject({
+      name: '可恢复联赛',
+      version: created.version,
+      isDeleted: true
+    });
+
+    await prisma.league.update({ where: { id: created.id }, data: { isDeleted: false } });
+    await expect(service.getPublic(created.id)).resolves.toMatchObject({
+      id: created.id,
+      name: '可恢复联赛',
+      version: created.version
+    });
+  });
+
   it('uses only the explicitly selected current season and its live approved count', async () => {
     const created = await service.create(actorId, {
       ...input,

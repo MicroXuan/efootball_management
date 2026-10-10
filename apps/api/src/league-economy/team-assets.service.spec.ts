@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { TeamAssetsService } from './team-assets.service.js';
+import { LeagueError } from '../leagues/league.errors.js';
 
 const at = new Date('2026-10-02T12:00:00.000Z');
 
@@ -56,10 +57,28 @@ function harness() {
     footballPlayer: { findUnique: jest.fn(async () => ({ id: 'player-1', nameZh: '有效球员', nameEn: null, shortName: null })) },
     playerValuationHistory: { findMany: jest.fn(async () => [{ id: 'history-1', previousValueMinor: null, newValueMinor: 8000, effectiveAt: at }]) }
   };
-  return { service: new TeamAssetsService(prisma as never), prisma, ownerships };
+  const visibility = {
+    requireVisible: jest.fn(async () => 'league-1'),
+    notFound: () => new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404)
+  };
+  return { service: new TeamAssetsService(prisma as never, visibility as never), prisma, ownerships };
 }
 
 describe('TeamAssetsService', () => {
+  it('returns the shared 404 before resolving a team from a deleted league', async () => {
+    const { prisma } = harness();
+    const visibility = {
+      requireVisible: jest.fn(async () => {
+        throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
+      })
+    };
+    const service = new TeamAssetsService(prisma as never, visibility as never);
+
+    await expect(service.getTeamAssets('user-1', 'team-1'))
+      .rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });
+    expect(prisma.leagueTeam.findUnique).not.toHaveBeenCalled();
+  });
+
   it('aggregates three roster states while valuing and paying only active players', async () => {
     const { service } = harness();
     const result = await service.getTeamAssets('user-1', 'team-1');

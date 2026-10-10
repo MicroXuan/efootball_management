@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ConfirmSeasonRenewalRequest,
   CreateSeasonApplicationRequest,
@@ -12,6 +12,7 @@ import type {
 import type { GameAccount, League, LeagueSeason, LeagueTeam, SeasonEntry } from '../generated/prisma/client.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { LeagueError, assertLeagueExpectedVersion } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
 import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
@@ -20,17 +21,23 @@ type SeasonWithLeague = LeagueSeason & { league: League };
 
 @Injectable()
 export class SeasonEntriesService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService
-  ) {}
+    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  apply(
+  async apply(
     userId: string,
     seasonId: string,
     input: CreateSeasonApplicationRequest,
     key: string
   ): Promise<SeasonEntryResponse> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(userId, `season.entry.apply:${seasonId}`, key, async (transaction) => {
       const season = await this.lockAndGetSeason(transaction, seasonId);
       this.assertRegistrationOpen(season);
@@ -64,12 +71,13 @@ export class SeasonEntriesService {
     });
   }
 
-  confirmRenewal(
+  async confirmRenewal(
     userId: string,
     seasonId: string,
     input: ConfirmSeasonRenewalRequest,
     key: string
   ): Promise<SeasonEntryResponse> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(userId, `season.entry.renew:${seasonId}`, key, async (transaction) => {
       const season = await this.lockAndGetSeason(transaction, seasonId);
       this.assertRegistrationOpen(season);
@@ -104,12 +112,13 @@ export class SeasonEntriesService {
     });
   }
 
-  withdraw(
+  async withdraw(
     userId: string,
     seasonId: string,
     input: WithdrawSeasonEntryRequest,
     key: string
   ): Promise<SeasonEntryResponse> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(userId, `season.entry.withdraw:${seasonId}`, key, async (transaction) => {
       const season = await this.lockAndGetSeason(transaction, seasonId);
       this.assertRegistrationOpen(season);
@@ -130,13 +139,14 @@ export class SeasonEntriesService {
     });
   }
 
-  review(
+  async review(
     actorId: string,
     seasonId: string,
     entryId: string,
     input: ReviewSeasonEntryRequest,
     key: string
   ): Promise<SeasonEntryResponse> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(actorId, `season.entry.review:${entryId}`, key, async (transaction) => {
       const season = await this.lockAndGetSeason(transaction, seasonId);
       this.assertReviewOpen(season);
@@ -155,13 +165,14 @@ export class SeasonEntriesService {
     });
   }
 
-  override(
+  async override(
     actorId: string,
     seasonId: string,
     entryId: string,
     input: OverrideSeasonEntryRequest,
     key: string
   ): Promise<SeasonEntryResponse> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     return this.receipts.execute(actorId, `season.entry.override:${entryId}`, key, async (transaction) => {
       await this.lockAndGetSeason(transaction, seasonId);
       const reason = input.reason.trim();
@@ -183,6 +194,7 @@ export class SeasonEntriesService {
   }
 
   async getMine(userId: string, seasonId: string): Promise<SeasonEntryResponse | null> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const entry = await this.prisma.seasonEntry.findFirst({ where: { seasonId, ownerUserId: userId } });
     return entry ? this.response(entry) : null;
   }
@@ -191,6 +203,7 @@ export class SeasonEntriesService {
     seasonId: string,
     query: SeasonEntryListQuery
   ): Promise<SeasonEntryResponse[]> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const entries = await this.prisma.seasonEntry.findMany({
       where: {
         seasonId,
@@ -280,8 +293,8 @@ export class SeasonEntriesService {
     seasonId: string
   ): Promise<SeasonWithLeague> {
     await transaction.$queryRaw`SELECT id FROM league_seasons WHERE id = ${seasonId} FOR UPDATE`;
-    const season = await transaction.leagueSeason.findUnique({
-      where: { id: seasonId },
+    const season = await transaction.leagueSeason.findFirst({
+      where: { id: seasonId, league: { isDeleted: false } },
       include: { league: true }
     });
     if (!season) throw new LeagueError('SEASON_NOT_FOUND', 'League season was not found', 404);

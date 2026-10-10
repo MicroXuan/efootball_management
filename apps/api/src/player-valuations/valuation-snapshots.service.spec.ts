@@ -63,7 +63,9 @@ function harness() {
     leaguePlayerValuation: { findMany: jest.fn(async () => [{ footballPlayerId: 'player-1', currentValueMinor: 1200 }]) }
   };
   const windows = { getEffectiveRule: jest.fn(async () => ({ window, rule, leagueId: 'league-1' })) };
-  const service = new ValuationSnapshotsService(prisma as never, windows as never);
+  const service = new ValuationSnapshotsService(prisma as never, windows as never, {
+    requireVisible: jest.fn(async () => 'league-1')
+  } as never);
   return { service, prisma, tx, windows, window, rule, ownership, snapshot };
 }
 

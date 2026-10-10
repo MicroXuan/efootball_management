@@ -1,5 +1,6 @@
-import { derivePesdataPositionAutoBuild, type PlayerCardDetail, type PlayerPosition } from '@efm/contracts'
+import type { PlayerCardDetail, PlayerPosition } from '@efm/contracts'
 import { toCardViewModel, type PlayerCardViewModel } from '../players/players.viewmodel'
+import { derivePlayerAutoBuild } from './player-auto-build'
 
 const attributeOrder = [
   'overall',
@@ -336,14 +337,8 @@ function attributeRows(
 }
 
 function derivedAutomaticBuild(detail: PlayerCardDetail): PlayerCardDetailViewModel['autoBuild'] {
-  if (detail.cardType === 'TRENDING') {
-    return {
-      available: false, maxOverall: null, dtRating: null, allocationRows: [],
-      unavailableReason: '状态火热卡为成品卡，无需分配成长点。',
-    }
-  }
   const source = objectRecord(detail.attributes.sourceMetadata)
-  const build = derivePesdataPositionAutoBuild({
+  const build = derivePlayerAutoBuild({
     position: detail.position,
     overallRating: detail.overallRating,
     maxLevel: sourceNumber(source, 'maxLevel'),
@@ -595,7 +590,9 @@ export function playerCardDetailWithAutomaticBuild(detail: PlayerCardDetail): Pl
       allocation: Object.fromEntries(derived.allocationRows.map(({ key, points }) => [key, points])),
       maxOverall: derived.maxOverall,
       dtRating: derived.dtRating,
-      algorithmVersion: 'pesdata-position-auto-v1',
+      algorithmVersion: detail.cardType === 'TRENDING'
+        ? 'pesdata-final-card-v1'
+        : 'pesdata-position-auto-v1',
     },
   }
 }

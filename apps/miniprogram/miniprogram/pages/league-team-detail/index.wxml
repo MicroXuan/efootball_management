@@ -7,10 +7,13 @@
       <view class="team-hero__copy"><text class="kicker">{{overview.leagueName}}</text><text class="title">{{overview.team.teamNumber}}-{{overview.team.name}}</text><text class="muted">（{{overview.team.ownerAlias}}） · 用户编号 {{overview.team.ownerPublicUserNo}}</text></view>
     </view>
     <view class="metrics"><view><text class="value">{{overview.team.activePlayerCount}}/25</text><text class="label">阵容</text></view><view><text class="value {{overCap ? 'danger' : ''}}">{{overview.team.salaryTotalMinor}}/{{overview.team.salaryCapMinor}}</text><text class="label">工资 / 工资帽</text></view></view>
-    <button class="valuation-entry" bindtap="openValuation">进入身价管理</button>
-    <view class="economy-links"><button bindtap="openAssets">球队资产</button><button bindtap="openTransactions">交易记录</button><button bindtap="openFinance">球队财务</button></view>
-    <view class="panel"><text class="section-title">当前转会窗口</text><text wx:if="{{overview.currentWindow}}" class="window-open">{{overview.currentWindow.name}} · 开放中</text><text wx:else class="muted">当前没有开放的转会窗口</text><text class="readonly">阵容操作由赛事管理员在后台完成</text></view>
-    <view class="section"><text class="section-title">阵容球员</text><view wx:if="{{rosterEmpty}}" class="panel"><text class="muted">当前阵容为空</text></view><view wx:else class="roster-grid"><view wx:for="{{overview.roster}}" wx:key="id" class="player"><text class="rating">{{item.maxOverall}}</text><view><text class="player-name">{{item.playerName}}</text><text class="muted">{{item.cardName}} · DT {{item.dtRating}} · 工资 {{item.salaryMinor}}</text></view></view></view></view>
-    <view class="section"><text class="section-title">财务流水</text><view wx:if="{{!ledger.length}}" class="panel"><text class="muted">暂无流水记录</text></view><view wx:for="{{ledger}}" wx:key="id" class="ledger-row"><view><text>{{item.type}}</text><text class="muted">{{item.note}}</text></view><text class="amount {{item.direction === 'DEBIT' ? 'danger' : ''}}">{{item.amountCopy}}</text></view></view>
+    <view class="workspace-grid">
+      <button wx:for="{{actions}}" wx:key="key" class="workspace-link" data-url="{{item.url}}" bindtap="openSection">
+        <text class="workspace-link__marker">{{item.marker}}</text>
+        <view class="workspace-link__copy"><text class="workspace-link__label">{{item.label}}</text><text class="workspace-link__description">{{item.description}}</text></view>
+        <text class="workspace-link__arrow">›</text>
+      </button>
+    </view>
+    <view class="section"><text class="section-title">阵容球员</text><view wx:if="{{rosterEmpty}}" class="panel"><text class="muted">当前阵容为空</text></view><view wx:else class="roster-grid"><view wx:for="{{roster}}" wx:key="id" class="player"><view class="position-badge position-badge--{{item.positionTone}}">{{item.position}}</view><view class="player-copy"><text class="player-name">{{item.playerName}}</text><view class="player-meta"><text>{{item.heightCopy}}</text><text>位置 {{item.positionCopy}}</text><text>工资 {{item.salaryCopy}}</text></view></view></view></view></view>
   </block>
 </view>

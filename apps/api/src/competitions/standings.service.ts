@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CompetitionTieBreaker,
   DivisionStandingsResponse,
@@ -9,10 +9,11 @@ import { PrismaService } from '../database/prisma.service.js';
 import type { CompetitionTransaction } from './competition.types.js';
 import { CompetitionError } from './competition.errors.js';
 import { calculateStandings } from './domain/standings.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const STAGE_INCLUDE = {
   participants: {
-    include: { participant: true },
+    include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
     orderBy: [{ seed: 'asc' as const }, { id: 'asc' as const }]
   },
   standingsSnapshots: {
@@ -20,7 +21,7 @@ const STAGE_INCLUDE = {
     take: 1,
     include: {
       rows: {
-        include: { participant: true },
+        include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
         orderBy: [{ rank: 'asc' as const }, { participantId: 'asc' as const }]
       }
     }
@@ -30,7 +31,14 @@ type StageRecord = Prisma.CompetitionStageGetPayload<{ include: typeof STAGE_INC
 
 @Injectable()
 export class StandingsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly visibility: LeagueVisibilityService;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async recalculate(
     transaction: CompetitionTransaction,
@@ -38,6 +46,7 @@ export class StandingsService {
     triggerResultVersionId: string,
     stageId?: string
   ): Promise<StandingsSnapshotResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId }, transaction);
     const competition = await transaction.competition.findUniqueOrThrow({ where: { id: competitionId } });
     const ruleVersion = competition.boundRuleVersion || competition.activeRuleVersion;
     const storedRules = await transaction.competitionRuleVersion.findUnique({
@@ -54,10 +63,14 @@ export class StandingsService {
     };
     const participants = stageId
       ? (await transaction.stageParticipant.findMany({
-        where: { stageId }, include: { participant: true }, orderBy: [{ seed: 'asc' }, { id: 'asc' }]
+        where: { stageId },
+        include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+        orderBy: [{ seed: 'asc' }, { id: 'asc' }]
       })).map((membership) => membership.participant)
       : await transaction.competitionParticipant.findMany({
-        where: { competitionId }, orderBy: [{ admissionSequence: 'asc' }, { id: 'asc' }]
+        where: { competitionId },
+        include: { seasonEntry: { include: { leagueTeam: true } } },
+        orderBy: [{ admissionSequence: 'asc' }, { id: 'asc' }]
       });
     const officialMatches = await transaction.competitionMatch.findMany({
       where: stageId
@@ -124,14 +137,23 @@ export class StandingsService {
       ruleVersion,
       triggeringResultVersionId: triggerResultVersionId,
       generatedAt: snapshot.generatedAt.toISOString(),
-      rows
+      rows: rows.map((row) => {
+        const participant = participants.find(({ id }) => id === row.participantId);
+        return { ...row, teamLifecycleStatus: this.lifecycleStatus(participant) };
+      })
     };
   }
 
   async getLatestPublic(competitionId: string): Promise<StandingsSnapshotResponse> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const snapshot = await this.prisma.standingsSnapshot.findFirst({
       where: { competitionId, stageId: null },
-      include: { rows: { include: { participant: true }, orderBy: [{ rank: 'asc' }, { participantId: 'asc' }] } },
+      include: {
+        rows: {
+          include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+          orderBy: [{ rank: 'asc' }, { participantId: 'asc' }]
+        }
+      },
       orderBy: { version: 'desc' }
     });
     if (!snapshot) {
@@ -158,6 +180,9 @@ export class StandingsService {
   }
 
   async getDivisionStandings(userId: string, leagueId: string, seasonId: string): Promise<DivisionStandingsResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     const entry = await this.prisma.seasonEntry.findFirst({
       where: { seasonId, ownerUserId: userId, status: 'APPROVED', season: { leagueId } },
       select: { id: true }
@@ -216,6 +241,7 @@ export class StandingsService {
         rows: stage.participants.map((membership, index) => ({
           participantId: membership.participant.id,
           displayName: membership.participant.displayNameSnapshot,
+          teamLifecycleStatus: this.lifecycleStatus(membership.participant),
           played: 0,
           wins: 0,
           draws: 0,
@@ -258,11 +284,15 @@ export class StandingsService {
     rank: number;
     tiePending: boolean;
     tieBreakValues: unknown;
-    participant: { displayNameSnapshot: string };
+    participant: {
+      displayNameSnapshot: string;
+      seasonEntry?: { leagueTeam: { status: string } } | null;
+    };
   }) {
     return {
       participantId: row.participantId,
       displayName: row.participant.displayNameSnapshot,
+      teamLifecycleStatus: this.lifecycleStatus(row.participant),
       played: row.played,
       wins: row.wins,
       draws: row.draws,
@@ -277,5 +307,12 @@ export class StandingsService {
       tiePending: row.tiePending,
       tieBreakValues: row.tieBreakValues as Record<string, number>
     };
+  }
+
+  private lifecycleStatus(participant: {
+    seasonEntry?: { leagueTeam: { status: string } } | null;
+  } | undefined): 'ACTIVE' | 'ARCHIVED' | null {
+    const status = participant?.seasonEntry?.leagueTeam.status;
+    return status === 'ACTIVE' || status === 'ARCHIVED' ? status : null;
   }
 }

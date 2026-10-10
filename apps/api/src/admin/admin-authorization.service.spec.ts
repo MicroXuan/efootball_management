@@ -128,4 +128,25 @@ describe('AdminAuthorizationService', () => {
       'ADMIN_LEAGUE_ACCESS_DENIED'
     );
   });
+
+  it('returns not found for a deleted league before evaluating an existing grant', async () => {
+    const platform = await createAdmin('PLATFORM_ADMIN');
+    const manager = await createAdmin('LEAGUE_MANAGER');
+    const league = await createLeague();
+    await prisma.adminLeagueRole.create({
+      data: {
+        adminId: manager.id,
+        leagueId: league.id,
+        role: 'LEAGUE_MANAGER',
+        grantedById: platform.id
+      }
+    });
+    await prisma.league.update({ where: { id: league.id }, data: { isDeleted: true } });
+
+    await expect(service.requireLeagueManager(manager.id, league.id)).rejects.toMatchObject({
+      status: 404,
+      response: { code: 'LEAGUE_NOT_FOUND' }
+    });
+    await expect(prisma.adminLeagueRole.count({ where: { leagueId: league.id } })).resolves.toBe(1);
+  });
 });

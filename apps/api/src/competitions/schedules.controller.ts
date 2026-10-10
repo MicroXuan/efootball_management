@@ -74,6 +74,15 @@ export class SchedulesController {
     return this.schedules.generateStage(admin.id, leagueId, stageId, body, this.key(key));
   }
 
+  @Get('admin/leagues/:leagueId/competition-stages/:stageId/schedule')
+  @UseGuards(AdminAuthGuard, AdminScopeGuard)
+  previewLeagueStage(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('stageId', new ZodValidationPipe(ResourceIdSchema)) stageId: string
+  ) {
+    return this.schedules.previewStageForLeague(leagueId, stageId);
+  }
+
   @Post('admin/leagues/:leagueId/competition-stages/:stageId/schedule/publish')
   @HttpCode(200)
   @UseGuards(AdminAuthGuard, AdminScopeGuard)

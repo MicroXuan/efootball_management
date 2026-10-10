@@ -31,7 +31,8 @@ function harness() {
   };
   const audit = { record: jest.fn(async () => undefined) };
   const service = new TransactionFeesService(
-    prisma as never, authorization as never, receipts as never, audit as never
+    prisma as never, authorization as never, receipts as never, audit as never,
+    { requireVisible: jest.fn(async () => 'league-1') } as never
   );
   return { service, prisma, tx, authorization, receipts, audit, rule };
 }

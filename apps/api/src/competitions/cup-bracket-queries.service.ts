@@ -1,9 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { CupBracketView } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { CompetitionError } from './competition.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const BRACKET_INCLUDE = {
   rounds: {
@@ -12,9 +13,9 @@ const BRACKET_INCLUDE = {
       pairings: {
         orderBy: { pairingNumber: 'asc' as const },
         include: {
-          homeParticipant: true,
-          awayParticipant: true,
-          winnerParticipant: true,
+          homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+          awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+          winnerParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
           match: { include: { officialResultVersion: true } }
         }
       }
@@ -26,12 +27,18 @@ type BracketRecord = Prisma.CupBracketProposalGetPayload<{ include: typeof BRACK
 
 @Injectable()
 export class CupBracketQueriesService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService
-  ) {}
+    @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async getPublished(competitionId: string): Promise<CupBracketView> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const proposal = await this.prisma.cupBracketProposal.findFirst({
       where: { competitionId, status: 'CONFIRMED' },
       orderBy: { version: 'desc' },
@@ -42,6 +49,8 @@ export class CupBracketQueriesService {
   }
 
   async getAdmin(actorAdminId: string, leagueId: string, competitionId: string): Promise<CupBracketView> {
+    const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (competitionLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     const proposal = await this.prisma.cupBracketProposal.findFirst({
       where: { competitionId, competition: { season: { leagueId } } },
@@ -99,8 +108,14 @@ export class CupBracketQueriesService {
     };
   }
 
-  private participant(participant: { id: string; displayNameSnapshot: string } | null) {
-    return participant ? { id: participant.id, displayName: participant.displayNameSnapshot } : null;
+  private participant(participant: BracketRecord['rounds'][number]['pairings'][number]['homeParticipant']) {
+    if (!participant) return null;
+    const status = participant.seasonEntry?.leagueTeam.status;
+    return {
+      id: participant.id,
+      displayName: participant.displayNameSnapshot,
+      teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null
+    };
   }
 
   private notFound(): CompetitionError {

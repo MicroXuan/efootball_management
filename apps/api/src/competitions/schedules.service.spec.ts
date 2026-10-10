@@ -194,7 +194,12 @@ describe('tiered stage schedules', () => {
       id: `participant-${index + 1}`,
       competitionId: 'competition-1',
       participantType: 'TEAM',
-      displayNameSnapshot: `球队 ${index + 1}`
+      displayNameSnapshot: `球队 ${index + 1}`,
+      seasonEntry: {
+        teamLogoUrlSnapshot: index === 0 ? 'https://static.example.com/team-1.png' : null,
+        owner: { displayName: `玩家 ${index + 1}` },
+        leagueTeam: { status: 'ACTIVE' }
+      }
     }));
     let matchData: Array<Record<string, unknown>> = [];
     const stage = {
@@ -249,7 +254,8 @@ describe('tiered stage schedules', () => {
       {} as never,
       generateRoundRobin,
       adminReceipts as never,
-      audit as never
+      audit as never,
+      { requireVisible: jest.fn(async () => 'league-1') } as never
     );
     return { service, transaction, stage };
   }
@@ -267,6 +273,15 @@ describe('tiered stage schedules', () => {
     expect(preview.matches.every((match) => ['participant-1', 'participant-2', 'participant-3']
       .includes(match.homeParticipant.id) && ['participant-1', 'participant-2', 'participant-3']
       .includes(match.awayParticipant.id))).toBe(true);
+    const teamOne = preview.matches
+      .flatMap((match) => [match.homeParticipant, match.awayParticipant])
+      .find((participant) => participant.id === 'participant-1');
+    expect(teamOne).toMatchObject({
+      displayName: '球队 1',
+      teamLifecycleStatus: 'ACTIVE',
+      teamLogoUrl: 'https://static.example.com/team-1.png',
+      ownerDisplayName: '玩家 1'
+    });
   });
 
   it('allows an empty single-team schedule and advances the season on first publication', async () => {

@@ -1,0 +1,43 @@
+<view class="binding-page">
+  <view class="page-head">
+    <view><text class="head-kicker">微信群助手</text><text class="head-title">绑定群机器人</text></view>
+    <text class="head-mark">BOT · 01</text>
+  </view>
+
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取绑定状态" />
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-code">状态读取失败</text>
+    <text class="state-title">暂时无法加载</text>
+    <text class="state-copy">{{view.errorMessage}}</text>
+    <button class="outline-button" bindtap="loadStatus">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <view class="status-card">
+      <text class="status-label">当前状态</text>
+      <text class="status-title">{{view.stateTitle}}</text>
+      <text class="status-copy">{{view.stateCopy}}</text>
+    </view>
+
+    <view wx:if="{{view.codeDisplay}}" class="code-card">
+      <text class="code-label">一次性验证码</text>
+      <text class="code-value">{{view.codeDisplay}}</text>
+      <text class="countdown">{{view.countdownCopy}} · {{view.expiresAtCopy}}</text>
+      <view class="instruction" bindtap="copyInstruction">
+        <text>{{view.instruction}}</text><text class="copy-action">点击复制</text>
+      </view>
+      <text class="security-note">验证码仅可使用一次，请勿发到微信群中。</text>
+    </view>
+
+    <text wx:if="{{view.errorMessage}}" class="error-copy">{{view.errorMessage}}</text>
+    <button wx:if="{{!view.showUnbind}}" class="primary-button" disabled="{{view.generateDisabled}}" bindtap="issueCode">{{view.generateLabel}}</button>
+    <button wx:else class="danger-button" bindtap="unbind">解除绑定</button>
+
+    <view class="steps-card">
+      <text class="steps-title">绑定步骤</text>
+      <text class="step">1. 点击生成 6 位验证码，有效期 5 分钟。</text>
+      <text class="step">2. 私聊联赛机器人发送“绑定 + 空格 + 验证码”。</text>
+      <text class="step">3. 机器人回复绑定成功后，即可在群里使用“我的赛程”。</text>
+    </view>
+  </block>
+</view>

@@ -14,6 +14,8 @@ import { LeagueRostersModule } from './league-rosters/league-rosters.module.js';
 import { LeagueEconomyModule } from './league-economy/league-economy.module.js';
 import { LeagueAllocationModule } from './league-allocation/league-allocation.module.js';
 import { LeagueWorkspaceModule } from './league-workspace/league-workspace.module.js';
+import { LeagueVisibilityModule } from './league-visibility/league-visibility.module.js';
+import { LeagueTeamLifecycleModule } from './league-team-lifecycle/league-team-lifecycle.module.js';
 import { PlayerCatalogModule } from './player-catalog/player-catalog.module.js';
 import { PlayerFavoritesModule } from './player-favorites/player-favorites.module.js';
 import { PlayerImportModule } from './player-import/player-import.module.js';
@@ -25,6 +27,8 @@ import { PesdataSyncModule } from './pesdata-sync/pesdata-sync.module.js';
 import { UsersModule } from './users/users.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
+import { WechatBotModule } from './wechat-bot/wechat-bot.module.js';
+import { PlayerAuctionsModule } from './player-auctions/player-auctions.module.js';
 
 @Module({
   imports: [
@@ -39,6 +43,8 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
     AuthModule,
     CompetitionsModule,
     DatabaseModule,
+    LeagueVisibilityModule,
+    LeagueTeamLifecycleModule,
     HealthModule,
     LeaguesModule,
     LeagueTeamsModule,
@@ -49,6 +55,7 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
     PlayerCatalogModule,
     PlayerFavoritesModule,
     PlayerBuildsModule,
+    PlayerAuctionsModule,
     PlayerImportModule,
     PlatformDataSyncModule,
     PlatformPresentationModule,
@@ -56,7 +63,8 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
     PesdataSyncModule,
     StorageModule,
     TeamCatalogModule,
-    UsersModule
+    UsersModule,
+    WechatBotModule
   ]
 })
 export class AppModule {}

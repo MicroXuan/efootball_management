@@ -45,7 +45,11 @@ function harness(found: typeof proposal | null = proposal) {
     leagueId
   })) };
   return {
-    service: new CupBracketQueriesService(prisma as never, authorization as never),
+    service: new CupBracketQueriesService(
+      prisma as never,
+      authorization as never,
+      { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn() } as never
+    ),
     prisma,
     authorization
   };
@@ -63,7 +67,7 @@ describe('CupBracketQueriesService', () => {
     expect(result.currentRoundNumber).toBe(1);
     expect(result.proposalStatus).toBe('CONFIRMED');
     expect(result.rounds[0]?.pairings[0]).toEqual(expect.objectContaining({
-      homeParticipant: { id: 'p1', displayName: '上海海港' },
+      homeParticipant: { id: 'p1', displayName: '上海海港', teamLifecycleStatus: null },
       match: { id: 'match-1', status: 'CONFIRMED', homeScore: 2, awayScore: 1 }
     }));
   });

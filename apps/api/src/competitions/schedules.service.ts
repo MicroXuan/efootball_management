@@ -6,12 +6,13 @@ import type {
 } from '@efm/contracts';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
-import type { CompetitionParticipant, CompetitionStage, Prisma } from '../generated/prisma/client.js';
+import type { CompetitionStage, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
 import type { generateRoundRobin } from './domain/round-robin.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 export type PublishScheduleInput = {
   expectedCompetitionVersion: number;
@@ -23,8 +24,8 @@ export const SCHEDULE_GENERATOR = Symbol('SCHEDULE_GENERATOR');
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
-    homeParticipant: true;
-    awayParticipant: true;
+    homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true; owner: true } } } };
+    awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true; owner: true } } } };
     officialResultVersion: true;
   };
 }>;
@@ -43,21 +44,28 @@ export type SchedulePreview = {
 
 @Injectable()
 export class SchedulesService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
     @Inject(SCHEDULE_GENERATOR) private readonly generator: ScheduleGenerator,
     @Optional() @Inject(AdminMutationReceiptService) private readonly adminReceipts?: AdminMutationReceiptService,
-    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
-  ) {}
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
-  generateStage(
+  async generateStage(
     actorAdminId: string,
     leagueId: string,
     stageId: string,
     input: GenerateStageScheduleRequest,
     key: string
   ): Promise<SchedulePreview> {
+    const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
+    if (stageLeagueId !== leagueId) throw this.visibility.notFound();
     const receipts = this.requireAdminReceipts();
     return receipts.execute(actorAdminId, `competition-stage.schedule.generate:${stageId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM competition_stages WHERE id = ${stageId} FOR UPDATE`;
@@ -96,13 +104,15 @@ export class SchedulesService {
     }, input);
   }
 
-  publishStage(
+  async publishStage(
     actorAdminId: string,
     leagueId: string,
     stageId: string,
     input: PublishStageScheduleRequest,
     key: string
   ): Promise<SchedulePreview> {
+    const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
+    if (stageLeagueId !== leagueId) throw this.visibility.notFound();
     const receipts = this.requireAdminReceipts();
     return receipts.execute(actorAdminId, `competition-stage.schedule.publish:${stageId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM competition_stages WHERE id = ${stageId} FOR UPDATE`;
@@ -166,11 +176,19 @@ export class SchedulesService {
     }, input);
   }
 
-  previewStage(stageId: string): Promise<SchedulePreview> {
+  async previewStage(stageId: string): Promise<SchedulePreview> {
+    await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
     return this.readStagePreview(this.prisma, stageId);
   }
 
-  generate(actorId: string, competitionId: string, key: string): Promise<SchedulePreview> {
+  async previewStageForLeague(leagueId: string, stageId: string): Promise<SchedulePreview> {
+    const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
+    if (stageLeagueId !== leagueId) throw this.visibility.notFound();
+    return this.readStagePreview(this.prisma, stageId);
+  }
+
+  async generate(actorId: string, competitionId: string, key: string): Promise<SchedulePreview> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.schedule.generate:${competitionId}`, key, async (transaction) => {
       await this.lockCompetition(transaction, competitionId);
       const competition = await transaction.competition.findUnique({ where: { id: competitionId } });
@@ -218,16 +236,18 @@ export class SchedulesService {
     });
   }
 
-  preview(competitionId: string): Promise<SchedulePreview> {
+  async preview(competitionId: string): Promise<SchedulePreview> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.readPreview(this.prisma, competitionId);
   }
 
-  publish(
+  async publish(
     actorId: string,
     competitionId: string,
     input: PublishScheduleInput,
     key: string
   ): Promise<SchedulePreview> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     return this.receipts.execute(actorId, `competition.schedule.publish:${competitionId}`, key, async (transaction) => {
       await this.lockCompetition(transaction, competitionId);
       const competition = await transaction.competition.findUnique({ where: { id: competitionId } });
@@ -256,6 +276,7 @@ export class SchedulesService {
   }
 
   async listPublic(competitionId: string): Promise<ScheduleMatch[]> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const stage = await this.prisma.competitionStage.findFirst({
       where: { competitionId, status: 'PUBLISHED' }, select: { id: true }
     });
@@ -265,6 +286,7 @@ export class SchedulesService {
   }
 
   async listStagePublic(stageId: string): Promise<ScheduleMatch[]> {
+    await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
     const stage = await this.prisma.competitionStage.findUnique({
       where: { id: stageId },
       select: { id: true, status: true }
@@ -318,7 +340,11 @@ export class SchedulesService {
   private matches(client: CompetitionTransaction | PrismaService, stageId: string): Promise<MatchRecord[]> {
     return client.competitionMatch.findMany({
       where: { stageId },
-      include: { homeParticipant: true, awayParticipant: true, officialResultVersion: true },
+      include: {
+        homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true, owner: true } } } },
+        awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true, owner: true } } } },
+        officialResultVersion: true
+      },
       orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }]
     });
   }
@@ -349,11 +375,15 @@ export class SchedulesService {
     };
   }
 
-  private participant(participant: CompetitionParticipant) {
+  private participant(participant: MatchRecord['homeParticipant']) {
+    const status = participant.seasonEntry?.leagueTeam.status;
     return {
       id: participant.id,
       displayName: participant.displayNameSnapshot,
-      participantType: participant.participantType
+      participantType: participant.participantType,
+      teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null,
+      teamLogoUrl: participant.seasonEntry?.teamLogoUrlSnapshot ?? null,
+      ownerDisplayName: participant.seasonEntry?.owner.displayName ?? null
     };
   }
 

@@ -225,5 +225,16 @@ describe('MyCompetitionsService', () => {
     const matches = await service.listMatches(userId, { limit: 10 });
     expect(matches.items).toHaveLength(1);
     expect(matches.items[0]).toMatchObject({ myParticipantId: mine.id, action: 'SUBMIT' });
+    await prisma.leagueTeam.update({ where: { id: myTeam.id }, data: { status: 'ARCHIVED' } });
+    await expect(service.listCompetitions(userId, { limit: 10 }))
+      .resolves.toMatchObject({ items: [] });
+    await expect(service.listMatches(userId, { limit: 10 }))
+      .resolves.toMatchObject({ items: [] });
+    await prisma.leagueTeam.update({ where: { id: myTeam.id }, data: { status: 'ACTIVE' } });
+    await prisma.league.update({ where: { id: league.id }, data: { isDeleted: true } });
+    await expect(service.listCompetitions(userId, { limit: 10 }))
+      .resolves.toMatchObject({ items: [] });
+    await expect(service.listMatches(userId, { limit: 10 }))
+      .resolves.toMatchObject({ items: [] });
   });
 });

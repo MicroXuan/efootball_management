@@ -22,7 +22,11 @@ export const EnvironmentSchema = z.object({
   PUBLIC_API_BASE_URL: z.url().default('http://127.0.0.1:3000'),
   CLOUDBASE_ENV_ID: z.string().trim().min(1).optional(),
   CLOUDBASE_SECRET_ID: z.string().trim().min(1).optional(),
-  CLOUDBASE_SECRET_KEY: z.string().trim().min(1).optional()
+  CLOUDBASE_SECRET_KEY: z.string().trim().min(1).optional(),
+  WECHAT_BOT_OUTBOX_LEASE_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
+  WECHAT_BOT_OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+  WECHAT_BOT_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(600_000).default(60_000),
+  WECHAT_BOT_COMMAND_RETENTION_HOURS: z.coerce.number().int().min(1).max(720).default(24)
 }).passthrough().superRefine((environment, context) => {
   if (environment.STORAGE_PROVIDER !== 'cloudbase') return;
   for (const field of ['CLOUDBASE_ENV_ID', 'CLOUDBASE_SECRET_ID', 'CLOUDBASE_SECRET_KEY'] as const) {

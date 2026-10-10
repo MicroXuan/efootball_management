@@ -103,6 +103,24 @@ describe('PESDATA player mapping', () => {
     expect(row.algorithmVersion).toBe('pesdata-position-auto-v1');
   });
 
+  it('maps a trending final card to an empty fixed build at its published overall', () => {
+    const row = mapPesdataPlayer({
+      ...detail,
+      overall: 96,
+      cardType: 5,
+      maxLevel: 0,
+      autoBuildAllocation: undefined,
+      autoBuildMaxOverall: undefined,
+      dtRating: undefined,
+      algorithmVersion: undefined
+    });
+
+    expect(row.autoBuildAllocation).toEqual({});
+    expect(row.autoBuildMaxOverall).toBe(96);
+    expect(row.dtRating).toBeUndefined();
+    expect(row.algorithmVersion).toBe('pesdata-final-card-v1');
+  });
+
   it('produces stable checksums independent of object key order', () => {
     expect(pesdataValueChecksum({ a: 1, b: { c: 2 } })).toBe(
       pesdataValueChecksum({ b: { c: 2 }, a: 1 })

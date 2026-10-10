@@ -69,7 +69,7 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
     setLoading(true); setError(null);
     try {
       const [leagueResult, seasonResult, teamResult] = await Promise.all([
-        api.request(`/v1/admin/leagues/${leagueId}/workspace`, { schema: LeagueDetailSchema }),
+        api.request(`/v1/leagues/${leagueId}`, { skipAuth: true, schema: LeagueDetailSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/seasons`, { schema: SeasonListSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/teams`, { schema: LeagueTeamListResponseSchema })
       ]);

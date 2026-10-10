@@ -68,10 +68,13 @@ describe('AdminLeaguesService', () => {
     await expect(service.list()).resolves.toMatchObject({
       items: [{ currentSeason: { id: 'season-20', approvedEntryCount: 67 } }]
     });
+    expect(prisma.league.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { isDeleted: false }
+    }));
   });
 
   it('loads one scoped league workspace with its current season', async () => {
-    const findUnique = jest.fn(async () => ({
+    const findFirst = jest.fn(async () => ({
       id: 'league-1',
       name: 'CELL 联赛',
       shortName: 'CELL',
@@ -93,7 +96,7 @@ describe('AdminLeaguesService', () => {
       updatedAt: new Date('2026-09-30T00:00:00.000Z')
     }));
     const service = new AdminLeaguesService(
-      { league: { findUnique } } as never,
+      { league: { findFirst } } as never,
       {} as never,
       {} as never
     );
@@ -103,8 +106,29 @@ describe('AdminLeaguesService', () => {
       currentSeason: { id: 'season-20', approvedEntryCount: 67 },
       capabilities: { canManage: true, canCreateSeason: true }
     });
-    expect(findUnique).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'league-1' }
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'league-1', isDeleted: false }
     }));
+  });
+
+  it('returns not found before opening a mutation receipt for a deleted league', async () => {
+    const findFirst = jest.fn(async () => null);
+    const receipts = { execute: jest.fn(async () => undefined) };
+    const audit = { record: jest.fn() };
+    const service = new AdminLeaguesService(
+      { league: { findFirst } } as never,
+      receipts as never,
+      audit as never
+    );
+
+    await expect(service.update('admin-1', 'deleted-league', {
+      name: '不应写入',
+      expectedVersion: 1
+    }, 'update-deleted')).rejects.toMatchObject({
+      status: 404,
+      response: { code: 'LEAGUE_NOT_FOUND' }
+    });
+    expect(receipts.execute).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });

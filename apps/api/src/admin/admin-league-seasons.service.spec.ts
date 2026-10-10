@@ -3,18 +3,22 @@ import { AdminError } from './admin.errors.js';
 import { AdminLeagueSeasonsService } from './admin-league-seasons.service.js';
 
 function harness(overrides: Record<string, unknown> = {}) {
+  const leagueFind = jest.fn(async () => ({
+    id: 'league-1', currentSeasonId: 'season-old', version: 2, edition: 'INTERNATIONAL'
+  }));
+  const seasonFind = jest.fn<() => Promise<Record<string, unknown> | null>>(async () => ({
+    id: 'season-20', leagueId: 'league-1', version: 4, displayName: 'S20', status: 'DRAFT'
+  }));
   const transaction = {
     $queryRaw: jest.fn(async () => []),
     league: {
-      findUnique: jest.fn(async () => ({
-        id: 'league-1', currentSeasonId: 'season-old', version: 2, edition: 'INTERNATIONAL'
-      })),
+      findUnique: leagueFind,
+      findFirst: leagueFind,
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     leagueSeason: {
-      findUnique: jest.fn<() => Promise<Record<string, unknown> | null>>(async () => ({
-        id: 'season-20', leagueId: 'league-1', version: 4, displayName: 'S20', status: 'DRAFT'
-      })),
+      findUnique: seasonFind,
+      findFirst: seasonFind,
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     leagueTeam: { findMany: jest.fn<() => Promise<unknown[]>>(async () => []) },

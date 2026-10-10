@@ -38,6 +38,7 @@ function harness(proposedValueMinor = 1100) {
   };
   const tx = {
     $queryRaw: jest.fn(async () => [{ id: submission.id }]),
+    leagueTeam: { findUnique: jest.fn(async () => ({ id: 'team-1', status: 'ACTIVE' })) },
     valuationSubmission: {
       findFirst: jest.fn(async () => submission),
       findUniqueOrThrow: jest.fn(async () => submission),
@@ -66,7 +67,8 @@ function harness(proposedValueMinor = 1100) {
   const audit = { record: jest.fn(async () => undefined) };
   const service = new ValuationSubmissionsService(
     prisma as never, windows as never, snapshots as never, authorization as never,
-    userReceipts as never, adminReceipts as never, audit as never
+    userReceipts as never, adminReceipts as never, audit as never,
+    { requireVisible: jest.fn(async () => 'league-1') } as never
   );
   return { service, prisma, tx, windows, snapshots, authorization, userReceipts, adminReceipts, audit, effective, snapshot, item, submission };
 }

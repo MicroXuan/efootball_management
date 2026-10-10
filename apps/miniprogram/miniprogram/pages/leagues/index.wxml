@@ -15,7 +15,7 @@
     </view>
   </view>
 
-  <view class="league-tabs" aria-label="联赛范围">
+  <view class="league-tabs efm-equal-tabs" aria-label="联赛范围">
     <button class="{{activeTab === 'all' ? 'is-active' : ''}}" data-tab="all" bindtap="switchTab">全部联赛</button>
     <button class="{{activeTab === 'mine' ? 'is-active' : ''}}" data-tab="mine" bindtap="switchTab">我的联赛</button>
   </view>

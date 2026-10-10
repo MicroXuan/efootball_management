@@ -20,7 +20,7 @@ const season = {
 const proposal = {
   id: proposalId, seasonId, version: 1, status: 'DRAFT' as const, algorithmVersion: 'tiered-v1',
   randomSeed: 7, createdAt: timestamp, rows: [{
-    id: rowId, proposalId, seasonEntryId: entryId, teamName: '上海海港',
+    id: rowId, proposalId, seasonEntryId: entryId, teamName: '上海海港', ownerDisplayName: '海港玩家',
     suggestedStageCode: 'CHAMPION_A', source: 'FIRST_SEASON' as const,
     previousRank: null, pointsPerMatch: null, goalDifferencePerMatch: null, goalsForPerMatch: null,
     tiePending: false, reason: '首赛季均分'
@@ -42,6 +42,7 @@ it('shows the first-season champion-only hint and requires a reason for manual a
   renderPage(request);
 
   expect(await screen.findByText('首赛季仅设置冠军组，不创建超级组')).toBeInTheDocument();
+  expect(screen.getByText('玩家：海港玩家')).toBeInTheDocument();
   expect(screen.queryByText('超级组')).not.toBeInTheDocument();
   await userEvent.click(screen.getByLabelText('上海海港最终组别'));
   await userEvent.click(await screen.findByText('冠军 B 组'));
@@ -115,4 +116,133 @@ it('restores confirmed stages after reload and advances the season version only 
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     expect.stringContaining(stageB), expect.objectContaining({ body: { expectedStageVersion: 2, expectedSeasonVersion: 5 } })
   ));
+});
+
+it('shows the generated match preview instead of only updating the match count', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const competitionId = '66666666-6666-4666-8666-666666666666';
+  const confirmedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId, seasonVersion: 4, seasonStatus: 'READY' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A' as const, reason: null }],
+      stages: [{
+        id: stageId, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组',
+        participantCount: 4, matchCount: 0, status: 'DRAFT' as const, version: 1
+      }]
+    }
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return confirmedProposal;
+    if (path.endsWith('/schedule/generate') && options?.method === 'POST') return {
+      id: stageId, competitionId, status: 'DRAFT', version: 2, roundCount: 3, matchCount: 6,
+      matches: [{
+        id: '99999999-9999-4999-8999-999999999999', competitionId, stageId,
+        roundNumber: 1, matchNumber: 1,
+        homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/brighton.png', ownerDisplayName: '布莱顿玩家' },
+        awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: 'https://static.example.com/arsenal.png', ownerDisplayName: '阿森纳玩家' },
+        plannedAt: null, status: 'SCHEDULED', version: 1, officialResult: null, resultVersions: [],
+        createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
+      }]
+    };
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '生成预览' }));
+
+  expect(await screen.findByText('赛程预览已生成，共 6 场')).toBeInTheDocument();
+  expect(screen.getByText('第 1 轮')).toBeInTheDocument();
+  expect(screen.getByText('布莱顿 蓝白')).toBeInTheDocument();
+  expect(screen.getByText('阿森纳')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '布莱顿 蓝白队徽' })).toHaveAttribute('src', 'https://static.example.com/brighton.png');
+  expect(screen.getByRole('img', { name: '阿森纳队徽' })).toHaveAttribute('src', 'https://static.example.com/arsenal.png');
+  expect(screen.getByText('玩家：布莱顿玩家')).toBeInTheDocument();
+  expect(screen.getByText('玩家：阿森纳玩家')).toBeInTheDocument();
+});
+
+it('shows an actionable error when schedule preview generation fails', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const confirmedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId: '66666666-6666-4666-8666-666666666666', seasonVersion: 4, seasonStatus: 'READY' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A' as const, reason: null }],
+      stages: [{
+        id: stageId, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组',
+        participantCount: 4, matchCount: 0, status: 'DRAFT' as const, version: 1
+      }]
+    }
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return confirmedProposal;
+    if (path.endsWith('/schedule/generate') && options?.method === 'POST') throw new Error('network failed');
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '生成预览' }));
+
+  expect(await screen.findByText('生成赛程预览失败，请刷新后重试')).toBeInTheDocument();
+});
+
+it('lets an administrator reopen a published schedule and record its official score', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const competitionId = '66666666-6666-4666-8666-666666666666';
+  const matchId = '99999999-9999-4999-8999-999999999999';
+  const publishedProposal = {
+    ...proposal,
+    status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId, seasonVersion: 5, seasonStatus: 'IN_PROGRESS' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A' as const, reason: null }],
+      stages: [{
+        id: stageId, stageCode: 'CHAMPION_A' as const, displayName: '冠军 A 组',
+        participantCount: 4, matchCount: 6, status: 'PUBLISHED' as const, version: 3
+      }]
+    }
+  };
+  const publishedSchedule = {
+    id: stageId, competitionId, status: 'PUBLISHED' as const, version: 3, roundCount: 3, matchCount: 6,
+    matches: [{
+      id: matchId, competitionId, stageId, roundNumber: 1, matchNumber: 1,
+      homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: null, ownerDisplayName: '布莱顿玩家' },
+      awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: null, ownerDisplayName: '阿森纳玩家' },
+      plannedAt: null, status: 'AWAITING_RESULT', version: 1, officialResult: null, resultVersions: [],
+      createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
+    }]
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [{ ...season, status: 'IN_PROGRESS' as const, version: 5 }], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return publishedProposal;
+    if (path.endsWith(`/competition-stages/${stageId}/schedule`)) return publishedSchedule;
+    if (path.endsWith(`/competitions/${competitionId}/matches/${matchId}/results`) && options?.method === 'POST') {
+      return { id: 'result-1', matchId, version: 1, homeScore: 2, awayScore: 1, status: 'OFFICIAL', submissionSide: 'MANAGER', submittedByMe: true, reason: null, createdAt: timestamp };
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+
+  await userEvent.click(await screen.findByRole('button', { name: '查看赛程' }));
+  expect(await screen.findByText('玩家：布莱顿玩家')).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: /比分管理$/ }));
+  const recordScoreButton = screen.getByRole('button', { name: '录入比分' });
+  expect(recordScoreButton).toHaveClass('fixture-score-action--pending');
+  await userEvent.click(recordScoreButton);
+  expect(screen.queryAllByLabelText('Increase Value')).toHaveLength(0);
+  expect(screen.queryAllByLabelText('Decrease Value')).toHaveLength(0);
+  await userEvent.type(screen.getByLabelText('主队比分'), '2');
+  await userEvent.type(screen.getByLabelText('客队比分'), '1');
+  await userEvent.click(screen.getByRole('button', { name: '确认提交' }));
+
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/competitions/${competitionId}/matches/${matchId}/results`,
+    expect.objectContaining({ method: 'POST', body: { homeScore: 2, awayScore: 1, expectedVersion: 1, reason: null } })
+  ));
+  expect(await screen.findByText('2 : 1')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '修改比分' })).toHaveClass('fixture-score-action--recorded');
 });

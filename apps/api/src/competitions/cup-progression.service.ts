@@ -1,15 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { CompetitionTransaction } from './competition.types.js';
 import { CompetitionError } from './competition.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class CupProgressionService {
+  constructor(
+    @Optional() @Inject(LeagueVisibilityService) private readonly visibility?: LeagueVisibilityService
+  ) {}
+
   async recordWinner(
     transaction: CompetitionTransaction,
     matchId: string,
     homeScore: number,
     awayScore: number
   ): Promise<void> {
+    await this.visibility?.requireVisible({ type: 'MATCH', id: matchId }, transaction);
     const pairing = await transaction.cupBracketPairing.findUnique({
       where: { matchId },
       include: { round: { include: { proposal: true } } }

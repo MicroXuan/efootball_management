@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   PublishValuationSubmissionRequestSchema,
   ReviewValuationSubmissionRequestSchema,
@@ -19,6 +19,7 @@ import { LeagueError } from '../leagues/league.errors.js';
 import { valuationRange } from './valuation-calculator.js';
 import { ValuationSnapshotsService } from './valuation-snapshots.service.js';
 import { ValuationWindowsService } from './valuation-windows.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 type PreparedItem = {
   snapshotId: string;
@@ -32,6 +33,8 @@ type PreparedItem = {
 
 @Injectable()
 export class ValuationSubmissionsService {
+  private readonly visibility: LeagueVisibilityService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ValuationWindowsService) private readonly windows: ValuationWindowsService,
@@ -39,11 +42,16 @@ export class ValuationSubmissionsService {
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(MutationReceiptService) private readonly userReceipts: MutationReceiptService,
     @Inject(AdminMutationReceiptService) private readonly adminReceipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async saveDraft(userId: string, teamId: string, raw: SaveValuationDraftRequest, at = new Date()) {
     const input = SaveValuationDraftRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    await this.visibility.requireVisible({ type: 'VALUATION_WINDOW', id: input.windowId });
     const context = await this.ownerContext(userId, teamId, input.windowId, at);
     const snapshots = await this.snapshots.ensureWindowSnapshot(input.windowId, at);
     const teamSnapshots = snapshots.filter((snapshot) => snapshot.leagueTeamId === teamId);
@@ -55,6 +63,10 @@ export class ValuationSubmissionsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const lockedTeam = await tx.leagueTeam.findUnique({ where: { id: teamId }, select: { status: true } });
+      if (lockedTeam?.status && lockedTeam.status !== 'ACTIVE') {
+        throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
+      }
       const latest = await tx.valuationSubmission.findFirst({
         where: { windowId: input.windowId, leagueTeamId: teamId },
         orderBy: [{ attemptNumber: 'desc' }, { createdAt: 'desc' }]
@@ -118,11 +130,17 @@ export class ValuationSubmissionsService {
     at = new Date()
   ) {
     const input = PublishValuationSubmissionRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    await this.visibility.requireVisible({ type: 'VALUATION_WINDOW', id: input.windowId });
     const context = await this.ownerContext(userId, teamId, input.windowId, at);
     const snapshots = (await this.snapshots.ensureWindowSnapshot(input.windowId, at))
       .filter((snapshot) => snapshot.leagueTeamId === teamId);
 
     return await this.userReceipts.execute(userId, `VALUATION_PUBLISH:${teamId}:${input.windowId}`, idempotencyKey, async (tx) => {
+      const lockedTeam = await tx.leagueTeam.findUnique({ where: { id: teamId }, select: { status: true } });
+      if (lockedTeam?.status && lockedTeam.status !== 'ACTIVE') {
+        throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
+      }
       const draft = await tx.valuationSubmission.findFirst({
         where: { windowId: input.windowId, leagueTeamId: teamId, status: 'DRAFT' },
         include: { items: true },
@@ -220,6 +238,7 @@ export class ValuationSubmissionsService {
   }
 
   async listForLeague(adminId: string, leagueId: string) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     await this.authorization.requireLeagueManager(adminId, leagueId);
     const submissions = await this.prisma.valuationSubmission.findMany({
       where: { window: { season: { leagueId } } },
@@ -276,18 +295,25 @@ export class ValuationSubmissionsService {
     at: Date
   ) {
     const input = ReviewValuationSubmissionRequestSchema.parse(raw);
+    await this.visibility.requireVisible({ type: 'VALUATION_SUBMISSION', id: submissionId });
     const current = await this.prisma.valuationSubmission.findUniqueOrThrow({
       where: { id: submissionId },
-      include: { window: { include: { season: true } } }
+      include: { window: { include: { season: true } }, leagueTeam: { select: { status: true } } }
     });
+    if (current.leagueTeam?.status === 'ARCHIVED') {
+      throw new LeagueError('TEAM_ARCHIVED', '球队已退出联赛', 409);
+    }
     const leagueId = current.window.season.leagueId;
     await this.authorization.requireLeagueManager(adminId, leagueId);
     return await this.adminReceipts.execute(adminId, `VALUATION_REVIEW:${decision}:${submissionId}`, key, async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM valuation_submissions WHERE id = ${submissionId} FOR UPDATE`);
       const locked = await tx.valuationSubmission.findUniqueOrThrow({
         where: { id: submissionId },
-        include: { items: { include: { snapshot: true } } }
+        include: { items: { include: { snapshot: true } }, leagueTeam: { select: { status: true } } }
       });
+      if (locked.leagueTeam?.status === 'ARCHIVED') {
+        throw new LeagueError('TEAM_ARCHIVED', '球队已退出联赛', 409);
+      }
       if (locked.status !== 'PENDING_REVIEW') {
         throw new LeagueError('VALUATION_SUBMISSION_NOT_PENDING', '该申报已不在待审核状态', 409);
       }
@@ -332,6 +358,9 @@ export class ValuationSubmissionsService {
     const team = await this.prisma.leagueTeam.findUnique({ where: { id: teamId } });
     if (!team || team.ownerUserId !== userId) {
       throw new LeagueError('VALUATION_TEAM_OWNER_REQUIRED', '只有球队拥有者可以提交身价', 403);
+    }
+    if (team.status && team.status !== 'ACTIVE') {
+      throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
     }
     const effective = await this.windows.getEffectiveRule(windowId, at);
     if (effective.window.state !== 'OPEN') {

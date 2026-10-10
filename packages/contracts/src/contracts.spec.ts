@@ -11,6 +11,7 @@ import {
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionListQuerySchema,
+  CompetitionParticipantSummarySchema,
   CompetitionParticipantTypeSchema,
   CompetitionStageCodeSchema,
   CompetitionStageSummarySchema,
@@ -52,6 +53,7 @@ import {
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
   MoneyMinorSchema,
+  MyLeagueTeamOverviewSchema,
   NormalizedPlayerCardRecordSchema,
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
@@ -80,6 +82,8 @@ import {
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
   LeagueTeamDetailSchema,
+  LeagueTeamAdminListStatusSchema,
+  LeagueTeamLifecycleRequestSchema,
   LeagueTeamSummarySchema,
   LeagueEditionSchema,
   CurrentSeasonSummarySchema,
@@ -102,6 +106,31 @@ import {
   StartPlatformSyncRequestSchema,
   derivePesdataPositionAutoBuild
 } from './index.js';
+import {
+  CreatePlayerAuctionBatchRequestSchema,
+  PlayerAuctionBatchDetailSchema,
+  PlayerAuctionBatchStatusSchema,
+  PlayerAuctionBidResultSchema,
+  PlayerAuctionLotStatusSchema,
+  ReplacePlayerAuctionLotsRequestSchema,
+  ReviewPlayerAuctionLotRequestSchema,
+  formatAuctionMoney
+} from './player-auction.js';
+import {
+  AdminLeagueWechatBotConfigSchema,
+  AdminWechatBotDeviceSchema,
+  AdminWechatGroupBindingSchema,
+  AdminWechatObservedGroupListSchema,
+  SaveWechatGroupBindingRequestSchema,
+  UpdateWechatBotDeviceStatusRequestSchema,
+  WechatBindingCodeResponseSchema,
+  WechatBindingStatusSchema,
+  WechatBridgeHeartbeatSchema,
+  WechatBridgeHeartbeatResponseSchema,
+  WechatInboundBatchSchema,
+  WechatOutboxAckSchema,
+  WechatOutboxClaimResponseSchema
+} from './wechat-bot.js';
 import {
   AuditLogSchema,
   CreateManualFinanceEntryRequestSchema,
@@ -938,6 +967,7 @@ describe('shared API contracts', () => {
       rows: [{
         participantId,
         displayName: '球员一',
+        teamLifecycleStatus: null,
         played: 1,
         wins: 0,
         draws: 1,
@@ -1125,6 +1155,63 @@ describe('league team administration contracts', () => {
       logoUrl: 'https://outside.example/logo.png',
       expectedVersion: 2
     }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
+      status: 'ARCHIVED',
+      expectedVersion: 2
+    }));
+  });
+
+  it('requires a reason and version for team lifecycle changes', () => {
+    assert.deepEqual(LeagueTeamLifecycleRequestSchema.parse({
+      expectedVersion: 2,
+      reason: '  球队主动退出联赛  '
+    }), {
+      expectedVersion: 2,
+      reason: '球队主动退出联赛'
+    });
+    assert.throws(() => LeagueTeamLifecycleRequestSchema.parse({ expectedVersion: 0, reason: '退出' }));
+    assert.throws(() => LeagueTeamLifecycleRequestSchema.parse({ expectedVersion: 1, reason: '   ' }));
+    assert.throws(() => LeagueTeamLifecycleRequestSchema.parse({ expectedVersion: 1, reason: 'x'.repeat(513) }));
+    assert.equal(LeagueTeamAdminListStatusSchema.parse('ACTIVE'), 'ACTIVE');
+    assert.equal(LeagueTeamAdminListStatusSchema.parse('ARCHIVED'), 'ARCHIVED');
+    assert.throws(() => LeagueTeamAdminListStatusSchema.parse('NEEDS_NUMBER'));
+  });
+
+  it('requires team lifecycle status in participant and standings responses', () => {
+    const participant = CompetitionParticipantSummarySchema.parse({
+      id: ids.user,
+      displayName: '上海海港',
+      participantType: 'TEAM',
+      teamLifecycleStatus: 'ARCHIVED',
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png',
+      ownerDisplayName: '海港玩家'
+    });
+    assert.deepEqual(participant, {
+      id: ids.user,
+      displayName: '上海海港',
+      participantType: 'TEAM',
+      teamLifecycleStatus: 'ARCHIVED',
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png',
+      ownerDisplayName: '海港玩家'
+    });
+    assert.deepEqual(CompetitionParticipantSummarySchema.parse({
+      id: ids.user,
+      displayName: '个人选手',
+      participantType: 'INDIVIDUAL',
+      teamLifecycleStatus: null
+    }), {
+      id: ids.user,
+      displayName: '个人选手',
+      participantType: 'INDIVIDUAL',
+      teamLifecycleStatus: null,
+      teamLogoUrl: null,
+      ownerDisplayName: null
+    });
+    assert.throws(() => CompetitionParticipantSummarySchema.parse({
+      id: ids.user,
+      displayName: '缺少状态',
+      participantType: 'TEAM'
+    }));
   });
 
   it('parses published catalog items independently from league assignment', () => {
@@ -1268,7 +1355,7 @@ describe('league team administration contracts', () => {
     }));
   });
 
-  it('requires salary tiers to cover every DT value without gaps or overlaps', () => {
+  it('requires salary tiers to cover every automatic overall without gaps or overlaps', () => {
     const base = {
       id: ids.rule,
       leagueId: ids.league,
@@ -1280,20 +1367,24 @@ describe('league team administration contracts', () => {
       createdAt
     };
     const validTiers = [
-      { minDtRating: 0, maxDtRating: 92, salaryMinor: 100 },
-      { minDtRating: 93, maxDtRating: 93, salaryMinor: 200 },
-      { minDtRating: 94, maxDtRating: 99, salaryMinor: 300 },
-      { minDtRating: 100, maxDtRating: 120, salaryMinor: 900 }
+      { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
+      { minOverall: 93, maxOverall: 93, salaryMinor: 200 },
+      { minOverall: 94, maxOverall: 99, salaryMinor: 300 },
+      { minOverall: 100, maxOverall: 120, salaryMinor: 900 }
     ];
 
     assert.equal(SalaryRuleVersionSchema.parse({ ...base, tiers: validTiers }).tiers.length, 4);
     assert.throws(() => SalaryRuleVersionSchema.parse({
       ...base,
-      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 94 } : tier)
+      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minOverall: 94 } : tier)
     }));
     assert.throws(() => SalaryRuleVersionSchema.parse({
       ...base,
-      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minDtRating: 92 } : tier)
+      tiers: validTiers.map((tier, index) => index === 1 ? { ...tier, minOverall: 92 } : tier)
+    }));
+    assert.throws(() => SalaryRuleVersionSchema.parse({
+      ...base,
+      tiers: [{ minDtRating: 0, maxDtRating: 120, salaryMinor: 100 }]
     }));
     assert.throws(() => CreateSalaryRuleVersionRequestSchema.parse({
       salaryCapMinor: 10_000,
@@ -1409,7 +1500,7 @@ describe('league team administration contracts', () => {
       currentPlayerCardId: ids.card,
       cardName: 'Epic Italy',
       maxOverall: 97,
-      dtRating: 97,
+      dtRating: 91,
       salaryRuleVersionId: ids.rule,
       salaryMinor: 600,
       acquiredAt: createdAt,
@@ -1417,6 +1508,24 @@ describe('league team administration contracts', () => {
       version: 1
     });
     assert.equal(rosterEntry.playerId, ids.player);
+    assert.equal(Object.hasOwn(rosterEntry, 'dtRating'), false);
+
+    const overview = MyLeagueTeamOverviewSchema.parse({
+      team: {
+        ...team,
+        ownerDisplayName: '小宣',
+        defaultGameAccountId: null,
+        participatingSeasonCount: 2
+      },
+      leagueName: '九星联赛',
+      roster: [{ ...rosterEntry, position: 'CB', heightCm: 190 }],
+      ledger: [],
+      currentWindow: null
+    });
+    assert.deepEqual(
+      { position: overview.roster[0]?.position, heightCm: overview.roster[0]?.heightCm },
+      { position: 'CB', heightCm: 190 }
+    );
 
     const transaction = RosterTransactionSchema.parse({
       id: ids.transaction,
@@ -1444,7 +1553,7 @@ describe('league team administration contracts', () => {
         leagueTeamId: ids.team,
         playerId: ids.player,
         currentPlayerCardId: ids.card,
-        dtRating: 97,
+        maxOverall: 97,
         salaryRuleVersionId: ids.rule,
         salaryMinor: 600,
         acquiredAt: createdAt,
@@ -1517,6 +1626,7 @@ describe('tiered league contracts', () => {
       proposalId: ids.proposal,
       seasonEntryId: ids.entry,
       teamName: '上海海港',
+      ownerDisplayName: '海港玩家',
       suggestedStageCode: stage.stageCode,
       source: 'FIRST_SEASON',
       previousRank: null,
@@ -1526,7 +1636,7 @@ describe('tiered league contracts', () => {
       tiePending: false,
       reason: '首赛季均分'
     });
-    assert.equal(SeasonAllocationProposalSchema.parse({
+    const proposal = SeasonAllocationProposalSchema.parse({
       id: ids.proposal,
       seasonId: ids.season,
       version: 1,
@@ -1535,7 +1645,9 @@ describe('tiered league contracts', () => {
       randomSeed: 20261003,
       rows: [row],
       createdAt
-    }).rows[0]?.suggestedStageCode, 'CHAMPION_A');
+    });
+    assert.equal(proposal.rows[0]?.suggestedStageCode, 'CHAMPION_A');
+    assert.equal(proposal.rows[0]?.ownerDisplayName, '海港玩家');
     assert.equal(SeasonAllocationDecisionSchema.parse({
       id: ids.row,
       proposalId: ids.proposal,
@@ -1561,6 +1673,7 @@ describe('tiered league contracts', () => {
           rows: [{
             participantId: ids.participant,
             displayName: '上海海港',
+            teamLifecycleStatus: 'ACTIVE',
             played: 0,
             wins: 0,
             draws: 0,
@@ -1883,9 +1996,9 @@ describe('cup center contracts', () => {
         pairings: [{
           id: entryId,
           pairingNumber: 1,
-          homeParticipant: { id: userId, displayName: '上海海港' },
-          awayParticipant: { id: registrationId, displayName: '北京国安' },
-          winnerParticipant: { id: userId, displayName: '上海海港' },
+          homeParticipant: { id: userId, displayName: '上海海港', teamLifecycleStatus: 'ARCHIVED' },
+          awayParticipant: { id: registrationId, displayName: '北京国安', teamLifecycleStatus: 'ACTIVE' },
+          winnerParticipant: { id: userId, displayName: '上海海港', teamLifecycleStatus: 'ARCHIVED' },
           isBye: false,
           match: {
             id: competitionId,
@@ -1897,6 +2010,7 @@ describe('cup center contracts', () => {
       }]
     });
     assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.displayName, '上海海港');
+    assert.equal(view.rounds[0]?.pairings[0]?.homeParticipant?.teamLifecycleStatus, 'ARCHIVED');
     assert.equal(view.proposalStatus, 'CONFIRMED');
   });
 
@@ -1920,5 +2034,350 @@ describe('cup center contracts', () => {
       version: 1
     });
     assert.equal(cup.participantCount, 12);
+  });
+});
+
+describe('WeChat bot contracts', () => {
+  const deviceId = '11111111-1111-4111-8111-111111111111';
+  const bindingId = '22222222-2222-4222-8222-222222222222';
+  const leagueId = '33333333-3333-4333-8333-333333333333';
+  const now = '2026-10-09T12:00:00.000Z';
+
+  it('validates bridge heartbeat and bounded observed groups', () => {
+    const heartbeat = WechatBridgeHeartbeatSchema.parse({
+      wechatAccountId: 'wxid_robot',
+      wechatVersion: '4.1.15.13',
+      loginStatus: 'LOGGED_IN',
+      listenerWatermark: '9001',
+      screenLocked: false,
+      outboundQueueDepth: 0,
+      observedGroups: [{ wechatGroupId: 'room-1@chatroom', displayName: '测试联赛群' }]
+    });
+    assert.equal(heartbeat.observedGroups[0]?.displayName, '测试联赛群');
+    assert.throws(() => WechatBridgeHeartbeatSchema.parse({
+      wechatVersion: '4.1.15.13',
+      loginStatus: 'LOGGED_IN',
+      screenLocked: false,
+      outboundQueueDepth: 0,
+      observedGroups: Array.from({ length: 501 }, (_, index) => ({
+        wechatGroupId: `room-${index}@chatroom`,
+        displayName: `群 ${index}`
+      }))
+    }));
+  });
+
+  it('rejects non-text inbound payloads', () => {
+    const message = {
+      messageId: 'message-1',
+      conversationType: 'GROUP',
+      conversationId: 'room-1@chatroom',
+      senderId: 'wxid_member',
+      sentAt: now,
+      messageType: 'TEXT',
+      text: '查询赛程',
+      sequence: '1'
+    } as const;
+    assert.equal(WechatInboundBatchSchema.parse({ messages: [message] }).messages.length, 1);
+    assert.throws(() => WechatInboundBatchSchema.parse({
+      messages: [{ ...message, messageType: 'IMAGE' }]
+    }));
+    assert.throws(() => WechatInboundBatchSchema.parse({
+      messages: [{ ...message, text: 'x'.repeat(2_001) }]
+    }));
+    assert.throws(() => WechatInboundBatchSchema.parse({
+      messages: Array.from({ length: 101 }, (_, index) => ({ ...message, messageId: `message-${index}` }))
+    }));
+  });
+
+  it('validates outbox acknowledgements', () => {
+    assert.equal(WechatOutboxAckSchema.parse({
+      status: 'SENT',
+      readbackMessageId: 'wechat-message-2'
+    }).status, 'SENT');
+    assert.equal(WechatOutboxAckSchema.parse({
+      status: 'FAILED',
+      errorCode: 'WINDOW_NOT_FOUND',
+      errorMessage: '未找到目标群窗口'
+    }).status, 'FAILED');
+    assert.equal(WechatOutboxAckSchema.parse({
+      status: 'AMBIGUOUS',
+      errorCode: 'WECHAT_SEND_UNCONFIRMED',
+      errorMessage: '发送结果需要人工核对'
+    }).status, 'AMBIGUOUS');
+    assert.throws(() => WechatOutboxAckSchema.parse({ status: 'SENT' }));
+    assert.throws(() => WechatOutboxAckSchema.parse({ status: 'RETRYING' }));
+
+    const claim = WechatOutboxClaimResponseSchema.parse({
+      messages: [{
+        id: bindingId,
+        targetType: 'GROUP',
+        targetId: 'room-1@chatroom',
+        text: '赛程如下',
+        priority: 100,
+        scheduledAt: now
+      }]
+    });
+    assert.equal(claim.messages[0]?.targetType, 'GROUP');
+  });
+
+  it('validates heartbeat authorization configuration', () => {
+    const response = WechatBridgeHeartbeatResponseSchema.parse({
+      acceptedAt: now,
+      enabledGroups: [{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]
+    });
+    assert.equal(response.enabledGroups[0]?.displayName, '测试群');
+    assert.throws(() => WechatBridgeHeartbeatResponseSchema.parse({
+      acceptedAt: now,
+      enabledGroups: [{ wechatGroupId: '', displayName: '测试群' }]
+    }));
+  });
+
+  it('parses binding/admin responses', () => {
+    assert.equal(WechatBindingCodeResponseSchema.parse({ code: '012345', expiresAt: now }).code, '012345');
+    assert.throws(() => WechatBindingCodeResponseSchema.parse({ code: '12345', expiresAt: now }));
+    assert.equal(WechatBindingStatusSchema.parse({ status: 'UNBOUND' }).status, 'UNBOUND');
+    assert.equal(WechatBindingStatusSchema.parse({
+      status: 'BOUND',
+      deviceName: '联赛机器人',
+      boundAt: now
+    }).status, 'BOUND');
+
+    const device = AdminWechatBotDeviceSchema.parse({
+      id: deviceId,
+      name: '联赛机器人',
+      status: 'ACTIVE',
+      loginStatus: 'LOGGED_IN',
+      circuitStatus: 'CLOSED',
+      lastHeartbeatAt: now,
+      wechatVersion: '4.1.15.13',
+      outboundQueueDepth: 0,
+      createdAt: now,
+      updatedAt: now
+    });
+    assert.equal(device.name, '联赛机器人');
+
+    const group = AdminWechatGroupBindingSchema.parse({
+      id: bindingId,
+      deviceId,
+      leagueId,
+      wechatGroupId: 'room-1@chatroom',
+      displayName: '测试联赛群',
+      enabled: true,
+      version: 1,
+      capabilities: [],
+      scheduleSourceIds: [],
+      createdAt: now,
+      updatedAt: now
+    });
+    assert.equal(group.leagueId, leagueId);
+
+    assert.equal(UpdateWechatBotDeviceStatusRequestSchema.parse({ status: 'DISABLED' }).status, 'DISABLED');
+    assert.throws(() => UpdateWechatBotDeviceStatusRequestSchema.parse({ status: 'DELETED' }));
+    assert.equal(AdminWechatObservedGroupListSchema.parse({
+      items: [{
+        id: bindingId,
+        deviceId,
+        wechatGroupId: 'room-1@chatroom',
+        displayName: '测试联赛群',
+        lastObservedAt: now
+      }]
+    }).items.length, 1);
+    assert.equal(AdminLeagueWechatBotConfigSchema.parse({
+      bindings: [group],
+      devices: [device],
+      observedGroups: [],
+      scheduleSourceOptions: [{ id: bindingId, name: '甲级联赛', status: 'IN_PROGRESS' }]
+    }).scheduleSourceOptions[0]?.name, '甲级联赛');
+  });
+
+  it('accepts explicit WeChat group capabilities', () => {
+    const capabilitySets = [
+      [],
+      ['SCHEDULE_QUERY'],
+      ['PLAYER_AUCTION'],
+      ['SCHEDULE_QUERY', 'PLAYER_AUCTION']
+    ];
+
+    for (const capabilities of capabilitySets) {
+      const group = AdminWechatGroupBindingSchema.parse({
+        id: bindingId,
+        deviceId,
+        leagueId,
+        wechatGroupId: 'room-1@chatroom',
+        displayName: '测试联赛群',
+        enabled: true,
+        version: 1,
+        capabilities,
+        scheduleSourceIds: [],
+        createdAt: now,
+        updatedAt: now
+      });
+      const request = SaveWechatGroupBindingRequestSchema.parse({
+        deviceId,
+        observedGroupId: bindingId,
+        capabilities,
+        scheduleSourceIds: []
+      });
+
+      assert.deepEqual(group.capabilities, capabilities);
+      assert.deepEqual(request.capabilities, capabilities);
+    }
+  });
+
+  it('rejects duplicate or unknown WeChat group capabilities', () => {
+    assert.throws(() => SaveWechatGroupBindingRequestSchema.parse({
+      deviceId,
+      observedGroupId: bindingId,
+      capabilities: ['SCHEDULE_QUERY', 'SCHEDULE_QUERY'],
+      scheduleSourceIds: []
+    }));
+    assert.throws(() => SaveWechatGroupBindingRequestSchema.parse({
+      deviceId,
+      observedGroupId: bindingId,
+      capabilities: ['UNKNOWN'],
+      scheduleSourceIds: []
+    }));
+    assert.throws(() => AdminWechatGroupBindingSchema.parse({
+      id: bindingId,
+      deviceId,
+      leagueId,
+      wechatGroupId: 'room-1@chatroom',
+      displayName: '测试联赛群',
+      enabled: true,
+      version: 1,
+      capabilities: ['PLAYER_AUCTION', 'PLAYER_AUCTION'],
+      scheduleSourceIds: [],
+      createdAt: now,
+      updatedAt: now
+    }));
+  });
+});
+
+describe('player auction contracts', () => {
+  const leagueId = '11111111-1111-4111-8111-111111111111';
+  const groupBindingId = '22222222-2222-4222-8222-222222222222';
+  const batchId = '33333333-3333-4333-8333-333333333333';
+  const lotId = '44444444-4444-4444-8444-444444444444';
+  const playerId = '55555555-5555-4555-8555-555555555555';
+  const teamId = '66666666-6666-4666-8666-666666666666';
+  const bidId = '77777777-7777-4777-8777-777777777777';
+  const now = '2026-10-09T12:00:00.000Z';
+
+  it('accepts the complete batch, lot, and bid status vocabulary', () => {
+    for (const status of ['DRAFT', 'READY', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', 'RECOVERY_REQUIRED']) {
+      assert.equal(PlayerAuctionBatchStatusSchema.parse(status), status);
+    }
+    for (const status of ['QUEUED', 'ACTIVE', 'PAUSED', 'PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID']) {
+      assert.equal(PlayerAuctionLotStatusSchema.parse(status), status);
+    }
+    for (const result of ['VALID', 'BELOW_STARTING_PRICE', 'BELOW_MINIMUM_INCREMENT', 'UNBOUND', 'NO_ACTIVE_TEAM', 'INACTIVE', 'PAUSED', 'RECOVERY_REQUIRED', 'DEADLINE_PASSED', 'DUPLICATE', 'OVERFLOW']) {
+      assert.equal(PlayerAuctionBidResultSchema.parse(result), result);
+    }
+  });
+
+  it('requires positive integer pricing, unique explicit order, and optimistic versions', () => {
+    assert.equal(CreatePlayerAuctionBatchRequestSchema.parse({
+      groupBindingId,
+      name: '十月拍卖',
+      expectedVersion: 2
+    }).expectedVersion, 2);
+    const request = ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [
+        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, displayOrder: 2, startingPrice: 80, minimumIncrement: 20 }
+      ]
+    });
+    assert.equal(request.lots[1]?.displayOrder, 2);
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [{ playerId, displayOrder: 1, startingPrice: 0, minimumIncrement: 10 }]
+    }));
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [
+        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, displayOrder: 1, startingPrice: 80, minimumIncrement: 20 }
+      ]
+    }));
+  });
+
+  it('requires reasons for adjusted and void reviews', () => {
+    assert.equal(ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'CONFIRM',
+      expectedVersion: 3
+    }).decision, 'CONFIRM');
+    assert.throws(() => ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'ADJUST',
+      reviewedTeamId: teamId,
+      reviewedPrice: 140,
+      expectedVersion: 3
+    }));
+    assert.equal(ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'ADJUST',
+      reviewedTeamId: teamId,
+      reviewedPrice: 140,
+      reason: '群内记录核对后修正',
+      expectedVersion: 3
+    }).reviewedPrice, 140);
+    assert.throws(() => ReviewPlayerAuctionLotRequestSchema.parse({
+      decision: 'VOID',
+      expectedVersion: 3,
+      reason: ' '
+    }));
+  });
+
+  it('parses a detail snapshot with ISO timestamps and keeps money formatting derived', () => {
+    const detail = PlayerAuctionBatchDetailSchema.parse({
+      id: batchId,
+      leagueId,
+      groupBindingId,
+      name: '十月拍卖',
+      status: 'ACTIVE',
+      currentLotId: lotId,
+      version: 4,
+      startedAt: now,
+      completedAt: null,
+      cancelledAt: null,
+      createdAt: now,
+      updatedAt: now,
+      lots: [{
+        id: lotId,
+        displayOrder: 1,
+        playerId,
+        playerCardId: null,
+        playerName: '车范根',
+        playerSnapshot: { position: 'CF', overall: 96 },
+        startingPrice: 50,
+        minimumIncrement: 10,
+        status: 'ACTIVE',
+        currentPrice: 120,
+        currentHighestBidId: bidId,
+        deadlineAt: now,
+        deadlineEpoch: 2,
+        pausedRemainingMs: null,
+        version: 3,
+        bids: [{
+          id: bidId,
+          leagueTeamId: teamId,
+          teamName: '上海申花',
+          userId: leagueId,
+          amount: 120,
+          result: 'VALID',
+          rejectionReason: null,
+          wechatMessageId: 'wechat-1',
+          wechatSortKey: '0001',
+          wechatSentAt: now,
+          receivedAt: now
+        }],
+        review: null,
+        startedAt: now,
+        closedAt: null,
+        reviewedAt: null
+      }]
+    });
+    assert.equal(detail.lots[0]?.currentPrice, 120);
+    assert.equal(formatAuctionMoney(120), '⭐120⭐');
+    assert.equal('currentPriceDisplay' in detail.lots[0]!, false);
   });
 });

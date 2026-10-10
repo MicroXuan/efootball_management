@@ -17,8 +17,8 @@ function api(request: AdminApi['request']): AdminApi {
 const candidate = {
   playerId, playerName: '博努奇', ownedByTeamId: null, recommendedPlayerCardId: bestCardId,
   cards: [
-    { id: bestCardId, cardName: 'Epic', imageUrl: 'https://media.example.com/bonucci.webp', position: 'CB' as const, overallRating: 87, maxOverall: 99, dtRating: 98, salaryMinor: 700, recommended: true },
-    { id: otherCardId, cardName: 'Highlight', imageUrl: null, position: 'CB' as const, overallRating: 86, maxOverall: 97, dtRating: 96, salaryMinor: 500, recommended: false }
+    { id: bestCardId, cardName: 'Epic', imageUrl: 'https://media.example.com/bonucci.webp', position: 'CB' as const, overallRating: 87, maxOverall: 99, salaryMinor: 700, recommended: true },
+    { id: otherCardId, cardName: 'Highlight', imageUrl: null, position: 'CB' as const, overallRating: 86, maxOverall: 97, salaryMinor: 500, recommended: false }
   ]
 };
 
@@ -65,13 +65,15 @@ describe('acquire player drawer', () => {
     expect(screen.getByText('购买后工资').parentElement).toHaveTextContent('900 / 2,000');
   });
 
-  it('explains when an automatic build total is unavailable', async () => {
+  it('keeps a card selectable when salary is available without DT', async () => {
     const request = vi.fn().mockResolvedValue({ items: [{ ...candidate, recommendedPlayerCardId: otherCardId, cards: [{ ...candidate.cards[1], id: otherCardId, dtRating: null, recommended: true }] }] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
     await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
     await userEvent.click(screen.getByRole('button', { name: '搜索' }));
-    expect(await screen.findByText('缺少自动加点总评，不能加入阵容')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '确认购买' })).toBeDisabled();
+    expect(await screen.findByLabelText('Highlight')).toBeChecked();
+    expect(screen.queryByText(/DT/)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('成交金额'), '100');
+    expect(screen.getByRole('button', { name: '确认购买' })).toBeEnabled();
   });
 
   it('requires the amount but keeps the operation reason optional', async () => {

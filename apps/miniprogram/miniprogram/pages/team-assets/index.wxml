@@ -47,7 +47,7 @@
       <text class="roster-count">{{rosterPlayers.length}} 人</text>
     </view>
 
-    <view class="roster-tabs">
+    <view class="roster-tabs efm-equal-tabs">
       <button
         wx:for="{{assets.tabs}}"
         wx:key="key"

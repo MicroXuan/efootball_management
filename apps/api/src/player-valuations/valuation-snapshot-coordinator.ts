@@ -32,7 +32,7 @@ export async function createValuationWindowSnapshot(
   if (locked.snapshotInitializedAt || existing.length > 0) return existing;
 
   const entries = await tx.seasonEntry.findMany({
-    where: { seasonId, status: 'APPROVED' },
+    where: { seasonId, status: 'APPROVED', leagueTeam: { status: 'ACTIVE' } },
     select: { leagueTeamId: true }
   });
   const teamIds = entries.map((entry) => entry.leagueTeamId);

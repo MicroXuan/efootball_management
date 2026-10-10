@@ -1,7 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ParsedCreateLeagueTeamRequest,
   LeagueTeamDetail,
+  LeagueTeamAdminListStatus,
+  LeagueTeamLifecycleRequest,
   LeagueTeamListResponse,
   LeagueTeamSummary,
   MyLeagueTeamListResponse,
@@ -13,7 +15,9 @@ import type { LeagueTeam, User } from '../generated/prisma/client.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
-import { LeagueError } from '../leagues/league.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { LeagueTeamLifecycleService } from '../league-team-lifecycle/league-team-lifecycle.service.js';
+import { assertLeagueExpectedVersion, LeagueError } from '../leagues/league.errors.js';
 import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
 
 type TeamWithOwner = LeagueTeam & { owner: User; _count: { seasonEntries: number } };
@@ -21,21 +25,32 @@ type TeamRosterMetrics = { activePlayerCount: number; salaryTotalMinor: number; 
 
 @Injectable()
 export class LeagueTeamsService {
+  private readonly visibility: LeagueVisibilityService;
+  private readonly lifecycle: LeagueTeamLifecycleService;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
-  ) {}
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
+    @Optional() @Inject(LeagueTeamLifecycleService) lifecycle?: LeagueTeamLifecycleService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+    this.lifecycle = lifecycle ?? new LeagueTeamLifecycleService(prisma, this.visibility);
+  }
 
-  create(
+  async create(
     actorAdminId: string,
     leagueId: string,
     input: ParsedCreateLeagueTeamRequest,
     key: string
   ): Promise<LeagueTeamDetail> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.create:${leagueId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-      const league = await transaction.league.findUnique({ where: { id: leagueId } });
+      const league = await transaction.league.findFirst({
+        where: { id: leagueId, isDeleted: false }
+      });
       if (!league) throw this.notFound('LEAGUE_NOT_FOUND', 'League was not found');
       if (!league.currentSeasonId) {
         throw new LeagueError(
@@ -142,16 +157,20 @@ export class LeagueTeamsService {
     });
   }
 
-  update(
+  async update(
     actorAdminId: string,
     leagueId: string,
     teamId: string,
     input: UpdateLeagueTeamRequest,
     key: string
   ): Promise<LeagueTeamDetail> {
+    const teamLeagueId = await this.lifecycle.requireActive(teamId);
+    if (teamLeagueId !== leagueId) throw this.visibility.notFound();
     return this.receipts.execute(actorAdminId, `league-team.update:${teamId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM league_teams WHERE id = ${teamId} FOR UPDATE`;
-      const existing = await transaction.leagueTeam.findFirst({ where: { id: teamId, leagueId } });
+      const existing = await transaction.leagueTeam.findFirst({
+        where: { id: teamId, leagueId, league: { isDeleted: false } }
+      });
       if (!existing) throw this.notFound('LEAGUE_TEAM_NOT_FOUND', 'League team was not found');
       if (input.teamNumber !== undefined && input.teamNumber !== existing.teamNumber) {
         const participationCount = await transaction.seasonEntry.count({
@@ -181,7 +200,6 @@ export class LeagueTeamsService {
         data: {
           ...(input.teamNumber !== undefined ? { teamNumber: input.teamNumber } : {}),
           ...(input.ownerAlias !== undefined ? { ownerAlias: input.ownerAlias } : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.shellValueMinor !== undefined ? { shellValueMinor: input.shellValueMinor } : {}),
           version: { increment: 1 }
         }
@@ -204,9 +222,29 @@ export class LeagueTeamsService {
     });
   }
 
+  archive(
+    actorAdminId: string,
+    leagueId: string,
+    teamId: string,
+    input: LeagueTeamLifecycleRequest,
+    key: string
+  ): Promise<LeagueTeamDetail> {
+    return this.changeLifecycle(actorAdminId, leagueId, teamId, input, key, 'ACTIVE', 'ARCHIVED');
+  }
+
+  restore(
+    actorAdminId: string,
+    leagueId: string,
+    teamId: string,
+    input: LeagueTeamLifecycleRequest,
+    key: string
+  ): Promise<LeagueTeamDetail> {
+    return this.changeLifecycle(actorAdminId, leagueId, teamId, input, key, 'ARCHIVED', 'ACTIVE');
+  }
+
   async listMine(ownerUserId: string): Promise<LeagueTeamListResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId },
+      where: { ownerUserId, status: { not: 'ARCHIVED' }, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
@@ -216,7 +254,7 @@ export class LeagueTeamsService {
 
   async listMineViews(ownerUserId: string): Promise<MyLeagueTeamListResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId },
+      where: { ownerUserId, status: { not: 'ARCHIVED' }, league: { isDeleted: false } },
       include: {
         owner: true,
         _count: { select: { seasonEntries: true } },
@@ -261,7 +299,7 @@ export class LeagueTeamsService {
         where: { leagueTeamId: teamId, status: 'ACTIVE' },
         include: {
           footballPlayer: true,
-          currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } }
+          currentPlayerCard: { include: { attributes: true } }
         },
         orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
       }),
@@ -283,22 +321,26 @@ export class LeagueTeamsService {
     return {
       team,
       leagueName: league.name,
-      roster: roster.map((entry) => ({
-        id: entry.id,
-        leagueId: entry.leagueId,
-        leagueTeamId: entry.leagueTeamId,
-        playerId: entry.footballPlayerId,
-        playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
-        currentPlayerCardId: entry.currentPlayerCardId,
-        cardName: entry.currentPlayerCard.cardName,
-        maxOverall: entry.currentPlayerCard.autoBuilds[0]?.maxOverall ?? entry.currentPlayerCard.overallRating,
-        dtRating: entry.dtRatingSnapshot,
-        salaryRuleVersionId: entry.salaryRuleVersionId,
-        salaryMinor: entry.salaryMinor,
-        acquiredAt: entry.acquiredAt.toISOString(),
-        status: entry.status,
-        version: entry.version
-      })),
+      roster: roster.map((entry) => {
+        const attributes = this.attributes(entry.currentPlayerCard.attributes?.attributesJson);
+        return {
+          id: entry.id,
+          leagueId: entry.leagueId,
+          leagueTeamId: entry.leagueTeamId,
+          playerId: entry.footballPlayerId,
+          playerName: entry.footballPlayer.nameZh ?? entry.footballPlayer.nameEn ?? entry.footballPlayer.shortName ?? '未命名球员',
+          currentPlayerCardId: entry.currentPlayerCardId,
+          cardName: entry.currentPlayerCard.cardName,
+          position: entry.currentPlayerCard.position,
+          heightCm: this.integer(attributes.heightCm ?? attributes.height),
+          maxOverall: entry.maxOverallSnapshot,
+          salaryRuleVersionId: entry.salaryRuleVersionId,
+          salaryMinor: entry.salaryMinor,
+          acquiredAt: entry.acquiredAt.toISOString(),
+          status: entry.status,
+          version: entry.version
+        };
+      }),
       ledger: ledger.map((entry) => ({
         id: entry.id,
         leagueId: entry.leagueId,
@@ -325,9 +367,13 @@ export class LeagueTeamsService {
     };
   }
 
-  async listForLeague(leagueId: string): Promise<LeagueTeamListResponse> {
+  async listForLeague(
+    leagueId: string,
+    status: LeagueTeamAdminListStatus = 'ACTIVE'
+  ): Promise<LeagueTeamListResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { leagueId },
+      where: { leagueId, status, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } },
       orderBy: [{ teamNumber: 'asc' }, { id: 'asc' }]
     });
@@ -336,9 +382,12 @@ export class LeagueTeamsService {
   }
 
   async getDetail(teamId: string, ownerUserId?: string, leagueId?: string): Promise<LeagueTeamDetail> {
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
     const team = await this.prisma.leagueTeam.findFirst({
       where: {
         id: teamId,
+        status: 'ACTIVE',
+        league: { isDeleted: false },
         ...(ownerUserId ? { ownerUserId } : {}),
         ...(leagueId ? { leagueId } : {})
       },
@@ -349,9 +398,100 @@ export class LeagueTeamsService {
     return this.detail(team, metrics.get(team.id));
   }
 
+  async getAdminDetail(teamId: string, leagueId: string): Promise<LeagueTeamDetail> {
+    const teamLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    if (teamLeagueId !== leagueId) throw this.visibility.notFound();
+    const team = await this.prisma.leagueTeam.findFirst({
+      where: { id: teamId, leagueId, league: { isDeleted: false } },
+      include: { owner: true, _count: { select: { seasonEntries: true } } }
+    });
+    if (!team) throw this.notFound('LEAGUE_TEAM_NOT_FOUND', 'League team was not found');
+    const metrics = await this.rosterMetrics(this.prisma, [team]);
+    return this.detail(team, metrics.get(team.id));
+  }
+
+  private async changeLifecycle(
+    actorAdminId: string,
+    leagueId: string,
+    teamId: string,
+    input: LeagueTeamLifecycleRequest,
+    key: string,
+    fromStatus: 'ACTIVE' | 'ARCHIVED',
+    toStatus: 'ACTIVE' | 'ARCHIVED'
+  ): Promise<LeagueTeamDetail> {
+    const visibleLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    if (visibleLeagueId !== leagueId) throw this.visibility.notFound();
+    const action = toStatus === 'ARCHIVED' ? 'league-team.archive' : 'league-team.restore';
+    return this.receipts.execute(
+      actorAdminId,
+      `${action}:${teamId}`,
+      key,
+      async (transaction) => {
+        await transaction.$queryRaw`SELECT id FROM league_teams WHERE id = ${teamId} FOR UPDATE`;
+        const transactionLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId }, transaction);
+        if (transactionLeagueId !== leagueId) throw this.visibility.notFound();
+        const existing = await transaction.leagueTeam.findFirst({
+          where: { id: teamId, leagueId },
+          include: { owner: true, _count: { select: { seasonEntries: true } } }
+        });
+        if (!existing) throw this.visibility.notFound();
+        if (existing.status === toStatus) return this.detail(existing);
+        if (existing.status !== fromStatus) {
+          throw new LeagueError('LEAGUE_TEAM_STATE_INVALID', 'League team lifecycle transition is invalid', 409);
+        }
+        assertLeagueExpectedVersion(existing.version, input.expectedVersion, 'League team');
+        const changed = await transaction.leagueTeam.updateMany({
+          where: { id: teamId, leagueId, status: fromStatus, version: input.expectedVersion },
+          data: { status: toStatus, version: { increment: 1 } }
+        });
+        if (changed.count !== 1) {
+          throw new LeagueError('VERSION_CONFLICT', 'League team has changed', 409);
+        }
+        if (toStatus === 'ARCHIVED') {
+          await transaction.seasonAllocationProposal.updateMany({
+            where: {
+              status: 'DRAFT',
+              season: { status: { in: ['DRAFT', 'REGISTRATION_OPEN', 'ALLOCATION_REVIEW'] } },
+              rows: {
+                some: {
+                  seasonEntry: { leagueTeamId: teamId, status: 'APPROVED' }
+                }
+              }
+            },
+            data: { status: 'SUPERSEDED' }
+          });
+          await transaction.seasonEntry.updateMany({
+            where: {
+              leagueTeamId: teamId,
+              status: 'APPROVED',
+              season: { status: { in: ['DRAFT', 'REGISTRATION_OPEN', 'ALLOCATION_REVIEW'] } }
+            },
+            data: {
+              status: 'WITHDRAWN',
+              withdrawnAt: new Date(),
+              version: { increment: 1 }
+            }
+          });
+        }
+        const updated = await this.record(transaction, teamId);
+        await this.audit.record(transaction, {
+          actorAdminId,
+          leagueId,
+          action,
+          resourceType: 'LeagueTeam',
+          resourceId: teamId,
+          reason: input.reason,
+          metadata: { fromStatus, toStatus, version: updated.version }
+        });
+        return this.detail(updated);
+      },
+      input
+    );
+  }
+
   private async record(client: Prisma.TransactionClient, teamId: string): Promise<TeamWithOwner> {
-    return client.leagueTeam.findUniqueOrThrow({
-      where: { id: teamId },
+    return client.leagueTeam.findFirstOrThrow({
+      where: { id: teamId, league: { isDeleted: false } },
       include: { owner: true, _count: { select: { seasonEntries: true } } }
     });
   }
@@ -473,6 +613,16 @@ export class LeagueTeamsService {
       defaultGameAccountId: team.defaultGameAccountId,
       participatingSeasonCount: team._count.seasonEntries
     };
+  }
+
+  private attributes(value: unknown): Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  }
+
+  private integer(value: unknown): number | null {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
   }
 
   private notFound(code: string, message: string) {

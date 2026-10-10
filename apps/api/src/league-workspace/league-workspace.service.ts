@@ -1,15 +1,32 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { LeagueWorkspaceResponse } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class LeagueWorkspaceService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly visibility: LeagueVisibilityService;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   async get(userId: string, leagueId: string, seasonId: string): Promise<LeagueWorkspaceResponse> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
     const entry = await this.prisma.seasonEntry.findFirst({
-      where: { ownerUserId: userId, seasonId, status: 'APPROVED', season: { leagueId } },
+      where: {
+        ownerUserId: userId,
+        seasonId,
+        status: 'APPROVED',
+        leagueTeam: { status: 'ACTIVE' },
+        season: { leagueId, league: { isDeleted: false } }
+      },
       include: {
         competitionParticipants: {
           where: { competition: { competitionType: 'DIVISION_LEAGUE' } },

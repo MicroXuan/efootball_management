@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { ValuationWindowsService } from './valuation-windows.service.js';
+import { LeagueError } from '../leagues/league.errors.js';
 
 const at = new Date('2026-10-02T12:00:00.000Z');
 const startsAt = new Date('2026-10-02T00:00:00.000Z');
@@ -52,12 +53,39 @@ function harness() {
     prisma as never,
     authorization as never,
     audit as never,
-    receipts as never
+    receipts as never,
+    {
+      requireVisible: jest.fn(async () => 'league-1'),
+      notFound: () => new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404)
+    } as never
   );
   return { service, prisma, tx, authorization, audit, receipts, season, window, rule };
 }
 
 describe('ValuationWindowsService', () => {
+  it('rejects a window-only mutation before reading receipts when its league is deleted', async () => {
+    const { prisma, authorization, audit, receipts } = harness();
+    const visibility = {
+      requireVisible: jest.fn(async () => {
+        throw new LeagueError('LEAGUE_NOT_FOUND', '联赛不存在', 404);
+      })
+    };
+    const service = new ValuationWindowsService(
+      prisma as never,
+      authorization as never,
+      audit as never,
+      receipts as never,
+      visibility as never
+    );
+
+    await expect(service.update('admin-1', 'window-1', {
+      expectedVersion: 1,
+      name: '不可修改'
+    }, 'deleted-window', at)).rejects.toMatchObject({ code: 'LEAGUE_NOT_FOUND', status: 404 });
+    expect(receipts.execute).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it('creates independently named windows with an immutable first rule version', async () => {
     const { service, tx, authorization, audit } = harness();
     const result = await service.create('admin-1', 'season-1', {

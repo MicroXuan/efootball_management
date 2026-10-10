@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   ConfirmCupBracketProposalRequest,
   CupBracketProposal,
@@ -9,6 +9,7 @@ import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.ser
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { CompetitionError } from './competition.errors.js';
 import { buildKnockoutDraw, type KnockoutQualifier } from './domain/cup-draw.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 const ALGORITHM_VERSION = 'cup-bracket-v1';
 
@@ -39,7 +40,8 @@ export class CupBracketsService {
   constructor(
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(LeagueVisibilityService) private readonly visibility?: LeagueVisibilityService
   ) {}
 
   async generate(
@@ -49,6 +51,8 @@ export class CupBracketsService {
     input: GenerateCupBracketProposalRequest,
     key: string
   ): Promise<CupBracketProposal> {
+    const competitionLeagueId = await this.visibility?.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (this.visibility && competitionLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,
@@ -204,6 +208,8 @@ export class CupBracketsService {
     input: ConfirmCupBracketProposalRequest,
     key: string
   ): Promise<CupBracketProposal> {
+    const competitionLeagueId = await this.visibility?.requireVisible({ type: 'COMPETITION', id: competitionId });
+    if (this.visibility && competitionLeagueId !== leagueId) throw this.visibility.notFound();
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(
       actorAdminId,

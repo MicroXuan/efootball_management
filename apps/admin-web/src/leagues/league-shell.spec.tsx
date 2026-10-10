@@ -44,6 +44,7 @@ describe('role-aware administration navigation', () => {
     expect(screen.getByRole('link', { name: '联赛管理' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '审计日志' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '数据同步' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '群机器人' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '数据同步' }).closest('.ant-menu-item')?.querySelector('.admin-icon')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '联赛管理' })).toHaveAttribute('aria-current', 'page');
   });

@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
 import { PrismaService } from '../database/prisma.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { ResourceScopeService } from './resource-scope.service.js';
 
 config({ path: '../../.env', quiet: true });
 
 describe('ResourceScopeService', () => {
   const prisma = new PrismaService();
-  const service = new ResourceScopeService(prisma);
+  const visibility = new LeagueVisibilityService(prisma);
+  const service = new (ResourceScopeService as unknown as new (
+    prisma: PrismaService,
+    visibility: LeagueVisibilityService
+  ) => ResourceScopeService)(prisma, visibility);
   const suffix = randomUUID();
   let userId: string;
   let leagueId: string;
@@ -76,5 +81,18 @@ describe('ResourceScopeService', () => {
 
   it('returns undefined for a missing hierarchical resource', async () => {
     await expect(service.resolve('SEASON', randomUUID())).resolves.toBeUndefined();
+  });
+
+  it('rejects deleted league and season scopes as not found', async () => {
+    await prisma.league.update({ where: { id: leagueId }, data: { isDeleted: true } });
+    const expected = {
+      status: 404,
+      response: { code: 'LEAGUE_NOT_FOUND', message: 'League was not found' }
+    };
+
+    await expect(service.resolve('LEAGUE', leagueId)).rejects.toMatchObject(expected);
+    await expect(service.resolve('SEASON', seasonId)).rejects.toMatchObject(expected);
+
+    await prisma.league.update({ where: { id: leagueId }, data: { isDeleted: false } });
   });
 });

@@ -68,7 +68,7 @@ export class AdminAuthService {
       where: { id: adminId },
       include: {
         leagueRoles: {
-          where: { revokedAt: null },
+          where: { revokedAt: null, league: { isDeleted: false } },
           include: { league: { select: { name: true } } }
         }
       }

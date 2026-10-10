@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable, Optional, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import type { ValuationWorkspace } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -10,15 +10,20 @@ import {
   synchronizeSeasonValuationSnapshots,
   type ValuationRosterSnapshotRecord
 } from './valuation-snapshot-coordinator.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
 @Injectable()
 export class ValuationSnapshotsService implements OnApplicationBootstrap, OnApplicationShutdown {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly visibility: LeagueVisibilityService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ValuationWindowsService) private readonly windows: ValuationWindowsService
-  ) {}
+    @Inject(ValuationWindowsService) private readonly windows: ValuationWindowsService,
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+  ) {
+    this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+  }
 
   onApplicationBootstrap() {
     void this.initializeDueWindows().catch(() => undefined);
@@ -34,9 +39,11 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
   }
 
   async initializeDueWindows(at = new Date(), seasonId?: string) {
+    if (seasonId) await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
     const due = await this.prisma.valuationWindow.findMany({
       where: {
         ...(seasonId ? { seasonId } : {}),
+        season: { league: { isDeleted: false } },
         startsAt: { lte: at },
         endsAt: { gt: at },
         closedAt: null,
@@ -53,10 +60,12 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
     seasonId: string,
     clock: () => Date = () => new Date()
   ): Promise<void> {
+    await this.visibility.requireVisible({ type: 'SEASON', id: seasonId }, tx);
     await synchronizeSeasonValuationSnapshots(tx, seasonId, clock);
   }
 
   async ensureWindowSnapshot(windowId: string, at = new Date()): Promise<ValuationRosterSnapshotRecord[]> {
+    await this.visibility.requireVisible({ type: 'VALUATION_WINDOW', id: windowId });
     const effective = await this.windows.getEffectiveRule(windowId, at);
     if (effective.window.state !== 'OPEN') {
       throw new LeagueError('VALUATION_WINDOW_NOT_OPEN', '身价窗口当前未开放', 409);
@@ -75,11 +84,13 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
   }
 
   async getWorkspace(userId: string, teamId: string, at = new Date()): Promise<ValuationWorkspace> {
+    await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
     const team = await this.prisma.leagueTeam.findUnique({
       where: { id: teamId },
-      select: { id: true, name: true, ownerUserId: true, leagueId: true }
+      select: { id: true, name: true, ownerUserId: true, leagueId: true, status: true }
     });
     if (!team) throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
+    if (team.status && team.status !== 'ACTIVE') throw new LeagueError('VALUATION_TEAM_NOT_FOUND', '未找到球队', 404);
     if (team.ownerUserId !== userId) {
       throw new LeagueError('VALUATION_TEAM_OWNER_REQUIRED', '只有球队拥有者可以管理本队身价', 403);
     }

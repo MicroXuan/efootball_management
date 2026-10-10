@@ -1,12 +1,13 @@
 import type { ReactElement } from 'react';
 
-export type AdminIconName = 'league' | 'administrators' | 'audit' | 'sync' | 'teams' | 'seasons' | 'allocation' | 'cup' | 'salary' | 'transfer' | 'valuation' | 'review' | 'finance';
+export type AdminIconName = 'league' | 'administrators' | 'audit' | 'sync' | 'bot' | 'teams' | 'seasons' | 'allocation' | 'cup' | 'salary' | 'transfer' | 'valuation' | 'review' | 'finance';
 
 const labels: Record<AdminIconName, string> = {
   league: '联赛',
   administrators: '管理员',
   audit: '审计',
   sync: '数据同步',
+  bot: '微信机器人',
   teams: '球队',
   seasons: '赛季',
   allocation: '分组与赛程',
@@ -23,6 +24,7 @@ const paths: Record<AdminIconName, ReactElement> = {
   administrators: <><circle cx="9" cy="8" r="3" /><path d="M3.5 19c.6-3.4 2.4-5 5.5-5s4.9 1.6 5.5 5" /><path d="M16 7.5a2.5 2.5 0 0 1 0 5M17 14.5c2.1.5 3.2 2 3.5 4.5" /></>,
   audit: <><path d="M7 3h10v4H7zM5 5H3v16h18V5h-2" /><path d="m8 14 2.5 2.5L16 11" /></>,
   sync: <><path d="M20 7h-5V2" /><path d="M20 7a8 8 0 0 0-13.7-2.8L4 7" /><path d="M4 17h5v5" /><path d="M4 17a8 8 0 0 0 13.7 2.8L20 17" /></>,
+  bot: <><rect x="4" y="7" width="16" height="12" rx="3" /><path d="M12 3v4M9 3h6M8 12h.01M16 12h.01M8 16h8" /></>,
   teams: <><path d="m4 6 8-3 8 3-2 13H6L4 6Z" /><path d="M9 11h6M12 8v6" /></>,
   seasons: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2M5 5l2 2M19 5l-2 2" /></>,
   allocation: <><circle cx="6" cy="6" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="12" cy="18" r="2" /><path d="M8 6h8M7.5 7.5l3.3 8.6M16.5 7.5l-3.3 8.6" /></>,
