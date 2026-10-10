@@ -9,6 +9,16 @@ export const WechatBotDeviceStatusSchema = z.enum(['ACTIVE', 'DISABLED']);
 export const WechatLoginStatusSchema = z.enum(['UNKNOWN', 'LOGGED_IN', 'LOGGED_OUT']);
 export const WechatCircuitStatusSchema = z.enum(['CLOSED', 'OPEN']);
 export const WechatConversationTypeSchema = z.enum(['GROUP', 'PRIVATE']);
+export const WechatGroupCapabilityTypeSchema = z.enum(['SCHEDULE_QUERY', 'PLAYER_AUCTION']);
+
+const WechatGroupCapabilitiesSchema = z.array(WechatGroupCapabilityTypeSchema).max(2).superRefine((value, context) => {
+  if (new Set(value).size !== value.length) {
+    context.addIssue({
+      code: 'custom',
+      message: 'capabilities must be unique'
+    });
+  }
+});
 
 export const WechatObservedGroupInputSchema = z.object({
   wechatGroupId: WechatStableIdSchema,
@@ -156,6 +166,7 @@ export const AdminWechatGroupBindingSchema = z.object({
   displayName: DisplayNameSchema,
   enabled: z.boolean(),
   version: ExpectedVersionSchema,
+  capabilities: WechatGroupCapabilitiesSchema,
   scheduleSourceIds: z.array(ResourceIdSchema),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
@@ -165,6 +176,7 @@ export const SaveWechatGroupBindingRequestSchema = z.object({
   deviceId: ResourceIdSchema,
   observedGroupId: ResourceIdSchema,
   enabled: z.boolean().default(true),
+  capabilities: WechatGroupCapabilitiesSchema,
   scheduleSourceIds: z.array(ResourceIdSchema).max(50).default([]),
   expectedVersion: ExpectedVersionSchema.optional()
 }).superRefine((value, context) => {
@@ -193,6 +205,7 @@ export const AdminLeagueWechatBotConfigSchema = z.object({
 export type WechatBridgeHeartbeat = z.infer<typeof WechatBridgeHeartbeatSchema>;
 export type WechatBridgeHeartbeatResponse = z.infer<typeof WechatBridgeHeartbeatResponseSchema>;
 export type WechatConversationType = z.infer<typeof WechatConversationTypeSchema>;
+export type WechatGroupCapabilityType = z.infer<typeof WechatGroupCapabilityTypeSchema>;
 export type WechatInboundBatch = z.infer<typeof WechatInboundBatchSchema>;
 export type WechatInboundBatchResult = z.infer<typeof WechatInboundBatchResultSchema>;
 export type WechatOutboxClaimRequest = z.infer<typeof WechatOutboxClaimRequestSchema>;

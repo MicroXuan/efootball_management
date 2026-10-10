@@ -382,6 +382,11 @@ enum WechatConversationType {
   PRIVATE
 }
 
+enum WechatGroupCapabilityType {
+  SCHEDULE_QUERY
+  PLAYER_AUCTION
+}
+
 enum WechatInboundProcessingStatus {
   PENDING
   PROCESSED
@@ -613,6 +618,7 @@ model AdminAccount {
   cupBracketProposals          CupBracketProposal[]              @relation("CupBracketProposalCreator")
   submittedMatchResults        MatchResultVersion[]              @relation("MatchResultAdminSubmitter")
   createdWechatBotDevices      WechatBotDevice[]                 @relation("WechatBotDeviceCreator")
+  createdWechatGroupCapabilities WechatGroupCapability[]         @relation("WechatGroupCapabilityCreator")
   createdWechatScheduleSources WechatGroupScheduleSource[]       @relation("WechatScheduleSourceCreator")
   createdPlayerAuctionBatches  PlayerAuctionBatch[]               @relation("PlayerAuctionBatchCreator")
   reviewedPlayerAuctionLots    PlayerAuctionReview[]              @relation("PlayerAuctionReviewAdmin")
@@ -2303,6 +2309,7 @@ model WechatGroupBinding {
   device          WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   observedGroup   WechatObservedGroup         @relation(fields: [observedGroupId], references: [id], onDelete: Restrict)
   league          League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  capabilities    WechatGroupCapability[]
   scheduleSources WechatGroupScheduleSource[]
   inboundMessages WechatInboundMessage[]
   playerAuctionBatches PlayerAuctionBatch[]
@@ -2310,6 +2317,21 @@ model WechatGroupBinding {
   @@unique([deviceId, wechatGroupId], map: "wechat_group_bindings_device_group_unique")
   @@index([leagueId, enabled], map: "wechat_group_bindings_league_enabled_idx")
   @@map("wechat_group_bindings")
+}
+
+model WechatGroupCapability {
+  id               String                    @id @default(uuid()) @db.Char(36)
+  groupBindingId   String                    @map("group_binding_id") @db.Char(36)
+  capability       WechatGroupCapabilityType
+  createdByAdminId String                    @map("created_by_admin_id") @db.Char(36)
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  groupBinding     WechatGroupBinding        @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount              @relation("WechatGroupCapabilityCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+
+  @@unique([groupBindingId, capability], map: "wechat_group_capabilities_binding_capability_unique")
+  @@index([capability, groupBindingId], map: "wechat_group_capabilities_capability_binding_idx")
+  @@index([createdByAdminId], map: "wechat_group_capabilities_creator_idx")
+  @@map("wechat_group_capabilities")
 }
 
 model WechatGroupScheduleSource {

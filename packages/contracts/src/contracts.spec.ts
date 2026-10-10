@@ -121,6 +121,7 @@ import {
   AdminWechatBotDeviceSchema,
   AdminWechatGroupBindingSchema,
   AdminWechatObservedGroupListSchema,
+  SaveWechatGroupBindingRequestSchema,
   UpdateWechatBotDeviceStatusRequestSchema,
   WechatBindingCodeResponseSchema,
   WechatBindingStatusSchema,
@@ -2163,6 +2164,7 @@ describe('WeChat bot contracts', () => {
       displayName: '测试联赛群',
       enabled: true,
       version: 1,
+      capabilities: [],
       scheduleSourceIds: [],
       createdAt: now,
       updatedAt: now
@@ -2186,6 +2188,68 @@ describe('WeChat bot contracts', () => {
       observedGroups: [],
       scheduleSourceOptions: [{ id: bindingId, name: '甲级联赛', status: 'IN_PROGRESS' }]
     }).scheduleSourceOptions[0]?.name, '甲级联赛');
+  });
+
+  it('accepts explicit WeChat group capabilities', () => {
+    const capabilitySets = [
+      [],
+      ['SCHEDULE_QUERY'],
+      ['PLAYER_AUCTION'],
+      ['SCHEDULE_QUERY', 'PLAYER_AUCTION']
+    ];
+
+    for (const capabilities of capabilitySets) {
+      const group = AdminWechatGroupBindingSchema.parse({
+        id: bindingId,
+        deviceId,
+        leagueId,
+        wechatGroupId: 'room-1@chatroom',
+        displayName: '测试联赛群',
+        enabled: true,
+        version: 1,
+        capabilities,
+        scheduleSourceIds: [],
+        createdAt: now,
+        updatedAt: now
+      });
+      const request = SaveWechatGroupBindingRequestSchema.parse({
+        deviceId,
+        observedGroupId: bindingId,
+        capabilities,
+        scheduleSourceIds: []
+      });
+
+      assert.deepEqual(group.capabilities, capabilities);
+      assert.deepEqual(request.capabilities, capabilities);
+    }
+  });
+
+  it('rejects duplicate or unknown WeChat group capabilities', () => {
+    assert.throws(() => SaveWechatGroupBindingRequestSchema.parse({
+      deviceId,
+      observedGroupId: bindingId,
+      capabilities: ['SCHEDULE_QUERY', 'SCHEDULE_QUERY'],
+      scheduleSourceIds: []
+    }));
+    assert.throws(() => SaveWechatGroupBindingRequestSchema.parse({
+      deviceId,
+      observedGroupId: bindingId,
+      capabilities: ['UNKNOWN'],
+      scheduleSourceIds: []
+    }));
+    assert.throws(() => AdminWechatGroupBindingSchema.parse({
+      id: bindingId,
+      deviceId,
+      leagueId,
+      wechatGroupId: 'room-1@chatroom',
+      displayName: '测试联赛群',
+      enabled: true,
+      version: 1,
+      capabilities: ['PLAYER_AUCTION', 'PLAYER_AUCTION'],
+      scheduleSourceIds: [],
+      createdAt: now,
+      updatedAt: now
+    }));
   });
 });
 

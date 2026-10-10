@@ -106,6 +106,7 @@ describe('AdminWechatBotService', () => {
     });
     await expect(service.saveGroupBinding('admin-1', 'league-1', {
       deviceId: 'device-1', observedGroupId: 'observed-1', enabled: true,
+      capabilities: [],
       scheduleSourceIds: ['competition-1']
     })).rejects.toBeInstanceOf(ConflictException);
   });
@@ -115,6 +116,7 @@ describe('AdminWechatBotService', () => {
     prisma.competition.findMany.mockResolvedValueOnce([]);
     await expect(service.saveGroupBinding('admin-1', 'league-1', {
       deviceId: 'device-1', observedGroupId: 'observed-1', enabled: true,
+      capabilities: [],
       scheduleSourceIds: ['competition-missing']
     })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.wechatGroupScheduleSource.deleteMany).not.toHaveBeenCalled();
@@ -124,6 +126,7 @@ describe('AdminWechatBotService', () => {
     const { service, prisma, audit } = harness();
     const result = await service.saveGroupBinding('admin-1', 'league-1', {
       deviceId: 'device-1', observedGroupId: 'observed-1', enabled: true,
+      capabilities: [],
       scheduleSourceIds: ['competition-1']
     });
     expect(prisma.wechatGroupScheduleSource.deleteMany).toHaveBeenCalledWith({ where: { groupBindingId: 'binding-1' } });
