@@ -7,7 +7,10 @@ import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
 
-const MARKS = [20, 10, 5, 4, 3, 2, 1] as const;
+const MARKS = [20, 10, 3, 2, 1] as const;
+const FULL_DURATION_MS = 30_000;
+const RESULT_PRIORITY = 600;
+const FOLLOW_UP_PRIORITY = 500;
 
 @Injectable()
 export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDestroy {
@@ -51,7 +54,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
       const remainingSeconds = Math.ceil(remainingMs / 1_000);
       const previous = lot.lastCountdownMark ?? 30;
       const crossed = MARKS.filter((mark) => mark < previous && remainingSeconds <= mark);
-      const mark = crossed.length ? Math.min(...crossed) : null;
+      const mark = crossed.length ? crossed.at(-1)! : null;
       if (mark === null) continue;
       const advanced = await this.prisma.playerAuctionLot.updateMany({
         where: { id: lot.id, status: 'ACTIVE', deadlineEpoch: lot.deadlineEpoch, lastCountdownMark: previous },
@@ -65,7 +68,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
       await this.outbox.enqueue({
         deviceId: lot.batch.groupBinding.deviceId, targetType: 'GROUP', targetId: lot.batch.groupBinding.wechatGroupId,
         businessKey: `auction:${lot.id}:epoch:${lot.deadlineEpoch}:countdown:${mark}`,
-        text: String(mark), priority: 400
+        text: this.formatter.countdown(mark), priority: 400
       });
     }
   }
@@ -91,8 +94,33 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
         data: { status: lot.currentHighestBidId ? 'PENDING_REVIEW' : 'NO_BID', deadlineAt: null, closedAt: now, version: { increment: 1 } }
       });
       if (update.count !== 1) return false;
-      const hasQueuedLot = await tx.playerAuctionLot.count({ where: { batchId: batch.id, status: 'QUEUED' } });
-      if (hasQueuedLot === 0) {
+      const next = await tx.playerAuctionLot.findFirst({
+        where: { batchId: batch.id, status: 'QUEUED' },
+        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }]
+      });
+      let nextEpoch: number | null = null;
+      if (next) {
+        await this.locks.lockLot(tx, next.id);
+        const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
+        nextEpoch = next.deadlineEpoch + 1;
+        const nextUpdate = await tx.playerAuctionLot.updateMany({
+          where: { id: next.id, status: 'QUEUED', deadlineEpoch: next.deadlineEpoch },
+          data: {
+            status: 'ACTIVE',
+            startedAt: now,
+            deadlineAt,
+            deadlineEpoch: nextEpoch,
+            lastCountdownMark: 30,
+            pausedRemainingMs: null,
+            version: { increment: 1 }
+          }
+        });
+        if (nextUpdate.count !== 1) throw new Error('AUCTION_NEXT_LOT_CONFLICT');
+        await tx.playerAuctionBatch.update({
+          where: { id: batch.id },
+          data: { status: 'ACTIVE', currentLotId: next.id, version: { increment: 1 } }
+        });
+      } else {
         await tx.playerAuctionBatch.update({
           where: { id: batch.id },
           data: { status: 'COMPLETED', currentLotId: null, completedAt: now, version: { increment: 1 } }
@@ -108,10 +136,27 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
           targetId: batch.groupBinding.wechatGroupId,
           businessKey: `auction:${lotId}:epoch:${epoch}:closed`,
           text,
-          priority: 500
+          priority: RESULT_PRIORITY
         }
       });
-      if (hasQueuedLot === 0) {
+      if (next && nextEpoch !== null) {
+        await tx.wechatOutboxMessage.create({
+          data: {
+            deviceId: batch.groupBinding.deviceId,
+            targetType: 'GROUP',
+            targetId: batch.groupBinding.wechatGroupId,
+            businessKey: `auction:${next.id}:epoch:${nextEpoch}:opened`,
+            text: this.formatter.opening({
+              displayOrder: next.displayOrder,
+              playerName: next.playerNameSnapshot,
+              playerSnapshot: next.playerSnapshot as Record<string, unknown>,
+              startingPrice: next.startingPrice,
+              minimumIncrement: next.minimumIncrement
+            }),
+            priority: FOLLOW_UP_PRIORITY
+          }
+        });
+      } else {
         await tx.wechatOutboxMessage.create({
           data: {
             deviceId: batch.groupBinding.deviceId,
@@ -119,7 +164,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
             targetId: batch.groupBinding.wechatGroupId,
             businessKey: `auction:${batch.id}:completed`,
             text: this.formatter.completed(),
-            priority: 500
+            priority: FOLLOW_UP_PRIORITY
           }
         });
       }

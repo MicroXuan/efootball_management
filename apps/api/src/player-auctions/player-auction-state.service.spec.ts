@@ -28,23 +28,9 @@ describe('PlayerAuctionStateService', () => {
     expect(lot.deadlineAt.toISOString()).toBe('2026-10-09T12:01:22.750Z');
   });
 
-  it('never auto-starts the next lot and completes only on an explicit next command', async () => {
-    const group = { id: 'group-1', leagueId: 'league-1', enabled: true };
-    const batch: any = { id: 'batch-1', groupBindingId: group.id, leagueId: group.leagueId, status: 'ACTIVE', currentLotId: 'lot-1' };
-    const lot: any = { id: 'lot-1', batchId: batch.id, status: 'PENDING_REVIEW', displayOrder: 1 };
-    const tx: any = {
-      wechatGroupBinding: { findUnique: jest.fn(async () => group) },
-      playerAuctionBatch: { findFirst: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) },
-      playerAuctionLot: { findUnique: jest.fn(async () => lot), findFirst: jest.fn(async () => null), update: jest.fn() }
-    };
-    const service = new PlayerAuctionStateService(
-      { $transaction: async (work: any) => work(tx) } as never,
-      { lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: jest.fn(async () => new Date()) } as never,
-      { can: jest.fn(async () => true) } as never
-    );
-
-    await service.next('group-1', 'user-1');
-    expect(batch.status).toBe('COMPLETED');
+  it('does not expose manual next-lot progression', () => {
+    const service = new PlayerAuctionStateService({} as never, {} as never, {} as never);
+    expect((service as unknown as { next?: unknown }).next).toBeUndefined();
   });
 
   it('rejects a manager without the league auction permission', async () => {

@@ -6,7 +6,7 @@ import { PlayerAuctionMessageFormatter } from './player-auction-message.formatte
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 import { PlayerAuctionStateService } from './player-auction-state.service.js';
 
-const MANAGER_COMMANDS = new Set(['开始拍卖', '暂停拍卖', '继续拍卖', '下一位', '取消拍卖']);
+const MANAGER_COMMANDS = new Set(['开始拍卖', '暂停拍卖', '继续拍卖', '取消拍卖']);
 const PURE_INTEGER = /^\d+$/;
 
 @Injectable()
@@ -54,12 +54,8 @@ export class PlayerAuctionCommandHandler {
                 ? activeBatch?.status === 'RECOVERY_REQUIRED'
                   ? await this.recovery.recover(activeBatch.id, identity.userId, false)
                   : await this.state.resume(inbound.groupBindingId, identity.userId)
-                : command === '下一位'
-                  ? await this.state.next(inbound.groupBindingId, identity.userId)
-                  : await this.state.cancel(inbound.groupBindingId, identity.userId);
-          text = transition.transition === 'COMPLETED'
-            ? this.formatter.completed()
-            : transition.transition === 'PAUSED'
+                : await this.state.cancel(inbound.groupBindingId, identity.userId);
+          text = transition.transition === 'PAUSED'
               ? '拍卖已由管理员暂停。'
               : transition.transition === 'CANCELLED'
                 ? '本批次拍卖已由管理员取消。'

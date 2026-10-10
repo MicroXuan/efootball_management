@@ -53,30 +53,6 @@ export class PlayerAuctionStateService {
     });
   }
 
-  next(groupBindingId: string, actorUserId: string) {
-    return this.withAuthorizedGroup(groupBindingId, actorUserId, async (tx, group) => {
-      const batch = await this.batchForGroup(tx, group.id, ['ACTIVE', 'PAUSED']);
-      await this.locks.lockBatch(tx, batch.id);
-      if (!batch.currentLotId) throw new PlayerAuctionError('AUCTION_CURRENT_LOT_MISSING', '当前没有拍卖球员', 409);
-      await this.locks.lockLot(tx, batch.currentLotId);
-      const current = await tx.playerAuctionLot.findUnique({ where: { id: batch.currentLotId } });
-      if (!current || !['PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID'].includes(current.status)) {
-        throw new PlayerAuctionError('AUCTION_NEXT_NOT_ALLOWED', '当前球员尚未结束，不能进入下一位', 409);
-      }
-      const next = await tx.playerAuctionLot.findFirst({ where: { batchId: batch.id, status: 'QUEUED', displayOrder: { gt: current.displayOrder } }, orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] });
-      const now = await this.locks.now(tx);
-      if (!next) {
-        await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'COMPLETED', currentLotId: null, completedAt: now, version: { increment: 1 } } });
-        return { transition: 'COMPLETED' as const, batchId: batch.id, lotId: null };
-      }
-      await this.locks.lockLot(tx, next.id);
-      const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
-      await tx.playerAuctionLot.update({ where: { id: next.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } } });
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', currentLotId: next.id, version: { increment: 1 } } });
-      return { transition: 'NEXT_STARTED' as const, batchId: batch.id, lotId: next.id, deadlineAt };
-    });
-  }
-
   cancel(groupBindingId: string, actorUserId: string) {
     return this.withAuthorizedGroup(groupBindingId, actorUserId, async (tx, group) => {
       const batch = await this.batchForGroup(tx, group.id, ['READY', 'ACTIVE', 'PAUSED', 'RECOVERY_REQUIRED']);

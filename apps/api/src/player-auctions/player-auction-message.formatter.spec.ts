@@ -12,10 +12,12 @@ describe('PlayerAuctionMessageFormatter', () => {
   });
 
   it('formats countdown, invalid bids, pending review, no bid, recovery and completion', () => {
-    expect(formatter.countdown(5)).toBe('5');
+    expect([20, 10, 3, 2, 1].map((mark) => formatter.countdown(mark as 20 | 10 | 3 | 2 | 1))).toEqual(['20', '10', '3', '2', '1']);
     expect(formatter.invalidBid('BELOW_MINIMUM_INCREMENT', 130)).toContain('⭐130⭐');
     expect(formatter.pendingReview('车范根', '申花', 120)).toContain('⭐120⭐');
+    expect(formatter.pendingReview('车范根', '申花', 120)).toContain('自动进入下一位');
     expect(formatter.noBid('车范根')).toContain('流拍');
+    expect(formatter.noBid('车范根')).toContain('自动进入下一位');
     expect(formatter.recovery()).toContain('暂停');
     expect(formatter.completed()).toContain('全部结束');
   });

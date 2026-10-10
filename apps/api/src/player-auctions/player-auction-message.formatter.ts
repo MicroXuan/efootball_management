@@ -56,16 +56,16 @@ export class PlayerAuctionMessageFormatter {
     return messages[result];
   }
 
-  countdown(mark: 20 | 10 | 5 | 4 | 3 | 2 | 1) {
+  countdown(mark: 20 | 10 | 3 | 2 | 1) {
     return String(mark);
   }
 
   pendingReview(playerName: string, teamName: string, amount: number) {
-    return `【${playerName}】倒计时结束，计算结果：${teamName} ${this.money(amount)}。结果待管理员人工审核，下一位不会自动开始。`;
+    return `【${playerName}】倒计时结束，计算结果：${teamName} ${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
   }
 
   noBid(playerName: string) {
-    return `【${playerName}】无人有效出价，本轮流拍。请管理员确认“下一位”。`;
+    return `【${playerName}】无人有效出价，已记录为待审核流拍。系统将自动进入下一位或结束批次。`;
   }
 
   recovery() {
