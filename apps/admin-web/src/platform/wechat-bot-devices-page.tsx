@@ -131,7 +131,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
     <header className="workspace-page-title wechat-page-heading">
       <div>
         <span className="section-kicker">平台管理 · WINDOWS 桥接</span>
-        <h1>微信机器人设备</h1>
+        <h1>群机器人</h1>
         <p>管理长期在线的 Windows 机器人电脑。令牌只在创建或轮换时展示一次。</p>
       </div>
       <Button type="primary" onClick={() => setCreateOpen(true)}>创建设备</Button>

@@ -23,6 +23,7 @@ it('shows loading, offline, and circuit states without exposing stored hashes', 
   render(<WechatBotDevicesPage api={{ request } as unknown as AdminApi} />);
   expect(screen.getByText('正在读取设备状态…')).toBeInTheDocument();
   resolve({ items: [device] });
+  expect(screen.getByRole('heading', { name: '群机器人' })).toBeInTheDocument();
   expect(await screen.findByText('联赛机器人 A')).toBeInTheDocument();
   expect(screen.getByText('离线')).toBeInTheDocument();
   expect(screen.getByText('熔断已开启')).toBeInTheDocument();
