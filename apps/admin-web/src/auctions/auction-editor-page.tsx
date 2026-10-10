@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Empty, Input, InputNumber, Select, Spin } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AdminLeagueWechatBotConfigSchema,
   PlayerAuctionBatchDetailSchema,
@@ -34,8 +34,11 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
       api.request(`/v1/admin/leagues/${leagueId}/wechat-bot`, { schema: AdminLeagueWechatBotConfigSchema }),
       batchId ? api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}`, { schema: PlayerAuctionBatchDetailSchema }) : Promise.resolve(null)
     ]).then(([config, existing]) => {
-      setGroups(config.bindings.filter((binding) => binding.enabled));
-      setGroupBindingId(existing?.groupBindingId ?? config.bindings.find((binding) => binding.enabled)?.id);
+      const eligibleGroups = config.bindings.filter(
+        (binding) => binding.enabled && binding.capabilities.includes('PLAYER_AUCTION')
+      );
+      setGroups(eligibleGroups);
+      setGroupBindingId(existing?.groupBindingId ?? eligibleGroups[0]?.id);
       if (existing) {
         setBatch(existing); setName(existing.name);
         setLots(existing.lots.map((lot) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId ?? '', playerName: lot.playerName, cardName: String((lot.playerSnapshot.card as { cardName?: string } | null)?.cardName ?? '默认卡'), startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement }))
@@ -88,7 +91,7 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
     <header className="auction-page__header"><div><span className="section-kicker">拍卖编排台</span><h2>{batch ? '编辑拍卖草稿' : '创建拍卖批次'}</h2><p>顺序就是群内的拍卖顺序；上下移动按钮可完全用键盘操作。</p></div></header>
     {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}{notice ? <Alert role="status" type="success" showIcon title={notice} /> : null}
     {duplicateNames.length ? <Alert type="warning" showIcon title={`重复球员：${[...new Set(duplicateNames)].join('、')}`} description="允许保存，但请确认是否确实需要重复拍卖。" /> : null}
-    <div className="auction-editor__grid"><Card className="form-card" title="批次与微信群"><label>批次名称<Input value={name} onChange={(event) => { setName(event.target.value); setDirty(true); }} /></label><label>绑定微信群<Select value={groupBindingId} disabled={Boolean(batch)} onChange={(value) => { setGroupBindingId(value); setDirty(true); }} options={(groups ?? []).map((group) => ({ value: group.id, label: group.displayName }))} /></label></Card>
+    <div className="auction-editor__grid"><Card className="form-card" title="批次与微信群"><label>批次名称<Input value={name} onChange={(event) => { setName(event.target.value); setDirty(true); }} /></label>{groups?.length ? <label>绑定微信群<Select value={groupBindingId} disabled={Boolean(batch)} onChange={(value) => { setGroupBindingId(value); setDirty(true); }} options={groups.map((group) => ({ value: group.id, label: group.displayName }))} /></label> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span>暂无已启用球员拍卖的微信群，<Link to={`/leagues/${leagueId}/wechat-bot`}>前往微信群机器人配置</Link></span>} />}</Card>
       <Card className="form-card" title="搜索并添加球员"><div className="auction-player-search"><Input aria-label="搜索球员" value={keyword} onChange={(event) => setKeyword(event.target.value)} onPressEnter={() => void search()} placeholder="中文名、英文名或卡名" /><Button aria-label="搜索" loading={busy} onClick={() => void search()}>搜索</Button></div>{results.length ? results.map((player) => <div className="auction-search-result" key={player.playerId}><strong>{player.playerName}</strong><span>{player.cards[0]?.cardName}</span><Button aria-label={`添加${player.playerName}`} onClick={() => add(player, player.recommendedPlayerCardId ?? player.cards[0]!.id)}>添加</Button></div>) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="搜索后从具体球员卡添加" />}</Card>
     </div>
     <Card className="auction-lot-card" title={`拍卖顺序 · ${lots.length} 位`}>

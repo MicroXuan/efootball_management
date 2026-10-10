@@ -13,7 +13,10 @@ function harness() {
   };
   const tx: any = {
     $queryRaw: jest.fn(async () => []),
-    wechatGroupBinding: { findFirst: jest.fn(async () => ({ id: 'group-1', leagueId: 'league-1', enabled: true })) },
+    wechatGroupBinding: { findFirst: jest.fn(async () => ({
+      id: 'group-1', leagueId: 'league-1', enabled: true, version: 1,
+      capabilities: [{ capability: 'PLAYER_AUCTION' }]
+    })) },
     playerAuctionBatch: {
       findFirst: jest.fn(async () => batch), findMany: jest.fn(async () => [batch]),
       create: jest.fn(async ({ data }: any) => Object.assign(batch, data)),
@@ -46,6 +49,31 @@ describe('AdminPlayerAuctionsService', () => {
     }, 'create-1')).rejects.toMatchObject({ code: 'AUCTION_GROUP_INVALID' });
   });
 
+  it('rejects an enabled query-only group when creating a draft', async () => {
+    const { service, tx } = harness();
+    const queryOnlyGroup = {
+      id: 'group-1', leagueId: 'league-1', enabled: true, version: 1,
+      capabilities: [{ capability: 'SCHEDULE_QUERY' }]
+    };
+    tx.wechatGroupBinding.findFirst.mockImplementationOnce(async ({ where }: any) =>
+      queryOnlyGroup.capabilities.some((item) => item.capability === where.capabilities.some.capability)
+        ? queryOnlyGroup
+        : null
+    );
+
+    await expect(service.create('admin-1', 'league-1', {
+      groupBindingId: 'group-1', name: '拍卖', expectedVersion: 1
+    }, 'create-query-only')).rejects.toMatchObject({ code: 'AUCTION_GROUP_INVALID' });
+    expect(tx.wechatGroupBinding.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'group-1',
+        leagueId: 'league-1',
+        enabled: true,
+        capabilities: { some: { capability: 'PLAYER_AUCTION' } }
+      }
+    });
+  });
+
   it('replaces draft lots with validated player/card snapshots in contiguous order', async () => {
     const { service, tx, batch } = harness();
     await service.replaceLots('admin-1', 'league-1', 'batch-1', {
@@ -73,12 +101,47 @@ describe('AdminPlayerAuctionsService', () => {
     const { service, tx, batch } = harness();
     await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-1'))
       .rejects.toMatchObject({ code: 'AUCTION_LOTS_REQUIRED' });
-    batch.lots = [{ id: 'lot-1' }];
+    batch.lots = [{ id: 'lot-1', bids: [], review: null }];
     tx.playerAuctionBatch.findFirst
       .mockResolvedValueOnce(batch)
       .mockResolvedValueOnce({ id: 'batch-other' });
     await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-2'))
       .rejects.toMatchObject({ code: 'AUCTION_GROUP_BUSY' });
+  });
+
+  it('revalidates auction capability before preparing a stale draft', async () => {
+    const { service, tx, batch } = harness();
+    batch.lots = [{ id: 'lot-1' }];
+    tx.wechatGroupBinding.findFirst.mockResolvedValueOnce(null);
+
+    await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-stale'))
+      .rejects.toMatchObject({ code: 'AUCTION_GROUP_INVALID' });
+    expect(tx.wechatGroupBinding.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'group-1',
+        leagueId: 'league-1',
+        enabled: true,
+        capabilities: { some: { capability: 'PLAYER_AUCTION' } }
+      },
+      select: { id: true }
+    });
+  });
+
+  it('does not let an unresolved batch in group A block an eligible group B', async () => {
+    const { service, tx, batch } = harness();
+    batch.groupBindingId = 'group-2';
+    batch.lots = [{ id: 'lot-1', bids: [], review: null }];
+    tx.wechatGroupBinding.findFirst.mockResolvedValueOnce({ id: 'group-2' });
+    tx.playerAuctionBatch.findFirst
+      .mockResolvedValueOnce(batch)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(batch);
+
+    await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-group-b'))
+      .resolves.toMatchObject({ id: 'batch-1' });
+    expect(tx.playerAuctionBatch.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({ groupBindingId: 'group-2' })
+    }));
   });
 
   it('reviews pending results without mutating the immutable computed winner', async () => {
