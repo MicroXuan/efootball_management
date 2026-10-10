@@ -11,7 +11,11 @@ config({ path: '../../.env', quiet: true });
 describe('WeChat bot foundation acceptance', () => {
   const prisma = new PrismaService();
   const runId = randomUUID();
-  const groupWechatId = `group-${runId}@chatroom`;
+  const groupWechatIds = {
+    query: `query-${runId}@chatroom`,
+    auction: `auction-${runId}@chatroom`,
+    combined: `combined-${runId}@chatroom`,
+  } as const;
   const contactWechatId = `contact-${runId}`;
   const adminUsername = `wechat-bot-${runId}`;
   const mainOpenId = `test-openid-wechat-bot-main-${runId}`;
@@ -200,6 +204,7 @@ describe('WeChat bot foundation acceptance', () => {
       await prisma.wechatInboundMessage.deleteMany({ where: { deviceId } });
       await prisma.wechatBridgeRequestReceipt.deleteMany({ where: { deviceId } });
       await prisma.wechatGroupScheduleSource.deleteMany({ where: { groupBinding: { deviceId } } });
+      await prisma.wechatGroupCapability.deleteMany({ where: { groupBinding: { deviceId } } });
       await prisma.wechatGroupBinding.deleteMany({ where: { deviceId } });
       await prisma.wechatObservedGroup.deleteMany({ where: { deviceId } });
       await prisma.wechatBotDevice.deleteMany({ where: { id: deviceId } });
@@ -225,7 +230,7 @@ describe('WeChat bot foundation acceptance', () => {
     await prisma.$disconnect();
   });
 
-  it('binds identity, answers schedule commands, and deduplicates retried inbound batches', async () => {
+  it('isolates query-only, auction-only, and combined groups while deduplicating inbound batches', async () => {
     const createdDevice = await request(app.getHttpServer())
       .post('/v1/admin/wechat-bot/devices')
       .set(adminAuth())
@@ -236,27 +241,38 @@ describe('WeChat bot foundation acceptance', () => {
 
     await bridgePost('/v1/wechat-bot/bridge/heartbeat', {
       wechatAccountId: `bot-${runId}`,
-      wechatVersion: '4.1.15.13',
+      wechatVersion: '4.1.15.50',
       loginStatus: 'LOGGED_IN',
       listenerWatermark: 'acceptance-1',
       screenLocked: false,
       outboundQueueDepth: 0,
-      observedGroups: [{ wechatGroupId: groupWechatId, displayName: 'CELL 联赛群' }],
+      observedGroups: [
+        { wechatGroupId: groupWechatIds.query, displayName: 'CELL 赛程群' },
+        { wechatGroupId: groupWechatIds.auction, displayName: 'CELL 拍卖群' },
+        { wechatGroupId: groupWechatIds.combined, displayName: 'CELL 综合群' },
+      ],
     }).expect(200);
 
-    const group = await prisma.wechatObservedGroup.findUniqueOrThrow({
-      where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: groupWechatId } },
-    });
-    await request(app.getHttpServer())
-      .put(`/v1/admin/leagues/${leagueId}/wechat-bot/group`)
-      .set(adminAuth())
-      .send({
-        deviceId,
-        observedGroupId: group.id,
-        enabled: true,
-        scheduleSourceIds: [competitionId],
-      })
-      .expect(200);
+    for (const [role, wechatGroupId] of Object.entries(groupWechatIds)) {
+      const group = await prisma.wechatObservedGroup.findUniqueOrThrow({
+        where: { deviceId_wechatGroupId: { deviceId, wechatGroupId } },
+      });
+      await request(app.getHttpServer())
+        .put(`/v1/admin/leagues/${leagueId}/wechat-bot/group`)
+        .set(adminAuth())
+        .send({
+          deviceId,
+          observedGroupId: group.id,
+          enabled: true,
+          capabilities: role === 'query'
+            ? ['SCHEDULE_QUERY']
+            : role === 'auction'
+              ? ['PLAYER_AUCTION']
+              : ['SCHEDULE_QUERY', 'PLAYER_AUCTION'],
+          scheduleSourceIds: role === 'auction' ? [] : [competitionId],
+        })
+        .expect(200);
+    }
 
     const issued = await request(app.getHttpServer())
       .post('/v1/me/wechat-bot/binding-code')
@@ -265,8 +281,7 @@ describe('WeChat bot foundation acceptance', () => {
     expect(issued.body.code).toMatch(/^\d{6}$/);
 
     const sentAt = new Date().toISOString();
-    const batch = {
-      messages: [
+    const messages = [
         {
           messageId: `private-bind-${runId}`,
           conversationType: 'PRIVATE',
@@ -277,57 +292,86 @@ describe('WeChat bot foundation acceptance', () => {
           text: `绑定 ${issued.body.code as string}`,
         },
         {
-          messageId: `group-schedule-${runId}`,
+          messageId: `query-schedule-${runId}`,
           conversationType: 'GROUP',
-          conversationId: groupWechatId,
+          conversationId: groupWechatIds.query,
           senderId: contactWechatId,
           sentAt,
           messageType: 'TEXT',
           text: '查询赛程',
         },
         {
-          messageId: `group-my-schedule-${runId}`,
+          messageId: `query-my-schedule-${runId}`,
           conversationType: 'GROUP',
-          conversationId: groupWechatId,
+          conversationId: groupWechatIds.query,
           senderId: contactWechatId,
           sentAt,
           messageType: 'TEXT',
           text: '我的赛程',
         },
-      ],
-    } as const;
+        ...[
+          [`query-number-${runId}`, groupWechatIds.query, '120'],
+          [`query-help-${runId}`, groupWechatIds.query, '帮助'],
+          [`auction-schedule-${runId}`, groupWechatIds.auction, '查询赛程'],
+          [`auction-number-${runId}`, groupWechatIds.auction, '120'],
+          [`auction-help-${runId}`, groupWechatIds.auction, '帮助'],
+          [`combined-schedule-${runId}`, groupWechatIds.combined, '查询赛程'],
+          [`combined-help-${runId}`, groupWechatIds.combined, '帮助'],
+        ].map(([messageId, conversationId, text]) => ({
+          messageId, conversationType: 'GROUP' as const, conversationId, senderId: contactWechatId,
+          sentAt, messageType: 'TEXT' as const, text,
+        })),
+      ] as const;
+    const batch = { messages };
 
     await bridgePost('/v1/wechat-bot/bridge/messages', batch)
       .expect(200)
       .expect(({ body }) => expect(body.results.map((item: { status: string }) => item.status))
-        .toEqual(['ACCEPTED', 'ACCEPTED', 'ACCEPTED']));
+        .toEqual(messages.map(() => 'ACCEPTED')));
 
     await bridgePost('/v1/wechat-bot/bridge/messages', batch)
       .expect(200)
       .expect(({ body }) => expect(body.results.map((item: { status: string }) => item.status))
-        .toEqual(['DUPLICATE', 'DUPLICATE', 'DUPLICATE']));
+        .toEqual(messages.map(() => 'DUPLICATE')));
 
-    expect(await prisma.wechatInboundMessage.count({ where: { deviceId } })).toBe(3);
+    expect(await prisma.wechatInboundMessage.count({ where: { deviceId } })).toBe(messages.length);
+    const inbound = await prisma.wechatInboundMessage.findMany({ where: { deviceId } });
+    expect(inbound.find((item) => item.messageId === `query-number-${runId}`)).toMatchObject({
+      processingStatus: 'IGNORED', resultCode: 'AUCTION_CAPABILITY_DISABLED'
+    });
+    expect(inbound.find((item) => item.messageId === `auction-schedule-${runId}`)).toMatchObject({
+      processingStatus: 'IGNORED', resultCode: 'SCHEDULE_CAPABILITY_DISABLED'
+    });
     const persistedReplies = await prisma.wechatOutboxMessage.findMany({
       where: { deviceId },
       orderBy: { createdAt: 'asc' },
     });
-    expect(persistedReplies).toHaveLength(3);
-    expect(new Set(persistedReplies.map((message) => message.businessKey)).size).toBe(3);
+    expect(persistedReplies).toHaveLength(8);
+    expect(new Set(persistedReplies.map((message) => message.businessKey)).size).toBe(8);
+    expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `query-number-${runId}`)?.id}:`))).toBe(false);
+    expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `auction-schedule-${runId}`)?.id}:`))).toBe(false);
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('绑定成功');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('赛程（1场）');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('我的赛程（1场）');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('上海申花 vs 成都蓉城');
+    const repliesFor = (targetId: string) => persistedReplies.filter((message) => message.targetId === targetId).map((message) => message.text).join('\n');
+    expect(repliesFor(groupWechatIds.query)).toContain('查询赛程：');
+    expect(repliesFor(groupWechatIds.query)).not.toContain('开始拍卖：');
+    expect(repliesFor(groupWechatIds.auction)).toContain('开始拍卖：');
+    expect(repliesFor(groupWechatIds.auction)).not.toContain('查询赛程：');
+    expect(repliesFor(groupWechatIds.combined)).toContain('查询赛程：');
+    expect(repliesFor(groupWechatIds.combined)).toContain('开始拍卖：');
+    expect(repliesFor(groupWechatIds.auction)).toContain('当前没有进行中的拍卖');
 
     const claim = await bridgePost('/v1/wechat-bot/bridge/outbox/claim', { limit: 20 }).expect(200);
-    expect(claim.body.messages).toHaveLength(3);
+    expect(claim.body.messages).toHaveLength(8);
     for (const [index, message] of (claim.body.messages as Array<{ id: string }>).entries()) {
       await bridgePost(`/v1/wechat-bot/bridge/outbox/${message.id}/ack`, {
         status: 'SENT',
         readbackMessageId: `wechat-readback-${runId}-${index + 1}`,
       }).expect(200);
     }
-    expect(await prisma.wechatOutboxMessage.count({ where: { deviceId, status: 'SENT' } })).toBe(3);
+    expect(await prisma.wechatOutboxMessage.count({ where: { deviceId, status: 'SENT' } })).toBe(8);
 
     await request(app.getHttpServer())
       .get('/v1/me/wechat-bot/binding')

@@ -140,13 +140,16 @@ describe('Player auction group acceptance', () => {
       .set({ Authorization: `Bearer ${adminToken}` }).send({ name: 'Windows 拍卖验收机器人' }).expect(201);
     deviceId = device.body.device.id as string; deviceToken = device.body.token as string;
     await bridgePost('/v1/wechat-bot/bridge/heartbeat', {
-      wechatAccountId: `auction-bot-${runId}`, wechatVersion: '4.1.15.13', loginStatus: 'LOGGED_IN',
+      wechatAccountId: `auction-bot-${runId}`, wechatVersion: '4.1.15.50', loginStatus: 'LOGGED_IN',
       listenerWatermark: 'auction-setup', screenLocked: false, outboundQueueDepth: 0,
       observedGroups: [{ wechatGroupId: groupWechatId, displayName: 'CELL 拍卖验收群' }]
     }).expect(200);
     const observed = await prisma.wechatObservedGroup.findUniqueOrThrow({ where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: groupWechatId } } });
     const binding = await request(app.getHttpServer()).put(`/v1/admin/leagues/${leagueId}/wechat-bot/group`)
-      .set({ Authorization: `Bearer ${adminToken}` }).send({ deviceId, observedGroupId: observed.id, enabled: true, scheduleSourceIds: [] }).expect(200);
+      .set({ Authorization: `Bearer ${adminToken}` }).send({
+        deviceId, observedGroupId: observed.id, enabled: true,
+        capabilities: ['PLAYER_AUCTION'], scheduleSourceIds: []
+      }).expect(200);
     groupBindingId = binding.body.id as string;
     await Promise.all(users.map((user, index) => prisma.wechatIdentityBinding.create({ data: {
       deviceId, wechatContactId: contacts[index]!, userId: user.id, status: 'ACTIVE'
@@ -168,6 +171,7 @@ describe('Player auction group acceptance', () => {
       await prisma.wechatInboundMessage.deleteMany({ where: { deviceId } });
       await prisma.wechatBridgeRequestReceipt.deleteMany({ where: { deviceId } });
       await prisma.wechatGroupScheduleSource.deleteMany({ where: { groupBinding: { deviceId } } });
+      await prisma.wechatGroupCapability.deleteMany({ where: { groupBinding: { deviceId } } });
       await prisma.wechatGroupBinding.deleteMany({ where: { deviceId } });
       await prisma.wechatObservedGroup.deleteMany({ where: { deviceId } });
       await prisma.wechatBotDevice.deleteMany({ where: { id: deviceId } });
@@ -188,7 +192,7 @@ describe('Player auction group acceptance', () => {
     await prisma.$disconnect();
   });
 
-  it('runs three lots with numeric bids, server deadlines, manual next, no-bid, and review', async () => {
+  it('runs three lots with automatic bid/no-bid progression, exact countdowns, and background review', async () => {
     const batch = await createPreparedBatch('端到端三人拍卖', 3);
     await groupMessage(contacts[0]!, '开始拍卖');
     const first = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
@@ -205,18 +209,39 @@ describe('Player auction group acceptance', () => {
     expect(afterBid.currentPrice).toBe(70);
     expect(afterBid.deadlineAt!.getTime()).toBeGreaterThan(Date.now() + 25_000);
 
-    await prisma.playerAuctionLot.update({ where: { id: first.id }, data: { deadlineAt: new Date(Date.now() + 19_000) } });
-    await worker.tick();
-    expect(await prisma.wechatOutboxMessage.count({ where: { deviceId, text: '20' } })).toBeGreaterThan(0);
+    for (const remaining of [20, 10, 5, 4, 3, 2, 1]) {
+      await prisma.playerAuctionLot.update({ where: { id: first.id }, data: { deadlineAt: new Date(Date.now() + remaining * 1_000) } });
+      await worker.tick();
+    }
+    const countdowns = await prisma.wechatOutboxMessage.findMany({
+      where: { deviceId, businessKey: { startsWith: `auction:${first.id}:epoch:${afterBid.deadlineEpoch}:countdown:` } },
+      orderBy: { createdAt: 'asc' }, select: { text: true }
+    });
+    expect(countdowns.map((message) => message.text)).toEqual(['20', '10', '3', '2', '1']);
     await closeLot(first.id);
     expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('PENDING_REVIEW');
-    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[1]!.id } })).status).toBe('QUEUED');
-
-    await groupMessage(contacts[0]!, '下一位');
     expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[1]!.id } })).status).toBe('ACTIVE');
+    expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } })).currentLotId).toBe(batch.lots[1]!.id);
+    const firstTransition = await prisma.wechatOutboxMessage.findMany({
+      where: { businessKey: { in: [
+        `auction:${first.id}:epoch:${afterBid.deadlineEpoch}:closed`,
+        `auction:${batch.lots[1]!.id}:epoch:1:opened`
+      ] } }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }]
+    });
+    expect(firstTransition.map((message) => message.businessKey)).toEqual([
+      `auction:${first.id}:epoch:${afterBid.deadlineEpoch}:closed`,
+      `auction:${batch.lots[1]!.id}:epoch:1:opened`
+    ]);
+
     await closeLot(batch.lots[1]!.id);
-    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[1]!.id } })).status).toBe('NO_BID');
-    await groupMessage(contacts[0]!, '下一位');
+    const noBidLot = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[1]!.id } });
+    expect(noBidLot.status).toBe('NO_BID');
+    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[2]!.id } })).status).toBe('ACTIVE');
+    await request(app.getHttpServer()).post(`/v1/admin/leagues/${leagueId}/player-auctions/${batch.id}/lots/${noBidLot.id}/review`)
+      .set(adminHeaders()).send({ decision: 'CONFIRM', expectedVersion: noBidLot.version }).expect(201);
+    expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } })).currentLotId).toBe(batch.lots[2]!.id);
+    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[2]!.id } })).status).toBe('ACTIVE');
+
     await groupMessage(contacts[0]!, '90');
     await closeLot(batch.lots[2]!.id);
     expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } })).status).toBe('COMPLETED');
@@ -233,6 +258,8 @@ describe('Player auction group acceptance', () => {
       expect(message.text.match(/⭐/g)).toHaveLength(2);
       expect(message.text).toMatch(/⭐\d+⭐/);
     }
+    expect(messages.some((message) => message.text.includes('无人有效出价'))).toBe(true);
+    expect(messages.every((message) => !message.text.includes('确认“下一位”'))).toBe(true);
   });
 
   it('fails closed on heartbeat loss, deduplicates messages, resumes for 30 seconds, and leaves finance and roster untouched', async () => {
