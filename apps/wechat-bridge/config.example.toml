@@ -7,7 +7,7 @@ state_dir = "state"
 
 # 目标电脑验收通过前必须保持 false。
 send_enabled = false
-expected_wechat_version = "4.1.15.13"
+expected_wechat_version = "4.1.15.50"
 poll_interval_seconds = 2.0
 heartbeat_interval_seconds = 20.0
 inbound_batch_size = 50
