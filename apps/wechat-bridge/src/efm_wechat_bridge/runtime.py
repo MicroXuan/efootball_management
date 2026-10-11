@@ -191,7 +191,20 @@ class BridgeRuntime:
 
             self.spool.remember_outbox(task)
             self.spool.mark_outbox_in_flight(task.id)
-            result = self.transport.send(task)
+            try:
+                result = self.transport.send(task)
+            except Exception:
+                code = "WECHAT_SEND_EXCEPTION"
+                self.spool.mark_outbox_ambiguous(task.id, code)
+                ack = SendAck(
+                    status="AMBIGUOUS",
+                    error_code=code,
+                    error_message="send outcome requires operator reconciliation",
+                )
+                self.api.ack_outbox(task.id, ack)
+                self._send_blocked.set()
+                processed += 1
+                break
             if result.status is SendStatus.SENT:
                 ack = SendAck(status="SENT", readback_message_id=result.readback_message_id)
                 self.spool.complete_outbox(task.id, ack)

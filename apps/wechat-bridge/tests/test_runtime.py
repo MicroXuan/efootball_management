@@ -288,6 +288,33 @@ def test_restarted_in_flight_send_becomes_ambiguous_without_resending(tmp_path: 
     assert spool.outbox_record(outgoing().id).status == "AMBIGUOUS"  # type: ignore[union-attr]
 
 
+def test_unexpected_transport_send_error_is_ambiguous_without_stranding_in_flight(
+    tmp_path: Path,
+) -> None:
+    class ExplodingTransport(FakeWechatTransport):
+        def send(self, task: OutboxTask) -> SendResult:
+            del task
+            raise OverflowError("64-bit window handle")
+
+    api = FakeApi()
+    api.claimed = [outgoing()]
+    transport = ExplodingTransport(
+        groups=[ObservedGroup(wechat_group_id="league@chatroom", display_name="CELL 联赛群")]
+    )
+    runtime, _, _, spool = make_runtime(
+        tmp_path,
+        api=api,
+        transport=transport,
+        enable_send=True,
+    )
+    assert runtime.doctor().passed is True
+
+    assert runtime.send_once() == 1
+    assert spool.outbox_record(outgoing().id).status == "AMBIGUOUS"  # type: ignore[union-attr]
+    assert api.acks[0][1].status == "AMBIGUOUS"
+    assert api.acks[0][1].error_code == "WECHAT_SEND_EXCEPTION"
+
+
 def test_runtime_persists_per_conversation_scan_cursors_only_after_upload(tmp_path: Path) -> None:
     runtime, transport, _, spool = make_runtime(tmp_path)
     transport.inject_inbound(inbound(sequence="0010"))

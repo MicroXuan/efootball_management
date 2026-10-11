@@ -72,7 +72,7 @@ class EfmBridgeClient:
                     "conversationType": event.conversation_type,
                     "conversationId": event.conversation_id,
                     "senderId": event.sender_id,
-                    "sentAt": event.sent_at.isoformat(),
+                    "sentAt": event.sent_at.astimezone(UTC).isoformat().replace("+00:00", "Z"),
                     "messageType": event.message_type,
                     "text": event.text,
                     **({"sequence": event.sequence} if event.sequence is not None else {}),

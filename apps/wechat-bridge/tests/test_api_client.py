@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -130,10 +131,12 @@ def test_reports_timeout_and_invalid_json_without_sensitive_response_content(tmp
 
 def test_uploads_contract_messages_and_acknowledges_outbox(tmp_path: Path) -> None:
     paths: list[str] = []
+    message_payloads: list[dict[str, object]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         paths.append(request.url.path)
         if request.url.path.endswith("/messages"):
+            message_payloads.append(json.loads(request.content))
             return httpx.Response(200, json={"results": [{
                 "messageId": "message-1", "status": "ACCEPTED", "inboundId": str(DEVICE_ID), "resultCode": None
             }]})
@@ -145,7 +148,7 @@ def test_uploads_contract_messages_and_acknowledges_outbox(tmp_path: Path) -> No
         conversation_type="GROUP",
         conversation_id="room@chatroom",
         sender_id="member-wxid",
-        sent_at=datetime.now(UTC),
+        sent_at=datetime(2026, 10, 10, 10, 7, 49, 613954, tzinfo=UTC),
         text="查询赛程",
     )])
     client.ack_outbox(DEVICE_ID, SendAck(status="SENT", readback_message_id="wechat-id"))
@@ -154,3 +157,4 @@ def test_uploads_contract_messages_and_acknowledges_outbox(tmp_path: Path) -> No
         "/v1/wechat-bot/bridge/messages",
         f"/v1/wechat-bot/bridge/outbox/{DEVICE_ID}/ack",
     ]
+    assert message_payloads[0]["messages"][0]["sentAt"] == "2026-10-10T10:07:49.613954Z"  # type: ignore[index]
