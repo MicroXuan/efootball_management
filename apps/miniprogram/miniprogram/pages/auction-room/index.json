@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "拍卖大厅",
+  "backgroundColor": "#0E1417",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

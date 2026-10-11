@@ -10,6 +10,7 @@ import {
   seasonStructureCopy,
   selectSeason,
   standingsAccess,
+  playerAuctionAccess,
   type SeasonRailStep,
   type WorkspaceModule,
   workspaceModuleRoute,
@@ -48,6 +49,7 @@ Page({
     workspace: null as LeagueWorkspaceResponse | null,
     workspaceView: null as ReturnType<typeof workspaceSummary> | null,
     workspaceModules: [] as WorkspaceModule[],
+    playerAuctionEnabled: false,
   },
 
   onLoad(options: LoadOptions) {
@@ -82,6 +84,7 @@ Page({
         registrationCloseDate: selectedSeason?.registrationClosesAt.slice(0, 10) ?? '',
         leagueLogoText: league.shortName.slice(0, 2),
         profile,
+        playerAuctionEnabled: playerAuctionAccess(loggedIn, Boolean(profile)).enabled,
         entryStatus: entryStatusCopy(loggedIn, Boolean(profile), null),
         seasonRail: selectedSeason ? seasonRailSteps(selectedSeason.status) : [],
         seasonStatusLabel: selectedSeason ? seasonStatusLabel(selectedSeason.status) : '',
@@ -128,6 +131,11 @@ Page({
     wx.navigateTo({
       url: `/pages/season-standings/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(this.data.selectedSeason.id)}&teamName=${encodeURIComponent(teamName)}`,
     })
+  },
+
+  openPlayerAuctions() {
+    if (!this.data.playerAuctionEnabled) return
+    wx.navigateTo({ url: '/pages/player-auctions/index' })
   },
 
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {

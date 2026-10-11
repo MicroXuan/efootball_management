@@ -54,7 +54,7 @@ type BidFeedbackDetails = {
   requiredMinimum?: number
 }
 
-export function bidFeedback(result: PlayerAuctionBidResult | 'AUCTION_EPOCH_CHANGED', details: BidFeedbackDetails = {}) {
+export function bidFeedback(result: PlayerAuctionBidResult | 'AUCTION_EPOCH_CHANGED' | string, details: BidFeedbackDetails = {}) {
   if (result === 'VALID' && details.teamName && details.amount) {
     return `【${details.teamName}】出价有效：⭐${details.amount}⭐，倒计时重置为 30 秒。`
   }
@@ -75,7 +75,7 @@ export function bidFeedback(result: PlayerAuctionBidResult | 'AUCTION_EPOCH_CHAN
   }
   if (result === 'VALID') return '出价已受理，正在刷新。'
   if (result === 'BELOW_STARTING_PRICE' || result === 'BELOW_MINIMUM_INCREMENT') return '出价未达到最低有效价。'
-  return messages[result]
+  return messages[result as keyof typeof messages] ?? '出价未完成，请刷新状态后重试。'
 }
 
 export function minimumPriceShortcuts(minimum: number | null, increment: number): number[] {
@@ -91,4 +91,9 @@ export function projectAuctionQueue(queue: MyPlayerAuctionRoom['queue']) {
 
 export function roomShare(room: MyPlayerAuctionRoom) {
   return { title: `${room.name} · ${room.league.name}`, path: room.sharePath }
+}
+
+export function auctionRoomEntry(batchId: string, authenticated: boolean) {
+  const roomPath = `/pages/auction-room/index?batchId=${encodeURIComponent(batchId)}`
+  return authenticated ? roomPath : `/pages/login/index?redirect=${encodeURIComponent(roomPath)}`
 }

@@ -74,6 +74,11 @@ export function standingsAccess(entry: SeasonEntryResponse | null): {
   return { enabled: false, label: '报名后开放', hint: '仅当前赛季正式参赛球队可查看' }
 }
 
+export function playerAuctionAccess(loggedIn: boolean, hasLeagueTeam: boolean) {
+  const enabled = loggedIn && hasLeagueTeam
+  return { enabled, route: enabled ? '/pages/player-auctions/index' : null }
+}
+
 export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
   const rank = workspace.currentRank
     ? `${workspace.currentRank.rank}${workspace.currentRank.tiePending ? '*' : ''}`

@@ -137,6 +137,15 @@ describe('league detail view model', () => {
     expect(routeFor?.('valuations', workspace)).toBeNull()
   })
 
+  it('shows the player auction entry only to a logged-in league team owner', () => {
+    const access = (detailViewModel as unknown as {
+      playerAuctionAccess?: (loggedIn: boolean, hasLeagueTeam: boolean) => { enabled: boolean; route: string | null }
+    }).playerAuctionAccess
+    expect(access?.(true, true)).toEqual({ enabled: true, route: '/pages/player-auctions/index' })
+    expect(access?.(true, false)).toEqual({ enabled: false, route: null })
+    expect(access?.(false, false)).toEqual({ enabled: false, route: null })
+  })
+
   it.each([
     ['DRAFT', ['current', 'upcoming', 'upcoming', 'upcoming']],
     ['REGISTRATION_OPEN', ['current', 'upcoming', 'upcoming', 'upcoming']],

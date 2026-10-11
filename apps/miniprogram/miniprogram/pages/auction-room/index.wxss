@@ -1,0 +1,19 @@
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { min-height:100vh;box-sizing:border-box;padding:calc(env(safe-area-inset-top) + 24rpx) 28rpx 100rpx;background:radial-gradient(circle at 86% 2%,rgba(182,241,58,.1),transparent 30%),#0e1417; }
+.room-head,.identity-card,.lot-hero,.bid-card,.history-card,.queue-card,.state-card { margin-top:20rpx;padding:28rpx;border:2rpx solid #344047;border-radius:24rpx;background:#151d21; }
+.room-head { margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:20rpx; }
+.room-kicker,.identity-label,.lot-order,.state-kicker { display:block;color:#aab5ba;font-size:18rpx;font-weight:750;letter-spacing:3rpx; }
+.room-title,.state-title { display:block;margin-top:9rpx;font-size:34rpx;font-weight:900; }
+.share-button { min-width:150rpx;min-height:76rpx;margin:0;border:2rpx solid #546b37;border-radius:16rpx;background:#202c25;color:#d9efac;font-size:20rpx;font-weight:800; }
+.identity-name { display:block;margin-top:12rpx;font-size:30rpx;font-weight:900; }.identity-note,.state-copy { display:block;margin-top:10rpx;color:#aab5ba;font-size:19rpx;line-height:1.5; }
+.lot-hero { overflow:hidden;background:linear-gradient(145deg,rgba(182,241,58,.09),transparent 55%),#151d21;text-align:center; }
+.lot-player { display:block;margin-top:14rpx;font-size:48rpx;font-weight:900;letter-spacing:-1rpx; }
+.countdown { margin:28rpx auto 20rpx; }.countdown-value { color:#b6f13a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:128rpx;font-weight:900;font-variant-numeric:tabular-nums;line-height:1; }.countdown-unit { margin-left:8rpx;color:#aab5ba;font-size:22rpx; }
+.price-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14rpx;margin-top:24rpx; }.price-grid view { padding:20rpx;border:2rpx solid #2d393f;border-radius:16rpx;background:#1c262b; }.price-grid text { display:block;color:#aab5ba;font-size:18rpx; }.price-grid .price-value { margin-top:8rpx;color:#f4f7f8;font-size:27rpx;font-weight:850; }
+.section-title { display:block;font-size:28rpx;font-weight:900; }.amount-input { height:88rpx;box-sizing:border-box;margin-top:20rpx;padding:0 22rpx;border:2rpx solid #344047;border-radius:16rpx;background:#1c262b;color:#f4f7f8;font-size:32rpx;font-weight:850; }
+.shortcut-row { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx;margin-top:14rpx; }.shortcut-row button { min-width:0;min-height:76rpx;margin:0;padding:0 8rpx;border:2rpx solid #344047;border-radius:16rpx;background:#1c262b;color:#f4f7f8;font-size:19rpx; }
+.bid-button { min-height:88rpx;margin-top:18rpx;border-radius:16rpx;background:#b6f13a;color:#111810;font-size:25rpx;font-weight:900; }.bid-button[disabled] { background:#273238;color:#7e8b91; }
+.bid-feedback { display:block;margin-top:16rpx;color:#d9efac;font-size:21rpx;line-height:1.55; }
+.bid-row,.queue-row { display:flex;align-items:center;justify-content:space-between;gap:18rpx;min-height:72rpx;margin-top:12rpx;padding:0 18rpx;border:2rpx solid #2d393f;border-radius:16rpx;background:#1c262b;font-size:20rpx; }.bid-price { color:#b6f13a;font-weight:850; }
+.empty-copy { display:block;margin-top:18rpx;color:#aab5ba;font-size:20rpx; }.reconnect-notice { margin-bottom:18rpx;padding:18rpx 22rpx;border:2rpx solid #755d30;border-radius:16rpx;background:#292317; }.reconnect-notice text { display:block;color:#f1d39c;font-size:19rpx; }.reconnect-notice text + text { margin-top:6rpx;color:#aab5ba;font-size:17rpx; }
+.outline-button { min-height:80rpx;margin:24rpx 0 0;border:2rpx solid #344047;border-radius:16rpx;background:#1c262b;color:#f4f7f8;font-size:22rpx; }

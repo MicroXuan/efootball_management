@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MyPlayerAuctionRoom, PlayerAuctionBidResult } from '@efm/contracts'
 import {
   applyRoomSnapshot,
+  auctionRoomEntry,
   bidFeedback,
   countdownCue,
   countdownSeconds,
@@ -90,6 +91,11 @@ describe('auction room view model', () => {
   it('builds minimum-price shortcuts and native share metadata', () => {
     expect(minimumPriceShortcuts(120, 10)).toEqual([120, 130, 140])
     expect(roomShare(room())).toEqual({ title: '十月拍卖 · CELL 联赛', path: '/pages/auction-room/index?batchId=22222222-2222-4222-8222-222222222222' })
+  })
+
+  it('preserves the batch id through direct room and unauthenticated login routes', () => {
+    expect(auctionRoomEntry('batch / 1', true)).toBe('/pages/auction-room/index?batchId=batch%20%2F%201')
+    expect(auctionRoomEntry('batch / 1', false)).toBe('/pages/login/index?redirect=%2Fpages%2Fauction-room%2Findex%3FbatchId%3Dbatch%2520%252F%25201')
   })
 
   it('separates upcoming lots from closed results', () => {

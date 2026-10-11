@@ -5,6 +5,12 @@ Page({
   data: {
     loading: false,
     errorMessage: '',
+    redirect: '',
+  },
+
+  onLoad(options: { redirect?: string }) {
+    const redirect = options.redirect ? decodeURIComponent(options.redirect) : ''
+    this.setData({ redirect: redirect.startsWith('/pages/') ? redirect : '' })
   },
 
   async login() {
@@ -12,7 +18,8 @@ Page({
     this.setData({ loading: true, errorMessage: '' })
     try {
       await auth.login()
-      wx.switchTab({ url: '/pages/profile/index' })
+      if (this.data.redirect) wx.redirectTo({ url: this.data.redirect })
+      else wx.switchTab({ url: '/pages/profile/index' })
     } catch (error) {
       const message = error instanceof ApiError
         ? error.message

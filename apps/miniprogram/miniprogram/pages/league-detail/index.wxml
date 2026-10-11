@@ -121,5 +121,9 @@
       <text class="state-title">暂无公开赛季</text>
       <text class="state-copy">等待联赛管理员发布新赛季。</text>
     </view>
+    <view wx:if="{{playerAuctionEnabled}}" class="auction-entry" bindtap="openPlayerAuctions" role="button">
+      <view><text class="section-kicker">实时交易</text><text class="auction-entry__title">球员拍卖</text><text class="auction-entry__hint">查看当前批次并进入小程序拍卖大厅</text></view>
+      <text class="auction-entry__arrow">→</text>
+    </view>
   </block>
 </view>
