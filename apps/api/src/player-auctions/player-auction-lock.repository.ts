@@ -3,6 +3,10 @@ import type { Prisma } from '../generated/prisma/client.js';
 
 @Injectable()
 export class PlayerAuctionLockRepository {
+  lockLeague(tx: Prisma.TransactionClient, leagueId: string) {
+    return tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
+  }
+
   lockGroup(tx: Prisma.TransactionClient, groupBindingId: string) {
     return tx.$queryRaw`SELECT id FROM wechat_group_bindings WHERE id = ${groupBindingId} FOR UPDATE`;
   }
