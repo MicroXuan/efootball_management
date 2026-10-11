@@ -34,7 +34,8 @@ describe('PlayerAuctionBidService', () => {
         update: jest.fn(async ({ data }: any) => {
           if (data.deadlineAt) deadlineUpdates += 1;
           const epochIncrement = data.deadlineEpoch?.increment ?? 0;
-          const { deadlineEpoch: _deadlineEpoch, ...plainData } = data;
+          const plainData = { ...data };
+          delete plainData.deadlineEpoch;
           Object.assign(lot, plainData);
           lot.deadlineEpoch += epochIncrement;
           return lot;
