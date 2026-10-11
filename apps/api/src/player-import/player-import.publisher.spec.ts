@@ -70,6 +70,7 @@ describe('PlayerImportPublisher', () => {
   beforeEach(async () => {
     userAuthorizationCalls.length = 0;
     platformAuthorizationCalls.length = 0;
+    sourceId = '';
     sourceCode = `publisher-${randomUUID()}`;
     const source = await prisma.dataSource.create({ data: { code: sourceCode, name: 'Publisher test' } });
     sourceId = source.id;
@@ -77,6 +78,7 @@ describe('PlayerImportPublisher', () => {
 
   afterEach(async () => {
     await prisma.auditLog.deleteMany({ where: { actorAdminId: adminId } });
+    if (!sourceId) return;
     const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
     const cardIds = cards.map(({ id }) => id);
     const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
