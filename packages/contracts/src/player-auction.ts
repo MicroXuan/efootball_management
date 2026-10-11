@@ -133,6 +133,58 @@ export const PlaceMiniprogramAuctionBidRequestSchema = z.object({
   deadlineEpoch: z.number().int().min(0)
 });
 
+export const MyPlayerAuctionListQuerySchema = z.object({
+  status: z.enum(['active', 'all']).default('active')
+});
+
+export const MyPlayerAuctionListItemSchema = z.object({
+  batchId: ResourceIdSchema,
+  league: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(64) }),
+  team: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(128) }),
+  name: z.string().trim().min(1).max(128),
+  status: PlayerAuctionBatchStatusSchema,
+  currentLotId: ResourceIdSchema.nullable(),
+  currentPlayerName: z.string().trim().min(1).max(128).nullable(),
+  deadlineAt: NullableTimestampSchema,
+  sharePath: z.string().startsWith('/pages/auction-room/index?batchId=')
+});
+
+export const MyPlayerAuctionPublicBidSchema = z.object({
+  id: ResourceIdSchema,
+  teamName: z.string().trim().min(1).max(128),
+  amount: PositiveMoneySchema,
+  submittedAt: TimestampSchema
+});
+
+export const MyPlayerAuctionLotSummarySchema = z.object({
+  id: ResourceIdSchema,
+  displayOrder: z.number().int().positive(),
+  playerName: z.string().trim().min(1).max(128),
+  playerSnapshot: z.record(z.string(), z.unknown()),
+  startingPrice: PositiveMoneySchema,
+  minimumIncrement: PositiveMoneySchema,
+  status: PlayerAuctionLotStatusSchema,
+  currentPrice: PositiveMoneySchema.nullable(),
+  deadlineAt: NullableTimestampSchema,
+  deadlineEpoch: z.number().int().min(0),
+  bids: z.array(MyPlayerAuctionPublicBidSchema)
+});
+
+export const MyPlayerAuctionRoomSchema = z.object({
+  batchId: ResourceIdSchema,
+  name: z.string().trim().min(1).max(128),
+  status: PlayerAuctionBatchStatusSchema,
+  bidChannel: z.literal('MINIPROGRAM'),
+  serverNow: TimestampSchema,
+  league: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(64) }),
+  team: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(128) }),
+  canBid: z.boolean(),
+  minimumValidPrice: PositiveMoneySchema.nullable(),
+  currentLot: MyPlayerAuctionLotSummarySchema.nullable(),
+  queue: z.array(MyPlayerAuctionLotSummarySchema.omit({ bids: true })),
+  sharePath: z.string().startsWith('/pages/auction-room/index?batchId=')
+});
+
 export const PlayerAuctionReviewSchema = z.object({
   id: ResourceIdSchema,
   decision: PlayerAuctionReviewDecisionSchema,
@@ -216,6 +268,9 @@ export type PlayerAuctionLotStatus = z.infer<typeof PlayerAuctionLotStatusSchema
 export type PlayerAuctionBidResult = z.infer<typeof PlayerAuctionBidResultSchema>;
 export type PlayerAuctionBidChannel = z.infer<typeof PlayerAuctionBidChannelSchema>;
 export type PlaceMiniprogramAuctionBidRequest = z.infer<typeof PlaceMiniprogramAuctionBidRequestSchema>;
+export type MyPlayerAuctionListQuery = z.infer<typeof MyPlayerAuctionListQuerySchema>;
+export type MyPlayerAuctionListItem = z.infer<typeof MyPlayerAuctionListItemSchema>;
+export type MyPlayerAuctionRoom = z.infer<typeof MyPlayerAuctionRoomSchema>;
 export type CreatePlayerAuctionBatchRequest = z.infer<typeof CreatePlayerAuctionBatchRequestSchema>;
 export type UpdatePlayerAuctionBatchRequest = z.infer<typeof UpdatePlayerAuctionBatchRequestSchema>;
 export type ReplacePlayerAuctionLotsRequest = z.infer<typeof ReplacePlayerAuctionLotsRequestSchema>;

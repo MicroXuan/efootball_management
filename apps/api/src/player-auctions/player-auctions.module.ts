@@ -15,13 +15,16 @@ import { PLAYER_AUCTION_RECOVERY_HOOK } from './player-auction-recovery.hook.js'
 import { PlayerAuctionCommandHandler } from './player-auction-command.handler.js';
 import { PLAYER_AUCTION_COMMAND_HANDLER } from './player-auction-command.hook.js';
 import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
+import { MyPlayerAuctionsController } from './my-player-auctions.controller.js';
+import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
 
 @Global()
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, WechatBotModule],
-  controllers: [AdminPlayerAuctionsController],
+  controllers: [AdminPlayerAuctionsController, MyPlayerAuctionsController],
   providers: [
     AdminPlayerAuctionsService,
+    MyPlayerAuctionsService,
     PlayerAuctionBidService,
     PlayerAuctionCommandHandler,
     PlayerAuctionClock,

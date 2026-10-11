@@ -109,6 +109,7 @@ import {
 import {
   CreatePlayerAuctionBatchRequestSchema,
   PlaceMiniprogramAuctionBidRequestSchema,
+  MyPlayerAuctionRoomSchema,
   PlayerAuctionBatchDetailSchema,
   PlayerAuctionBidChannelSchema,
   PlayerAuctionBatchStatusSchema,
@@ -2471,5 +2472,35 @@ describe('player auction contracts', () => {
     });
     assert.equal(detail.lots[0]?.bids[0]?.source, 'MINIPROGRAM');
     assert.equal(detail.lots[0]?.bids[0]?.wechatSentAt, null);
+  });
+
+  it('parses a participant room without transport-specific bid fields', () => {
+    const room = MyPlayerAuctionRoomSchema.parse({
+      batchId,
+      name: '应用内拍卖',
+      status: 'ACTIVE',
+      bidChannel: 'MINIPROGRAM',
+      serverNow: now,
+      league: { id: leagueId, name: '九星联赛' },
+      team: { id: teamId, name: '上海申花' },
+      canBid: true,
+      minimumValidPrice: 130,
+      currentLot: {
+        id: lotId,
+        displayOrder: 1,
+        playerName: '车范根',
+        playerSnapshot: { position: 'CF' },
+        startingPrice: 50,
+        minimumIncrement: 10,
+        status: 'ACTIVE',
+        currentPrice: 120,
+        deadlineAt: now,
+        deadlineEpoch: 4,
+        bids: [{ id: bidId, teamName: '上海申花', amount: 120, submittedAt: now }]
+      },
+      queue: [],
+      sharePath: `/pages/auction-room/index?batchId=${batchId}`
+    });
+    assert.equal(room.currentLot?.bids[0]?.amount, 120);
   });
 });
