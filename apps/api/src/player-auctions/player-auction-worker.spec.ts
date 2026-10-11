@@ -12,14 +12,15 @@ function applyData(target: any, data: Record<string, any>) {
   return target;
 }
 
-function closingHarness({ highestBid = true, includeNext = true } = {}) {
+function closingHarness({ highestBid = true, includeNext = true, bidChannel = 'WECHAT_GROUP' } = {}) {
   const now = new Date('2026-10-09T12:00:30.000Z');
   const current: any = {
     id: 'lot-1', batchId: 'batch-1', displayOrder: 1, playerNameSnapshot: '车范根',
     playerSnapshot: { card: { position: 'CF', overallRating: 96 } }, startingPrice: 50,
     minimumIncrement: 10, currentPrice: highestBid ? 120 : null, status: 'ACTIVE',
     deadlineAt: now, deadlineEpoch: 3, currentHighestBidId: highestBid ? 'bid-1' : null,
-    currentHighestBid: highestBid ? { leagueTeam: { name: '申花' } } : null, version: 1
+    currentHighestBid: highestBid ? { leagueTeam: { name: '申花' } } : null, version: 1,
+    batch: { id: 'batch-1', leagueId: 'league-1' }
   };
   const next: any = {
     id: 'lot-2', batchId: 'batch-1', displayOrder: 2, playerNameSnapshot: '唐伯虎',
@@ -29,7 +30,7 @@ function closingHarness({ highestBid = true, includeNext = true } = {}) {
   };
   const lots = includeNext ? [current, next] : [current];
   const batch: any = {
-    id: 'batch-1', status: 'ACTIVE', currentLotId: 'lot-1', version: 1,
+    id: 'batch-1', bidChannel, leagueId: 'league-1', status: 'ACTIVE', currentLotId: 'lot-1', version: 1,
     groupBinding: { deviceId: 'device-1', wechatGroupId: 'room@chatroom' }
   };
   const messages: any[] = [];
@@ -54,6 +55,7 @@ function closingHarness({ highestBid = true, includeNext = true } = {}) {
     }
   };
   const locks: any = {
+    lockLeague: jest.fn(async () => undefined),
     lockLot: jest.fn(async () => undefined),
     lockBatch: jest.fn(async () => undefined),
     now: jest.fn(async () => now)
@@ -76,7 +78,7 @@ describe('PlayerAuctionWorker', () => {
     const lot: any = {
       id: 'lot-1', status: 'ACTIVE', deadlineAt: new Date('2026-10-09T12:00:30.000Z'),
       deadlineEpoch: 2, lastCountdownMark: 30,
-      batch: { groupBinding: { deviceId: 'device-1', wechatGroupId: 'room@chatroom' } }
+      batch: { bidChannel: 'WECHAT_GROUP', groupBinding: { deviceId: 'device-1', wechatGroupId: 'room@chatroom' } }
     };
     const prisma: any = {
       playerAuctionLot: {
@@ -150,5 +152,13 @@ describe('PlayerAuctionWorker', () => {
     expect(messages[0].businessKey).toBe('auction:lot-1:epoch:3:closed');
     expect(messages[1].businessKey).toBe('auction:batch-1:completed');
     expect(messages[0].priority).toBeGreaterThan(messages[1].priority);
+  });
+
+  it('advances a miniprogram auction even when no group notification is written', async () => {
+    const { worker, current, next, messages } = closingHarness({ bidChannel: 'MINIPROGRAM' });
+    await expect(worker.closeDueLot('lot-1', 3)).resolves.toBe(true);
+    expect(current.status).toBe('PENDING_REVIEW');
+    expect(next.status).toBe('ACTIVE');
+    expect(messages).toHaveLength(0);
   });
 });
