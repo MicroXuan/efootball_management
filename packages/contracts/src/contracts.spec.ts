@@ -108,7 +108,9 @@ import {
 } from './index.js';
 import {
   CreatePlayerAuctionBatchRequestSchema,
+  PlaceMiniprogramAuctionBidRequestSchema,
   PlayerAuctionBatchDetailSchema,
+  PlayerAuctionBidChannelSchema,
   PlayerAuctionBatchStatusSchema,
   PlayerAuctionBidResultSchema,
   PlayerAuctionLotStatusSchema,
@@ -2263,6 +2265,36 @@ describe('player auction contracts', () => {
   const bidId = '77777777-7777-4777-8777-777777777777';
   const now = '2026-10-09T12:00:00.000Z';
 
+  it('parses channel-aware auction batches', () => {
+    assert.equal(PlayerAuctionBidChannelSchema.parse('WECHAT_GROUP'), 'WECHAT_GROUP');
+    assert.equal(PlayerAuctionBidChannelSchema.parse('MINIPROGRAM'), 'MINIPROGRAM');
+    assert.throws(() => PlayerAuctionBidChannelSchema.parse('BOTH'));
+    assert.equal(CreatePlayerAuctionBatchRequestSchema.parse({
+      groupBindingId,
+      name: '小程序拍卖',
+      bidChannel: 'MINIPROGRAM',
+      expectedVersion: 2
+    }).bidChannel, 'MINIPROGRAM');
+  });
+
+  it('parses miniprogram bid requests', () => {
+    assert.deepEqual(PlaceMiniprogramAuctionBidRequestSchema.parse({
+      amount: 120,
+      lotId,
+      deadlineEpoch: 4
+    }), { amount: 120, lotId, deadlineEpoch: 4 });
+  });
+
+  it('rejects invalid auction money and epochs', () => {
+    for (const input of [
+      { amount: 0, lotId, deadlineEpoch: 4 },
+      { amount: 1.5, lotId, deadlineEpoch: 4 },
+      { amount: 120, lotId: 'not-a-resource-id', deadlineEpoch: 4 },
+      { amount: 120, lotId, deadlineEpoch: -1 },
+      { amount: 120, lotId, deadlineEpoch: 1.5 }
+    ]) assert.throws(() => PlaceMiniprogramAuctionBidRequestSchema.parse(input));
+  });
+
   it('accepts the complete batch, lot, and bid status vocabulary', () => {
     for (const status of ['DRAFT', 'READY', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', 'RECOVERY_REQUIRED']) {
       assert.equal(PlayerAuctionBatchStatusSchema.parse(status), status);
@@ -2332,6 +2364,7 @@ describe('player auction contracts', () => {
       id: batchId,
       leagueId,
       groupBindingId,
+      bidChannel: 'WECHAT_GROUP',
       name: '十月拍卖',
       status: 'ACTIVE',
       currentLotId: lotId,
@@ -2362,12 +2395,14 @@ describe('player auction contracts', () => {
           leagueTeamId: teamId,
           teamName: '上海申花',
           userId: leagueId,
+          source: 'WECHAT_GROUP',
           amount: 120,
           result: 'VALID',
           rejectionReason: null,
           wechatMessageId: 'wechat-1',
           wechatSortKey: '0001',
           wechatSentAt: now,
+          submittedAt: now,
           receivedAt: now
         }],
         review: null,
@@ -2377,7 +2412,64 @@ describe('player auction contracts', () => {
       }]
     });
     assert.equal(detail.lots[0]?.currentPrice, 120);
+    assert.equal(detail.bidChannel, 'WECHAT_GROUP');
     assert.equal(formatAuctionMoney(120), '⭐120⭐');
     assert.equal('currentPriceDisplay' in detail.lots[0]!, false);
+  });
+
+  it('parses channel-neutral bid views', () => {
+    const detail = PlayerAuctionBatchDetailSchema.parse({
+      id: batchId,
+      leagueId,
+      groupBindingId,
+      bidChannel: 'MINIPROGRAM',
+      name: '应用内拍卖',
+      status: 'ACTIVE',
+      currentLotId: lotId,
+      version: 1,
+      startedAt: now,
+      completedAt: null,
+      cancelledAt: null,
+      createdAt: now,
+      updatedAt: now,
+      lots: [{
+        id: lotId,
+        displayOrder: 1,
+        playerId,
+        playerCardId: null,
+        playerName: '车范根',
+        playerSnapshot: {},
+        startingPrice: 50,
+        minimumIncrement: 10,
+        status: 'ACTIVE',
+        currentPrice: 120,
+        currentHighestBidId: bidId,
+        deadlineAt: now,
+        deadlineEpoch: 2,
+        pausedRemainingMs: null,
+        version: 1,
+        bids: [{
+          id: bidId,
+          leagueTeamId: teamId,
+          teamName: '上海申花',
+          userId: leagueId,
+          source: 'MINIPROGRAM',
+          amount: 120,
+          result: 'VALID',
+          rejectionReason: null,
+          wechatMessageId: null,
+          wechatSortKey: null,
+          wechatSentAt: null,
+          submittedAt: now,
+          receivedAt: now
+        }],
+        review: null,
+        startedAt: now,
+        closedAt: null,
+        reviewedAt: null
+      }]
+    });
+    assert.equal(detail.lots[0]?.bids[0]?.source, 'MINIPROGRAM');
+    assert.equal(detail.lots[0]?.bids[0]?.wechatSentAt, null);
   });
 });

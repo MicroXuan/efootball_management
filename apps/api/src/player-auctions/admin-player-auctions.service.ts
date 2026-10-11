@@ -33,7 +33,7 @@ const DETAIL_INCLUDE = {
 
 type AuctionClient = Prisma.TransactionClient | PrismaService;
 type BatchRecord = Prisma.PlayerAuctionBatchGetPayload<{ include: typeof DETAIL_INCLUDE }>;
-type BatchSummaryInput = Pick<BatchRecord, 'id' | 'leagueId' | 'groupBindingId' | 'name' | 'status' | 'currentLotId' | 'version' | 'createdAt' | 'updatedAt' | 'groupBinding'> & {
+type BatchSummaryInput = Pick<BatchRecord, 'id' | 'leagueId' | 'groupBindingId' | 'bidChannel' | 'name' | 'status' | 'currentLotId' | 'version' | 'createdAt' | 'updatedAt' | 'groupBinding'> & {
   _count?: { lots: number };
   lots?: BatchRecord['lots'];
 };
@@ -78,12 +78,18 @@ export class AdminPlayerAuctionsService {
       if (!group) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
       if (group.version !== input.expectedVersion) throw auctionVersionConflict();
       const created = await tx.playerAuctionBatch.create({
-        data: { leagueId, groupBindingId: group.id, name: input.name, createdByAdminId: actorAdminId }
+        data: {
+          leagueId,
+          groupBindingId: group.id,
+          bidChannel: input.bidChannel,
+          name: input.name,
+          createdByAdminId: actorAdminId
+        }
       });
       await this.audit.record(tx, {
         actorAdminId, leagueId, action: 'admin.player-auction.create',
         resourceType: 'PlayerAuctionBatch', resourceId: created.id,
-        metadata: { groupBindingId: group.id, name: input.name }
+        metadata: { groupBindingId: group.id, bidChannel: input.bidChannel, name: input.name }
       });
       return this.view(await this.batch(tx, leagueId, created.id));
     }, input);
@@ -303,7 +309,8 @@ export class AdminPlayerAuctionsService {
   private summary(batch: BatchSummaryInput) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
-      groupDisplayName: batch.groupBinding.displayName, name: batch.name, status: batch.status,
+      bidChannel: batch.bidChannel, groupDisplayName: batch.groupBinding.displayName,
+      name: batch.name, status: batch.status,
       lotCount: batch._count?.lots ?? batch.lots?.length ?? 0, currentLotId: batch.currentLotId,
       version: batch.version, createdAt: batch.createdAt.toISOString(), updatedAt: batch.updatedAt.toISOString()
     };
@@ -312,7 +319,8 @@ export class AdminPlayerAuctionsService {
   private view(batch: BatchRecord) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
-      name: batch.name, status: batch.status, currentLotId: batch.currentLotId, version: batch.version,
+      bidChannel: batch.bidChannel, name: batch.name, status: batch.status,
+      currentLotId: batch.currentLotId, version: batch.version,
       startedAt: batch.startedAt?.toISOString() ?? null, completedAt: batch.completedAt?.toISOString() ?? null,
       cancelledAt: batch.cancelledAt?.toISOString() ?? null, createdAt: batch.createdAt.toISOString(),
       updatedAt: batch.updatedAt.toISOString(), lots: batch.lots.map((lot) => this.lotView(lot))
@@ -329,9 +337,11 @@ export class AdminPlayerAuctionsService {
       deadlineEpoch: lot.deadlineEpoch, pausedRemainingMs: lot.pausedRemainingMs, version: lot.version,
       bids: lot.bids.map((bid) => ({
         id: bid.id, leagueTeamId: bid.leagueTeamId, teamName: bid.leagueTeam?.name ?? null,
-        userId: bid.userId, amount: bid.amount, result: bid.result, rejectionReason: bid.rejectionReason,
+        userId: bid.userId, source: bid.source, amount: bid.amount,
+        result: bid.result, rejectionReason: bid.rejectionReason,
         wechatMessageId: bid.wechatMessageId, wechatSortKey: bid.wechatSortKey,
-        wechatSentAt: bid.wechatSentAt.toISOString(), receivedAt: bid.receivedAt.toISOString()
+        wechatSentAt: bid.wechatSentAt?.toISOString() ?? null,
+        submittedAt: bid.submittedAt.toISOString(), receivedAt: bid.receivedAt.toISOString()
       })),
       review: lot.review ? this.reviewView(lot.review) : null,
       startedAt: lot.startedAt?.toISOString() ?? null, closedAt: lot.closedAt?.toISOString() ?? null,

@@ -442,6 +442,11 @@ enum PlayerAuctionReviewDecision {
   VOID
 }
 
+enum PlayerAuctionBidChannel {
+  WECHAT_GROUP
+  MINIPROGRAM
+}
+
 model User {
   id                               String                                 @id @default(uuid()) @db.Char(36)
   wechatOpenId                     String                                 @unique @map("wechat_open_id") @db.VarChar(128)
@@ -2463,6 +2468,7 @@ model PlayerAuctionBatch {
   id                    String                   @id @default(uuid()) @db.Char(36)
   leagueId              String                   @map("league_id") @db.Char(36)
   groupBindingId        String                   @map("group_binding_id") @db.Char(36)
+  bidChannel            PlayerAuctionBidChannel  @default(WECHAT_GROUP) @map("bid_channel")
   name                  String                   @db.VarChar(128)
   status                PlayerAuctionBatchStatus @default(DRAFT)
   currentLotId          String?                  @unique @map("current_lot_id") @db.Char(36)
@@ -2529,27 +2535,32 @@ model PlayerAuctionLot {
 model PlayerAuctionBid {
   id                String                   @id @default(uuid()) @db.Char(36)
   lotId             String                   @map("lot_id") @db.Char(36)
-  inboundMessageId  String                   @unique @map("inbound_message_id") @db.Char(36)
+  inboundMessageId  String?                  @unique @map("inbound_message_id") @db.Char(36)
   leagueTeamId      String?                  @map("league_team_id") @db.Char(36)
   userId            String?                  @map("user_id") @db.Char(36)
   identityBindingId String?                  @map("identity_binding_id") @db.Char(36)
+  source            PlayerAuctionBidChannel  @default(WECHAT_GROUP)
+  idempotencyKey    String?                  @map("idempotency_key") @db.VarChar(128)
   amount            Int                      @db.UnsignedInt
   result            PlayerAuctionBidResult
   rejectionReason   String?                  @map("rejection_reason") @db.VarChar(512)
-  wechatMessageId   String                   @map("wechat_message_id") @db.VarChar(256)
-  wechatSortKey     String                   @map("wechat_sort_key") @db.VarChar(128)
-  wechatSentAt      DateTime                 @map("wechat_sent_at")
+  wechatMessageId   String?                  @map("wechat_message_id") @db.VarChar(256)
+  wechatSortKey     String?                  @map("wechat_sort_key") @db.VarChar(128)
+  wechatSentAt      DateTime?                @map("wechat_sent_at")
+  submittedAt       DateTime                 @map("submitted_at")
   receivedAt        DateTime                 @map("received_at")
   becameHighestAt   DateTime?                @map("became_highest_at")
   createdAt         DateTime                 @default(now()) @map("created_at")
   lot               PlayerAuctionLot         @relation("PlayerAuctionLotBids", fields: [lotId], references: [id], onDelete: Restrict)
   highestForLot     PlayerAuctionLot?         @relation("PlayerAuctionLotHighestBid")
-  inboundMessage    WechatInboundMessage     @relation(fields: [inboundMessageId], references: [id], onDelete: Restrict)
+  inboundMessage    WechatInboundMessage?    @relation(fields: [inboundMessageId], references: [id], onDelete: Restrict)
   leagueTeam        LeagueTeam?              @relation("PlayerAuctionBidTeam", fields: [leagueTeamId], references: [id], onDelete: Restrict)
   user              User?                    @relation("PlayerAuctionBidUser", fields: [userId], references: [id], onDelete: Restrict)
   identityBinding   WechatIdentityBinding?   @relation(fields: [identityBindingId], references: [id], onDelete: Restrict)
 
   @@index([lotId, wechatSentAt, wechatSortKey, wechatMessageId], map: "player_auction_bids_order_idx")
+  @@unique([lotId, userId, idempotencyKey], map: "player_auction_bids_user_idempotency_unique")
+  @@index([lotId, submittedAt, id], map: "player_auction_bids_submitted_order_idx")
   @@index([leagueTeamId, createdAt], map: "player_auction_bids_team_idx")
   @@index([identityBindingId], map: "player_auction_bids_identity_idx")
   @@map("player_auction_bids")

@@ -70,7 +70,8 @@ export class PlayerAuctionBidService {
           amount: Number.isSafeInteger(amount) && amount > 0 ? Math.min(amount, MAX_AMOUNT) : 1,
           result, rejectionReason, wechatMessageId: inbound.messageId,
           wechatSortKey: inbound.sequence ?? inbound.messageId, wechatSentAt: inbound.wechatSentAt,
-          receivedAt: inbound.receivedAt, becameHighestAt: result === 'VALID' ? now : null
+          submittedAt: inbound.wechatSentAt, receivedAt: inbound.receivedAt,
+          becameHighestAt: result === 'VALID' ? now : null
         }
       });
       const monetaryResults: PlayerAuctionBidResult[] = ['VALID', 'BELOW_STARTING_PRICE', 'BELOW_MINIMUM_INCREMENT'];

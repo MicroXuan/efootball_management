@@ -7,7 +7,7 @@ const now = new Date('2026-10-09T12:00:00.000Z');
 function harness() {
   const batch: any = {
     id: 'batch-1', leagueId: 'league-1', groupBindingId: 'group-1', name: '秋季拍卖',
-    status: 'DRAFT', currentLotId: null, version: 1, startedAt: null, completedAt: null,
+    bidChannel: 'WECHAT_GROUP', status: 'DRAFT', currentLotId: null, version: 1, startedAt: null, completedAt: null,
     cancelledAt: null, createdAt: now, updatedAt: now, groupBinding: { displayName: 'CELL 联赛群' },
     lots: []
   };
@@ -45,7 +45,7 @@ describe('AdminPlayerAuctionsService', () => {
     const { service, tx } = harness();
     tx.wechatGroupBinding.findFirst.mockResolvedValueOnce(null);
     await expect(service.create('admin-1', 'league-1', {
-      groupBindingId: 'other-group', name: '拍卖', expectedVersion: 0
+      groupBindingId: 'other-group', name: '拍卖', bidChannel: 'WECHAT_GROUP', expectedVersion: 0
     }, 'create-1')).rejects.toMatchObject({ code: 'AUCTION_GROUP_INVALID' });
   });
 
@@ -62,7 +62,7 @@ describe('AdminPlayerAuctionsService', () => {
     );
 
     await expect(service.create('admin-1', 'league-1', {
-      groupBindingId: 'group-1', name: '拍卖', expectedVersion: 1
+      groupBindingId: 'group-1', name: '拍卖', bidChannel: 'WECHAT_GROUP', expectedVersion: 1
     }, 'create-query-only')).rejects.toMatchObject({ code: 'AUCTION_GROUP_INVALID' });
     expect(tx.wechatGroupBinding.findFirst).toHaveBeenCalledWith({
       where: {
