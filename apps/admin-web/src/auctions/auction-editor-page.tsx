@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Input, InputNumber, Select, Spin } from 'antd';
+import { Alert, Button, Card, Empty, Input, InputNumber, Radio, Select, Spin } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -7,6 +7,7 @@ import {
   RosterPlayerCandidateListResponseSchema,
   type AdminWechatGroupBinding,
   type PlayerAuctionBatchDetail,
+  type PlayerAuctionBidChannel,
   type RosterPlayerCandidate
 } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
@@ -21,6 +22,7 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
   const [batch, setBatch] = useState<PlayerAuctionBatchDetail | null>(null);
   const [name, setName] = useState('球员拍卖');
   const [groupBindingId, setGroupBindingId] = useState<string>();
+  const [bidChannel, setBidChannel] = useState<PlayerAuctionBidChannel>('WECHAT_GROUP');
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<RosterPlayerCandidate[]>([]);
   const [lots, setLots] = useState<DraftLot[]>([]);
@@ -40,7 +42,7 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
       setGroups(eligibleGroups);
       setGroupBindingId(existing?.groupBindingId ?? eligibleGroups[0]?.id);
       if (existing) {
-        setBatch(existing); setName(existing.name);
+        setBatch(existing); setName(existing.name); setBidChannel(existing.bidChannel);
         setLots(existing.lots.map((lot) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId ?? '', playerName: lot.playerName, cardName: String((lot.playerSnapshot.card as { cardName?: string } | null)?.cardName ?? '默认卡'), startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement }))
       ); }
     }).catch(() => setError('拍卖草稿加载失败，请返回列表重试'));
@@ -75,11 +77,11 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
     try {
       const group = groups?.find((item) => item.id === groupBindingId);
       let current = batch;
-      if (!current) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions`, { method: 'POST', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { groupBindingId, name: name.trim(), expectedVersion: group?.version ?? 1 } });
-      else if (current.name !== name.trim()) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}`, { method: 'PATCH', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { name: name.trim(), expectedVersion: current.version } });
+      if (!current) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions`, { method: 'POST', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { groupBindingId, name: name.trim(), bidChannel, expectedVersion: group?.version ?? 1 } });
+      else if (current.name !== name.trim() || current.bidChannel !== bidChannel) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}`, { method: 'PATCH', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { name: name.trim(), bidChannel, expectedVersion: current.version } });
       current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}/lots`, { method: 'PUT', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { expectedVersion: current.version, lots: lots.map((lot, index) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId, displayOrder: index + 1, startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement })) } });
       if (prepare) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}/prepare`, { method: 'POST', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { expectedVersion: current.version } });
-      setBatch(current); setDirty(false); setNotice(prepare ? '拍卖已准备完成，可在微信群发送“开始拍卖”。' : '草稿已保存。');
+      setBatch(current); setDirty(false); setNotice(prepare ? '拍卖已准备完成，可在详情页开始。' : '草稿已保存。');
       if (prepare) navigate(`/leagues/${leagueId}/auctions/${current.id}`);
     } catch (caught) {
       setError(caught instanceof ApiError && caught.code === 'VERSION_CONFLICT' ? '草稿已被其他管理员更新，请刷新后重新确认' : '草稿保存失败，表单内容已保留');
@@ -91,7 +93,7 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
     <header className="auction-page__header"><div><span className="section-kicker">拍卖编排台</span><h2>{batch ? '编辑拍卖草稿' : '创建拍卖批次'}</h2><p>顺序就是群内的拍卖顺序；上下移动按钮可完全用键盘操作。</p></div></header>
     {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}{notice ? <Alert role="status" type="success" showIcon title={notice} /> : null}
     {duplicateNames.length ? <Alert type="warning" showIcon title={`重复球员：${[...new Set(duplicateNames)].join('、')}`} description="允许保存，但请确认是否确实需要重复拍卖。" /> : null}
-    <div className="auction-editor__grid"><Card className="form-card" title="批次与微信群"><label>批次名称<Input value={name} onChange={(event) => { setName(event.target.value); setDirty(true); }} /></label>{groups?.length ? <label>绑定微信群<Select value={groupBindingId} disabled={Boolean(batch)} onChange={(value) => { setGroupBindingId(value); setDirty(true); }} options={groups.map((group) => ({ value: group.id, label: group.displayName }))} /></label> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span>暂无已启用球员拍卖的微信群，<Link to={`/leagues/${leagueId}/wechat-bot`}>前往微信群机器人配置</Link></span>} />}</Card>
+    <div className="auction-editor__grid"><Card className="form-card" title="批次、渠道与微信群"><label>批次名称<Input value={name} onChange={(event) => { setName(event.target.value); setDirty(true); }} /></label><label>出价渠道<Radio.Group value={bidChannel} disabled={Boolean(batch && batch.status !== 'DRAFT')} onChange={(event) => { setBidChannel(event.target.value as PlayerAuctionBidChannel); setDirty(true); }}><Radio.Button value="WECHAT_GROUP">微信群纯数字出价</Radio.Button><Radio.Button value="MINIPROGRAM">小程序拍卖大厅</Radio.Button></Radio.Group><small>{bidChannel === 'WECHAT_GROUP' ? '球队在绑定群发送纯数字，机器人确认并重置倒计时。' : '球队从小程序卡片进入拍卖大厅，Bridge 离线也不影响出价。'}</small></label>{groups?.length ? <label>通知微信群<Select value={groupBindingId} disabled={Boolean(batch)} onChange={(value) => { setGroupBindingId(value); setDirty(true); }} options={groups.map((group) => ({ value: group.id, label: group.displayName }))} /></label> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span>暂无已启用球员拍卖的微信群，<Link to={`/leagues/${leagueId}/wechat-bot`}>前往微信群机器人配置</Link></span>} />}</Card>
       <Card className="form-card" title="搜索并添加球员"><div className="auction-player-search"><Input aria-label="搜索球员" value={keyword} onChange={(event) => setKeyword(event.target.value)} onPressEnter={() => void search()} placeholder="中文名、英文名或卡名" /><Button aria-label="搜索" loading={busy} onClick={() => void search()}>搜索</Button></div>{results.length ? results.map((player) => <div className="auction-search-result" key={player.playerId}><strong>{player.playerName}</strong><span>{player.cards[0]?.cardName}</span><Button aria-label={`添加${player.playerName}`} onClick={() => add(player, player.recommendedPlayerCardId ?? player.cards[0]!.id)}>添加</Button></div>) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="搜索后从具体球员卡添加" />}</Card>
     </div>
     <Card className="auction-lot-card" title={`拍卖顺序 · ${lots.length} 位`}>
