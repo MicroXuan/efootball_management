@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   leagueBannerView,
   leagueCardView,
+  leagueEntryAction,
   leagueListErrorMessage,
   myLeagueCardView,
   selectLeagueCards,
@@ -65,6 +66,16 @@ describe('league list view model', () => {
     const bound = [myLeagueCardView(mine({ leagueId: 'league-2', leagueName: '我的联赛' }))]
     expect(selectLeagueCards('all', all, bound)).toEqual(all)
     expect(selectLeagueCards('mine', all, bound)).toEqual(bound)
+  })
+
+  it('only opens leagues that belong to the current user', () => {
+    const memberships = [
+      myLeagueCardView(mine({ leagueId: 'league-2' })),
+    ]
+
+    expect(leagueEntryAction('league-2', memberships)).toBe('open')
+    expect(leagueEntryAction('league-1', memberships)).toBe('unbound')
+    expect(leagueEntryAction('league-1', [])).toBe('unbound')
   })
 
   it('formats season states and actionable errors', () => {

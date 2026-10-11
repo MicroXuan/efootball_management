@@ -23,7 +23,8 @@ page { background: #0e1417; color: #f4f7f8; }
 .login-panel { margin-top: auto; padding: 32rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; box-shadow: 0 20rpx 54rpx rgba(0,0,0,.26); }
 .panel-line { display: flex; justify-content: space-between; color: #aab5ba; font-size: 22rpx; letter-spacing: 2rpx; }
 .panel-code { color: #7e8b91; }
-.login-button { min-height: 92rpx; margin-top: 34rpx; border: 0; border-radius: 16rpx; background: #b6f13a; color: #111810; font-size: 30rpx; font-weight: 800; letter-spacing: 3rpx; }
+.login-button { min-height: 92rpx; margin-top: 34rpx; padding: 0 32rpx; border: 0; border-radius: 16rpx; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: #b6f13a; color: #111810; font-size: 30rpx; font-weight: 800; letter-spacing: 3rpx; }
+.login-button__label { line-height: 1; }
 .login-button::after { border: 0; }
 .login-button[disabled] { background: #263238; color: #7e8b91; }
 .error-copy { display: block; margin-top: 24rpx; color: #ffaaa5; font-size: 23rpx; line-height: 1.5; }

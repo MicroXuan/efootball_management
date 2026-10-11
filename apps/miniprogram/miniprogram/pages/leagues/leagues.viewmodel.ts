@@ -103,6 +103,13 @@ export function selectLeagueCards(
   return [...(tab === 'mine' ? mine : all)]
 }
 
+export function leagueEntryAction(
+  leagueId: string,
+  memberships: readonly LeagueCardView[],
+): 'open' | 'unbound' {
+  return memberships.some((league) => league.id === leagueId) ? 'open' : 'unbound'
+}
+
 export function leagueListErrorMessage(code: string): string {
   const messages: Record<string, string> = {
     NETWORK_ERROR: '网络连接失败，下拉或点击重试',

@@ -6,6 +6,7 @@ import { session } from '../../services/session'
 import {
   leagueCardView,
   leagueBannerView,
+  leagueEntryAction,
   leagueListErrorMessage,
   myLeagueCardView,
   selectLeagueCards,
@@ -79,6 +80,16 @@ Page({
 
   openLeague(event: LeagueTapEvent) {
     const id = event.currentTarget.dataset.id
-    if (id) wx.navigateTo({ url: `/pages/league-detail/index?id=${encodeURIComponent(id)}` })
+    if (!id) return
+    if (leagueEntryAction(id, this.data.myLeagues) === 'unbound') {
+      void wx.showModal({
+        title: '未绑定联赛',
+        content: '您尚未绑定该联赛，请联系联赛管理员进行绑定',
+        showCancel: false,
+        confirmText: '确定',
+      })
+      return
+    }
+    wx.navigateTo({ url: `/pages/league-detail/index?id=${encodeURIComponent(id)}` })
   },
 })
