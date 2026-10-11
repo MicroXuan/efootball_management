@@ -3,6 +3,7 @@ import {
   CancelPlayerAuctionBatchRequestSchema,
   CreatePlayerAuctionBatchRequestSchema,
   PreparePlayerAuctionBatchRequestSchema,
+  PlayerAuctionTransitionRequestSchema,
   ReplacePlayerAuctionLotsRequestSchema,
   ResourceIdSchema,
   ReviewPlayerAuctionLotRequestSchema,
@@ -10,6 +11,7 @@ import {
   type CancelPlayerAuctionBatchRequest,
   type CreatePlayerAuctionBatchRequest,
   type PreparePlayerAuctionBatchRequest,
+  type PlayerAuctionTransitionRequest,
   type ReplacePlayerAuctionLotsRequest,
   type ReviewPlayerAuctionLotRequest,
   type UpdatePlayerAuctionBatchRequest
@@ -84,6 +86,39 @@ export class AdminPlayerAuctionsController {
     @Headers('idempotency-key') key?: string
   ) {
     return this.service.prepare(admin.id, leagueId, batchId, body, this.key(key));
+  }
+
+  @Post(':batchId/start')
+  start(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('batchId', new ZodValidationPipe(ResourceIdSchema)) batchId: string,
+    @Body(new ZodValidationPipe(PlayerAuctionTransitionRequestSchema)) body: PlayerAuctionTransitionRequest,
+    @Headers('idempotency-key') key?: string
+  ) {
+    return this.service.start(admin.id, leagueId, batchId, body, this.key(key));
+  }
+
+  @Post(':batchId/pause')
+  pause(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('batchId', new ZodValidationPipe(ResourceIdSchema)) batchId: string,
+    @Body(new ZodValidationPipe(PlayerAuctionTransitionRequestSchema)) body: PlayerAuctionTransitionRequest,
+    @Headers('idempotency-key') key?: string
+  ) {
+    return this.service.pause(admin.id, leagueId, batchId, body, this.key(key));
+  }
+
+  @Post(':batchId/resume')
+  resume(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('batchId', new ZodValidationPipe(ResourceIdSchema)) batchId: string,
+    @Body(new ZodValidationPipe(PlayerAuctionTransitionRequestSchema)) body: PlayerAuctionTransitionRequest,
+    @Headers('idempotency-key') key?: string
+  ) {
+    return this.service.resume(admin.id, leagueId, batchId, body, this.key(key));
   }
 
   @Post(':batchId/cancel')

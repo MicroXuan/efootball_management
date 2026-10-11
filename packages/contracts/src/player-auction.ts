@@ -53,6 +53,11 @@ export const CreatePlayerAuctionBatchRequestSchema = z.object({
 
 export const UpdatePlayerAuctionBatchRequestSchema = z.object({
   name: z.string().trim().min(1).max(128),
+  bidChannel: PlayerAuctionBidChannelSchema.optional(),
+  expectedVersion: ExpectedVersionSchema
+});
+
+export const PlayerAuctionTransitionRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema
 });
 
@@ -273,6 +278,7 @@ export type MyPlayerAuctionListItem = z.infer<typeof MyPlayerAuctionListItemSche
 export type MyPlayerAuctionRoom = z.infer<typeof MyPlayerAuctionRoomSchema>;
 export type CreatePlayerAuctionBatchRequest = z.infer<typeof CreatePlayerAuctionBatchRequestSchema>;
 export type UpdatePlayerAuctionBatchRequest = z.infer<typeof UpdatePlayerAuctionBatchRequestSchema>;
+export type PlayerAuctionTransitionRequest = z.infer<typeof PlayerAuctionTransitionRequestSchema>;
 export type ReplacePlayerAuctionLotsRequest = z.infer<typeof ReplacePlayerAuctionLotsRequestSchema>;
 export type PreparePlayerAuctionBatchRequest = z.infer<typeof PreparePlayerAuctionBatchRequestSchema>;
 export type CancelPlayerAuctionBatchRequest = z.infer<typeof CancelPlayerAuctionBatchRequestSchema>;

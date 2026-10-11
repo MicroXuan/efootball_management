@@ -36,8 +36,11 @@ function harness() {
   const receipts: any = { execute: jest.fn(async (_a: string, _o: string, _k: string, work: any) => work(tx)) };
   const authorization: any = { requireLeagueAccess: jest.fn(async () => undefined) };
   const audit: any = { record: jest.fn(async () => undefined) };
-  const service = new AdminPlayerAuctionsService({} as never, authorization, receipts, audit);
-  return { service, tx, batch, audit };
+  const state: any = {
+    startBatch: jest.fn(), pauseBatch: jest.fn(), resumeBatch: jest.fn()
+  };
+  const service = new AdminPlayerAuctionsService({} as never, authorization, receipts, audit, state);
+  return { service, tx, batch, audit, state };
 }
 
 describe('AdminPlayerAuctionsService', () => {
@@ -88,16 +91,16 @@ describe('AdminPlayerAuctionsService', () => {
     const { service, batch, tx } = harness();
     batch.status = 'READY';
     await expect(service.update('admin-1', 'league-1', 'batch-1', {
-      name: '新名字', expectedVersion: 1
+      name: '新名字', bidChannel: 'MINIPROGRAM', expectedVersion: 1
     }, 'update-1')).rejects.toMatchObject({ code: 'AUCTION_DRAFT_REQUIRED' });
     batch.status = 'DRAFT';
     tx.playerAuctionBatch.updateMany.mockResolvedValueOnce({ count: 0 });
     await expect(service.update('admin-1', 'league-1', 'batch-1', {
-      name: '新名字', expectedVersion: 1
+      name: '新名字', bidChannel: 'MINIPROGRAM', expectedVersion: 1
     }, 'update-2')).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
   });
 
-  it('prepares only a non-empty batch and rejects another unresolved batch for the group', async () => {
+  it('prepares only a non-empty batch and rejects another unresolved batch for the league', async () => {
     const { service, tx, batch } = harness();
     await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-1'))
       .rejects.toMatchObject({ code: 'AUCTION_LOTS_REQUIRED' });
@@ -106,7 +109,7 @@ describe('AdminPlayerAuctionsService', () => {
       .mockResolvedValueOnce(batch)
       .mockResolvedValueOnce({ id: 'batch-other' });
     await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-2'))
-      .rejects.toMatchObject({ code: 'AUCTION_GROUP_BUSY' });
+      .rejects.toMatchObject({ code: 'AUCTION_LEAGUE_BUSY' });
   });
 
   it('revalidates auction capability before preparing a stale draft', async () => {
@@ -127,7 +130,7 @@ describe('AdminPlayerAuctionsService', () => {
     });
   });
 
-  it('does not let an unresolved batch in group A block an eligible group B', async () => {
+  it('checks league-wide unresolved batches rather than only the selected group', async () => {
     const { service, tx, batch } = harness();
     batch.groupBindingId = 'group-2';
     batch.lots = [{ id: 'lot-1', bids: [], review: null }];
@@ -140,8 +143,23 @@ describe('AdminPlayerAuctionsService', () => {
     await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-group-b'))
       .resolves.toMatchObject({ id: 'batch-1' });
     expect(tx.playerAuctionBatch.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: expect.objectContaining({ groupBindingId: 'group-2' })
+      where: expect.objectContaining({ leagueId: 'league-1' })
     }));
+  });
+
+  it('delegates idempotent admin lifecycle controls to the shared state machine', async () => {
+    const { service, state, batch } = harness();
+    batch.status = 'READY';
+    await service.start('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'start-1');
+    expect(state.startBatch).toHaveBeenCalledWith(expect.anything(), 'batch-1', 1);
+
+    batch.status = 'ACTIVE';
+    await service.pause('admin-1', 'league-1', 'batch-1', { expectedVersion: 2 }, 'pause-1');
+    expect(state.pauseBatch).toHaveBeenCalledWith(expect.anything(), 'batch-1', 2);
+
+    batch.status = 'PAUSED';
+    await service.resume('admin-1', 'league-1', 'batch-1', { expectedVersion: 3 }, 'resume-1');
+    expect(state.resumeBatch).toHaveBeenCalledWith(expect.anything(), 'batch-1', 3);
   });
 
   it('reviews pending results without mutating the immutable computed winner', async () => {
