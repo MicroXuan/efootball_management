@@ -27,6 +27,8 @@ describe('Player auction group acceptance', () => {
   let sourceId = '';
   let roleBindingId = '';
   const userIds: string[] = [];
+  const userTokens: string[] = [];
+  const leagueIds: string[] = [];
   const teamIds: string[] = [];
   const catalogIds: string[] = [];
   const playerIds: string[] = [];
@@ -53,16 +55,17 @@ describe('Player auction group acceptance', () => {
     }] }).expect(200);
     return { messageId, result: result.body.results[0] as { status: string; inboundId: string | null } };
   };
-  const createPreparedBatch = async (name: string, lotCount: number) => {
-    const created = await request(app.getHttpServer()).post(`/v1/admin/leagues/${leagueId}/player-auctions`)
-      .set(adminHeaders()).send({ groupBindingId, name, expectedVersion: 1 }).expect(201);
+  const createPreparedBatch = async (name: string, lotCount: number, options: { targetLeagueId?: string; targetGroupBindingId?: string; bidChannel?: 'WECHAT_GROUP' | 'MINIPROGRAM' } = {}) => {
+    const targetLeagueId = options.targetLeagueId ?? leagueId;
+    const created = await request(app.getHttpServer()).post(`/v1/admin/leagues/${targetLeagueId}/player-auctions`)
+      .set(adminHeaders()).send({ groupBindingId: options.targetGroupBindingId ?? groupBindingId, name, bidChannel: options.bidChannel ?? 'WECHAT_GROUP', expectedVersion: 1 }).expect(201);
     const batchId = created.body.id as string; batchIds.push(batchId);
-    const configured = await request(app.getHttpServer()).put(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}/lots`)
+    const configured = await request(app.getHttpServer()).put(`/v1/admin/leagues/${targetLeagueId}/player-auctions/${batchId}/lots`)
       .set(adminHeaders()).send({ expectedVersion: created.body.version, lots: playerIds.slice(0, lotCount).map((playerId, index) => ({
         playerId, playerCardId: cardIds[index], displayOrder: index + 1,
         startingPrice: 50 + index * 20, minimumIncrement: 10 + index * 10
       })) }).expect(200);
-    const prepared = await request(app.getHttpServer()).post(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}/prepare`)
+    const prepared = await request(app.getHttpServer()).post(`/v1/admin/leagues/${targetLeagueId}/player-auctions/${batchId}/prepare`)
       .set(adminHeaders()).send({ expectedVersion: configured.body.version }).expect(201);
     return prepared.body as { id: string; version: number; lots: Array<{ id: string; version: number }> };
   };
@@ -86,15 +89,24 @@ describe('Player auction group acceptance', () => {
       .send({ username: admin.username, password: 'auction-password-123' }).expect(200);
     adminToken = login.body.accessToken as string;
 
-    const users = await Promise.all(['拍卖管理员', '竞价球队'].map((displayName, index) => prisma.user.create({ data: {
-      wechatOpenId: `auction-openid-${index}-${runId}`, displayName
-    } })));
+    const users = [];
+    for (const [index, displayName] of ['拍卖管理员', '竞价球队', '已退出球队'].entries()) {
+      const login = await request(app.getHttpServer()).post('/v1/auth/wechat')
+        .send({ code: `test-code-auction-${index}-${runId}` }).expect(200);
+      userTokens.push(login.body.accessToken as string);
+      const user = await prisma.user.update({
+        where: { wechatOpenId: `test-openid-auction-${index}-${runId}` },
+        data: { displayName }
+      });
+      users.push(user);
+    }
     userIds.push(...users.map((user) => user.id));
     const league = await prisma.league.create({ data: {
       name: `拍卖验收联赛 ${runId.slice(0, 8)}`, shortName: '拍卖验收', edition: 'NATIONAL',
       defaultPlatform: 'MOBILE', defaultServerRegion: 'CN', createdByAdminId: adminId
     } });
     leagueId = league.id;
+    leagueIds.push(league.id);
     const managerRole = await prisma.role.findUniqueOrThrow({ where: { code: 'LEAGUE_MANAGER' } });
     const auctionPermission = await prisma.permission.upsert({
       where: { code: 'league.auction.manage' }, update: {},
@@ -107,7 +119,7 @@ describe('Player auction group acceptance', () => {
     roleBindingId = (await prisma.userRoleBinding.create({ data: {
       userId: userIds[0]!, roleId: managerRole.id, scopeType: 'LEAGUE', scopeId: leagueId
     } })).id;
-    const teamNames = [{ name: '上海申花', shortName: '申花' }, { name: '成都蓉城', shortName: '蓉城' }] as const;
+    const teamNames = [{ name: '上海申花', shortName: '申花' }, { name: '成都蓉城', shortName: '蓉城' }, { name: '退出球队', shortName: '退出' }] as const;
     for (let index = 0; index < users.length; index += 1) {
       const teamName = teamNames[index]!;
       const catalog = await prisma.teamCatalogItem.create({ data: {
@@ -116,7 +128,8 @@ describe('Player auction group acceptance', () => {
       catalogIds.push(catalog.id);
       const team = await prisma.leagueTeam.create({ data: {
         leagueId, ownerUserId: users[index]!.id, ownerAlias: users[index]!.displayName,
-        catalogTeamId: catalog.id, teamNumber: index + 1, name: teamName.name, shortName: teamName.shortName
+        catalogTeamId: catalog.id, teamNumber: index + 1, name: teamName.name, shortName: teamName.shortName,
+        status: index === 2 ? 'ARCHIVED' : 'ACTIVE'
       } });
       teamIds.push(team.id);
     }
@@ -151,7 +164,7 @@ describe('Player auction group acceptance', () => {
         capabilities: ['PLAYER_AUCTION'], scheduleSourceIds: []
       }).expect(200);
     groupBindingId = binding.body.id as string;
-    await Promise.all(users.map((user, index) => prisma.wechatIdentityBinding.create({ data: {
+    await Promise.all(users.slice(0, 2).map((user, index) => prisma.wechatIdentityBinding.create({ data: {
       deviceId, wechatContactId: contacts[index]!, userId: user.id, status: 'ACTIVE'
     } })));
   });
@@ -184,7 +197,8 @@ describe('Player auction group acceptance', () => {
     if (roleBindingId) await prisma.userRoleBinding.deleteMany({ where: { id: roleBindingId } });
     if (teamIds.length) await prisma.leagueTeam.deleteMany({ where: { id: { in: teamIds } } });
     if (catalogIds.length) await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
-    if (leagueId) await prisma.league.deleteMany({ where: { id: leagueId } });
+    if (leagueIds.length) await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
+    if (userIds.length) await prisma.refreshSession.deleteMany({ where: { userId: { in: userIds } } });
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.adminSession.deleteMany({ where: { adminId } });
     await prisma.adminAccount.deleteMany({ where: { id: adminId } });
@@ -260,6 +274,109 @@ describe('Player auction group acceptance', () => {
     }
     expect(messages.some((message) => message.text.includes('无人有效出价'))).toBe(true);
     expect(messages.every((message) => !message.text.includes('确认“下一位”'))).toBe(true);
+  });
+
+  it('runs independent miniprogram auctions with server-timed idempotent bidding while Bridge availability is irrelevant', async () => {
+    const secondLeague = await prisma.league.create({ data: {
+      name: `第二拍卖联赛 ${runId.slice(0, 8)}`, shortName: '第二拍卖', edition: 'NATIONAL',
+      defaultPlatform: 'MOBILE', defaultServerRegion: 'CN', createdByAdminId: adminId
+    } });
+    leagueIds.push(secondLeague.id);
+    const secondCatalog = await prisma.teamCatalogItem.create({ data: {
+      sourceType: 'CUSTOM', nameZh: '第二联赛球队', shortName: '第二队'
+    } });
+    catalogIds.push(secondCatalog.id);
+    const secondTeam = await prisma.leagueTeam.create({ data: {
+      leagueId: secondLeague.id, ownerUserId: userIds[1]!, ownerAlias: '竞价球队',
+      catalogTeamId: secondCatalog.id, teamNumber: 1, name: '第二联赛球队', shortName: '第二队'
+    } });
+    teamIds.push(secondTeam.id);
+    const secondWechatId = `auction-second-${runId}@chatroom`;
+    const observed = await prisma.wechatObservedGroup.create({ data: {
+      deviceId, wechatGroupId: secondWechatId, displayName: '第二联赛通知群', lastObservedAt: new Date()
+    } });
+    const secondBinding = await prisma.wechatGroupBinding.create({ data: {
+      deviceId, observedGroupId: observed.id, wechatGroupId: secondWechatId,
+      displayName: observed.displayName, leagueId: secondLeague.id, enabled: true,
+      capabilities: { create: { capability: 'PLAYER_AUCTION', createdByAdminId: adminId } }
+    } });
+
+    const firstBatch = await createPreparedBatch('小程序连续拍卖', 2, { bidChannel: 'MINIPROGRAM' });
+    const secondBatch = await createPreparedBatch('第二联赛小程序拍卖', 1, {
+      targetLeagueId: secondLeague.id,
+      targetGroupBindingId: secondBinding.id,
+      bidChannel: 'MINIPROGRAM'
+    });
+    const startedFirst = await request(app.getHttpServer())
+      .post(`/v1/admin/leagues/${leagueId}/player-auctions/${firstBatch.id}/start`)
+      .set(adminHeaders()).send({ expectedVersion: firstBatch.version }).expect(201);
+    const startedSecond = await request(app.getHttpServer())
+      .post(`/v1/admin/leagues/${secondLeague.id}/player-auctions/${secondBatch.id}/start`)
+      .set(adminHeaders()).send({ expectedVersion: secondBatch.version }).expect(201);
+    expect(startedFirst.body.status).toBe('ACTIVE');
+    expect(startedSecond.body.status).toBe('ACTIVE');
+
+    const conflicting = await request(app.getHttpServer()).post(`/v1/admin/leagues/${leagueId}/player-auctions`)
+      .set(adminHeaders()).send({ groupBindingId, name: '同联赛冲突批次', bidChannel: 'MINIPROGRAM', expectedVersion: 1 }).expect(201);
+    batchIds.push(conflicting.body.id as string);
+    const conflictingConfigured = await request(app.getHttpServer())
+      .put(`/v1/admin/leagues/${leagueId}/player-auctions/${conflicting.body.id}/lots`)
+      .set(adminHeaders()).send({ expectedVersion: conflicting.body.version, lots: [{
+        playerId: playerIds[0], playerCardId: cardIds[0], displayOrder: 1, startingPrice: 50, minimumIncrement: 10
+      }] }).expect(200);
+    const conflict = await request(app.getHttpServer())
+      .post(`/v1/admin/leagues/${leagueId}/player-auctions/${conflicting.body.id}/prepare`)
+      .set(adminHeaders()).send({ expectedVersion: conflictingConfigured.body.version }).expect(409);
+    expect(conflict.body.error.code).toBe('AUCTION_LEAGUE_BUSY');
+
+    const firstAuth = { Authorization: `Bearer ${userTokens[0]}` };
+    const secondAuth = { Authorization: `Bearer ${userTokens[1]}` };
+    const archivedAuth = { Authorization: `Bearer ${userTokens[2]}` };
+    const firstRoom = await request(app.getHttpServer()).get(`/v1/me/player-auctions/${firstBatch.id}`)
+      .set(firstAuth).expect(200);
+    await request(app.getHttpServer()).get(`/v1/me/player-auctions/${secondBatch.id}`)
+      .set(firstAuth).expect(403).expect(({ body }) => expect(body.error.code).toBe('NO_ACTIVE_TEAM'));
+    await request(app.getHttpServer()).get(`/v1/me/player-auctions/${firstBatch.id}`)
+      .set(archivedAuth).expect(403).expect(({ body }) => expect(body.error.code).toBe('NO_ACTIVE_TEAM'));
+    const secondList = await request(app.getHttpServer()).get('/v1/me/player-auctions?status=active')
+      .set(secondAuth).expect(200);
+    expect(secondList.body.items.map((item: { batchId: string }) => item.batchId)).toEqual(expect.arrayContaining([firstBatch.id, secondBatch.id]));
+
+    const lotId = firstRoom.body.currentLot.id as string;
+    const originalEpoch = firstRoom.body.currentLot.deadlineEpoch as number;
+    const bidKey = randomUUID();
+    const bidBody = { amount: 120, lotId, deadlineEpoch: originalEpoch };
+    const accepted = await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
+      .set(firstAuth).set('Idempotency-Key', bidKey).send(bidBody).expect(201);
+    expect(accepted.body).toMatchObject({ result: 'VALID', amount: 120, teamName: '上海申花' });
+    expect(new Date(accepted.body.deadlineAt as string).getTime()).toBeGreaterThan(Date.now() + 25_000);
+    const replay = await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
+      .set(firstAuth).set('Idempotency-Key', bidKey).send(bidBody).expect(201);
+    expect(replay.body.id).toBe(accepted.body.id);
+    expect(await prisma.playerAuctionBid.count({ where: { lotId, userId: userIds[0]!, idempotencyKey: bidKey } })).toBe(1);
+    await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
+      .set(firstAuth).set('Idempotency-Key', randomUUID()).send(bidBody).expect(409)
+      .expect(({ body }) => expect(body.error.code).toBe('AUCTION_EPOCH_CHANGED'));
+
+    await recovery.onBridgeUnavailable(deviceId, 'HEARTBEAT_TIMEOUT');
+    expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: firstBatch.id } })).status).toBe('ACTIVE');
+    expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: secondBatch.id } })).status).toBe('ACTIVE');
+    recovery.bridgeAvailable(deviceId);
+
+    await closeLot(firstBatch.lots[0]!.id);
+    await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
+      .set(firstAuth).set('Idempotency-Key', randomUUID()).send(bidBody).expect(409)
+      .expect(({ body }) => expect(body.error.code).toBe('AUCTION_EPOCH_CHANGED'));
+    await closeLot(firstBatch.lots[1]!.id);
+    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: firstBatch.lots[1]!.id } })).status).toBe('NO_BID');
+    expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: firstBatch.id } })).status).toBe('COMPLETED');
+    await closeLot(secondBatch.lots[0]!.id);
+
+    const soldLot = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: firstBatch.lots[0]!.id } });
+    await request(app.getHttpServer())
+      .post(`/v1/admin/leagues/${leagueId}/player-auctions/${firstBatch.id}/lots/${soldLot.id}/review`)
+      .set(adminHeaders()).send({ decision: 'CONFIRM', expectedVersion: soldLot.version }).expect(201);
+    expect(await prisma.playerAuctionReview.count({ where: { lotId: soldLot.id } })).toBe(1);
   });
 
   it('fails closed on heartbeat loss, deduplicates messages, resumes for 30 seconds, and leaves finance and roster untouched', async () => {
