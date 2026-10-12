@@ -6,27 +6,36 @@ const markup = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-det
 
 describe('league detail module cards', () => {
   it('renders player auctions in the same grid as the standard workspace modules', () => {
-    const gridStart = markup.indexOf('<view class="module-grid">')
+    const gridStart = markup.indexOf('<view class="workspace-groups">')
     const auctionPosition = markup.indexOf('球员拍卖')
     const gridMarkup = markup.slice(gridStart, auctionPosition + '球员拍卖'.length)
 
     expect(gridStart).toBeGreaterThan(-1)
-    expect(gridMarkup).toContain('workspaceModules')
+    expect(gridMarkup).toContain('workspaceModuleGroups')
+    expect(gridMarkup).toContain('module-grid')
     expect(gridMarkup).toContain('module-tile')
     expect(markup).not.toContain('class="auction-entry"')
   })
 
   it('prioritizes member actions and removes duplicated season navigation', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
+    const qualificationPosition = markup.indexOf('class="entry-card entry-card--priority"')
     const workspacePosition = markup.indexOf('class="workspace-card"')
     const overviewPosition = markup.indexOf('class="season-overview-card"')
 
     expect(markup).toContain('class="league-hero league-hero--compact"')
+    expect(markup).toContain('class="league-hero__main"')
+    expect(markup).toContain('{{leagueEditionLabel}} · 联赛中心')
+    expect(markup).not.toContain('{{league.shortName}} · 联赛中心')
     expect(markup).toContain('class="season-switcher"')
+    expect(qualificationPosition).toBeGreaterThan(-1)
     expect(workspacePosition).toBeGreaterThan(-1)
+    expect(workspacePosition).toBeGreaterThan(qualificationPosition)
     expect(overviewPosition).toBeGreaterThan(workspacePosition)
-    expect(markup).toContain('class="entry-card entry-card--priority"')
-    expect(markup).toContain('class="entry-card entry-card--secondary"')
+    expect(markup.match(/我的资格/g)).toHaveLength(1)
+    expect(markup).not.toContain('entry-card--secondary')
+    expect(markup).toContain('workspaceModuleGroups')
+    expect(markup).toContain('{{group.label}}')
     expect(markup).not.toContain('class="progress-card"')
     expect(markup).not.toContain('class="season-picker-card"')
     expect(markup).not.toContain('class="season-board"')

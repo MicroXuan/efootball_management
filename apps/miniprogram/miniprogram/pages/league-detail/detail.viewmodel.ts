@@ -117,6 +117,12 @@ export type WorkspaceModule = {
   wide?: boolean
 }
 
+export type WorkspaceModuleGroup = {
+  key: 'competition' | 'team' | 'transactions' | 'personal'
+  label: '比赛' | '球队' | '交易' | '个人'
+  modules: WorkspaceModule[]
+}
+
 export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceModule[] {
   const standard = (input: Omit<WorkspaceModule, 'stateLabel' | 'tone'>): WorkspaceModule => ({
     ...input,
@@ -150,8 +156,30 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
     }),
     {
       key: 'favorites', marker: '藏', label: '我的收藏', description: '查看球员当前最强卡片',
-      stateLabel: '个人球探簿', enabled: true, tone: 'personal', wide: false,
+      stateLabel: '个人球探簿', enabled: true, tone: 'personal', wide: true,
     },
+  ]
+}
+
+export function workspaceModuleGroups(modules: readonly WorkspaceModule[]): WorkspaceModuleGroup[] {
+  const byKey = new Map(modules.map((module) => [module.key, module]))
+  const group = (
+    key: WorkspaceModuleGroup['key'],
+    label: WorkspaceModuleGroup['label'],
+    moduleKeys: WorkspaceModuleKey[],
+  ): WorkspaceModuleGroup => ({
+    key,
+    label,
+    modules: moduleKeys.flatMap((moduleKey) => {
+      const module = byKey.get(moduleKey)
+      return module ? [module] : []
+    }),
+  })
+  return [
+    group('competition', '比赛', ['standings', 'cups']),
+    group('team', '球队', ['assets', 'valuations']),
+    group('transactions', '交易', ['transactions', 'finance']),
+    group('personal', '个人', ['favorites']),
   ]
 }
 

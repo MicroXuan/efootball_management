@@ -8,14 +8,16 @@
   </view>
   <block wx:else>
     <view class="league-hero league-hero--compact">
-      <view class="league-hero__topline">
+      <view class="league-hero__main">
         <view class="league-mark">
           <entity-artwork src="{{league.logoUrl}}" fallback="{{leagueLogoText}}" shape="square" />
         </view>
-        <text class="hero-kicker">{{league.shortName}} · 联赛中心</text>
+        <view class="league-hero__copy">
+          <text class="hero-kicker">{{leagueEditionLabel}} · 联赛中心</text>
+          <text class="hero-title">{{league.name}}</text>
+          <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
+        </view>
       </view>
-      <text class="hero-title">{{league.name}}</text>
-      <text class="hero-copy">{{league.description || '长期联赛赛季、报名和球队资格中心'}}</text>
       <view wx:if="{{selectedSeason}}" class="hero-season-row">
         <picker class="season-switcher__picker" range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="onSeasonChange">
           <view class="season-switcher">
@@ -27,7 +29,7 @@
       </view>
     </view>
 
-    <view wx:if="{{selectedSeason && !workspaceView}}" class="entry-card entry-card--priority">
+    <view wx:if="{{selectedSeason}}" class="entry-card entry-card--priority">
       <view class="entry-summary">
         <view><text class="section-kicker">我的资格</text><text class="entry-summary__status">{{entryStatus}}</text></view>
         <view wx:if="{{profile}}" class="entry-team"><view class="team-mark"><entity-artwork src="{{profile.logoUrl}}" fallback="{{profile.shortName}}" shape="square" /></view><text class="team-name">{{profile.name}}</text></view>
@@ -44,35 +46,41 @@
         <view><text class="workspace-metric__label">当前排名</text><text class="workspace-rank">{{workspaceView.rank}}</text><text class="workspace-metric__meta">{{workspaceView.rankMeta}}</text></view>
         <view><text class="workspace-metric__label">下一场</text><text class="workspace-next">{{workspaceView.nextMatch}}</text><text class="workspace-metric__meta">{{workspaceView.nextMatchTime}}</text></view>
       </view>
-      <view class="module-grid">
-        <view
-          wx:for="{{workspaceModules}}"
-          wx:key="key"
-          class="module-tile {{item.enabled ? '' : 'is-locked'}} {{item.wide ? 'is-wide' : ''}} {{item.tone === 'personal' ? 'is-personal' : ''}}"
-          data-key="{{item.key}}"
-          bindtap="onWorkspaceModuleTap"
-          role="button"
-          aria-disabled="{{!item.enabled}}"
-        >
-          <view class="module-topline">
-            <text class="module-marker">{{item.marker}}</text>
-            <text class="module-state">{{item.stateLabel}}</text>
-          </view>
-          <text class="module-title">{{item.label}}</text>
-          <view class="module-footer">
-            <text class="module-description">{{item.description}}</text>
-            <text class="module-arrow">{{item.enabled ? '→' : '锁定'}}</text>
-          </view>
-        </view>
-        <view wx:if="{{playerAuctionEnabled}}" class="module-tile is-auction" bindtap="openPlayerAuctions" role="button">
-          <view class="module-topline">
-            <text class="module-marker">拍</text>
-            <text class="module-state">实时开放</text>
-          </view>
-          <text class="module-title">球员拍卖</text>
-          <view class="module-footer">
-            <text class="module-description">进入小程序拍卖大厅</text>
-            <text class="module-arrow">→</text>
+      <view class="workspace-groups">
+        <view wx:for="{{workspaceModuleGroups}}" wx:key="key" wx:for-item="group" class="workspace-group">
+          <view class="workspace-group__head"><text>{{group.label}}</text></view>
+          <view class="module-grid">
+            <view
+              wx:for="{{group.modules}}"
+              wx:key="key"
+              wx:for-item="module"
+              class="module-tile {{module.enabled ? '' : 'is-locked'}} {{module.wide ? 'is-wide' : ''}} {{module.tone === 'personal' ? 'is-personal' : ''}}"
+              data-key="{{module.key}}"
+              bindtap="onWorkspaceModuleTap"
+              role="button"
+              aria-disabled="{{!module.enabled}}"
+            >
+              <view class="module-topline">
+                <text class="module-marker">{{module.marker}}</text>
+                <text class="module-state">{{module.stateLabel}}</text>
+              </view>
+              <text class="module-title">{{module.label}}</text>
+              <view class="module-footer">
+                <text class="module-description">{{module.description}}</text>
+                <text class="module-arrow">{{module.enabled ? '→' : '锁定'}}</text>
+              </view>
+            </view>
+            <view wx:if="{{group.key === 'transactions' && playerAuctionEnabled}}" class="module-tile is-auction is-wide" bindtap="openPlayerAuctions" role="button">
+              <view class="module-topline">
+                <text class="module-marker">拍</text>
+                <text class="module-state">实时开放</text>
+              </view>
+              <text class="module-title">球员拍卖</text>
+              <view class="module-footer">
+                <text class="module-description">进入小程序拍卖大厅</text>
+                <text class="module-arrow">→</text>
+              </view>
+            </view>
           </view>
         </view>
       </view>
@@ -91,14 +99,6 @@
         <view><text class="metric-value">{{selectedSeason.promotionCount}}</text><text class="metric-label">升级建议数</text></view>
       </view>
       <view class="timeline"><text>报名截止</text><text>{{registrationCloseDate}}</text></view>
-    </view>
-
-    <view wx:if="{{selectedSeason && workspaceView}}" class="entry-card entry-card--secondary">
-      <view class="entry-summary">
-        <view><text class="section-kicker">我的资格</text><text class="entry-summary__status">{{entryStatus}}</text></view>
-        <view wx:if="{{profile}}" class="entry-team"><view class="team-mark"><entity-artwork src="{{profile.logoUrl}}" fallback="{{profile.shortName}}" shape="square" /></view><text class="team-name">{{profile.name}}</text></view>
-      </view>
-      <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
     </view>
 
     <view wx:if="{{!selectedSeason}}" class="state-card compact">

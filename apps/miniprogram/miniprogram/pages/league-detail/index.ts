@@ -11,12 +11,13 @@ import {
   selectSeason,
   playerAuctionAccess,
   type SeasonRailStep,
-  type WorkspaceModule,
+  type WorkspaceModuleGroup,
   workspaceModuleRoute,
+  workspaceModuleGroups,
   workspaceModules,
   workspaceSummary,
 } from './detail.viewmodel'
-import { seasonStatusLabel, seasonStatusTone } from '../leagues/leagues.viewmodel'
+import { editionLabel, seasonStatusLabel, seasonStatusTone } from '../leagues/leagues.viewmodel'
 
 type LoadOptions = { id?: string }
 type SeasonPickerEvent = { detail: { value: string } }
@@ -35,6 +36,7 @@ Page({
     structureCopy: '',
     registrationCloseDate: '',
     leagueLogoText: '',
+    leagueEditionLabel: '',
     loggedIn: false,
     profile: null as LeagueTeamSummary | null,
     entry: null as SeasonEntryResponse | null,
@@ -44,7 +46,7 @@ Page({
     seasonStatusTone: 'muted' as 'accent' | 'info' | 'warning' | 'muted' | 'danger',
     workspace: null as LeagueWorkspaceResponse | null,
     workspaceView: null as ReturnType<typeof workspaceSummary> | null,
-    workspaceModules: [] as WorkspaceModule[],
+    workspaceModuleGroups: [] as WorkspaceModuleGroup[],
     playerAuctionEnabled: false,
   },
 
@@ -79,6 +81,7 @@ Page({
         structureCopy: selectedSeason ? seasonStructureCopy(selectedSeason) : '',
         registrationCloseDate: selectedSeason?.registrationClosesAt.slice(0, 10) ?? '',
         leagueLogoText: league.shortName.slice(0, 2),
+        leagueEditionLabel: editionLabel(league.edition),
         profile,
         playerAuctionEnabled: playerAuctionAccess(loggedIn, Boolean(profile)).enabled,
         entryStatus: entryStatusCopy(loggedIn, Boolean(profile), null),
@@ -99,20 +102,24 @@ Page({
   async loadEntry() {
     const season = this.data.selectedSeason
     if (!season) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), workspace: null, workspaceView: null, workspaceModules: [] })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), workspace: null, workspaceView: null, workspaceModuleGroups: [] })
       return
     }
     if (!this.data.loggedIn) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), workspace: null, workspaceView: null, workspaceModules: [] })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), workspace: null, workspaceView: null, workspaceModuleGroups: [] })
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
     this.setData({ entry, entryStatus: entryStatusCopy(true, Boolean(this.data.profile), entry) })
     if (entry?.status === 'APPROVED') {
       const workspace = await leaguesApi.workspace(this.data.leagueId, season.id)
-      this.setData({ workspace, workspaceView: workspaceSummary(workspace), workspaceModules: workspaceModules(workspace) })
+      this.setData({
+        workspace,
+        workspaceView: workspaceSummary(workspace),
+        workspaceModuleGroups: workspaceModuleGroups(workspaceModules(workspace)),
+      })
     } else {
-      this.setData({ workspace: null, workspaceView: null, workspaceModules: [] })
+      this.setData({ workspace: null, workspaceView: null, workspaceModuleGroups: [] })
     }
   },
 
@@ -149,7 +156,7 @@ Page({
       entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null),
       workspace: null,
       workspaceView: null,
-      workspaceModules: [],
+      workspaceModuleGroups: [],
       seasonRail: seasonRailSteps(selectedSeason.status),
       seasonStatusLabel: seasonStatusLabel(selectedSeason.status),
       seasonStatusTone: seasonStatusTone(selectedSeason.status),
