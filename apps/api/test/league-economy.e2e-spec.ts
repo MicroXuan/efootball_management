@@ -291,4 +291,52 @@ describe('league economy end-to-end flow', () => {
       .get(`/v1/me/league-teams/${teamIds[1]}/finance?seasonId=${seasonId}`)
       .set(userAuth(0)).expect(403);
   });
+
+  it('stores audited settlement targets as immutable deltas for administrators and owners', async () => {
+    const amounts = {
+      transactionAmountMinor: 10,
+      luxuryTaxMinor: 404,
+      offseasonFeeMinor: 0,
+      unfinishedMatchPenaltyMinor: 0,
+      playerAuctionMinor: 0,
+      teamAuctionMinor: 0,
+      rookieSelectionMinor: 0,
+      installmentPaymentMinor: 0,
+      otherAdjustmentMinor: 0
+    };
+    const first = await request(app.getHttpServer())
+      .put(`/v1/admin/leagues/${leagueId}/finance-settlements`).set(adminAuth())
+      .set('Idempotency-Key', randomUUID())
+      .send({ leagueTeamId: teamIds[1], seasonId, amounts, note: '实时结算', reason: '验收初次录入' })
+      .expect(200);
+    expect(first.body).toMatchObject({ teamId: teamIds[1], seasonId, totalMinor: 414 });
+    expect(first.body.items).toHaveLength(9);
+
+    const adminRead = await request(app.getHttpServer())
+      .get(`/v1/admin/leagues/${leagueId}/finance-settlements`)
+      .query({ leagueTeamId: teamIds[1], seasonId }).set(adminAuth()).expect(200);
+    expect(adminRead.body).toMatchObject({ totalMinor: 414 });
+
+    await request(app.getHttpServer())
+      .put(`/v1/admin/leagues/${leagueId}/finance-settlements`).set(adminAuth())
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        leagueTeamId: teamIds[1], seasonId,
+        amounts: { ...amounts, luxuryTaxMinor: 300 },
+        note: '下调税额', reason: '验收差额冲销'
+      }).expect(200);
+
+    const ownerRead = await request(app.getHttpServer())
+      .get(`/v1/me/league-teams/${teamIds[1]}/finance?seasonId=${seasonId}`)
+      .set(userAuth(1)).expect(200);
+    expect(ownerRead.body).toMatchObject({ settlementTotalMinor: 310 });
+    expect(ownerRead.body.settlementItems.find((item: { category: string }) => item.category === 'LUXURY_TAX'))
+      .toMatchObject({ amountMinor: 300 });
+    expect(await prisma.financeLedgerEntry.count({
+      where: { leagueTeamId: teamIds[1]!, seasonId, settlementCategory: { not: null } }
+    })).toBe(3);
+    expect(await prisma.auditLog.count({
+      where: { leagueId, action: 'FINANCE_SETTLEMENT_UPDATED', resourceId: teamIds[1]! }
+    })).toBe(2);
+  });
 });

@@ -233,6 +233,7 @@ export class AdminRosterQueriesService {
         rosterTransactionId: entry.rosterTransactionId,
         direction: entry.direction,
         type: entry.type,
+        settlementCategory: entry.settlementCategory,
         amountMinor: entry.amountMinor,
         note: entry.note,
         createdAt: entry.createdAt.toISOString()

@@ -9,10 +9,11 @@ import { MyLeagueTransactionsController } from './my-league-transactions.control
 import { TransactionFeesService } from './transaction-fees.service.js';
 import { AdminFinanceController } from './admin-finance.controller.js';
 import { TeamFinanceService } from './team-finance.service.js';
+import { AdminFinanceSettlementsController } from './admin-finance-settlements.controller.js';
 
 @Module({
   imports: [JwtModule.register({}), AdminAuthModule, AdminModule],
-  controllers: [MyTeamAssetsController, MyLeagueTransactionsController, AdminTransactionFeesController, AdminFinanceController],
+  controllers: [MyTeamAssetsController, MyLeagueTransactionsController, AdminTransactionFeesController, AdminFinanceController, AdminFinanceSettlementsController],
   providers: [TeamAssetsService, TransactionFeesService, TeamFinanceService],
   exports: [TeamAssetsService, TransactionFeesService, TeamFinanceService]
 })
