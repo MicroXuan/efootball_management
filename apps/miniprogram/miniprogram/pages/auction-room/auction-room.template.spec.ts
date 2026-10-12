@@ -18,6 +18,9 @@ describe('native player auction pages', () => {
     expect(markup).toContain('{{countdown}}')
     expect(markup).toContain('type="number"')
     expect(markup).toContain('最低有效价')
+    expect(markup).toContain('{{item.label}}')
+    expect(markup).toContain('核对并出价')
+    expect(markup).toContain('{{amountHint}}')
     expect(markup).toContain('disabled="{{!canSubmit}}"')
     expect(markup).toContain('正在重新连接')
     expect(markup).toContain('有效出价记录')
@@ -37,5 +40,11 @@ describe('native player auction pages', () => {
     expect(login).toContain('options.redirect')
     expect(login).toContain('decodeURIComponent')
     expect(login).toContain('wx.redirectTo')
+  })
+
+  it('requires a native confirmation before sending a bid', () => {
+    const room = readFileSync(resolve(miniRoot, 'pages/auction-room/index.ts'), 'utf8')
+    expect(room).toContain('wx.showModal')
+    expect(room).toContain("confirmText: '确认出价'")
   })
 })

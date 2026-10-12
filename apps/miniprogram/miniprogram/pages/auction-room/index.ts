@@ -9,6 +9,8 @@ import {
 import { session } from '../../services/session'
 import {
   applyRoomSnapshot,
+  bidConfirmation,
+  bidDraftState,
   bidFeedback,
   countdownSeconds,
   minimumPriceShortcuts,
@@ -38,10 +40,11 @@ Page({
     reconnecting: false,
     reconnectLabel: '正在重新连接',
     amount: '',
-    shortcuts: [] as number[],
+    shortcuts: [] as Array<{ amount: number; label: string }>,
     upcoming: [] as MyPlayerAuctionRoom['queue'],
     completed: [] as MyPlayerAuctionRoom['queue'],
     canSubmit: false,
+    amountHint: '请选择快捷价格或输入整数金额',
     submitting: false,
     feedback: '',
   },
@@ -108,34 +111,47 @@ Page({
     const queue = projectAuctionQueue(room.queue)
     const increment = room.currentLot?.minimumIncrement ?? 1
     const amount = this.snapshot.draftAmount
-    const numericAmount = Number(amount)
+    const draft = bidDraftState(amount, room.minimumValidPrice)
     this.setData({
       state: 'loaded', room, teamName: room.team.name, reconnecting: false, statusMessage: '',
       countdown: countdown ?? '—', amount,
       shortcuts: minimumPriceShortcuts(room.minimumValidPrice, increment),
       upcoming: queue.upcoming, completed: queue.completed,
-      canSubmit: room.canBid && !this.data.submitting && !this.data.reconnecting && amount !== '' && Number.isSafeInteger(numericAmount) && numericAmount > 0,
+      canSubmit: room.canBid && !this.data.submitting && !this.data.reconnecting && draft.valid,
+      amountHint: draft.hint,
     })
   },
 
   onAmountInput(event: AmountInputEvent) {
     const amount = event.detail.value.replace(/\D/g, '')
     if (this.snapshot) this.snapshot.draftAmount = amount
-    const numericAmount = Number(amount)
-    this.setData({ amount, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting && amount !== '' && Number.isSafeInteger(numericAmount) && numericAmount > 0 })
+    const draft = bidDraftState(amount, this.snapshot?.room.minimumValidPrice ?? null)
+    this.setData({ amount, amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting && draft.valid })
   },
 
   useShortcut(event: ShortcutEvent) {
     const amount = event.currentTarget.dataset.amount
     if (!amount) return
     if (this.snapshot) this.snapshot.draftAmount = String(amount)
-    this.setData({ amount: String(amount), canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting })
+    const draft = bidDraftState(String(amount), this.snapshot?.room.minimumValidPrice ?? null)
+    this.setData({ amount: String(amount), amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting && draft.valid })
   },
 
   async submitBid() {
     const lot = this.snapshot?.room.currentLot
     const amount = Number(this.data.amount)
     if (!this.data.canSubmit || !lot || !Number.isSafeInteger(amount) || amount <= 0) return
+    const confirmation = bidConfirmation(this.data.teamName, amount)
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        ...confirmation,
+        confirmText: '确认出价',
+        cancelText: '再检查',
+        success: (result) => resolve(result.confirm),
+        fail: () => resolve(false),
+      })
+    })
+    if (!confirmed) return
     const input = { amount, lotId: lot.id, deadlineEpoch: lot.deadlineEpoch }
     const pending = this.pendingSubmission
     const submission = pending && pending.input.amount === input.amount && pending.input.lotId === input.lotId && pending.input.deadlineEpoch === input.deadlineEpoch

@@ -150,7 +150,7 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
     }),
     {
       key: 'favorites', marker: '藏', label: '我的收藏', description: '查看球员当前最强卡片',
-      stateLabel: '个人球探簿', enabled: true, tone: 'personal', wide: true,
+      stateLabel: '个人球探簿', enabled: true, tone: 'personal', wide: false,
     },
   ]
 }

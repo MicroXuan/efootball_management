@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
@@ -9,9 +9,11 @@ const leagueId = '11111111-1111-4111-8111-111111111111';
 it('searches a player, adds pricing, and exposes keyboard ordering controls', async () => {
   const api = { request: vi.fn((path: string) => path.includes('player-candidates') ? Promise.resolve({ items: [{ playerId: 'player-1', playerName: '车范根', ownedByTeamId: null, recommendedPlayerCardId: 'card-1', cards: [{ id: 'card-1', cardName: '传奇', imageUrl: null, position: 'CF', overallRating: 96, maxOverall: 96, salaryMinor: 500, recommended: true }] }] }) : Promise.resolve({ bindings: [{ id: 'group-1', deviceId: 'device-1', leagueId, wechatGroupId: 'room@chatroom', displayName: 'CELL 联赛群', enabled: true, version: 1, capabilities: ['PLAYER_AUCTION'], scheduleSourceIds: [], createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z' }], devices: [], observedGroups: [], scheduleSourceOptions: [] })) } as unknown as AdminApi;
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
-  expect(await screen.findByText('微信群纯数字出价')).toBeInTheDocument();
-  expect(screen.getByText('小程序拍卖大厅')).toBeInTheDocument();
-  expect(within(screen.getByRole('radiogroup')).getAllByRole('radio')[0]).toBeChecked();
+  const channel = await screen.findByRole('combobox', { name: '出价渠道' });
+  expect(screen.getByText('小程序拍卖大厅（推荐）')).toBeInTheDocument();
+  await userEvent.click(channel);
+  expect(await screen.findByRole('option', { name: '微信群纯数字出价' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: '小程序拍卖大厅（推荐）' })).toBeInTheDocument();
   await userEvent.type(await screen.findByLabelText('搜索球员'), '车范根');
   await userEvent.click(screen.getByRole('button', { name: '搜索' }));
   await userEvent.click(await screen.findByRole('button', { name: /添加车范根/ }));
@@ -35,7 +37,7 @@ it('lists only enabled auction-capable groups', async () => {
   })) } as unknown as AdminApi;
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
 
-  await userEvent.click(await screen.findByRole('combobox'));
+  await userEvent.click(await screen.findByRole('combobox', { name: '通知微信群' }));
   expect(await screen.findByRole('option', { name: '拍卖专用群' })).toBeInTheDocument();
   expect(screen.getByRole('option', { name: '联赛综合群' })).toBeInTheDocument();
   expect(screen.queryByRole('option', { name: '赛程查询群' })).not.toBeInTheDocument();
@@ -59,7 +61,7 @@ it('keeps an existing draft on its saved eligible group', async () => {
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/batch-1/edit`]}><Routes><Route path="/leagues/:leagueId/auctions/:batchId/edit" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
 
   expect(await screen.findByText('拍卖专用群')).toBeInTheDocument();
-  expect(screen.getByRole('combobox')).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: '通知微信群' })).toBeDisabled();
 });
 
 it('links to WeChat group configuration when no auction group is eligible', async () => {

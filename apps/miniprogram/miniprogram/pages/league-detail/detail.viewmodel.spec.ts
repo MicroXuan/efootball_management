@@ -113,7 +113,7 @@ describe('league detail view model', () => {
       expect.objectContaining({ key: 'finance', label: '球队财务', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'valuations', label: '身价管理', stateLabel: '窗口未开放', enabled: false }),
       expect.objectContaining({ key: 'cups', label: '杯赛中心', stateLabel: '可查看', enabled: true }),
-      expect.objectContaining({ key: 'favorites', label: '我的收藏', stateLabel: '个人球探簿', enabled: true, wide: true }),
+      expect.objectContaining({ key: 'favorites', label: '我的收藏', stateLabel: '个人球探簿', enabled: true, wide: false }),
     ])
   })
 

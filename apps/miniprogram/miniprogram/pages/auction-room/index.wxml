@@ -12,9 +12,11 @@
     </view>
     <view wx:if="{{room.currentLot}}" class="bid-card">
       <text class="section-title">提交出价</text>
-      <input class="amount-input" type="number" value="{{amount}}" bindinput="onAmountInput" placeholder="输入纯数字价格" disabled="{{!room.canBid || reconnecting}}" />
-      <view class="shortcut-row"><button wx:for="{{shortcuts}}" wx:key="*this" data-amount="{{item}}" bindtap="useShortcut" disabled="{{!room.canBid || reconnecting}}">⭐{{item}}⭐</button></view>
-      <button class="bid-button" bindtap="submitBid" loading="{{submitting}}" disabled="{{!canSubmit}}">确认出价</button>
+      <view class="bid-minimum"><text>本次最低有效价</text><text class="bid-minimum__price">⭐{{room.minimumValidPrice}}⭐</text></view>
+      <view class="amount-field"><text aria-hidden="true">⭐</text><input class="amount-input" aria-label="出价金额" type="number" value="{{amount}}" bindinput="onAmountInput" placeholder="输入整数金额" disabled="{{!room.canBid || reconnecting}}" /><text aria-hidden="true">⭐</text></view>
+      <text class="amount-hint {{canSubmit ? 'is-valid' : ''}}">{{amountHint}}</text>
+      <view class="shortcut-row"><button wx:for="{{shortcuts}}" wx:key="amount" data-amount="{{item.amount}}" bindtap="useShortcut" disabled="{{!room.canBid || reconnecting}}"><text>{{item.label}}</text><text class="shortcut-price">⭐{{item.amount}}⭐</text></button></view>
+      <button class="bid-button" bindtap="submitBid" loading="{{submitting}}" disabled="{{!canSubmit}}">核对并出价</button>
       <text wx:if="{{feedback}}" class="bid-feedback">{{feedback}}</text>
     </view>
     <view wx:if="{{room.currentLot}}" class="history-card"><text class="section-title">有效出价记录</text><text wx:if="{{!room.currentLot.bids.length}}" class="empty-copy">尚无有效出价</text><view wx:for="{{room.currentLot.bids}}" wx:key="id" class="bid-row"><text>{{item.teamName}}</text><text class="bid-price">⭐{{item.amount}}⭐</text></view></view>

@@ -113,6 +113,17 @@
             <text class="module-arrow">{{item.enabled ? '→' : '锁定'}}</text>
           </view>
         </view>
+        <view wx:if="{{playerAuctionEnabled}}" class="module-tile is-auction" bindtap="openPlayerAuctions" role="button">
+          <view class="module-topline">
+            <text class="module-marker">拍</text>
+            <text class="module-state">实时开放</text>
+          </view>
+          <text class="module-title">球员拍卖</text>
+          <view class="module-footer">
+            <text class="module-description">进入小程序拍卖大厅</text>
+            <text class="module-arrow">→</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -120,10 +131,6 @@
       <text class="state-code">等待发布</text>
       <text class="state-title">暂无公开赛季</text>
       <text class="state-copy">等待联赛管理员发布新赛季。</text>
-    </view>
-    <view wx:if="{{playerAuctionEnabled}}" class="auction-entry" bindtap="openPlayerAuctions" role="button">
-      <view><text class="section-kicker">实时交易</text><text class="auction-entry__title">球员拍卖</text><text class="auction-entry__hint">查看当前批次并进入小程序拍卖大厅</text></view>
-      <text class="auction-entry__arrow">→</text>
     </view>
   </block>
 </view>

@@ -3,6 +3,8 @@ import type { MyPlayerAuctionRoom, PlayerAuctionBidResult } from '@efm/contracts
 import {
   applyRoomSnapshot,
   auctionRoomEntry,
+  bidConfirmation,
+  bidDraftState,
   bidFeedback,
   countdownCue,
   countdownSeconds,
@@ -88,8 +90,22 @@ describe('auction room view model', () => {
     expect(bidFeedback('NO_ACTIVE_TEAM')).toBe('你在当前联赛没有有效球队，无法出价。')
   })
 
-  it('builds minimum-price shortcuts and native share metadata', () => {
-    expect(minimumPriceShortcuts(120, 10)).toEqual([120, 130, 140])
+  it('builds labelled shortcuts, validates the draft, and asks for explicit confirmation', () => {
+    expect(minimumPriceShortcuts(120, 10)).toEqual([
+      { amount: 120, label: '最低价' },
+      { amount: 130, label: '加 1 档' },
+      { amount: 140, label: '加 2 档' },
+    ])
+    expect(bidDraftState('', 120)).toEqual({ valid: false, hint: '请选择快捷价格或输入整数金额' })
+    expect(bidDraftState('110', 120)).toEqual({ valid: false, hint: '不得低于最低有效价 ⭐120⭐' })
+    expect(bidDraftState('120', 120)).toEqual({ valid: true, hint: '本次将出价 ⭐120⭐' })
+    expect(bidConfirmation('上海申花', 120)).toEqual({
+      title: '确认出价',
+      content: '确认代表【上海申花】以 ⭐120⭐ 出价？提交后不可撤回。',
+    })
+  })
+
+  it('builds native share metadata', () => {
     expect(roomShare(room())).toEqual({ title: '十月拍卖 · CELL 联赛', path: '/pages/auction-room/index?batchId=22222222-2222-4222-8222-222222222222' })
   })
 

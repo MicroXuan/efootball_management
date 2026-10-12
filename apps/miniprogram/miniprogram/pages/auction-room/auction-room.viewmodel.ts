@@ -78,9 +78,31 @@ export function bidFeedback(result: PlayerAuctionBidResult | 'AUCTION_EPOCH_CHAN
   return messages[result as keyof typeof messages] ?? '出价未完成，请刷新状态后重试。'
 }
 
-export function minimumPriceShortcuts(minimum: number | null, increment: number): number[] {
+export function minimumPriceShortcuts(minimum: number | null, increment: number): Array<{ amount: number; label: string }> {
   if (minimum === null) return []
-  return [minimum, minimum + increment, minimum + increment * 2]
+  return [
+    { amount: minimum, label: '最低价' },
+    { amount: minimum + increment, label: '加 1 档' },
+    { amount: minimum + increment * 2, label: '加 2 档' },
+  ]
+}
+
+export function bidDraftState(amount: string, minimum: number | null) {
+  if (!amount) return { valid: false, hint: '请选择快捷价格或输入整数金额' }
+  const numericAmount = Number(amount)
+  if (!Number.isSafeInteger(numericAmount) || numericAmount <= 0) {
+    return { valid: false, hint: '请输入有效的正整数价格' }
+  }
+  if (minimum === null) return { valid: false, hint: '最低有效价暂不可用，请等待刷新' }
+  if (numericAmount < minimum) return { valid: false, hint: `不得低于最低有效价 ⭐${minimum}⭐` }
+  return { valid: true, hint: `本次将出价 ⭐${numericAmount}⭐` }
+}
+
+export function bidConfirmation(teamName: string, amount: number) {
+  return {
+    title: '确认出价',
+    content: `确认代表【${teamName}】以 ⭐${amount}⭐ 出价？提交后不可撤回。`,
+  }
 }
 
 export function projectAuctionQueue(queue: MyPlayerAuctionRoom['queue']) {

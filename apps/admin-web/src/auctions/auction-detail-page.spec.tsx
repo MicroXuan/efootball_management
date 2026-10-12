@@ -15,6 +15,7 @@ it('shows computed result, bid audit, and the non-financial review boundary', as
   expect(screen.getAllByText('⭐120⭐').length).toBeGreaterThan(0);
   expect(screen.getByText(/审核只记录结果，不会自动修改资金或阵容/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '暂停拍卖' })).toBeInTheDocument();
+  expect(screen.getByRole('status', { name: '当前拍卖状态' })).toHaveTextContent('进行中');
   expect(screen.getByText(`/pages/auction-room/index?batchId=${batchId}`)).toBeInTheDocument();
   expect(screen.getByText('小程序')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '暂停拍卖' }));
@@ -26,6 +27,20 @@ it('shows computed result, bid audit, and the non-financial review boundary', as
       body: { expectedVersion: 2 }
     })
   );
+});
+
+it('uses a channel-neutral ready state beside the primary action', async () => {
+  const detail = {
+    id: batchId, leagueId, groupBindingId: 'group-1', bidChannel: 'MINIPROGRAM', name: '十月拍卖',
+    status: 'READY', currentLotId: null, version: 1, startedAt: null, completedAt: null, cancelledAt: null,
+    createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', lots: []
+  };
+  const api = { request: vi.fn().mockResolvedValue(detail) } as unknown as AdminApi;
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/${batchId}`]}><Routes><Route path="/leagues/:leagueId/auctions/:batchId" element={<AuctionDetailPage api={api} />} /></Routes></MemoryRouter>);
+
+  expect(await screen.findByRole('button', { name: '开始拍卖' })).toBeInTheDocument();
+  expect(screen.getByRole('status', { name: '当前拍卖状态' })).toHaveTextContent('待开始');
+  expect(screen.queryByText('待群内开始')).not.toBeInTheDocument();
 });
 
 it('reviews pending and no-bid outcomes while the next lot advances automatically', async () => {
