@@ -1,9 +1,9 @@
 <view class="page-shell leagues-page">
-  <view class="league-banner {{bannerUrl && !bannerFailed ? 'has-image' : 'is-fallback'}}" aria-label="联赛主题图">
+  <view class="league-banner {{bannerDisplayUrl && !bannerFailed ? 'has-image' : 'is-fallback'}}" aria-label="联赛主题图">
     <image
-      wx:if="{{bannerUrl && !bannerFailed}}"
+      wx:if="{{bannerDisplayUrl && !bannerFailed}}"
       class="league-banner__image"
-      src="{{bannerUrl}}"
+      src="{{bannerDisplayUrl}}"
       mode="aspectFill"
       lazy-load="{{true}}"
       binderror="onBannerError"

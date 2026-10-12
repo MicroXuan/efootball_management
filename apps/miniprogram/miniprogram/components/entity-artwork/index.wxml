@@ -1,8 +1,8 @@
 <view class="artwork artwork--{{shape}}" aria-label="{{fallback}}">
   <image
-    wx:if="{{src && !imageFailed}}"
+    wx:if="{{displaySrc && !imageFailed}}"
     class="artwork__image"
-    src="{{src}}"
+    src="{{displaySrc}}"
     mode="{{shape === 'portrait' ? 'aspectFill' : 'aspectFit'}}"
     binderror="onImageError"
   />

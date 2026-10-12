@@ -3,6 +3,7 @@ import { ApiError } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
 import { platformPresentationApi } from '../../services/platform-presentation'
 import { session } from '../../services/session'
+import { resolveImageSource } from '../../services/image-source'
 import {
   leagueCardView,
   leagueBannerView,
@@ -28,6 +29,7 @@ Page({
     hasLeagues: false,
     loggedIn: false,
     bannerUrl: '',
+    bannerDisplayUrl: '',
     bannerFailed: false,
   },
 
@@ -50,12 +52,16 @@ Page({
         platformPresentationApi.get().catch(() => ({ leagueCenterBannerUrl: null, version: 0 })),
       ])
       const banner = leagueBannerView(presentation)
+      const bannerDisplayUrl = banner.imageUrl
+        ? await resolveImageSource(banner.imageUrl, (options) => wx.downloadFile(options)).catch(() => '')
+        : ''
       const allLeagues = allResponse.items.map((league: LeagueSummary) => leagueCardView(league))
       const myLeagues = mineResponse.items.map((team: MyLeagueTeamSummary) => myLeagueCardView(team))
       const leagues = selectLeagueCards(this.data.activeTab, allLeagues, myLeagues)
       this.setData({
         state: 'loaded', errorMessage: '', loggedIn, allLeagues, myLeagues, leagues,
-        hasLeagues: leagues.length > 0, bannerUrl: banner.imageUrl, bannerFailed: false,
+        hasLeagues: leagues.length > 0, bannerUrl: banner.imageUrl, bannerDisplayUrl,
+        bannerFailed: Boolean(banner.imageUrl && !bannerDisplayUrl),
       })
     } catch (error) {
       this.setData({
