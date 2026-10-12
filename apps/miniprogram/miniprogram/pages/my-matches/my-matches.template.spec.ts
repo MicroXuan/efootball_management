@@ -3,6 +3,9 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const markup = readFileSync(resolve(__dirname, 'index.wxml'), 'utf8')
+const pageConfig = JSON.parse(readFileSync(resolve(__dirname, 'index.json'), 'utf8')) as {
+  usingComponents?: Record<string, string>
+}
 
 describe('my matches template', () => {
   it('renders a season picker and a symmetric read-only three-column fixture', () => {
@@ -15,5 +18,9 @@ describe('my matches template', () => {
     expect(markup).not.toContain('提交比分')
     expect(markup).not.toContain('确认对手比分')
     expect(markup).not.toContain('bindtap="openMatch"')
+  })
+
+  it('registers the team badge component used by each fixture', () => {
+    expect(pageConfig.usingComponents?.['entity-artwork']).toBe('/components/entity-artwork/index')
   })
 })
