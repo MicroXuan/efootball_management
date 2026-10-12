@@ -1,70 +1,92 @@
-<view class="page-shell">
+<block wx:if="{{state === 'loaded'}}">
+  <view wx:if="{{!loggedIn}}" class="login-shell">
+    <view class="login-stadium-mark" aria-hidden="true">
+      <view class="login-pitch-ring"></view>
+      <view class="login-ball">⚽</view>
+    </view>
+
+    <view class="login-brand-block">
+      <text class="login-eyebrow">赛事运营中枢</text>
+      <text class="login-title">非概念实况</text>
+      <text class="login-subtitle">赛事、战队、球员，实时调度。</text>
+    </view>
+
+    <view class="login-panel">
+      <view class="login-panel-line">
+        <text>参赛者通道</text>
+        <text class="login-panel-code">球员档案 · 01</text>
+      </view>
+      <button class="login-button" loading="{{loginLoading}}" disabled="{{loginLoading}}" bindtap="login">
+        <text class="login-button__label">{{loginLoading ? '正在进入…' : '微信登录'}}</text>
+      </button>
+      <text wx:if="{{errorMessage}}" class="login-error-copy">{{errorMessage}}</text>
+      <text class="login-privacy-copy">登录即用于识别参赛身份，不读取未授权的微信资料。</text>
+    </view>
+  </view>
+
+  <view wx:else class="page-shell">
+    <view class="topbar">
+      <view><text class="eyebrow">成员身份</text><text class="page-title">我的</text></view>
+      <text class="record-mark">球员档案 · 01</text>
+    </view>
+
+    <view class="identity-card">
+      <image wx:if="{{profile.avatarUrl}}" class="avatar" src="{{profile.avatarUrl}}" mode="aspectFill" />
+      <view wx:else class="avatar avatar-fallback">⚽</view>
+      <view class="identity-copy">
+        <text class="member-name">{{profile.displayName}}</text>
+        <text class="member-region">{{profile.region}}</text>
+      </view>
+      <view class="number-block" bindtap="copyUserNo">
+        <text class="number-label">用户编号</text><text class="public-number">{{profile.publicUserNoDisplay}}</text>
+        <text wx:if="{{profile.publicUserNoCopy}}" class="copy-hint">点击复制</text>
+      </view>
+    </view>
+
+    <view class="favorites-entry" bindtap="openFavorites" role="button">
+      <view class="favorites-icon">★</view>
+      <view class="favorites-copy"><text class="favorites-title">我的收藏</text><text class="favorites-detail">查看球员当前自动加点最高能力卡</text></view>
+      <text class="chevron">›</text>
+    </view>
+
+    <view class="favorites-entry" bindtap="openWechatBotBinding" role="button">
+      <view class="favorites-icon">🤖</view>
+      <view class="favorites-copy"><text class="favorites-title">绑定群机器人</text><text class="favorites-detail">绑定微信身份，使用“我的赛程”等群命令</text></view>
+      <text class="chevron">›</text>
+    </view>
+
+    <view class="section-head">
+      <view><text class="section-kicker">已绑定球队</text><text class="section-title">已绑定联赛球队</text></view>
+      <text class="team-count">{{profile.teams.length}} 支</text>
+    </view>
+
+    <view wx:if="{{!profile.hasTeams}}" class="state-card compact">
+      <text class="state-title">还没有绑定球队</text>
+      <text class="state-copy">球队由联赛管理员在后台创建并绑定。绑定后会自动报名当前赛季，无需你手动填写资料。</text>
+    </view>
+    <view wx:else class="team-list">
+      <view wx:for="{{profile.teams}}" wx:key="id" class="team-card" data-id="{{item.id}}" bindtap="openTeam">
+        <entity-artwork class="team-logo" src="{{item.teamLogoUrl}}" fallback="{{item.teamLogoText}}" shape="square" />
+        <view class="team-copy">
+          <view class="team-name-line"><text class="team-name">{{item.identityCopy}}</text></view>
+          <text class="team-alias">{{item.ownerAliasCopy}}</text>
+          <text class="league-name">{{item.leagueName}} · {{item.editionLabel}}</text>
+          <text class="season-name">{{item.seasonName}} · 阵容 {{item.rosterCopy}}</text>
+        </view>
+        <text class="chevron">›</text>
+      </view>
+    </view>
+  </view>
+</block>
+
+<view wx:else class="page-shell">
   <view class="topbar">
     <view><text class="eyebrow">成员身份</text><text class="page-title">我的</text></view>
     <text class="record-mark">球员档案 · 01</text>
   </view>
-
   <loading-state wx:if="{{state === 'loading'}}" label="正在加载身份资料" />
-  <view wx:elif="{{state === 'error'}}" class="state-card">
+  <view wx:else class="state-card">
     <text class="state-code">身份读取失败</text><text class="state-title">暂时无法加载</text>
     <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
   </view>
-
-  <block wx:else>
-    <view wx:if="{{!loggedIn}}" class="state-card login-card">
-      <text class="state-code">微信身份</text><text class="state-title">登录后查看我的球队</text>
-      <text class="state-copy">管理员绑定联赛球队后，球队与当前赛季会自动显示在这里。</text>
-      <text wx:if="{{errorMessage}}" class="login-error">{{errorMessage}}</text>
-      <button class="primary-button" loading="{{loginLoading}}" disabled="{{loginLoading}}" bindtap="login">{{loginLoading ? '登录中' : '微信登录'}}</button>
-    </view>
-
-    <block wx:else>
-      <view class="identity-card">
-        <image wx:if="{{profile.avatarUrl}}" class="avatar" src="{{profile.avatarUrl}}" mode="aspectFill" />
-        <view wx:else class="avatar avatar-fallback">⚽</view>
-        <view class="identity-copy">
-          <text class="member-name">{{profile.displayName}}</text>
-          <text class="member-region">{{profile.region}}</text>
-        </view>
-        <view class="number-block" bindtap="copyUserNo">
-          <text class="number-label">用户编号</text><text class="public-number">{{profile.publicUserNoDisplay}}</text>
-          <text wx:if="{{profile.publicUserNoCopy}}" class="copy-hint">点击复制</text>
-        </view>
-      </view>
-
-      <view class="favorites-entry" bindtap="openFavorites" role="button">
-        <view class="favorites-icon">★</view>
-        <view class="favorites-copy"><text class="favorites-title">我的收藏</text><text class="favorites-detail">查看球员当前自动加点最高能力卡</text></view>
-        <text class="chevron">›</text>
-      </view>
-
-      <view class="favorites-entry" bindtap="openWechatBotBinding" role="button">
-        <view class="favorites-icon">🤖</view>
-        <view class="favorites-copy"><text class="favorites-title">绑定群机器人</text><text class="favorites-detail">绑定微信身份，使用“我的赛程”等群命令</text></view>
-        <text class="chevron">›</text>
-      </view>
-
-      <view class="section-head">
-        <view><text class="section-kicker">已绑定球队</text><text class="section-title">已绑定联赛球队</text></view>
-        <text class="team-count">{{profile.teams.length}} 支</text>
-      </view>
-
-      <view wx:if="{{!profile.hasTeams}}" class="state-card compact">
-        <text class="state-title">还没有绑定球队</text>
-        <text class="state-copy">球队由联赛管理员在后台创建并绑定。绑定后会自动报名当前赛季，无需你手动填写资料。</text>
-      </view>
-      <view wx:else class="team-list">
-        <view wx:for="{{profile.teams}}" wx:key="id" class="team-card" data-id="{{item.id}}" bindtap="openTeam">
-          <entity-artwork class="team-logo" src="{{item.teamLogoUrl}}" fallback="{{item.teamLogoText}}" shape="square" />
-          <view class="team-copy">
-            <view class="team-name-line"><text class="team-name">{{item.identityCopy}}</text></view>
-            <text class="team-alias">{{item.ownerAliasCopy}}</text>
-            <text class="league-name">{{item.leagueName}} · {{item.editionLabel}}</text>
-            <text class="season-name">{{item.seasonName}} · 阵容 {{item.rosterCopy}}</text>
-          </view>
-          <text class="chevron">›</text>
-        </view>
-      </view>
-    </block>
-  </block>
 </view>
