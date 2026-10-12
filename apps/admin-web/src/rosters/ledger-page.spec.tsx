@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
 import { LedgerPage } from './ledger-page';
 
 it('renders immutable categorized real-time finance data and management entry points', async () => {
   const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/roster-seasons')) return [];
     if (path.endsWith('/teams')) return { items: [], nextCursor: null };
     if (path.endsWith('/transaction-fee-rules')) return { items: [] };
     if (path.endsWith('/transactions')) return { items: [{
@@ -28,10 +30,65 @@ it('renders immutable categorized real-time finance data and management entry po
   expect(screen.getAllByText('历史未归档').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: '新增财务项目' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '配置手续费规则' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '赛季结算金额' })).toBeInTheDocument();
   expect(screen.getByText('阵容交易历史')).toBeInTheDocument();
   expect(screen.getByText('扬·范赫克')).toBeInTheDocument();
   expect(screen.getByText('上海申花 → 亚特兰大')).toBeInTheDocument();
   expect(screen.getByText('1,500 → 3,000')).toBeInTheDocument();
   expect(screen.getByText('手续费 30')).toBeInTheDocument();
   expect(request).toHaveBeenCalledWith('/v1/admin/leagues/11111111-1111-4111-8111-111111111111/transactions', expect.any(Object));
+});
+
+it('loads and saves all seasonal settlement amount fields with team and season selectors', async () => {
+  const user = userEvent.setup();
+  const leagueId = '11111111-1111-4111-8111-111111111111';
+  const teamId = '33333333-3333-4333-8333-333333333333';
+  const seasonId = '55555555-5555-4555-8555-555555555555';
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: unknown }) => {
+    if (path.endsWith('/roster-seasons')) return [{ id: seasonId, displayName: 'CELL-S20赛季' }];
+    if (path.endsWith('/teams')) return { items: [{ id: teamId, name: '阿森纳' }], nextCursor: null };
+    if (path.endsWith('/transaction-fee-rules')) return { items: [] };
+    if (path.endsWith('/transactions')) return { items: [], nextCursor: null };
+    if (path.includes('/finance-settlements?')) return {
+      leagueId, teamId, seasonId, totalMinor: 414,
+      items: [
+        { category: 'TRANSACTION_AMOUNT', amountMinor: 10 },
+        { category: 'LUXURY_TAX', amountMinor: 404 },
+        { category: 'OFFSEASON_FEE', amountMinor: 0 },
+        { category: 'UNFINISHED_MATCH_PENALTY', amountMinor: 0 },
+        { category: 'PLAYER_AUCTION', amountMinor: 0 },
+        { category: 'TEAM_AUCTION', amountMinor: 0 },
+        { category: 'ROOKIE_SELECTION', amountMinor: 0 },
+        { category: 'INSTALLMENT_PAYMENT', amountMinor: 0 },
+        { category: 'OTHER_ADJUSTMENT', amountMinor: 0 }
+      ]
+    };
+    if (path.endsWith('/finance-settlements') && options?.method === 'PUT') return {
+      leagueId, teamId, seasonId, totalMinor: 414, items: []
+    };
+    return { items: [], nextCursor: null };
+  }) as unknown as AdminApi['request'];
+  const api = { request } as unknown as AdminApi;
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/ledger`]}><Routes>
+    <Route path="/leagues/:leagueId/ledger" element={<LedgerPage api={api} />} />
+  </Routes></MemoryRouter>);
+
+  await user.click(await screen.findByRole('button', { name: '赛季结算金额' }));
+  for (const label of ['交易金额', '奢侈税', '休赛费用', '未完赛处罚', '海摘竞拍金额', '球队拍卖金额', '新秀金额', '分期付款', '其他手动调整']) {
+    expect(await screen.findByLabelText(label)).toBeInTheDocument();
+  }
+  expect(screen.getByLabelText('交易金额')).toHaveValue('10');
+  expect(screen.getByLabelText('奢侈税')).toHaveValue('404');
+  await user.type(screen.getByLabelText('操作原因'), '管理员确认');
+  await user.click(screen.getByRole('button', { name: '保存结算金额' }));
+
+  expect(request).toHaveBeenCalledWith(`/v1/admin/leagues/${leagueId}/finance-settlements`, expect.objectContaining({
+    method: 'PUT',
+    body: expect.objectContaining({
+      leagueTeamId: teamId,
+      seasonId,
+      amounts: expect.objectContaining({ transactionAmountMinor: 10, luxuryTaxMinor: 404, otherAdjustmentMinor: 0 }),
+      reason: '管理员确认'
+    })
+  }));
 });

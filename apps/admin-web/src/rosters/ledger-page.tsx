@@ -4,13 +4,15 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  FinanceLedgerEntrySchema, FinanceLedgerListResponseSchema, LeagueTeamListResponseSchema,
+  FinanceLedgerEntrySchema, FinanceLedgerListResponseSchema, LeagueSeasonSummarySchema, LeagueTeamListResponseSchema,
   LeagueTransactionListResponseSchema,
+  TeamFinanceSettlementSummarySchema,
   TransactionFeeRuleVersionListResponseSchema, TransactionFeeRuleVersionSchema,
-  type FinanceLedgerListResponse, type LeagueTransactionListResponse, type TransactionFeeRuleVersion
+  type FinanceLedgerListResponse, type LeagueSeasonSummary, type LeagueTransactionListResponse, type TransactionFeeRuleVersion
 } from '@efm/contracts';
 import { adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
+import { z } from 'zod';
 
 const financeTypeLabels: Record<string, string> = {
   PLAYER_PURCHASE: '购买球员', PLAYER_SALE: '出售球员', PLAYER_TRANSFER: '球员转会',
@@ -33,28 +35,49 @@ type ManualFields = {
   amountMinor: number; note: string; reason: string;
 };
 type FeeFields = { rateBps: number; minimumFeeMinor: number; effectiveAt: string };
+type SettlementAmountField = 'transactionAmountMinor' | 'luxuryTaxMinor' | 'offseasonFeeMinor'
+  | 'unfinishedMatchPenaltyMinor' | 'playerAuctionMinor' | 'teamAuctionMinor'
+  | 'rookieSelectionMinor' | 'installmentPaymentMinor' | 'otherAdjustmentMinor';
+type SettlementFields = Record<SettlementAmountField, number | undefined> & {
+  leagueTeamId: string; seasonId: string; note?: string; reason: string;
+};
+const settlementFields: Array<{ field: SettlementAmountField; category: string; label: string }> = [
+  { field: 'transactionAmountMinor', category: 'TRANSACTION_AMOUNT', label: '交易金额' },
+  { field: 'luxuryTaxMinor', category: 'LUXURY_TAX', label: '奢侈税' },
+  { field: 'offseasonFeeMinor', category: 'OFFSEASON_FEE', label: '休赛费用' },
+  { field: 'unfinishedMatchPenaltyMinor', category: 'UNFINISHED_MATCH_PENALTY', label: '未完赛处罚' },
+  { field: 'playerAuctionMinor', category: 'PLAYER_AUCTION', label: '海摘竞拍金额' },
+  { field: 'teamAuctionMinor', category: 'TEAM_AUCTION', label: '球队拍卖金额' },
+  { field: 'rookieSelectionMinor', category: 'ROOKIE_SELECTION', label: '新秀金额' },
+  { field: 'installmentPaymentMinor', category: 'INSTALLMENT_PAYMENT', label: '分期付款' },
+  { field: 'otherAdjustmentMinor', category: 'OTHER_ADJUSTMENT', label: '其他手动调整' }
+];
 
 export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
   const [data, setData] = useState<FinanceLedgerListResponse>({ items: [], nextCursor: null });
   const [transactions, setTransactions] = useState<LeagueTransactionListResponse>({ items: [], nextCursor: null });
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
+  const [seasons, setSeasons] = useState<LeagueSeasonSummary[]>([]);
   const [rules, setRules] = useState<TransactionFeeRuleVersion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false); const [feeOpen, setFeeOpen] = useState(false);
+  const [settlementOpen, setSettlementOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [manualForm] = Form.useForm<ManualFields>(); const [feeForm] = Form.useForm<FeeFields>();
-  const manualKey = useMutationKey(); const feeKey = useMutationKey();
+  const [settlementForm] = Form.useForm<SettlementFields>();
+  const manualKey = useMutationKey(); const feeKey = useMutationKey(); const settlementKey = useMutationKey();
   const load = useCallback(async () => {
     try {
-      const [ledger, transactionResult, teamResult, ruleResult] = await Promise.all([
+      const [ledger, transactionResult, teamResult, ruleResult, seasonResult] = await Promise.all([
         api.request(`/v1/admin/roster/leagues/${leagueId}/ledger`, { schema: FinanceLedgerListResponseSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/transactions`, { schema: LeagueTransactionListResponseSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/teams`, { schema: LeagueTeamListResponseSchema }),
-        api.request(`/v1/admin/leagues/${leagueId}/transaction-fee-rules`, { schema: TransactionFeeRuleVersionListResponseSchema })
+        api.request(`/v1/admin/leagues/${leagueId}/transaction-fee-rules`, { schema: TransactionFeeRuleVersionListResponseSchema }),
+        api.request(`/v1/admin/leagues/${leagueId}/roster-seasons`, { schema: z.array(LeagueSeasonSummarySchema) })
       ]);
       setData(ledger); setTransactions(transactionResult);
-      setTeams(teamResult.items.map(({ id, name }) => ({ id, name }))); setRules(ruleResult.items);
+      setTeams(teamResult.items.map(({ id, name }) => ({ id, name }))); setRules(ruleResult.items); setSeasons(seasonResult);
     } catch { setError('财务数据加载失败'); }
   }, [api, leagueId]);
   useEffect(() => { void load(); }, [load]);
@@ -80,6 +103,38 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
     } catch { setError('手续费规则发布失败，请刷新后重试'); }
     finally { setSubmitting(false); }
   };
+  const loadSettlement = async (leagueTeamId: string, seasonId: string) => {
+    try {
+      const result = await api.request(
+        `/v1/admin/leagues/${leagueId}/finance-settlements?leagueTeamId=${encodeURIComponent(leagueTeamId)}&seasonId=${encodeURIComponent(seasonId)}`,
+        { schema: TeamFinanceSettlementSummarySchema }
+      );
+      const values = Object.fromEntries(settlementFields.map(({ field, category }) => [
+        field, result.items.find((item) => item.category === category)?.amountMinor ?? 0
+      ]));
+      settlementForm.setFieldsValue({ leagueTeamId, seasonId, ...values } as Partial<SettlementFields>);
+    } catch { setError('赛季结算金额加载失败'); }
+  };
+  const openSettlement = () => {
+    const leagueTeamId = teams[0]?.id; const seasonId = seasons[0]?.id;
+    setSettlementOpen(true); settlementForm.resetFields();
+    if (leagueTeamId && seasonId) void loadSettlement(leagueTeamId, seasonId);
+  };
+  const saveSettlement = async (values: SettlementFields) => {
+    setSubmitting(true); setError(null);
+    try {
+      const amounts = Object.fromEntries(settlementFields.map(({ field }) => [field, values[field] ?? 0]));
+      await api.request(`/v1/admin/leagues/${leagueId}/finance-settlements`, {
+        method: 'PUT', headers: { 'Idempotency-Key': settlementKey.current() }, schema: TeamFinanceSettlementSummarySchema,
+        body: {
+          leagueTeamId: values.leagueTeamId, seasonId: values.seasonId, amounts,
+          note: values.note?.trim() ?? '', reason: values.reason
+        }
+      });
+      settlementKey.reset(); setSettlementOpen(false); settlementForm.resetFields(); await load();
+    } catch { setError('保存赛季结算金额失败，请检查球队、赛季和权限'); }
+    finally { setSubmitting(false); }
+  };
   return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
   <Card title="财务流水">
     {error ? <Alert role="alert" type="warning" title={error} /> : null}
@@ -88,7 +143,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
       { key: 'rule', label: '当前手续费规则', children: rules[0] ? `${rules[0].rateBps / 100}% · 最低 ${rules[0].minimumFeeMinor}` : '尚未配置' },
       { key: 'history', label: '历史未归档', children: `${data.items.filter(({ seasonId }) => seasonId === null).length} 条` }
     ]} />
-    <Space wrap><Button type="primary" onClick={() => setManualOpen(true)}>新增财务项目</Button><Button onClick={() => setFeeOpen(true)}>配置手续费规则</Button></Space>
+    <Space wrap><Button type="primary" onClick={() => setManualOpen(true)}>新增财务项目</Button><Button onClick={openSettlement}>赛季结算金额</Button><Button onClick={() => setFeeOpen(true)}>配置手续费规则</Button></Space>
     <Typography.Paragraph type="secondary">所有分类均以中文展示，技术类型码仅保留在接口和审计详情中。</Typography.Paragraph>
     <Table pagination={false} rowKey="id" dataSource={data.items} columns={[
       { title: '时间', dataIndex: 'createdAt' }, { title: '球队', dataIndex: 'teamName' },
@@ -107,6 +162,29 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
         <Form.Item label="流水说明" name="note"><Input maxLength={512} /></Form.Item>
         <Form.Item label="操作原因" name="reason" rules={[{ required: true, whitespace: true }]}><Input.TextArea maxLength={512} /></Form.Item>
         <Button type="primary" htmlType="submit" loading={submitting}>确认新增</Button>
+      </Form>
+    </Modal>
+    <Modal open={settlementOpen} title="赛季结算金额" footer={null} onCancel={() => setSettlementOpen(false)} destroyOnHidden width={720}>
+      <Form<SettlementFields>
+        form={settlementForm} layout="vertical"
+        onValuesChange={(changed, values) => {
+          settlementKey.reset();
+          if (('leagueTeamId' in changed || 'seasonId' in changed) && values.leagueTeamId && values.seasonId) {
+            void loadSettlement(values.leagueTeamId, values.seasonId);
+          }
+        }}
+        onFinish={(values) => void saveSettlement(values)}
+      >
+        <Space size="middle" style={{ display: 'flex' }}>
+          <Form.Item label="球队" name="leagueTeamId" rules={[{ required: true }]} style={{ flex: 1 }}><Select options={teams.map(({ id, name }) => ({ value: id, label: name }))} /></Form.Item>
+          <Form.Item label="赛季" name="seasonId" rules={[{ required: true }]} style={{ flex: 1 }}><Select options={seasons.map(({ id, displayName }) => ({ value: id, label: displayName }))} /></Form.Item>
+        </Space>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0 16px' }}>
+          {settlementFields.map(({ field, label }) => <Form.Item key={field} label={label} name={field}><InputNumber min={0} precision={0} style={{ width: '100%' }} /></Form.Item>)}
+        </div>
+        <Form.Item label="展示说明" name="note"><Input maxLength={512} /></Form.Item>
+        <Form.Item label="操作原因" name="reason" rules={[{ required: true, whitespace: true }]}><Input.TextArea maxLength={512} /></Form.Item>
+        <Button type="primary" htmlType="submit" loading={submitting}>保存结算金额</Button>
       </Form>
     </Modal>
     <Modal open={feeOpen} title="发布手续费规则版本" footer={null} onCancel={() => setFeeOpen(false)} destroyOnHidden>
