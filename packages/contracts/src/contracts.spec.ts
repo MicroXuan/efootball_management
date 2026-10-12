@@ -33,6 +33,7 @@ import {
   WithdrawSeasonCupRequestSchema,
   CupRegistrationResponseSchema,
   MyCompetitionResponseSchema,
+  MyMatchListQuerySchema,
   GenerateCupGroupProposalRequestSchema,
   ConfirmCupGroupProposalRequestSchema,
   CupGroupProposalSchema,
@@ -431,6 +432,18 @@ describe('league economy contracts', () => {
       createdAt: startsAt
     });
     assert.equal(audit.resourceId, 'global');
+  });
+
+  it('accepts season-scoped upcoming match queries', () => {
+    assert.deepEqual(MyMatchListQuerySchema.parse({
+      seasonId: ids.season,
+      upcomingOnly: 'true',
+      limit: '100'
+    }), {
+      seasonId: ids.season,
+      upcomingOnly: true,
+      limit: 100
+    });
   });
 });
 

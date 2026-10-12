@@ -81,7 +81,7 @@ export function playerAuctionAccess(loggedIn: boolean, hasLeagueTeam: boolean) {
 
 export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
   const rank = workspace.currentRank
-    ? `${workspace.currentRank.rank}${workspace.currentRank.tiePending ? '*' : ''}`
+    ? String(workspace.currentRank.rank)
     : '—'
   const nextMatch = workspace.nextMatch
     ? `第 ${workspace.nextMatch.roundNumber} 轮 · 对阵 ${workspace.nextMatch.opponentName}`
@@ -91,6 +91,7 @@ export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
     teamShortName: workspace.team.shortName,
     divisionName: workspace.division?.displayName ?? '等待正式分组',
     rank,
+    rankNotice: workspace.currentRank?.tiePending ? '同分待定' : '',
     rankMeta: workspace.currentRank ? `${workspace.currentRank.played} 场 · ${workspace.currentRank.points} 分` : '排名尚未产生',
     nextMatch,
     nextMatchTime: workspace.nextMatch?.plannedAt?.slice(0, 16).replace('T', ' ') ?? '时间待定',

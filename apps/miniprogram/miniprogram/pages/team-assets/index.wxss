@@ -5,7 +5,6 @@ page { background: #0e1417; color: #f4f7f8; }
 .team-badge { width: 118rpx; height: 118rpx; border: 2rpx solid #46545b; border-radius: 28rpx; background: #0b1114; }
 .badge-placeholder { display: flex; align-items: center; justify-content: center; color: #b6f13a; font-size: 42rpx; font-weight: 850; }
 .owner-avatar { position: absolute; right: 0; bottom: 0; width: 58rpx; height: 58rpx; box-sizing: border-box; border: 5rpx solid #151d21; border-radius: 18rpx; background: #1c262b; box-shadow: 0 0 0 2rpx #b6f13a; }
-.owner-avatar-placeholder { display: flex; align-items: center; justify-content: center; color: #111810; background: #b6f13a; font-size: 22rpx; font-weight: 850; }
 .hero-copy { min-width: 0; margin-left: 22rpx; flex: 1; }
 .kicker { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
 .title { display: block; margin-top: 10rpx; overflow: hidden; font-size: 42rpx; font-weight: 850; line-height: 1.18; text-overflow: ellipsis; white-space: nowrap; }

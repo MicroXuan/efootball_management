@@ -468,7 +468,12 @@ export const MyCompetitionListQuerySchema = z.object({
 
 export const MyMatchListQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20)
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  seasonId: ResourceIdSchema.optional(),
+  upcomingOnly: z.union([
+    z.boolean(),
+    z.enum(['true', 'false']).transform((value) => value === 'true')
+  ]).optional()
 });
 
 export const CompetitionRegistrationResponseSchema = z.object({

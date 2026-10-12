@@ -16,4 +16,11 @@ describe('team assets template', () => {
     expect(markup).toContain('<label>AT</label><text>{{item.atCopy}}</text>')
     expect(markup).not.toContain('{{item.cardCopy}}')
   })
+
+  it('shows a real WeChat avatar only and keeps team identity and division visible', () => {
+    expect(markup).toContain('wx:if="{{assets.ownerAvatarUrl}}"')
+    expect(markup).not.toContain('owner-avatar-placeholder')
+    expect(markup).toContain('{{assets.identityCopy}}')
+    expect(markup).toContain('{{assets.divisionCopy}}')
+  })
 })

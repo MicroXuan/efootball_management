@@ -1,11 +1,12 @@
 <view class="matches-page">
-  <view class="page-head"><view><text class="kicker">球员工作台</text><text class="title">我的比赛</text></view><text class="mark">实时运营</text></view>
+  <view class="page-head"><view><text class="kicker">{{pageKicker}}</text><text class="title">{{pageTitle}}</text></view><text class="mark">实时赛程</text></view>
   <loading-state wx:if="{{loading && items.length === 0}}" label="正在整理比赛任务" />
   <view wx:elif="{{errorMessage && items.length === 0}}" class="state"><text>比赛列表不可用</text><text>{{errorMessage}}</text><button bindtap="retry">重试</button></view>
   <view wx:elif="{{!loading && items.length === 0}}" class="state"><text>还没有比赛任务</text><text>报名获批并发布赛程后，会显示在这里。</text></view>
   <view wx:else class="match-list">
     <view wx:for="{{items}}" wx:key="matchId" class="match-card">
       <view class="match-head"><text>{{item.competition.name}}</text><text>#{{item.match.matchNumber}}</text></view>
+      <text class="schedule-meta">{{item.scheduleMeta}}</text>
       <text class="planned">{{item.plannedLabel}}</text>
       <view class="versus"><text>{{item.match.homeParticipant.displayName}}{{item.match.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{item.match.awayParticipant.displayName}}{{item.match.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
       <text wx:if="{{item.match.officialResult}}" class="score">{{item.match.officialResult.homeScore}} : {{item.match.officialResult.awayScore}}</text>

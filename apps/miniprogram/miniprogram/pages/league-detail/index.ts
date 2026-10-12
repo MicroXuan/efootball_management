@@ -129,6 +129,14 @@ Page({
     wx.navigateTo({ url: '/pages/player-auctions/index' })
   },
 
+  openUpcomingMatches() {
+    const workspace = this.data.workspace
+    if (!workspace) return
+    wx.navigateTo({
+      url: `/pages/my-matches/index?seasonId=${encodeURIComponent(workspace.seasonId)}&upcomingOnly=1`,
+    })
+  },
+
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return

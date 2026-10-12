@@ -15,7 +15,7 @@ Page({
   async load(preserveError = false) {
     this.setData({ loading: true })
     try {
-      const response = await competitionsApi.myMatches(undefined, 100)
+      const response = await competitionsApi.myMatches({ limit: 100 })
       const item = response.items.find(({ match }) => match.id === this.data.id) ?? null
       this.setData({ item, errorMessage: item ? (preserveError ? this.data.errorMessage : '') : '比赛不存在或已不可操作', reloadRequired: false })
     } catch (error) {

@@ -66,10 +66,15 @@ export class MyCompetitionsService {
   async listMatches(userId: string, query: MyMatchListQuery): Promise<MyMatchListResponse> {
     const records = await this.prisma.competitionMatch.findMany({
       where: {
+        ...(query.upcomingOnly ? {
+          officialResultVersionId: null,
+          status: { notIn: ['CONFIRMED', 'ADMIN_DECIDED'] as const }
+        } : {}),
         stage: {
           status: 'PUBLISHED',
           competition: {
             status: { not: 'CANCELLED' },
+            ...(query.seasonId ? { seasonId: query.seasonId } : {}),
             OR: [{ seasonId: null }, { season: { league: { isDeleted: false } } }]
           }
         },

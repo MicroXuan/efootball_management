@@ -50,4 +50,14 @@ describe('league detail module cards', () => {
     expect(page).not.toContain('enterCurrentSeason()')
     expect(page).not.toContain('openStandings()')
   })
+
+  it('opens the current season upcoming schedule from the next-match card', () => {
+    const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
+
+    expect(markup).toContain('class="workspace-metric workspace-metric--schedule"')
+    expect(markup).toContain('bindtap="openUpcomingMatches"')
+    expect(markup).toContain('{{workspaceView.rankNotice}}')
+    expect(page).toContain("upcomingOnly=1")
+    expect(page).toContain('seasonId=')
+  })
 })

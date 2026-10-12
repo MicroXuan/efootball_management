@@ -36,12 +36,28 @@ export type CompetitionListOptions = {
   category?: 'CUP'
 }
 
+export type MyMatchListOptions = {
+  cursor?: string
+  limit?: number
+  seasonId?: string
+  upcomingOnly?: boolean
+}
+
 export function competitionListPath(options: CompetitionListOptions = {}): string {
   return query('/competitions', {
     cursor: options.cursor,
     limit: options.limit ?? 20,
     seasonId: options.seasonId,
     category: options.category,
+  })
+}
+
+export function myMatchesPath(options: MyMatchListOptions = {}): string {
+  return query('/me/matches', {
+    cursor: options.cursor,
+    limit: options.limit ?? 20,
+    seasonId: options.seasonId,
+    upcomingOnly: options.upcomingOnly ? 'true' : undefined,
   })
 }
 
@@ -58,8 +74,8 @@ export const competitionsApi = {
   mine(cursor?: string, limit = 100) {
     return api.request<MyCompetitionListResponse>({ path: query('/me/competitions', { cursor, limit }) })
   },
-  myMatches(cursor?: string, limit = 20) {
-    return api.request<MyMatchListResponse>({ path: query('/me/matches', { cursor, limit }) })
+  myMatches(options: MyMatchListOptions = {}) {
+    return api.request<MyMatchListResponse>({ path: myMatchesPath(options) })
   },
   register(competitionId: string, gameAccountId: string, acceptedRuleVersion: number) {
     return api.request<CompetitionRegistrationResponse>({

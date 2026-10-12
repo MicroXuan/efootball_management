@@ -12,7 +12,6 @@
         <image wx:if="{{assets.teamBadgeUrl}}" class="team-badge" src="{{assets.teamBadgeUrl}}" mode="aspectFit" />
         <view wx:else class="team-badge badge-placeholder">{{assets.teamBadgeText}}</view>
         <image wx:if="{{assets.ownerAvatarUrl}}" class="owner-avatar" src="{{assets.ownerAvatarUrl}}" mode="aspectFill" />
-        <view wx:else class="owner-avatar owner-avatar-placeholder">{{assets.ownerAvatarText}}</view>
       </view>
       <view class="hero-copy">
         <text class="kicker">球队资产</text>

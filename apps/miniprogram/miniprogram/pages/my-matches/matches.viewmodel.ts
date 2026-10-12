@@ -6,3 +6,7 @@ export function primaryAction(action: MatchAction) {
   }
   return { label: labels[action], enabled: action !== 'WAIT' }
 }
+
+export function scheduleMeta(roundNumber: number, side: 'HOME' | 'AWAY') {
+  return `第 ${roundNumber} 轮 · ${side === 'HOME' ? '主场' : '客场'}`
+}

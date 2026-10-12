@@ -216,6 +216,10 @@ describe('MyCompetitionsService', () => {
       stageId: stage.id, roundNumber: 1, matchNumber: 1, pairingKey: 'cup-final',
       homeParticipantId: mine.id, awayParticipantId: opponent.id, status: 'AWAITING_RESULT'
     } });
+    await prisma.competitionMatch.create({ data: {
+      stageId: stage.id, roundNumber: 2, matchNumber: 2, pairingKey: 'cup-finished',
+      homeParticipantId: mine.id, awayParticipantId: opponent.id, status: 'CONFIRMED'
+    } });
 
     const competitions = await service.listCompetitions(userId, { limit: 10 });
     expect(competitions.items[0]).toMatchObject({
@@ -223,8 +227,11 @@ describe('MyCompetitionsService', () => {
       registration: { seasonEntryId: myEntry.id, teamName: '上海海港' }
     });
     const matches = await service.listMatches(userId, { limit: 10 });
-    expect(matches.items).toHaveLength(1);
+    expect(matches.items).toHaveLength(2);
     expect(matches.items[0]).toMatchObject({ myParticipantId: mine.id, action: 'SUBMIT' });
+    const upcoming = await service.listMatches(userId, { limit: 10, seasonId: season.id, upcomingOnly: true });
+    expect(upcoming.items).toHaveLength(1);
+    expect(upcoming.items[0]).toMatchObject({ myParticipantId: mine.id, action: 'SUBMIT' });
     await prisma.leagueTeam.update({ where: { id: myTeam.id }, data: { status: 'ARCHIVED' } });
     await expect(service.listCompetitions(userId, { limit: 10 }))
       .resolves.toMatchObject({ items: [] });

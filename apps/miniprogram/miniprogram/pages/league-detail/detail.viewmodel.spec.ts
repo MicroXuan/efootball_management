@@ -91,7 +91,7 @@ describe('league detail view model', () => {
 
   it('presents enrolled workspace data and stable empty states', () => {
     const workspace = workspaceFixture()
-    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2*', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
+    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2', rankNotice: '同分待定', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
     expect(workspaceSummary({ ...workspace, division: null, currentRank: null, nextMatch: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', nextMatch: '暂无待进行比赛' })
   })
 
