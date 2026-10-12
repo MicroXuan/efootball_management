@@ -5,6 +5,13 @@ import { describe, expect, it } from 'vitest'
 const markup = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.wxml'), 'utf8')
 
 describe('league detail module cards', () => {
+  it('keeps the compact hero below the runtime status bar', () => {
+    const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
+
+    expect(markup).toContain('style="padding-top: calc({{statusBarHeight}}px + 26rpx);"')
+    expect(page).toContain('statusBarHeight: wx.getSystemInfoSync().statusBarHeight')
+  })
+
   it('renders player auctions in the same grid as the standard workspace modules', () => {
     const gridStart = markup.indexOf('<view class="workspace-groups">')
     const auctionPosition = markup.indexOf('球员拍卖')

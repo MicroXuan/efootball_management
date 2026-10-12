@@ -25,6 +25,7 @@ type WorkspaceModuleTapEvent = { currentTarget: { dataset: { key?: string } } }
 
 Page({
   data: {
+    statusBarHeight: wx.getSystemInfoSync().statusBarHeight,
     state: 'loading' as 'loading' | 'loaded' | 'error',
     errorMessage: '',
     leagueId: '',

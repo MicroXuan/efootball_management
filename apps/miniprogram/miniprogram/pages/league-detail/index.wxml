@@ -1,4 +1,4 @@
-<view class="page-shell detail-page">
+<view class="page-shell detail-page" style="padding-top: calc({{statusBarHeight}}px + 26rpx);">
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取赛季资料" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
     <text class="state-code">赛季读取失败</text>
