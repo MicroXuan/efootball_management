@@ -1,10 +1,8 @@
-import {
-  MyPlayerAuctionListItemSchema,
-  MyPlayerAuctionRoomSchema,
-  type MyPlayerAuctionListItem,
-  type MyPlayerAuctionRoom,
-  type PlaceMiniprogramAuctionBidRequest,
-  type PlayerAuctionBidResult,
+import type {
+  MyPlayerAuctionListItem,
+  MyPlayerAuctionRoom,
+  PlaceMiniprogramAuctionBidRequest,
+  PlayerAuctionBidResult,
 } from '@efm/contracts'
 import { api } from './api'
 
@@ -32,13 +30,12 @@ export function createPlayerAuctionBidSubmission(
 }
 
 export async function listMyPlayerAuctions(status: 'active' | 'all' = 'active'): Promise<MyPlayerAuctionListItem[]> {
-  const response = await api.request<{ items: unknown[] }>({ path: `/me/player-auctions?status=${status}` })
-  return response.items.map((item) => MyPlayerAuctionListItemSchema.parse(item))
+  const response = await api.request<{ items: MyPlayerAuctionListItem[] }>({ path: `/me/player-auctions?status=${status}` })
+  return response.items
 }
 
 export async function getMyPlayerAuction(batchId: string): Promise<MyPlayerAuctionRoom> {
-  const response = await api.request<unknown>({ path: `/me/player-auctions/${id(batchId)}` })
-  return MyPlayerAuctionRoomSchema.parse(response)
+  return api.request<MyPlayerAuctionRoom>({ path: `/me/player-auctions/${id(batchId)}` })
 }
 
 export function placeMyPlayerAuctionBid(
