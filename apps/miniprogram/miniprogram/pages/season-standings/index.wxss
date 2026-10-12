@@ -171,16 +171,12 @@ page {
   justify-content: center;
 }
 
+.plain-rank { width: 100%; }
+.plain-rank.is-accent { color: #65ef9b; }
+
 .medal {
   font-size: 38rpx;
   line-height: 1;
-}
-
-.rise {
-  margin-left: 8rpx;
-  color: #65ef9b;
-  font-size: 28rpx;
-  font-weight: 900;
 }
 
 .team {

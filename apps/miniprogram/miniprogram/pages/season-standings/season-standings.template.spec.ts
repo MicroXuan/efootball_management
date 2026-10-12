@@ -12,10 +12,11 @@ describe('season standings template', () => {
     expect(markup).toContain('{{item.ownerDisplayName}}')
   })
 
-  it('renders podium medals and the fourth-place rise marker', () => {
+  it('renders podium medals and an aligned green fourth-place rank', () => {
     expect(markup).toContain('{{item.medalLabel}}')
-    expect(markup).toContain('wx:if="{{item.showRise}}"')
-    expect(markup).toContain('class="rise">↑</text>')
+    expect(markup).toContain("item.rankAccent ? 'is-accent' : ''")
+    expect(markup).not.toContain('item.showRise')
+    expect(markup).not.toContain('class="rise"')
   })
 
   it('keeps played matches and points visible in the compact standings columns', () => {

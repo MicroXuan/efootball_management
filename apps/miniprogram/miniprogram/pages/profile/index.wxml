@@ -35,7 +35,6 @@
       <view wx:else class="avatar avatar-fallback">⚽</view>
       <view class="identity-copy">
         <text class="member-name">{{profile.displayName}}</text>
-        <text class="member-region">{{profile.region}}</text>
       </view>
       <view class="number-block" bindtap="copyUserNo">
         <text class="number-label">用户编号</text><text class="public-number">{{profile.publicUserNoDisplay}}</text>

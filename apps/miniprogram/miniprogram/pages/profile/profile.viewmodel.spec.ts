@@ -1,6 +1,10 @@
 import type { CurrentUserResponse, MyLeagueTeamSummary } from '@efm/contracts'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { profileView } from './profile.viewmodel'
+
+const markup = readFileSync(resolve(__dirname, 'index.wxml'), 'utf8')
 
 const user: CurrentUserResponse = {
   id: 'user-1', publicUserNo: '000123', displayName: 'Dust', avatarUrl: null, region: null, status: 'ACTIVE', profileComplete: false,
@@ -29,9 +33,15 @@ describe('read-only profile view model', () => {
 
   it('is safe before identity data exists and has no editable-form state', () => {
     expect(profileView(null, [])).toEqual({
-      displayName: '微信用户', avatarUrl: '', region: '未设置地区', publicUserNoDisplay: '暂无编号',
+      displayName: '微信用户', avatarUrl: '', publicUserNoDisplay: '暂无编号',
       publicUserNoCopy: '', hasTeams: false, teams: [],
     })
+  })
+
+  it('keeps the default avatar fallback without rendering empty region copy', () => {
+    expect(markup).toContain('class="avatar avatar-fallback">⚽</view>')
+    expect(markup).not.toContain('member-region')
+    expect(markup).not.toContain('profile.region')
   })
 
   it('shows the user number before any league team is bound', () => {

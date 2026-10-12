@@ -26,7 +26,7 @@
           <view wx:for="{{rows}}" wx:key="participantId" class="table-row {{item.isMine ? 'is-mine' : ''}}">
             <view class="rank rank-cell">
               <text wx:if="{{item.medalLabel}}" class="medal">{{item.medalLabel}}</text>
-              <view wx:else class="plain-rank"><text>{{item.rankLabel}}</text><text wx:if="{{item.showRise}}" class="rise">↑</text></view>
+              <view wx:else class="plain-rank {{item.rankAccent ? 'is-accent' : ''}}"><text>{{item.rankLabel}}</text></view>
             </view>
             <view class="team team-cell">
               <entity-artwork class="team-crest" src="{{item.teamLogoSrc}}" fallback="{{item.logoFallback}}" shape="square" />

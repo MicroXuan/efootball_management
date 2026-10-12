@@ -51,6 +51,12 @@ describe('league detail module cards', () => {
     expect(page).not.toContain('openStandings()')
   })
 
+  it('uses a stable drawn chevron for season switching', () => {
+    expect(markup).toContain('class="season-switcher__action"')
+    expect(markup).toContain('class="season-switcher__chevron"')
+    expect(markup).not.toContain('切换⌄')
+  })
+
   it('opens the current and historical season schedule from the next-match card', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
 

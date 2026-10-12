@@ -13,7 +13,7 @@ export type StandingsTab = {
 export type StandingRowView = StandingsRowResponse & {
   rankLabel: string
   medalLabel: string
-  showRise: boolean
+  rankAccent: boolean
   isMine: boolean
   tieLabel: string
   teamIdentityLabel: string
@@ -52,7 +52,7 @@ export function standingRows(rows: readonly StandingsRowResponse[], myTeamName: 
     ...row,
     rankLabel: String(index + 1),
     medalLabel: ['🥇', '🥈', '🥉'][index] ?? '',
-    showRise: index === 3,
+    rankAccent: index === 3,
     isMine: Boolean(myTeamName) && row.displayName === myTeamName,
     tieLabel: row.tiePending ? '同分待定' : '',
     teamIdentityLabel: row.teamNumber === null ? row.teamName : `${row.teamNumber}-${row.teamName}`,

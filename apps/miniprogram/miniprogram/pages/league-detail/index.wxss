@@ -68,7 +68,8 @@ page { background: #0e1417; color: #f4f7f8; }
 .season-switcher { min-height: 58rpx; padding: 0 14rpx; border: 2rpx solid #344047; border-radius: 14rpx; background: #1c262b; }
 .season-switcher__label { display: block; color: #7e8b91; font-size: 15rpx; font-weight: 700; letter-spacing: 2rpx; }
 .season-switcher__name { display: block; margin-top: 2rpx; font-size: 20rpx; font-weight: 850; }
-.season-switcher__arrow { flex: none; color: #b6f13a; font-size: 17rpx; font-weight: 750; }
+.season-switcher__action { height: 42rpx; padding: 0 4rpx 0 12rpx; display: flex; flex: none; align-items: center; gap: 10rpx; color: #b6f13a; font-size: 17rpx; font-weight: 800; }
+.season-switcher__chevron { width: 12rpx; height: 12rpx; box-sizing: border-box; border-right: 3rpx solid #b6f13a; border-bottom: 3rpx solid #b6f13a; transform: rotate(45deg) translateY(-3rpx); }
 
 .section-kicker,
 .board-kicker,

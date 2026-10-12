@@ -60,7 +60,7 @@ describe('season standings view model', () => {
     ], '')
     expect(rows.map(({ rankLabel }) => rankLabel)).toEqual(['1', '2', '3', '4', '5'])
     expect(rows.map(({ medalLabel }) => medalLabel)).toEqual(['🥇', '🥈', '🥉', '', ''])
-    expect(rows.map(({ showRise }) => showRise)).toEqual([false, false, false, true, false])
+    expect(rows.map(({ rankAccent }) => rankAccent)).toEqual([false, false, false, true, false])
   })
 
   it('provides Chinese retry and access messages', () => {

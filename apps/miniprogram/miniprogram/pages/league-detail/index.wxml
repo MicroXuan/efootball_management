@@ -22,7 +22,10 @@
         <picker class="season-switcher__picker" range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="onSeasonChange">
           <view class="season-switcher">
             <view><text class="season-switcher__label">当前赛季</text><text class="season-switcher__name">{{selectedSeason.displayName}}</text></view>
-            <text class="season-switcher__arrow">切换⌄</text>
+            <view class="season-switcher__action">
+              <text>切换</text>
+              <view class="season-switcher__chevron"></view>
+            </view>
           </view>
         </picker>
         <status-badge label="{{seasonStatusLabel}}" tone="{{seasonStatusTone}}" />
