@@ -196,9 +196,11 @@ describe('tiered stage schedules', () => {
       participantType: 'TEAM',
       displayNameSnapshot: `球队 ${index + 1}`,
       seasonEntry: {
+        teamNumberSnapshot: index + 1,
+        teamNameSnapshot: `赛季球队 ${index + 1}`,
         teamLogoUrlSnapshot: index === 0 ? 'https://static.example.com/team-1.png' : null,
         owner: { displayName: `玩家 ${index + 1}` },
-        leagueTeam: { status: 'ACTIVE' }
+        leagueTeam: { status: 'ACTIVE', ownerAlias: `玩家 ${index + 1}`, teamNumber: index + 1, name: `球队 ${index + 1}`, logoUrl: null }
       }
     }));
     let matchData: Array<Record<string, unknown>> = [];
@@ -279,6 +281,8 @@ describe('tiered stage schedules', () => {
     expect(teamOne).toMatchObject({
       displayName: '球队 1',
       teamLifecycleStatus: 'ACTIVE',
+      teamNumber: 1,
+      teamName: '赛季球队 1',
       teamLogoUrl: 'https://static.example.com/team-1.png',
       ownerDisplayName: '玩家 1'
     });
