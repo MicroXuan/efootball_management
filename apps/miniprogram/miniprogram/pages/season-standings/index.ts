@@ -1,7 +1,7 @@
 import type { DivisionStandingsResponse } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
-import { initialStageIndex, standingRows, standingsErrorMessage, standingsTabs } from './standings.viewmodel'
+import { initialStageIndex, seasonStandingsTitle, standingRows, standingsErrorMessage, standingsTabs } from './standings.viewmodel'
 
 type LoadOptions = { leagueId?: string; seasonId?: string; teamName?: string }
 
@@ -11,6 +11,7 @@ Page({
     errorMessage: '',
     leagueId: '',
     seasonId: '',
+    seasonTitle: '赛季积分榜',
     myTeamName: '',
     response: null as DivisionStandingsResponse | null,
     tabs: [] as ReturnType<typeof standingsTabs>,
@@ -48,7 +49,12 @@ Page({
     try {
       const response = await leaguesApi.divisionStandings(this.data.leagueId, this.data.seasonId)
       const selectedIndex = initialStageIndex(response)
-      this.setData({ response, tabs: standingsTabs(response), errorMessage: '' })
+      this.setData({
+        response,
+        seasonTitle: seasonStandingsTitle(response.seasonDisplayName),
+        tabs: standingsTabs(response),
+        errorMessage: ''
+      })
       this.presentStage(selectedIndex)
     } catch (error) {
       const code = error instanceof ApiError ? error.code : 'UNKNOWN'

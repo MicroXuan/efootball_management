@@ -13,7 +13,7 @@ function date(value: string | null) {
 export function teamAssetsView(assets: TeamAssetOverview) {
   const players = assets.players.map((player) => ({
     ...player,
-    cardCopy: `${player.cardName} · ${player.position ?? '位置待补'}`,
+    positionCopy: player.position ?? '位置待补',
     originCopy: `${player.nationality ?? '国籍待补'} · ${player.club ?? '俱乐部待补'}`,
     joinedCopy: date(player.acquiredAt) ?? '—',
     ageCopy: player.age === null ? '—' : `${player.age} 岁`,
@@ -41,12 +41,10 @@ export function teamAssetsView(assets: TeamAssetOverview) {
     ownerAvatarText: Array.from(assets.ownerDisplayName)[0] ?? '用',
     teamNumberCopy: assets.teamNumber === null ? '球队编号待分配' : `球队编号 ${String(assets.teamNumber).padStart(2, '0')}`,
     divisionCopy: assets.divisionName ?? '组别待公布',
-    completenessCopy: assets.valuationCompleteness === 'COMPLETE' ? '身价数据完整' : `缺少 ${assets.missingValuationCount} 人身价`,
     totalCopy: assets.valuationCompleteness === 'COMPLETE' ? String(assets.totalKnownValueMinor) : `${assets.totalKnownValueMinor}+`,
     shellCopy: money(assets.shellValueMinor),
     salaryCopy: money(assets.activeSalaryMinor),
     playerValueCopy: `${money(assets.knownPlayerValueMinor)}${valueSuffix}`,
-    totalAssetCopy: `${money(assets.totalKnownValueMinor)}${valueSuffix}`,
     tabs: [
       { key: 'ACTIVE' as const, label: '一线阵容', count: active.length },
       { key: 'DISAPPEARED' as const, label: '已消失', count: disappeared.length },

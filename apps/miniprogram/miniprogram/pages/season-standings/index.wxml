@@ -1,7 +1,7 @@
 <view class="standings-page">
   <view class="page-head">
     <text class="kicker">赛季数据中心</text>
-    <text class="title">分组积分榜</text>
+    <text class="title">{{seasonTitle}}</text>
     <text class="subtitle">正式参赛球队专属 · 实时排名</text>
   </view>
   <loading-state wx:if="{{loading}}" label="正在读取积分榜" />
@@ -24,7 +24,18 @@
         <view class="standings-table">
           <view class="table-row table-head"><text class="rank">排名</text><text class="team">球队</text><text>赛</text><text>胜</text><text>平</text><text>负</text><text>进</text><text>失</text><text>净</text><text class="points">积分</text></view>
           <view wx:for="{{rows}}" wx:key="participantId" class="table-row {{item.isMine ? 'is-mine' : ''}}">
-            <text class="rank">{{item.rankLabel}}</text><view class="team"><text>{{item.displayName}}{{item.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text wx:if="{{item.tieLabel}}" class="tie">{{item.tieLabel}}</text></view>
+            <view class="rank rank-cell">
+              <text wx:if="{{item.medalLabel}}" class="medal">{{item.medalLabel}}</text>
+              <view wx:else class="plain-rank"><text>{{item.rankLabel}}</text><text wx:if="{{item.showRise}}" class="rise">↑</text></view>
+            </view>
+            <view class="team team-cell">
+              <entity-artwork class="team-crest" src="{{item.teamLogoSrc}}" fallback="{{item.logoFallback}}" shape="square" />
+              <view class="team-copy">
+                <text class="team-name">{{item.teamIdentityLabel}}{{item.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text>
+                <text class="owner-name">（{{item.ownerDisplayName}}）</text>
+                <text wx:if="{{item.tieLabel}}" class="tie">{{item.tieLabel}}</text>
+              </view>
+            </view>
             <text>{{item.played}}</text><text>{{item.wins}}</text><text>{{item.draws}}</text><text>{{item.losses}}</text><text>{{item.goalsFor}}</text><text>{{item.goalsAgainst}}</text><text>{{item.goalDifference}}</text><text class="points">{{item.totalPoints}}</text>
           </view>
         </view>

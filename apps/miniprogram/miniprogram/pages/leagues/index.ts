@@ -31,11 +31,17 @@ Page({
     bannerUrl: '',
     bannerDisplayUrl: '',
     bannerFailed: false,
+    bannerVisible: true,
   },
 
   onShow() {
+    this.setData({ bannerVisible: true })
     this.getTabBar?.()?.setData({ selected: 1 })
     void this.loadLeagues()
+  },
+
+  onHide() {
+    this.setData({ bannerVisible: false })
   },
 
   onPullDownRefresh() {

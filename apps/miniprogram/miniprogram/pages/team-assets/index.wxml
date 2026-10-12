@@ -24,19 +24,10 @@
     </view>
 
     <view class="metrics">
-      <view class="metric metric-primary metric-wide"><text>{{assets.totalAssetCopy}}</text><label>球队总资产 · 队壳 + 球员身价</label></view>
       <view class="metric"><text>{{assets.playerValueCopy}}</text><label>球员总身价</label></view>
       <view class="metric"><text>{{assets.salaryCopy}}</text><label>总工资</label></view>
       <view class="metric"><text>{{assets.shellCopy}}</text><label>队壳价值</label></view>
       <view class="metric"><text>{{assets.activePlayerCount}}<text class="metric-suffix">/25</text></text><label>一线人数</label></view>
-    </view>
-
-    <view class="valuation-status {{assets.valuationCompleteness === 'COMPLETE' ? 'is-complete' : ''}}">
-      <view class="status-mark"></view>
-      <view>
-        <text class="status-title">{{assets.completenessCopy}}</text>
-        <text class="status-copy">总资产由队壳与一线球员正式身价组成</text>
-      </view>
     </view>
 
     <view class="roster-head">
@@ -69,7 +60,7 @@
           <view wx:else class="player-image image-placeholder">{{item.position || '—'}}</view>
           <view class="player-copy">
             <text class="player-name">{{item.playerName}}</text>
-            <text class="card-copy">{{item.cardCopy}}</text>
+            <text class="card-copy">{{item.positionCopy}}</text>
             <text class="origin-copy">{{item.originCopy}}</text>
           </view>
           <view class="value-block">

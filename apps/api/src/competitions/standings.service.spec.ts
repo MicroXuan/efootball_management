@@ -21,16 +21,26 @@ describe('StandingsService', () => {
 describe('stage-scoped standings', () => {
   it('returns every published group with zero rows before any official result', async () => {
     const participant = {
-      id: 'participant-1', seasonEntryId: 'entry-1', displayNameSnapshot: '海港', admissionSequence: 1
+      id: 'participant-1', seasonEntryId: 'entry-1', displayNameSnapshot: '海港', admissionSequence: 1,
+      seasonEntry: null
     };
     const prisma = {
       seasonEntry: { findFirst: jest.fn(async () => ({ id: 'entry-1' })) },
       competition: { findFirst: jest.fn(async () => ({
-        id: 'competition-1',
+        id: 'competition-1', season: { displayName: '九星S1赛季' },
         stages: [{
           id: 'stage-a', competitionId: 'competition-1', stageCode: 'CHAMPION_A', displayName: '冠军 A 组',
           sequence: 1, capacity: 18, format: 'ROUND_ROBIN', status: 'PUBLISHED', version: 2,
-          participants: [{ seed: 1, participant }], standingsSnapshots: []
+          participants: [{ seed: 1, participant: {
+            ...participant,
+            seasonEntry: {
+              teamNumberSnapshot: 3,
+              teamNameSnapshot: '阿贾克斯',
+              teamShortNameSnapshot: '阿贾克斯',
+              teamLogoUrlSnapshot: 'https://example.com/ajax.png',
+              leagueTeam: { status: 'ACTIVE', owner: { displayName: '啾鸣凶一个' } }
+            }
+          } }], standingsSnapshots: []
         }, {
           id: 'stage-b', competitionId: 'competition-1', stageCode: 'CHAMPION_B', displayName: '冠军 B 组',
           sequence: 2, capacity: 18, format: 'ROUND_ROBIN', status: 'PUBLISHED', version: 2,
@@ -43,9 +53,11 @@ describe('stage-scoped standings', () => {
     } as never);
 
     const response = await service.getDivisionStandings('user-1', 'league-1', 'season-1');
-    expect(response).toMatchObject({ myStageId: 'stage-a' });
+    expect(response).toMatchObject({ seasonDisplayName: '九星S1赛季', myStageId: 'stage-a' });
     expect(response.groups.map((group) => group.stage.stageCode)).toEqual(['CHAMPION_A', 'CHAMPION_B']);
     expect(response.groups[0]!.standings.rows[0]).toMatchObject({
+      teamNumber: 3, teamName: '阿贾克斯', teamShortName: '阿贾克斯',
+      teamLogoUrl: 'https://example.com/ajax.png', ownerDisplayName: '啾鸣凶一个',
       played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0,
       goalDifference: 0, totalPoints: 0
     });

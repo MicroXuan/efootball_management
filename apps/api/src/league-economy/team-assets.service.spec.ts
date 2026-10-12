@@ -16,25 +16,29 @@ function harness() {
       id: 'ownership-1', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-1',
       acquiredAt: at, status: 'ACTIVE', salaryMinor: 800,
       footballPlayer: { nameZh: '有效球员', nameEn: null, shortName: null, nationality: '中国', club: '上海海港' },
-      currentPlayerCard: { cardName: '精选卡', imageUrl: null, position: 'CF', attributes: { attributesJson: { age: 22, height: 180, at: 91 } } }
+      currentPlayerCard: {
+        cardName: '精选卡', imageUrl: null, position: 'CF',
+        attributes: { attributesJson: { age: 22, height: 180, at: 91 } },
+        autoBuilds: [{ maxOverall: 103 }]
+      }
     },
     {
       id: 'ownership-2', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-2',
       acquiredAt: at, status: 'ACTIVE', salaryMinor: 400,
       footballPlayer: { nameZh: null, nameEn: 'Missing Value', shortName: null, nationality: null, club: null },
-      currentPlayerCard: { cardName: '基础卡', imageUrl: null, position: 'CB', attributes: null }
+      currentPlayerCard: { cardName: '基础卡', imageUrl: null, position: 'CB', attributes: null, autoBuilds: [] }
     },
     {
       id: 'ownership-3', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-3',
       acquiredAt: at, status: 'DISAPPEARED', salaryMinor: 300,
       footballPlayer: { nameZh: '消失球员', nameEn: null, shortName: null, nationality: null, club: null },
-      currentPlayerCard: { cardName: '旧卡', imageUrl: null, position: 'AMF', attributes: null }
+      currentPlayerCard: { cardName: '旧卡', imageUrl: null, position: 'AMF', attributes: null, autoBuilds: [] }
     },
     {
       id: 'ownership-4', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-4',
       acquiredAt: at, status: 'RETIRED', salaryMinor: 200,
       footballPlayer: { nameZh: '退役球员', nameEn: null, shortName: null, nationality: null, club: null },
-      currentPlayerCard: { cardName: '传奇卡', imageUrl: null, position: 'GK', attributes: null }
+      currentPlayerCard: { cardName: '传奇卡', imageUrl: null, position: 'GK', attributes: null, autoBuilds: [] }
     }
   ];
   const seasonEntry = {
@@ -93,7 +97,7 @@ describe('TeamAssetsService', () => {
       .toEqual(['ACTIVE', 'ACTIVE', 'DISAPPEARED', 'RETIRED']);
     expect(result.players[0]).toMatchObject({
       position: 'CF', nationality: '中国', club: '上海海港', age: 22, heightCm: 180,
-      atRating: 91, salaryMinor: 800, currentValueMinor: 8000
+      atRating: 103, salaryMinor: 800, currentValueMinor: 8000
     });
     expect(result.players[2]?.currentValueMinor).toBe(9999);
   });

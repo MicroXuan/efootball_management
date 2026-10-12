@@ -13,7 +13,7 @@ import { LeagueVisibilityService } from '../league-visibility/league-visibility.
 
 const STAGE_INCLUDE = {
   participants: {
-    include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+    include: { participant: { include: { seasonEntry: { include: { leagueTeam: { include: { owner: true } } } } } } },
     orderBy: [{ seed: 'asc' as const }, { id: 'asc' as const }]
   },
   standingsSnapshots: {
@@ -21,13 +21,14 @@ const STAGE_INCLUDE = {
     take: 1,
     include: {
       rows: {
-        include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+        include: { participant: { include: { seasonEntry: { include: { leagueTeam: { include: { owner: true } } } } } } },
         orderBy: [{ rank: 'asc' as const }, { participantId: 'asc' as const }]
       }
     }
   }
 } satisfies Prisma.CompetitionStageInclude;
 type StageRecord = Prisma.CompetitionStageGetPayload<{ include: typeof STAGE_INCLUDE }>;
+type DivisionStandingsSnapshot = DivisionStandingsResponse['groups'][number]['standings'];
 
 @Injectable()
 export class StandingsService {
@@ -193,6 +194,7 @@ export class StandingsService {
     const competition = await this.prisma.competition.findFirst({
       where: { seasonId, competitionType: 'DIVISION_LEAGUE', season: { leagueId } },
       include: {
+        season: { select: { displayName: true } },
         stages: {
           where: { stageCode: { not: null } },
           include: STAGE_INCLUDE,
@@ -208,6 +210,7 @@ export class StandingsService {
     ));
     return {
       seasonId,
+      seasonDisplayName: competition.season!.displayName,
       competitionId: competition.id,
       myStageId: myStage?.id ?? null,
       groups: competition.stages.map((stage) => ({
@@ -228,7 +231,7 @@ export class StandingsService {
     };
   }
 
-  private stageSnapshot(competitionId: string, stage: StageRecord): StandingsSnapshotResponse {
+  private stageSnapshot(competitionId: string, stage: StageRecord): DivisionStandingsSnapshot {
     const snapshot = stage.standingsSnapshots[0];
     if (!snapshot) {
       return {
@@ -241,6 +244,7 @@ export class StandingsService {
         rows: stage.participants.map((membership, index) => ({
           participantId: membership.participant.id,
           displayName: membership.participant.displayNameSnapshot,
+          ...this.divisionTeamIdentity(membership.participant),
           teamLifecycleStatus: this.lifecycleStatus(membership.participant),
           played: 0,
           wins: 0,
@@ -265,7 +269,22 @@ export class StandingsService {
       ruleVersion: snapshot.ruleVersion,
       triggeringResultVersionId: snapshot.triggeringResultVersionId,
       generatedAt: snapshot.generatedAt.toISOString(),
-      rows: snapshot.rows.map((row) => this.rowResponse(row))
+      rows: snapshot.rows.map((row) => ({
+        ...this.rowResponse(row),
+        ...this.divisionTeamIdentity(row.participant)
+      }))
+    };
+  }
+
+  private divisionTeamIdentity(participant: StageRecord['participants'][number]['participant']) {
+    const entry = participant.seasonEntry;
+    const team = entry?.leagueTeam;
+    return {
+      teamNumber: entry?.teamNumberSnapshot ?? team?.teamNumber ?? null,
+      teamName: entry?.teamNameSnapshot ?? team?.name ?? participant.displayNameSnapshot,
+      teamShortName: entry?.teamShortNameSnapshot ?? team?.shortName ?? participant.displayNameSnapshot,
+      teamLogoUrl: entry?.teamLogoUrlSnapshot ?? team?.logoUrl ?? null,
+      ownerDisplayName: team?.owner.displayName ?? participant.displayNameSnapshot
     };
   }
 

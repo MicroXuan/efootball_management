@@ -10,9 +10,7 @@ it('presents team identity, owner, totals and three roster groups', () => {
     ownerCopy: '小宣 · 100069',
     ownerAvatarUrl: null,
     ownerAvatarText: '小',
-    completenessCopy: '缺少 1 人身价',
     playerValueCopy: '1,000+',
-    totalAssetCopy: '6,000+',
     active: [{ playerId: '一线' }],
     disappeared: [{ playerId: '消失' }],
     retired: [{ playerId: '退役' }],
@@ -53,7 +51,6 @@ it('presents every player asset field with Chinese labels and readable fallbacks
     identityCopy: '07号 · 海港竞技 · 小宣',
     divisionCopy: '冠军 A 组',
     playerValueCopy: '8,800',
-    totalAssetCopy: '13,800',
     salaryCopy: '450',
     shellCopy: '5,000',
   })
@@ -63,12 +60,12 @@ it('presents every player asset field with Chinese labels and readable fallbacks
     { key: 'RETIRED', label: '已退役', count: 0 }
   ])
   expect(view.active[0]).toMatchObject({
-    playerName: '莱昂内尔·梅西', cardCopy: '史诗高光 · RWF', originCopy: '阿根廷 · 迈阿密国际',
+    playerName: '莱昂内尔·梅西', positionCopy: 'RWF', originCopy: '阿根廷 · 迈阿密国际',
     joinedCopy: '2026.10.01', ageCopy: '39 岁', heightCopy: '170 cm', footCopy: '左脚', atCopy: '103',
     salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02'
   })
   expect(view.active[1]).toMatchObject({
-    cardCopy: '基础卡 · 位置待补', originCopy: '国籍待补 · 俱乐部待补', ageCopy: '—', heightCopy: '—',
+    positionCopy: '位置待补', originCopy: '国籍待补 · 俱乐部待补', ageCopy: '—', heightCopy: '—',
     footCopy: '—', atCopy: '—', valueCopy: '待设置', valuationCopy: '暂无正式身价'
   })
 })

@@ -1660,8 +1660,9 @@ describe('tiered league contracts', () => {
       reason: null,
       createdAt
     }).overridden, false);
-    assert.equal(DivisionStandingsResponseSchema.parse({
+    assert.deepEqual(DivisionStandingsResponseSchema.parse({
       seasonId: ids.season,
+      seasonDisplayName: '九星S1赛季',
       competitionId: ids.competition,
       myStageId: ids.stage,
       groups: [{
@@ -1676,6 +1677,11 @@ describe('tiered league contracts', () => {
           rows: [{
             participantId: ids.participant,
             displayName: '上海海港',
+            teamNumber: 3,
+            teamName: '上海海港',
+            teamShortName: '海港',
+            teamLogoUrl: 'https://example.com/haigang.png',
+            ownerDisplayName: '海港玩家',
             teamLifecycleStatus: 'ACTIVE',
             played: 0,
             wins: 0,
@@ -1693,7 +1699,29 @@ describe('tiered league contracts', () => {
           }]
         }
       }]
-    }).groups[0]?.standings.rows[0]?.rank, 1);
+    }).groups[0]?.standings.rows[0], {
+      participantId: ids.participant,
+      displayName: '上海海港',
+      teamNumber: 3,
+      teamName: '上海海港',
+      teamShortName: '海港',
+      teamLogoUrl: 'https://example.com/haigang.png',
+      ownerDisplayName: '海港玩家',
+      teamLifecycleStatus: 'ACTIVE',
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      basePoints: 0,
+      adjustmentPoints: 0,
+      totalPoints: 0,
+      rank: 1,
+      tiePending: false,
+      tieBreakValues: {}
+    });
   });
 
   it('parses an enrolled league workspace summary', () => {
