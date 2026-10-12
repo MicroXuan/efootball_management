@@ -4,6 +4,7 @@ import { leaguesApi } from '../../services/leagues'
 import { platformPresentationApi } from '../../services/platform-presentation'
 import { session } from '../../services/session'
 import { cacheImageSource } from '../../services/image-source'
+import { clearBannerBeforeTabSwitch } from './banner-transition'
 import {
   leagueCardView,
   leagueBannerView,
@@ -32,11 +33,22 @@ Page({
     bannerUrl: '',
     bannerDisplayUrl: '',
     bannerMode: 'loading' as BannerMode,
+    bannerLayerVisible: true,
   },
 
   onShow() {
+    this.setData({ bannerLayerVisible: true })
     this.getTabBar?.()?.setData({ selected: 1 })
     void this.loadLeagues()
+  },
+
+  beforeTabLeave(continueSwitch: () => void) {
+    clearBannerBeforeTabSwitch({
+      clear: (done) => this.setData({ bannerLayerVisible: false }, done),
+      nextTick: (done) => wx.nextTick(done),
+      schedule: (done, delayMs) => setTimeout(done, delayMs),
+      continueSwitch,
+    })
   },
 
   onPullDownRefresh() {
