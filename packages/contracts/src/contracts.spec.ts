@@ -1269,16 +1269,20 @@ describe('league team administration contracts', () => {
       displayName: '上海海港',
       participantType: 'TEAM',
       teamLifecycleStatus: 'ARCHIVED',
+      teamNumber: 25,
+      teamName: '历史上海海港',
       teamLogoUrl: 'https://static.example.com/shanghai-port.png',
-      ownerDisplayName: '海港玩家'
+      ownerDisplayName: '梅西（小宣）'
     });
     assert.deepEqual(participant, {
       id: ids.user,
       displayName: '上海海港',
       participantType: 'TEAM',
       teamLifecycleStatus: 'ARCHIVED',
+      teamNumber: 25,
+      teamName: '历史上海海港',
       teamLogoUrl: 'https://static.example.com/shanghai-port.png',
-      ownerDisplayName: '海港玩家'
+      ownerDisplayName: '梅西（小宣）'
     });
     assert.deepEqual(CompetitionParticipantSummarySchema.parse({
       id: ids.user,
@@ -1290,6 +1294,8 @@ describe('league team administration contracts', () => {
       displayName: '个人选手',
       participantType: 'INDIVIDUAL',
       teamLifecycleStatus: null,
+      teamNumber: null,
+      teamName: null,
       teamLogoUrl: null,
       ownerDisplayName: null
     });
