@@ -233,6 +233,17 @@ export const SalaryRecalculationResponseSchema = z.object({
 });
 
 export const FinanceLedgerDirectionSchema = z.enum(['DEBIT', 'CREDIT']);
+export const FinanceSettlementCategorySchema = z.enum([
+  'TRANSACTION_AMOUNT',
+  'LUXURY_TAX',
+  'OFFSEASON_FEE',
+  'UNFINISHED_MATCH_PENALTY',
+  'PLAYER_AUCTION',
+  'TEAM_AUCTION',
+  'ROOKIE_SELECTION',
+  'INSTALLMENT_PAYMENT',
+  'OTHER_ADJUSTMENT'
+]);
 export const FinanceLedgerTypeSchema = z.enum([
   'PLAYER_PURCHASE',
   'PLAYER_SALE',
@@ -255,6 +266,7 @@ export const FinanceLedgerEntrySchema = z.object({
   rosterTransactionId: ResourceIdSchema.nullable(),
   direction: FinanceLedgerDirectionSchema,
   type: FinanceLedgerTypeSchema,
+  settlementCategory: FinanceSettlementCategorySchema.nullable().default(null),
   amountMinor: MoneyMinorSchema,
   note: z.string().max(512),
   createdAt: TimestampSchema
@@ -425,6 +437,7 @@ export type MyLeagueTeamSummary = z.infer<typeof MyLeagueTeamSummarySchema>;
 export type MyLeagueTeamListResponse = z.infer<typeof MyLeagueTeamListResponseSchema>;
 export type MyLeagueTeamOverview = z.infer<typeof MyLeagueTeamOverviewSchema>;
 export type FinanceLedgerDirection = z.infer<typeof FinanceLedgerDirectionSchema>;
+export type FinanceSettlementCategory = z.infer<typeof FinanceSettlementCategorySchema>;
 export type AcquirePlayerRequest = z.infer<typeof AcquirePlayerRequestSchema>;
 export type ReleasePlayerRequest = z.infer<typeof ReleasePlayerRequestSchema>;
 export type TransferPlayerRequest = z.infer<typeof TransferPlayerRequestSchema>;

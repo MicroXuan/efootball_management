@@ -82,6 +82,7 @@ import {
   TransferWindowSchema,
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
+  FinanceSettlementCategorySchema,
   LeagueTeamDetailSchema,
   LeagueTeamAdminListStatusSchema,
   LeagueTeamLifecycleRequestSchema,
@@ -144,6 +145,8 @@ import {
   SaveValuationDraftRequestSchema,
   TeamAssetOverviewSchema,
   TeamFinanceSummarySchema,
+  TeamFinanceSettlementSummarySchema,
+  UpsertTeamFinanceSettlementRequestSchema,
   ValuationWindowSchema,
   ValuationWorkspaceSchema
 } from './index.js';
@@ -384,6 +387,8 @@ describe('league economy contracts', () => {
       entries: []
     });
     assert.equal(finance.seasonId, null);
+    assert.deepEqual(finance.settlementItems, []);
+    assert.equal(finance.settlementTotalMinor, 0);
     assert.equal(CreateManualFinanceEntryRequestSchema.parse({
       leagueTeamId: ids.team,
       seasonId: null,
@@ -394,6 +399,69 @@ describe('league economy contracts', () => {
       reason: '管理员纠正历史余额',
       idempotencyKey: 'finance-adjustment-1'
     }).seasonId, null);
+  });
+
+  it('defines all seasonal finance settlement categories and batch targets', () => {
+    const categories = [
+      'TRANSACTION_AMOUNT', 'LUXURY_TAX', 'OFFSEASON_FEE', 'UNFINISHED_MATCH_PENALTY',
+      'PLAYER_AUCTION', 'TEAM_AUCTION', 'ROOKIE_SELECTION', 'INSTALLMENT_PAYMENT',
+      'OTHER_ADJUSTMENT'
+    ] as const;
+    assert.deepEqual(categories.map((category) => FinanceSettlementCategorySchema.parse(category)), categories);
+
+    const request = UpsertTeamFinanceSettlementRequestSchema.parse({
+      leagueTeamId: ids.team,
+      seasonId: ids.season,
+      amounts: {
+        transactionAmountMinor: 10,
+        luxuryTaxMinor: 404,
+        offseasonFeeMinor: 0,
+        unfinishedMatchPenaltyMinor: 0,
+        playerAuctionMinor: 0,
+        teamAuctionMinor: 0,
+        rookieSelectionMinor: 0,
+        installmentPaymentMinor: 0,
+        otherAdjustmentMinor: 0
+      },
+      note: 'S20 实时结算',
+      reason: '管理员核对赛季结算'
+    });
+    assert.equal(request.amounts.luxuryTaxMinor, 404);
+    assert.throws(() => UpsertTeamFinanceSettlementRequestSchema.parse({
+      ...request,
+      amounts: { ...request.amounts, luxuryTaxMinor: -1 }
+    }));
+    assert.throws(() => UpsertTeamFinanceSettlementRequestSchema.parse({ ...request, reason: ' ' }));
+  });
+
+  it('keeps legacy ledger rows valid and parses ordered settlement summaries', () => {
+    const legacy = FinanceLedgerEntrySchema.parse({
+      id: ids.submission,
+      leagueId: ids.league,
+      leagueTeamId: ids.team,
+      seasonId: ids.season,
+      rosterTransactionId: null,
+      direction: 'DEBIT',
+      type: 'LUXURY_TAX',
+      amountMinor: 404,
+      note: '',
+      createdAt: startsAt
+    });
+    assert.equal(legacy.settlementCategory, null);
+
+    const summary = TeamFinanceSettlementSummarySchema.parse({
+      leagueId: ids.league,
+      teamId: ids.team,
+      seasonId: ids.season,
+      items: [
+        { category: 'TRANSACTION_AMOUNT', amountMinor: 10 },
+        { category: 'LUXURY_TAX', amountMinor: 404 }
+      ],
+      totalMinor: 414
+    });
+    assert.equal(summary.items[0]?.category, 'TRANSACTION_AMOUNT');
+    assert.equal(summary.totalMinor, 414);
+    assert.equal(TeamFinanceSettlementSummarySchema.parse({ ...summary, totalMinor: -5 }).totalMinor, -5);
   });
 
   it('requires Chinese-ready audit display context', () => {

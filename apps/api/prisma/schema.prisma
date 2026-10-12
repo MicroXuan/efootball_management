@@ -108,6 +108,18 @@ enum FinanceLedgerDirection {
   CREDIT
 }
 
+enum FinanceSettlementCategory {
+  TRANSACTION_AMOUNT
+  LUXURY_TAX
+  OFFSEASON_FEE
+  UNFINISHED_MATCH_PENALTY
+  PLAYER_AUCTION
+  TEAM_AUCTION
+  ROOKIE_SELECTION
+  INSTALLMENT_PAYMENT
+  OTHER_ADJUSTMENT
+}
+
 enum FinanceLedgerType {
   PLAYER_PURCHASE
   PLAYER_SALE
@@ -1065,6 +1077,7 @@ model FinanceLedgerEntry {
   rosterTransactionId String?                @map("roster_transaction_id") @db.Char(36)
   direction           FinanceLedgerDirection
   type                FinanceLedgerType
+  settlementCategory  FinanceSettlementCategory? @map("settlement_category")
   amountMinor         Int                    @map("amount_minor") @db.UnsignedInt
   note                String                 @default("") @db.VarChar(512)
   createdAt           DateTime               @default(now()) @map("created_at")
@@ -1077,6 +1090,7 @@ model FinanceLedgerEntry {
   @@index([leagueTeamId, createdAt, id], map: "finance_ledger_entries_team_timeline_idx")
   @@index([rosterTransactionId], map: "finance_ledger_entries_transaction_idx")
   @@index([seasonId, leagueTeamId, createdAt], map: "finance_ledger_entries_season_team_idx")
+  @@index([leagueTeamId, seasonId, settlementCategory], map: "finance_ledger_entries_settlement_idx")
   @@map("finance_ledger_entries")
 }
 
