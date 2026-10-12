@@ -17,9 +17,10 @@ describe('mini-program image source integration', () => {
   })
 
   it('renders the league banner from the resolved local source', () => {
-    expect(source('pages/leagues/index.wxml')).toContain('src="{{bannerDisplayUrl}}"')
+    expect(source('pages/leagues/index.wxml')).toContain("background-image: url('{{bannerDisplayUrl}}')")
     const controller = source('pages/leagues/index.ts')
     expect(controller).toContain("from '../../services/image-source'")
-    expect(controller).toContain('resolveImageSource(')
+    expect(controller).toContain('cacheImageSource(')
+    expect(controller).not.toContain('wx.getImageInfo')
   })
 })

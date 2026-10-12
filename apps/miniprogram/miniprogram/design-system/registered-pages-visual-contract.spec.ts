@@ -89,8 +89,8 @@ describe('registered browsing pages visual boundary', () => {
     const markup = readFileSync(resolve(miniRoot, 'pages/leagues/index.wxml'), 'utf8')
 
     expect(markup).toContain('class="league-banner')
-    expect(markup).toContain('mode="aspectFill"')
-    expect(markup).toContain('binderror="onBannerError"')
+    expect(markup).toContain("background-image: url('{{bannerDisplayUrl}}')")
+    expect(markup).not.toContain('<image')
     expect(markup).not.toContain('联赛中心')
     expect(markup).not.toContain('发现公开联赛')
   })

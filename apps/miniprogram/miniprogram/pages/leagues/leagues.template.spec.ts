@@ -6,10 +6,18 @@ const markup = readFileSync(resolve(__dirname, 'index.wxml'), 'utf8')
 const page = readFileSync(resolve(__dirname, 'index.ts'), 'utf8')
 
 describe('league banner tab lifecycle', () => {
-  it('unmounts the banner image while the tab page is hidden', () => {
-    expect(markup).toContain('bannerVisible && bannerDisplayUrl && !bannerFailed')
-    expect(markup).not.toContain('lazy-load="{{true}}"')
-    expect(page).toMatch(/onHide\(\)\s*\{[^}]*bannerVisible:\s*false/s)
-    expect(page).toMatch(/onShow\(\)\s*\{[^}]*bannerVisible:\s*true/s)
+  it('uses a stable view background instead of a composited image node', () => {
+    expect(markup).toContain("bannerMode === 'image'")
+    expect(markup).toContain("background-image: url('{{bannerDisplayUrl}}')")
+    expect(markup).not.toContain('<image')
+    expect(page).not.toContain('onHide()')
+    expect(page).not.toContain('bannerVisible')
+  })
+
+  it('shows the fallback only after banner resolution settles', () => {
+    expect(markup).toContain("bannerMode === 'fallback'")
+    expect(page).toContain("bannerMode: 'loading'")
+    expect(page).toContain('cacheImageSource(')
+    expect(page).not.toContain('wx.getImageInfo')
   })
 })

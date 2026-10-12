@@ -3,7 +3,7 @@ import { ApiError } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
 import { platformPresentationApi } from '../../services/platform-presentation'
 import { session } from '../../services/session'
-import { resolveImageSource } from '../../services/image-source'
+import { cacheImageSource } from '../../services/image-source'
 import {
   leagueCardView,
   leagueBannerView,
@@ -17,6 +17,7 @@ import {
 
 type LeagueTapEvent = { currentTarget: { dataset: { id?: string } } }
 type TabTapEvent = { currentTarget: { dataset: { tab?: LeagueListTab } } }
+type BannerMode = 'loading' | 'image' | 'fallback'
 
 Page({
   data: {
@@ -30,18 +31,12 @@ Page({
     loggedIn: false,
     bannerUrl: '',
     bannerDisplayUrl: '',
-    bannerFailed: false,
-    bannerVisible: true,
+    bannerMode: 'loading' as BannerMode,
   },
 
   onShow() {
-    this.setData({ bannerVisible: true })
     this.getTabBar?.()?.setData({ selected: 1 })
     void this.loadLeagues()
-  },
-
-  onHide() {
-    this.setData({ bannerVisible: false })
   },
 
   onPullDownRefresh() {
@@ -58,16 +53,30 @@ Page({
         platformPresentationApi.get().catch(() => ({ leagueCenterBannerUrl: null, version: 0 })),
       ])
       const banner = leagueBannerView(presentation)
-      const bannerDisplayUrl = banner.imageUrl
-        ? await resolveImageSource(banner.imageUrl, (options) => wx.downloadFile(options)).catch(() => '')
-        : ''
+      let bannerDisplayUrl = this.data.bannerDisplayUrl
+      let bannerMode = this.data.bannerMode
+      if (!banner.imageUrl) {
+        bannerDisplayUrl = ''
+        bannerMode = 'fallback'
+      } else {
+        const preloadedSource = await cacheImageSource(
+          banner.imageUrl,
+          (options) => wx.downloadFile(options),
+        ).catch(() => '')
+        if (preloadedSource) {
+          bannerDisplayUrl = preloadedSource
+          bannerMode = 'image'
+        } else if (!bannerDisplayUrl) {
+          bannerMode = 'fallback'
+        }
+      }
       const allLeagues = allResponse.items.map((league: LeagueSummary) => leagueCardView(league))
       const myLeagues = mineResponse.items.map((team: MyLeagueTeamSummary) => myLeagueCardView(team))
       const leagues = selectLeagueCards(this.data.activeTab, allLeagues, myLeagues)
       this.setData({
         state: 'loaded', errorMessage: '', loggedIn, allLeagues, myLeagues, leagues,
         hasLeagues: leagues.length > 0, bannerUrl: banner.imageUrl, bannerDisplayUrl,
-        bannerFailed: Boolean(banner.imageUrl && !bannerDisplayUrl),
+        bannerMode,
       })
     } catch (error) {
       this.setData({
@@ -77,10 +86,6 @@ Page({
           : leagueListErrorMessage('UNKNOWN'),
       })
     }
-  },
-
-  onBannerError() {
-    this.setData({ bannerFailed: true })
   },
 
   switchTab(event: TabTapEvent) {

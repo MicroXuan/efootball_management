@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveImageSource } from './image-source'
+import { cacheImageSource, resolveImageSource } from './image-source'
 
 describe('resolveImageSource', () => {
   it('keeps HTTPS images as remote sources', async () => {
@@ -36,6 +36,20 @@ describe('resolveImageSource', () => {
 
     await expect(resolveImageSource('http://127.0.0.1:3000/v1/media/missing.webp', download)).rejects.toThrow(
       'IMAGE_DOWNLOAD_FAILED',
+    )
+  })
+})
+
+describe('cacheImageSource', () => {
+  it('downloads HTTPS images before exposing them as CSS backgrounds', async () => {
+    const download = vi.fn((options: {
+      success: (result: { statusCode: number; tempFilePath: string }) => void
+    }) => {
+      options.success({ statusCode: 200, tempFilePath: 'wxfile://tmp/banner.webp' })
+    })
+
+    await expect(cacheImageSource('https://media.example/banner.webp', download)).resolves.toBe(
+      'wxfile://tmp/banner.webp',
     )
   })
 })

@@ -21,3 +21,21 @@ export function resolveImageSource(url: string, download: ImageDownload): Promis
     })
   })
 }
+
+export function cacheImageSource(url: string, download: ImageDownload): Promise<string> {
+  if (!/^https?:\/\//.test(url)) return Promise.resolve(url)
+
+  return new Promise((resolve, reject) => {
+    download({
+      url,
+      success: (result) => {
+        if (result.statusCode === 200 && result.tempFilePath) {
+          resolve(result.tempFilePath)
+          return
+        }
+        reject(new Error('IMAGE_DOWNLOAD_FAILED'))
+      },
+      fail: () => reject(new Error('IMAGE_DOWNLOAD_FAILED')),
+    })
+  })
+}
