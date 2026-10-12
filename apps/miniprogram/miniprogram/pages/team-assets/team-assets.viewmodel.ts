@@ -33,8 +33,8 @@ export function teamAssetsView(assets: TeamAssetOverview) {
   return {
     ...assets,
     identity: `${assets.teamNumber ?? '—'} · ${assets.teamName}`,
-    ownerCopy: `${assets.ownerDisplayName} · ${assets.ownerPublicUserNo}`,
-    identityCopy: `${teamNumber}-${assets.teamName}-${assets.ownerDisplayName}`,
+    ownerCopy: `${assets.ownerAlias} · ${assets.ownerPublicUserNo}`,
+    identityCopy: `${teamNumber}-${assets.teamName}-${assets.ownerAlias}`,
     teamBadgeUrl: assets.teamLogoUrl,
     teamBadgeText: Array.from(assets.teamName)[0] ?? '队',
     ownerAvatarUrl: assets.ownerAvatarUrl,

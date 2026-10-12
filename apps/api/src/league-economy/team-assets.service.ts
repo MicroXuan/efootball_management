@@ -92,6 +92,7 @@ export class TeamAssetsService {
       teamNumber: team.teamNumber,
       divisionName: entry.competitionParticipants[0]?.stageMemberships[0]?.stage.displayName ?? null,
       teamLogoUrl: team.logoUrl,
+      ownerAlias: team.ownerAlias,
       ownerDisplayName: team.owner.displayName,
       ownerPublicUserNo: team.owner.publicUserNo,
       ownerAvatarUrl: team.owner.avatarUrl,

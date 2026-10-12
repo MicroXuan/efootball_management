@@ -4,10 +4,10 @@ import { teamAssetsView } from './team-assets.viewmodel'
 
 it('presents team identity, owner, totals and three roster groups', () => {
   const player = (rosterStatus: 'ACTIVE'|'DISAPPEARED'|'RETIRED', playerId: string) => ({ playerId, playerName: playerId, cardName: '卡片', cardImageUrl: null, position: 'CF', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null, atRating: null, acquiredAt: '2026-10-01T00:00:00.000Z', salaryMinor: 100, rosterStatus, currentValueMinor: rosterStatus === 'ACTIVE' ? 1000 : null, lastEffectiveAt: null })
-  const value: TeamAssetOverview = { leagueId: 'league-1', teamId: 'team-1', teamName: '海港竞技', teamNumber: 7, divisionName: null, teamLogoUrl: null, ownerDisplayName: '小宣', ownerPublicUserNo: '100069', ownerAvatarUrl: null, shellValueMinor: 5000, knownPlayerValueMinor: 1000, totalKnownValueMinor: 6000, valuationCompleteness: 'INCOMPLETE', missingValuationCount: 1, activePlayerCount: 1, activeSalaryMinor: 100, players: [player('ACTIVE', '一线'), player('DISAPPEARED', '消失'), player('RETIRED', '退役')] }
+  const value: TeamAssetOverview = { leagueId: 'league-1', teamId: 'team-1', teamName: '海港竞技', teamNumber: 7, divisionName: null, teamLogoUrl: null, ownerAlias: '梅西（小宣）', ownerDisplayName: '实况玩家', ownerPublicUserNo: '100069', ownerAvatarUrl: null, shellValueMinor: 5000, knownPlayerValueMinor: 1000, totalKnownValueMinor: 6000, valuationCompleteness: 'INCOMPLETE', missingValuationCount: 1, activePlayerCount: 1, activeSalaryMinor: 100, players: [player('ACTIVE', '一线'), player('DISAPPEARED', '消失'), player('RETIRED', '退役')] }
   expect(teamAssetsView(value)).toMatchObject({
-    identityCopy: '07号-海港竞技-小宣',
-    ownerCopy: '小宣 · 100069',
+    identityCopy: '07号-海港竞技-梅西（小宣）',
+    ownerCopy: '梅西（小宣） · 100069',
     ownerAvatarUrl: null,
     playerValueCopy: '1,000+',
     active: [{ playerId: '一线' }],
@@ -19,7 +19,7 @@ it('presents team identity, owner, totals and three roster groups', () => {
 it('presents every player asset field with Chinese labels and readable fallbacks', () => {
   const value: TeamAssetOverview = {
     leagueId: 'league-1', teamId: 'team-1', teamName: '海港竞技', teamNumber: 7, divisionName: '冠军 A 组',
-    teamLogoUrl: 'https://example.com/team.png', ownerDisplayName: '小宣', ownerPublicUserNo: '100069',
+    teamLogoUrl: 'https://example.com/team.png', ownerAlias: '梅西（小宣）', ownerDisplayName: '实况玩家', ownerPublicUserNo: '100069',
     ownerAvatarUrl: 'https://example.com/owner.png', shellValueMinor: 5000, knownPlayerValueMinor: 8800,
     totalKnownValueMinor: 13800, valuationCompleteness: 'COMPLETE', missingValuationCount: 0,
     activePlayerCount: 2, activeSalaryMinor: 450,
@@ -46,7 +46,7 @@ it('presents every player asset field with Chinese labels and readable fallbacks
     teamBadgeUrl: 'https://example.com/team.png',
     teamBadgeText: '海',
     ownerAvatarUrl: 'https://example.com/owner.png',
-    identityCopy: '07号-海港竞技-小宣',
+    identityCopy: '07号-海港竞技-梅西（小宣）',
     divisionCopy: '冠军 A 组',
     playerValueCopy: '8,800',
     salaryCopy: '450',

@@ -21,6 +21,15 @@ page { background: #0e1417; color: #f4f7f8; }
 .metric.debit text { color: #ff9c8e; }
 .archive-notice { margin-top: 14rpx; padding: 20rpx 24rpx; border: 2rpx solid rgba(232, 189, 101, .3); border-radius: 20rpx; color: #aab5ba; background: rgba(232, 189, 101, .06); font-size: 19rpx; line-height: 1.55; }
 .archive-title { display: block; color: #e8bd65; font-size: 21rpx; font-weight: 800; }
+.settlement-card { margin-top: 30rpx; padding: 28rpx; border: 2rpx solid #344047; border-radius: 26rpx; background: #151d21; }
+.settlement-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; }
+.settlement-period { padding-bottom: 5rpx; color: #7e8b91; font-size: 18rpx; }
+.settlement-list { margin-top: 24rpx; padding-top: 8rpx; border-top: 2rpx solid #2d393f; }
+.settlement-row { display: flex; align-items: center; justify-content: space-between; min-height: 58rpx; color: #c7d0d4; font-size: 22rpx; }
+.settlement-amount { color: #6df2a3; font-size: 24rpx; font-weight: 800; font-variant-numeric: tabular-nums; }
+.settlement-total { display: flex; align-items: center; justify-content: space-between; margin-top: 10rpx; padding-top: 22rpx; border-top: 2rpx solid #344047; font-size: 27rpx; font-weight: 850; }
+.settlement-total text:last-child { color: #6df2a3; font-size: 32rpx; }
+.settlement-note { display: block; margin-top: 17rpx; color: #647177; font-size: 18rpx; line-height: 1.55; }
 .ledger-head { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 52rpx; }
 .section-index { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
 .section-title { display: block; margin-top: 8rpx; font-size: 34rpx; font-weight: 850; }

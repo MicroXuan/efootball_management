@@ -357,6 +357,7 @@ describe('league economy contracts', () => {
       teamNumber: 7,
       divisionName: '冠军 A 组',
       teamLogoUrl: null,
+      ownerAlias: '梅西（小宣）',
       ownerDisplayName: '小宣',
       ownerPublicUserNo: '100069',
       ownerAvatarUrl: null,
@@ -370,6 +371,7 @@ describe('league economy contracts', () => {
       players: []
     });
     assert.equal(assets.valuationCompleteness, 'INCOMPLETE');
+    assert.equal(assets.ownerAlias, '梅西（小宣）');
     assert.equal(assets.divisionName, '冠军 A 组');
     assert.throws(() => TeamAssetOverviewSchema.parse({ ...assets, valuationCompleteness: 'PARTIAL' }));
 

@@ -7,7 +7,7 @@ const at = new Date('2026-10-02T12:00:00.000Z');
 function harness() {
   const team = {
     id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', teamNumber: 7,
-    name: '海港竞技', logoUrl: null, shellValueMinor: 5000,
+    name: '海港竞技', ownerAlias: '梅西（小宣）', logoUrl: null, shellValueMinor: 5000,
     league: { currentSeasonId: 'season-1' },
     owner: { displayName: '小宣', publicUserNo: '100069', avatarUrl: null }
   };
@@ -88,7 +88,7 @@ describe('TeamAssetsService', () => {
     const result = await service.getTeamAssets('user-1', 'team-1');
 
     expect(result).toMatchObject({
-      teamName: '海港竞技', teamNumber: 7, ownerDisplayName: '小宣', shellValueMinor: 5000,
+      teamName: '海港竞技', teamNumber: 7, ownerAlias: '梅西（小宣）', ownerDisplayName: '小宣', shellValueMinor: 5000,
       divisionName: '冠军 A 组',
       activePlayerCount: 2, activeSalaryMinor: 1200, knownPlayerValueMinor: 8000,
       totalKnownValueMinor: 13_000, missingValuationCount: 1, valuationCompleteness: 'INCOMPLETE'

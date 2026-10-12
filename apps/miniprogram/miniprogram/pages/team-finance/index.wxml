@@ -35,9 +35,30 @@
       <text>当前共有 {{finance.uncategorizedEntryCount}} 条流水未归入具体赛季。</text>
     </view>
 
+    <view class="settlement-card">
+      <view class="settlement-heading">
+        <view>
+          <text class="section-index">01 / 管理员录入</text>
+          <text class="section-title">赛季结算金额</text>
+        </view>
+        <text class="settlement-period">{{finance.periodCopy}}</text>
+      </view>
+      <view class="settlement-list">
+        <view class="settlement-row" wx:for="{{finance.settlementItems}}" wx:key="category">
+          <text>{{item.label}}</text>
+          <text class="settlement-amount">{{item.amountCopy}}</text>
+        </view>
+      </view>
+      <view class="settlement-total">
+        <text>总结算金额</text>
+        <text>{{finance.settlementTotalCopy}}</text>
+      </view>
+      <text class="settlement-note">结算金额由联赛管理员维护，以后台最新保存结果为准。</text>
+    </view>
+
     <view class="ledger-head">
       <view>
-        <text class="section-index">01 / 结算流水</text>
+        <text class="section-index">02 / 结算流水</text>
         <text class="section-title">收支明细</text>
       </view>
       <text class="entry-count">{{finance.entries.length}} 条</text>
