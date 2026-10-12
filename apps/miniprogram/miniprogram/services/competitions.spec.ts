@@ -12,8 +12,8 @@ describe('competition service query', () => {
     expect(competitionListPath()).toBe('/competitions?limit=20')
   })
 
-  it('builds a current-season upcoming schedule query', () => {
-    expect(myMatchesPath({ seasonId: 'season 1', upcomingOnly: true, limit: 100 }))
-      .toBe('/me/matches?limit=100&seasonId=season%201&upcomingOnly=true')
+  it('builds a complete season history query without the upcoming-only filter', () => {
+    expect(myMatchesPath({ seasonId: 'season 1', limit: 100 }))
+      .toBe('/me/matches?limit=100&seasonId=season%201')
   })
 })

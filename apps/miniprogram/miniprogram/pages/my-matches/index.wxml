@@ -1,16 +1,35 @@
 <view class="matches-page">
-  <view class="page-head"><view><text class="kicker">{{pageKicker}}</text><text class="title">{{pageTitle}}</text></view><text class="mark">实时赛程</text></view>
-  <loading-state wx:if="{{loading && items.length === 0}}" label="正在整理比赛任务" />
-  <view wx:elif="{{errorMessage && items.length === 0}}" class="state"><text>比赛列表不可用</text><text>{{errorMessage}}</text><button bindtap="retry">重试</button></view>
-  <view wx:elif="{{!loading && items.length === 0}}" class="state"><text>还没有比赛任务</text><text>报名获批并发布赛程后，会显示在这里。</text></view>
+  <view class="page-head">
+    <view><text class="kicker">当前及历史赛季</text><text class="title">我的赛程</text></view>
+    <text class="mark">只读赛程</text>
+  </view>
+
+  <picker wx:if="{{seasonLabels.length}}" class="season-picker" mode="selector" range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="changeSeason">
+    <view class="season-picker-row"><text>查看赛季</text><text>{{seasonLabels[selectedSeasonIndex]}}⌄</text></view>
+  </picker>
+
+  <loading-state wx:if="{{loading && items.length === 0}}" label="正在整理赛程" />
+  <view wx:elif="{{errorMessage && items.length === 0}}" class="state"><text>赛程列表不可用</text><text>{{errorMessage}}</text><button bindtap="retry">重试</button></view>
+  <view wx:elif="{{!loading && items.length === 0}}" class="state"><text>当前赛季暂无赛程</text><text>赛程发布后会显示在这里。</text></view>
   <view wx:else class="match-list">
     <view wx:for="{{items}}" wx:key="matchId" class="match-card">
-      <view class="match-head"><text>{{item.competition.name}}</text><text>#{{item.match.matchNumber}}</text></view>
-      <text class="schedule-meta">{{item.scheduleMeta}}</text>
-      <text class="planned">{{item.plannedLabel}}</text>
-      <view class="versus"><text>{{item.match.homeParticipant.displayName}}{{item.match.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{item.match.awayParticipant.displayName}}{{item.match.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
-      <text wx:if="{{item.match.officialResult}}" class="score">{{item.match.officialResult.homeScore}} : {{item.match.officialResult.awayScore}}</text>
-      <button class="action {{item.actionEnabled ? '' : 'is-disabled'}}" data-id="{{item.match.id}}" data-enabled="{{item.actionEnabled}}" bindtap="openMatch">{{item.actionLabel}}</button>
+      <view class="match-head"><text>{{item.competition.name}}</text><text class="state-tag">{{item.stateCopy}}</text></view>
+      <view class="match-meta"><text>{{item.scheduleMeta}}</text><text>{{item.plannedLabel}}</text></view>
+      <view class="fixture-grid">
+        <view class="fixture-team fixture-home">
+          <entity-artwork class="team-badge" src="{{item.home.badgeUrl}}" fallback="{{item.home.badgeText}}" shape="square" />
+          <text class="team-identity">{{item.home.identityCopy}}</text>
+          <text class="team-owner">{{item.home.ownerCopy}}</text>
+          <text wx:if="{{item.home.archived}}" class="archived">已退赛</text>
+        </view>
+        <view class="fixture-center"><text>{{item.resultCopy}}</text></view>
+        <view class="fixture-team fixture-away">
+          <entity-artwork class="team-badge" src="{{item.away.badgeUrl}}" fallback="{{item.away.badgeText}}" shape="square" />
+          <text class="team-identity">{{item.away.identityCopy}}</text>
+          <text class="team-owner">{{item.away.ownerCopy}}</text>
+          <text wx:if="{{item.away.archived}}" class="archived">已退赛</text>
+        </view>
+      </view>
     </view>
   </view>
 </view>

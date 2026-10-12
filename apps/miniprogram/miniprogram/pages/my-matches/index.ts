@@ -1,56 +1,59 @@
-import type { MyMatchResponse } from '@efm/contracts'
+import type { LeagueSeasonSummary } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
-import { competitionErrorMessage, formatLocalDate } from '../competitions/competitions.viewmodel'
-import { primaryAction, scheduleMeta } from './matches.viewmodel'
+import { leaguesApi } from '../../services/leagues'
+import { competitionErrorMessage } from '../competitions/competitions.viewmodel'
+import { matchCard, seasonOptions } from './matches.viewmodel'
 
-type LoadOptions = { seasonId?: string; upcomingOnly?: string }
+type LoadOptions = { leagueId?: string; seasonId?: string }
 
 Page({
   data: {
     loading: true,
     errorMessage: '',
+    leagueId: '',
     seasonId: '',
-    upcomingOnly: false,
-    pageTitle: '我的比赛',
-    pageKicker: '比赛任务',
-    items: [] as Array<MyMatchResponse & { matchId: string; actionLabel: string; actionEnabled: boolean; plannedLabel: string; scheduleMeta: string }>
+    seasons: [] as LeagueSeasonSummary[],
+    seasonChoices: [] as Array<{ id: string; label: string }>,
+    seasonLabels: [] as string[],
+    selectedSeasonIndex: 0,
+    items: [] as Array<ReturnType<typeof matchCard>>
   },
   onLoad(options: LoadOptions) {
-    const upcomingOnly = options.upcomingOnly === '1'
-    this.setData({
-      seasonId: options.seasonId ?? '',
-      upcomingOnly,
-      pageTitle: upcomingOnly ? '我的赛程' : '我的比赛',
-      pageKicker: upcomingOnly ? '当前赛季' : '比赛任务',
-    })
+    this.setData({ leagueId: options.leagueId ?? '', seasonId: options.seasonId ?? '' })
     void this.load()
   },
-  onShow() { if (!this.data.loading) void this.load(false) },
+  onShow() { if (!this.data.loading && this.data.items.length) void this.load(false) },
   onPullDownRefresh() { void this.load(false).finally(() => wx.stopPullDownRefresh()) },
   retry() { void this.load() },
-  openMatch(event: { currentTarget: { dataset: { id?: string; enabled?: boolean } } }) {
-    if (event.currentTarget.dataset.id && event.currentTarget.dataset.enabled) {
-      wx.navigateTo({ url: `/pages/match-result/index?id=${encodeURIComponent(event.currentTarget.dataset.id)}` })
-    }
+  changeSeason(event: { detail: { value: string } }) {
+    const selectedSeasonIndex = Number(event.detail.value)
+    const seasonId = this.data.seasonChoices[selectedSeasonIndex]?.id
+    if (!seasonId || seasonId === this.data.seasonId) return
+    this.setData({ selectedSeasonIndex, seasonId, items: [] })
+    void this.load()
   },
   async load(showLoading = true) {
     if (showLoading) this.setData({ loading: true, errorMessage: '' })
     try {
-      const response = await competitionsApi.myMatches({
-        limit: 100,
-        seasonId: this.data.seasonId || undefined,
-        upcomingOnly: this.data.upcomingOnly,
+      let seasons = this.data.seasons
+      if (this.data.leagueId && !seasons.length) seasons = await leaguesApi.seasons(this.data.leagueId)
+      const choices = seasonOptions(seasons, this.data.seasonId)
+      const seasonId = choices.selectedSeasonId || this.data.seasonId
+      const response = await competitionsApi.myMatches({ limit: 100, seasonId: seasonId || undefined })
+      this.setData({
+        seasons,
+        seasonChoices: choices.items,
+        seasonLabels: choices.items.map(({ label }) => label),
+        selectedSeasonIndex: choices.selectedIndex,
+        seasonId,
+        items: response.items.map(matchCard),
+        errorMessage: ''
       })
-      this.setData({ items: response.items.map((item) => {
-        const action = primaryAction(item.action)
-        const side = item.match.homeParticipant.id === item.myParticipantId ? 'HOME' : 'AWAY'
-        return { ...item, matchId: item.match.id, actionLabel: action.label, actionEnabled: action.enabled,
-          plannedLabel: item.match.plannedAt ? formatLocalDate(item.match.plannedAt) : '时间待定',
-          scheduleMeta: scheduleMeta(item.match.roundNumber, side) }
-      }), errorMessage: '' })
     } catch (error) {
       this.setData({ errorMessage: competitionErrorMessage(error instanceof ApiError ? error : {}) })
-    } finally { this.setData({ loading: false }) }
-  },
+    } finally {
+      this.setData({ loading: false })
+    }
+  }
 })

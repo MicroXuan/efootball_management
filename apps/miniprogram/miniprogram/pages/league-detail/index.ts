@@ -133,7 +133,7 @@ Page({
     const workspace = this.data.workspace
     if (!workspace) return
     wx.navigateTo({
-      url: `/pages/my-matches/index?seasonId=${encodeURIComponent(workspace.seasonId)}&upcomingOnly=1`,
+      url: `/pages/my-matches/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(workspace.seasonId)}`,
     })
   },
 
