@@ -1,8 +1,10 @@
 import type { CurrentUserResponse } from '@efm/contracts'
 import { ApiError, api } from '../../services/api'
+import { auth } from '../../services/auth'
 import { leaguesApi } from '../../services/leagues'
 import { session } from '../../services/session'
 import { profileView, type ProfileView } from './profile.viewmodel'
+import { completeProfileLogin } from './profile-login'
 
 type TeamTapEvent = { currentTarget: { dataset: { id?: string } } }
 
@@ -14,6 +16,7 @@ Page({
   data: {
     state: 'loading' as 'loading' | 'loaded' | 'error',
     errorMessage: '',
+    loginLoading: false,
     loggedIn: false,
     profile: profileView(null, []) as ProfileView,
   },
@@ -50,8 +53,8 @@ Page({
     }
   },
 
-  login() {
-    wx.navigateTo({ url: '/pages/login/index' })
+  async login() {
+    await completeProfileLogin(this, () => auth.login(), errorCopy)
   },
 
   copyUserNo() {

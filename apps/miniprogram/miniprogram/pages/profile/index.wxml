@@ -14,7 +14,8 @@
     <view wx:if="{{!loggedIn}}" class="state-card login-card">
       <text class="state-code">微信身份</text><text class="state-title">登录后查看我的球队</text>
       <text class="state-copy">管理员绑定联赛球队后，球队与当前赛季会自动显示在这里。</text>
-      <button class="primary-button" bindtap="login">微信登录</button>
+      <text wx:if="{{errorMessage}}" class="login-error">{{errorMessage}}</text>
+      <button class="primary-button" loading="{{loginLoading}}" disabled="{{loginLoading}}" bindtap="login">{{loginLoading ? '登录中' : '微信登录'}}</button>
     </view>
 
     <block wx:else>

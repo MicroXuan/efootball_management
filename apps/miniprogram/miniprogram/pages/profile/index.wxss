@@ -37,6 +37,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .state-card.compact { min-height:230rpx; }
 .state-title { margin-top:18rpx; font-size:31rpx; font-weight:800; }
 .state-copy { margin-top:14rpx; color:#aab5ba; font-size:23rpx; line-height:1.65; }
+.login-error { display:block; margin-top:18rpx; color:#ff9c8e; font-size:21rpx; line-height:1.5; }
 .primary-button,.outline-button { min-height:88rpx; margin:28rpx 0 0; border-radius: 16rpx; font-weight:800; }
 .primary-button::after,.outline-button::after { border:0; }
 .primary-button { min-width:280rpx; background:#b6f13a; color:#111810; }
