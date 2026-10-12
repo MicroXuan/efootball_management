@@ -73,7 +73,7 @@ export function leagueCardView(league: LeagueSummary): LeagueCardView {
     seasonName: season?.displayName || '暂无当前赛季',
     seasonState: season ? seasonStatusLabel(season.status) : '待发布',
     seasonTone: seasonStatusTone(season?.status ?? null),
-    entryCopy: season ? `${season.approvedEntryCount} 支球队参赛` : '等待管理员设置赛季',
+    entryCopy: season ? `${season.approvedEntryCount} 支球队` : '等待管理员设置赛季',
     teamName: '',
   }
 }
@@ -90,7 +90,7 @@ export function myLeagueCardView(team: MyLeagueTeamSummary): LeagueCardView {
     seasonName: season?.displayName || '暂无当前赛季',
     seasonState: season ? seasonStatusLabel(season.status) : '待发布',
     seasonTone: seasonStatusTone(season?.status ?? null),
-    entryCopy: season ? `${season.approvedEntryCount} 支球队参赛` : '等待管理员设置赛季',
+    entryCopy: season ? `${season.approvedEntryCount} 支球队` : '等待管理员设置赛季',
     teamName: team.name.trim() || '未命名球队',
   }
 }

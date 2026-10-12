@@ -123,6 +123,20 @@ describe('registered browsing pages visual boundary', () => {
     }
   })
 
+  it.each(['leagues', 'players'])('%s keeps scroll content above the floating tab bar', (page) => {
+    const styles = readFileSync(resolve(miniRoot, `pages/${page}/index.wxss`), 'utf8')
+
+    expect(styles).toMatch(/padding:[^;]*calc\(env\(safe-area-inset-bottom\) \+ 190rpx\)/s)
+  })
+
+  it('keeps the league discovery surface compact enough to preview multiple leagues', () => {
+    const styles = readFileSync(resolve(miniRoot, 'pages/leagues/index.wxss'), 'utf8')
+
+    expect(styles).toMatch(/\.league-banner\s*{[^}]*height:\s*160rpx/s)
+    expect(styles).toMatch(/\.league-card__identity\s*{[^}]*min-height:\s*136rpx/s)
+    expect(styles).toMatch(/\.season-strip\s*{[^}]*min-height:\s*88rpx/s)
+  })
+
   it('keeps the favorite control as a compact badge inside the player card', () => {
     const styles = readFileSync(resolve(miniRoot, 'pages/favorites/index.wxss'), 'utf8')
 

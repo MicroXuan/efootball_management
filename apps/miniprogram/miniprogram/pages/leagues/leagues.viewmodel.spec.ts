@@ -49,7 +49,7 @@ describe('league list view model', () => {
     } }))
     expect(card).toMatchObject({
       displayName: 'CELL传奇联赛', seasonName: 'CELL S20', seasonState: '报名中',
-      editionLabel: '国服', entryCopy: '12 支球队参赛', logoText: 'CE',
+      editionLabel: '国服', entryCopy: '12 支球队', logoText: 'CE',
     })
   })
 

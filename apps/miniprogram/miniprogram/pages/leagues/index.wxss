@@ -1,7 +1,7 @@
 page { background: #0e1417; color: #f4f7f8; }
 
 .page-shell {
-  padding: calc(env(safe-area-inset-top) + 38rpx) 28rpx 184rpx;
+  padding: calc(env(safe-area-inset-top) + 28rpx) 28rpx calc(env(safe-area-inset-bottom) + 190rpx);
   background:
     radial-gradient(circle at 94% 2%, rgba(182, 241, 58, 0.07), transparent 30%),
     #0e1417;
@@ -38,7 +38,7 @@ page { background: #0e1417; color: #f4f7f8; }
 
 .league-banner {
   position: relative;
-  height: 220rpx;
+  height: 160rpx;
   overflow: hidden;
   border: 2rpx solid #344047;
   border-radius: 24rpx;
@@ -95,7 +95,7 @@ page { background: #0e1417; color: #f4f7f8; }
 }
 
 .league-tabs {
-  margin-top: 24rpx;
+  margin-top: 18rpx;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8rpx;
@@ -119,10 +119,10 @@ page { background: #0e1417; color: #f4f7f8; }
   background: #b6f13a;
 }
 
-.league-list { margin-top: 38rpx; }
+.league-list { margin-top: 24rpx; }
 
 .league-card {
-  margin-top: 24rpx;
+  margin-top: 16rpx;
   overflow: hidden;
   border: 2rpx solid #344047;
   border-radius: 24rpx;
@@ -134,18 +134,18 @@ page { background: #0e1417; color: #f4f7f8; }
 .league-card:first-child { margin-top: 0; }
 .league-card--pressed { opacity: 0.86; transform: scale(0.988); }
 
-.league-card__identity { min-height: 184rpx; padding: 28rpx; }
-.league-mark { width: 104rpx; flex: none; }
-.league-card__copy { min-width: 0; margin-left: 22rpx; flex: 1; }
+.league-card__identity { min-height: 136rpx; padding: 20rpx 22rpx; }
+.league-mark { width: 88rpx; flex: none; }
+.league-card__copy { min-width: 0; margin-left: 18rpx; flex: 1; }
 .league-card__meta-line { min-width: 0; gap: 12rpx; }
 
 .edition-badge {
   flex: none;
-  padding: 6rpx 10rpx;
+  padding: 4rpx 9rpx;
   border: 2rpx solid #46545b;
   border-radius: 8rpx;
   color: #cbd4d8;
-  font-size: 17rpx;
+  font-size: 16rpx;
   font-weight: 750;
 }
 
@@ -153,7 +153,7 @@ page { background: #0e1417; color: #f4f7f8; }
   min-width: 0;
   overflow: hidden;
   color: #aab5ba;
-  font-size: 19rpx;
+  font-size: 18rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -165,44 +165,44 @@ page { background: #0e1417; color: #f4f7f8; }
 .entry-copy { display: block; }
 
 .league-name {
-  margin-top: 12rpx;
+  margin-top: 8rpx;
   overflow: hidden;
   display: -webkit-box;
-  font-size: 32rpx;
+  font-size: 29rpx;
   font-weight: 800;
   line-height: 1.24;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .league-meta {
-  margin-top: 8rpx;
+  margin-top: 6rpx;
   overflow: hidden;
   color: #aab5ba;
-  font-size: 21rpx;
+  font-size: 19rpx;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .arrow {
-  margin-left: 16rpx;
+  margin-left: 12rpx;
   color: #b6f13a;
-  font-size: 34rpx;
+  font-size: 30rpx;
   font-weight: 500;
 }
 
 .season-strip {
-  min-height: 132rpx;
-  padding: 22rpx 28rpx;
+  min-height: 88rpx;
+  padding: 14rpx 22rpx;
   border-top: 2rpx solid #2d393f;
   background: #1c262b;
 }
 
-.season-copy { min-width: 0; padding-right: 18rpx; }
-.season-label { color: #7e8b91; letter-spacing: 3rpx; }
-.season-name { margin-top: 7rpx; overflow: hidden; font-size: 25rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.entry-copy { margin-top: 5rpx; color: #aab5ba; font-size: 19rpx; }
+.season-copy { min-width: 0; padding-right: 16rpx; }
+.season-label { color: #7e8b91; font-size: 16rpx; letter-spacing: 3rpx; }
+.season-name { margin-top: 4rpx; overflow: hidden; font-size: 23rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.entry-copy { margin-top: 3rpx; color: #aab5ba; font-size: 17rpx; }
 
 .state-card {
   min-height: 380rpx;
