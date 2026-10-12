@@ -9,7 +9,6 @@ import {
   seasonRailSteps,
   seasonStructureCopy,
   selectSeason,
-  standingsAccess,
   playerAuctionAccess,
   type SeasonRailStep,
   type WorkspaceModule,
@@ -43,9 +42,6 @@ Page({
     seasonRail: [] as SeasonRailStep[],
     seasonStatusLabel: '',
     seasonStatusTone: 'muted' as 'accent' | 'info' | 'warning' | 'muted' | 'danger',
-    standingsEnabled: false,
-    standingsLabel: '报名后开放',
-    standingsHint: '仅当前赛季正式参赛球队可查看',
     workspace: null as LeagueWorkspaceResponse | null,
     workspaceView: null as ReturnType<typeof workspaceSummary> | null,
     workspaceModules: [] as WorkspaceModule[],
@@ -103,34 +99,21 @@ Page({
   async loadEntry() {
     const season = this.data.selectedSeason
     if (!season) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), ...this.standingsData(null), workspace: null, workspaceView: null, workspaceModules: [] })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), workspace: null, workspaceView: null, workspaceModules: [] })
       return
     }
     if (!this.data.loggedIn) {
-      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), ...this.standingsData(null), workspace: null, workspaceView: null, workspaceModules: [] })
+      this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), workspace: null, workspaceView: null, workspaceModules: [] })
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
-    this.setData({ entry, entryStatus: entryStatusCopy(true, Boolean(this.data.profile), entry), ...this.standingsData(entry) })
+    this.setData({ entry, entryStatus: entryStatusCopy(true, Boolean(this.data.profile), entry) })
     if (entry?.status === 'APPROVED') {
       const workspace = await leaguesApi.workspace(this.data.leagueId, season.id)
       this.setData({ workspace, workspaceView: workspaceSummary(workspace), workspaceModules: workspaceModules(workspace) })
     } else {
       this.setData({ workspace: null, workspaceView: null, workspaceModules: [] })
     }
-  },
-
-  standingsData(entry: SeasonEntryResponse | null) {
-    const access = standingsAccess(entry)
-    return { standingsEnabled: access.enabled, standingsLabel: access.label, standingsHint: access.hint }
-  },
-
-  openStandings() {
-    if (!this.data.standingsEnabled || !this.data.selectedSeason) return
-    const teamName = this.data.workspace?.team.name ?? this.data.profile?.name ?? ''
-    wx.navigateTo({
-      url: `/pages/season-standings/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(this.data.selectedSeason.id)}&teamName=${encodeURIComponent(teamName)}`,
-    })
   },
 
   openPlayerAuctions() {
@@ -164,7 +147,6 @@ Page({
       registrationCloseDate: selectedSeason.registrationClosesAt.slice(0, 10),
       entry: null,
       entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null),
-      ...this.standingsData(null),
       workspace: null,
       workspaceView: null,
       workspaceModules: [],
@@ -173,10 +155,6 @@ Page({
       seasonStatusTone: seasonStatusTone(selectedSeason.status),
     })
     void this.loadEntry().catch((error: unknown) => this.setData({ errorMessage: this.errorCopy(error) }))
-  },
-
-  enterCurrentSeason() {
-    wx.pageScrollTo({ selector: '#current-season', duration: 180 })
   },
 
   errorCopy(error: unknown): string {
