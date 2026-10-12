@@ -98,13 +98,6 @@ export function bidDraftState(amount: string, minimum: number | null) {
   return { valid: true, hint: `本次将出价 ⭐${numericAmount}⭐` }
 }
 
-export function bidConfirmation(teamName: string, amount: number) {
-  return {
-    title: '确认出价',
-    content: `确认代表【${teamName}】以 ⭐${amount}⭐ 出价？提交后不可撤回。`,
-  }
-}
-
 export function projectAuctionQueue(queue: MyPlayerAuctionRoom['queue']) {
   const upcoming = queue.filter((lot) => lot.status === 'QUEUED')
   const completed = queue.filter((lot) => ['PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID'].includes(lot.status))

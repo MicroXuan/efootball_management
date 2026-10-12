@@ -9,7 +9,6 @@ import {
 import { session } from '../../services/session'
 import {
   applyRoomSnapshot,
-  bidConfirmation,
   bidDraftState,
   bidFeedback,
   countdownSeconds,
@@ -141,17 +140,6 @@ Page({
     const lot = this.snapshot?.room.currentLot
     const amount = Number(this.data.amount)
     if (!this.data.canSubmit || !lot || !Number.isSafeInteger(amount) || amount <= 0) return
-    const confirmation = bidConfirmation(this.data.teamName, amount)
-    const confirmed = await new Promise<boolean>((resolve) => {
-      wx.showModal({
-        ...confirmation,
-        confirmText: '确认出价',
-        cancelText: '再检查',
-        success: (result) => resolve(result.confirm),
-        fail: () => resolve(false),
-      })
-    })
-    if (!confirmed) return
     const input = { amount, lotId: lot.id, deadlineEpoch: lot.deadlineEpoch }
     const pending = this.pendingSubmission
     const submission = pending && pending.input.amount === input.amount && pending.input.lotId === input.lotId && pending.input.deadlineEpoch === input.deadlineEpoch

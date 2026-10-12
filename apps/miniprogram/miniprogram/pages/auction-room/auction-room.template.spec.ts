@@ -42,9 +42,12 @@ describe('native player auction pages', () => {
     expect(login).toContain('wx.redirectTo')
   })
 
-  it('requires a native confirmation before sending a bid', () => {
+  it('submits directly and keeps native buttons inside the bid card', () => {
     const room = readFileSync(resolve(miniRoot, 'pages/auction-room/index.ts'), 'utf8')
-    expect(room).toContain('wx.showModal')
-    expect(room).toContain("confirmText: '确认出价'")
+    const styles = readFileSync(resolve(miniRoot, 'pages/auction-room/index.wxss'), 'utf8')
+    expect(room).not.toContain('wx.showModal')
+    expect(styles).toMatch(/\.shortcut-row button\s*\{[^}]*width:100%[^}]*box-sizing:border-box/)
+    expect(styles).toMatch(/\.shortcut-row button\[disabled\]\s*\{[^}]*background:/)
+    expect(styles).toMatch(/\.bid-button\s*\{[^}]*display:flex[^}]*align-items:center[^}]*justify-content:center/)
   })
 })
