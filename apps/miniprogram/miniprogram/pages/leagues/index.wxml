@@ -1,4 +1,5 @@
 <view class="page-shell leagues-page">
+  <view wx:if="{{!bannerLayerVisible}}" class="tab-exit-mask"></view>
   <view class="league-banner {{bannerMode === 'image' ? 'has-image' : bannerMode === 'fallback' ? 'is-fallback' : 'is-loading'}}" aria-label="联赛主题图">
     <view
       wx:if="{{bannerLayerVisible && bannerMode === 'image'}}"

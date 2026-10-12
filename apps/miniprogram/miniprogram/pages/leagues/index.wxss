@@ -7,6 +7,17 @@ page { background: #0e1417; color: #f4f7f8; }
     #0e1417;
 }
 
+.tab-exit-mask {
+  position: fixed;
+  z-index: 999;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: #0e1417;
+  pointer-events: none;
+}
+
 .league-card__identity,
 .league-card__meta-line,
 .season-strip {

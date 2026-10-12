@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 
 const markup = readFileSync(resolve(__dirname, 'index.wxml'), 'utf8')
 const page = readFileSync(resolve(__dirname, 'index.ts'), 'utf8')
+const styles = readFileSync(resolve(__dirname, 'index.wxss'), 'utf8')
 const tabBar = readFileSync(resolve(__dirname, '../../custom-tab-bar/index.ts'), 'utf8')
+const tabBarStyles = readFileSync(resolve(__dirname, '../../custom-tab-bar/index.wxss'), 'utf8')
 
 describe('league banner tab lifecycle', () => {
   it('uses a stable view background instead of a composited image node', () => {
@@ -28,5 +30,13 @@ describe('league banner tab lifecycle', () => {
     expect(page).toMatch(/onShow\(\)[\s\S]*bannerLayerVisible:\s*true/)
     expect(tabBar).toContain('current.beforeTabLeave(navigate)')
     expect(tabBar).toContain('wx.switchTab({ url })')
+  })
+
+  it('covers the outgoing league page while keeping the custom tab bar visible', () => {
+    expect(markup).toContain('wx:if="{{!bannerLayerVisible}}" class="tab-exit-mask"')
+    expect(styles).toMatch(/\.tab-exit-mask\s*{[^}]*position:\s*fixed/)
+    expect(styles).toMatch(/\.tab-exit-mask\s*{[^}]*z-index:\s*999/)
+    expect(styles).not.toContain('.leagues-page.is-leaving')
+    expect(tabBarStyles).toMatch(/\.tabbar-shell\s*{[^}]*z-index:\s*1000/)
   })
 })
