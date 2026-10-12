@@ -17,4 +17,14 @@ describe('season standings template', () => {
     expect(markup).toContain('wx:if="{{item.showRise}}"')
     expect(markup).toContain('class="rise">↑</text>')
   })
+
+  it('keeps played matches and points visible in the compact standings columns', () => {
+    expect(markup).toContain('<text class="played">场次</text>')
+    expect(markup).toContain('<text class="record">胜/平/负</text>')
+    expect(markup).toContain('<text class="goals">进/失/净</text>')
+    expect(markup).toContain('{{item.played}}')
+    expect(markup).toContain('{{item.wins}}/{{item.draws}}/{{item.losses}}')
+    expect(markup).toContain('{{item.goalsFor}}/{{item.goalsAgainst}}/{{item.goalDifference}}')
+    expect(markup).toContain('{{item.totalPoints}}')
+  })
 })

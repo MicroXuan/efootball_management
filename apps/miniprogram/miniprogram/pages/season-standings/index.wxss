@@ -124,17 +124,17 @@ page {
 }
 
 .standings-table {
-  min-width: 1120rpx;
+  min-width: 620rpx;
 }
 
 .table-row {
   display: grid;
-  grid-template-columns: 92rpx 340rpx repeat(7, 64rpx) 86rpx;
+  grid-template-columns: 64rpx minmax(210rpx, 1fr) 62rpx 90rpx 112rpx 68rpx;
   min-height: 112rpx;
   align-items: center;
   border-bottom: 2rpx solid #273238;
   background: #151d21;
-  font-size: 20rpx;
+  font-size: 18rpx;
   text-align: center;
 }
 
@@ -160,7 +160,7 @@ page {
 }
 
 .rank {
-  font-size: 24rpx;
+  font-size: 21rpx;
   font-weight: 850;
 }
 
@@ -185,7 +185,7 @@ page {
 
 .team {
   box-sizing: border-box;
-  padding: 0 14rpx;
+  padding: 0 8rpx;
   text-align: left;
   font-weight: 750;
 }
@@ -193,11 +193,11 @@ page {
 .team-cell {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 10rpx;
 }
 
 .team-crest {
-  width: 66rpx;
+  width: 52rpx;
   flex: none;
 }
 
@@ -219,14 +219,14 @@ page {
 
 .team-name {
   color: #f4f7f8;
-  font-size: 22rpx;
+  font-size: 19rpx;
   font-weight: 850;
 }
 
 .owner-name {
   margin-top: 5rpx;
   color: #aab5ba;
-  font-size: 18rpx;
+  font-size: 16rpx;
   font-weight: 600;
 }
 
@@ -239,7 +239,7 @@ page {
 
 .points {
   color: #b6f13a;
-  font-size: 24rpx;
+  font-size: 21rpx;
   font-weight: 900;
 }
 

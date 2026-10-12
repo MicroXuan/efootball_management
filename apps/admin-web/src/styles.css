@@ -330,8 +330,11 @@ select { font: inherit; }
 .allocation-toolbar .ant-card-body { display: grid; gap: 10px; }
 .allocation-toolbar p { margin: 0; color: var(--admin-text-secondary); }
 .allocation-stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 14px; }
-.allocation-stage-card { display: grid; gap: 18px; padding: 18px; border: 1px solid var(--admin-border); border-radius: 16px; background: var(--admin-surface-subtle); }
+.allocation-stage-card { align-self: start; display: grid; gap: 18px; padding: 18px; border: 1px solid var(--admin-border); border-radius: 16px; background: var(--admin-surface-subtle); }
 .allocation-stage-card__summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.allocation-schedule-panel { margin-top: 18px; padding: 22px; border: 1px solid var(--admin-border); border-radius: 16px; background: #f7f9f8; }
+.allocation-schedule-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.allocation-schedule-panel__header h3 { margin: 5px 0 0; color: var(--admin-text); font-size: 22px; letter-spacing: -.025em; }
 .allocation-schedule-preview { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--admin-border); }
 .allocation-schedule-preview__heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .allocation-schedule-preview__heading > div { display: grid; gap: 2px; }

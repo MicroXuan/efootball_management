@@ -161,6 +161,9 @@ it('shows the generated match preview instead of only updating the match count',
   expect(screen.getByRole('img', { name: '阿森纳队徽' })).toHaveAttribute('src', 'https://static.example.com/arsenal.png');
   expect(screen.getByText('玩家：布莱顿玩家')).toBeInTheDocument();
   expect(screen.getByText('玩家：阿森纳玩家')).toBeInTheDocument();
+  const schedulePanel = screen.getByText('第 1 轮').closest('.allocation-schedule-panel');
+  expect(schedulePanel).not.toBeNull();
+  expect(schedulePanel?.closest('.allocation-stage-card')).toBeNull();
 });
 
 it('shows an actionable error when schedule preview generation fails', async () => {

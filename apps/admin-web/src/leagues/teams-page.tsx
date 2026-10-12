@@ -34,6 +34,8 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
   const [submitting, setSubmitting] = useState(false);
   const [filterKeyword, setFilterKeyword] = useState('');
   const [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form] = Form.useForm<CreateFields>();
   const mutationKey = useMutationKey();
   const filteredTeams = useMemo(() => filterLeagueTeams(teams, filterKeyword), [teams, filterKeyword]);
@@ -84,7 +86,7 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
 
   return <div className="page-grid page-grid--teams">
     <Card title="联赛球队" className="data-card">
-      <Tabs activeKey={status} onChange={(key) => { setFilterKeyword(''); setStatus(key as 'ACTIVE' | 'ARCHIVED'); }} items={[
+      <Tabs activeKey={status} onChange={(key) => { setFilterKeyword(''); setPage(1); setStatus(key as 'ACTIVE' | 'ARCHIVED'); }} items={[
         { key: 'ACTIVE', label: '现役球队' },
         { key: 'ARCHIVED', label: '已退出' }
       ]} />
@@ -95,11 +97,21 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         allowClear
         placeholder="搜索球队、编号或负责人"
         value={filterKeyword}
-        onChange={(event) => setFilterKeyword(event.target.value)}
+        onChange={(event) => { setFilterKeyword(event.target.value); setPage(1); }}
         style={{ marginBottom: 20 }}
       /> : null}
       {!loading && teams.length > 0 && filteredTeams.length === 0 ? <Empty description="没有符合筛选条件的球队" /> : null}
-      {!loading && filteredTeams.length ? <Table rowKey="id" pagination={false} dataSource={filteredTeams} columns={[
+      {!loading && filteredTeams.length ? <Table rowKey="id" pagination={{
+        current: page,
+        pageSize,
+        showSizeChanger: true,
+        pageSizeOptions: [10, 20, 50],
+        showTotal: (total, range) => `共 ${total} 支球队，当前显示 ${range[0]}-${range[1]}`,
+        onChange: (nextPage, nextPageSize) => {
+          setPage(nextPageSize === pageSize ? nextPage : 1);
+          setPageSize(nextPageSize);
+        }
+      }} dataSource={filteredTeams} columns={[
         { title: '球队', render: (_, row) => <div className="league-team-identity">
           {row.logoUrl ? <img src={row.logoUrl} alt={`${row.name}队徽`} /> : <span aria-label={`${row.name}暂无队徽`}>{row.shortName.slice(0, 2)}</span>}
           <Link to={`/leagues/${leagueId}/teams/${row.id}`}>
