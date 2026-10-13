@@ -226,7 +226,10 @@ describe('SchedulesService', () => {
 });
 
 describe('tiered stage schedules', () => {
-  function stageHarness(participantCount = 3) {
+  function stageHarness(
+    participantCount = 3,
+    competitionType: 'DIVISION_LEAGUE' | 'GROUP_KNOCKOUT_CUP' = 'DIVISION_LEAGUE'
+  ) {
     const now = new Date('2026-10-03T00:00:00.000Z');
     const participants = Array.from({ length: participantCount }, (_, index) => ({
       id: `participant-${index + 1}`,
@@ -247,7 +250,7 @@ describe('tiered stage schedules', () => {
       sequence: 1, capacity: 18, format: 'ROUND_ROBIN', status: 'DRAFT', version: 1,
       createdAt: now, updatedAt: now,
       competition: {
-        id: 'competition-1', seasonId: 'season-1', competitionType: 'DIVISION_LEAGUE', status: 'DRAFT',
+        id: 'competition-1', seasonId: 'season-1', competitionType, status: 'DRAFT',
         season: { id: 'season-1', leagueId: 'league-1', status: 'READY', version: 4 }
       },
       participants: participants.map((participant, index) => ({
@@ -323,6 +326,21 @@ describe('tiered stage schedules', () => {
       teamName: '赛季球队 1',
       teamLogoUrl: 'https://static.example.com/team-1.png',
       ownerDisplayName: '玩家 1'
+    });
+  });
+
+  it('generates a schedule for a confirmed group-knockout cup stage', async () => {
+    const { service } = stageHarness(4, 'GROUP_KNOCKOUT_CUP');
+
+    const preview = await service.generateStage('admin-1', 'league-1', 'stage-1', {
+      expectedStageVersion: 1
+    }, 'cup-stage-generate');
+
+    expect(preview).toMatchObject({
+      id: 'stage-1',
+      competitionId: 'competition-1',
+      roundCount: 3,
+      matchCount: 6
     });
   });
 

@@ -423,7 +423,7 @@ export class SchedulesService {
     leagueId: string
   ): asserts stage is NonNullable<typeof stage> {
     if (!stage) throw new CompetitionError('COMPETITION_STAGE_NOT_FOUND', '未找到联赛组别', 404);
-    if (stage.competition.competitionType !== 'DIVISION_LEAGUE'
+    if (!['DIVISION_LEAGUE', 'GROUP_KNOCKOUT_CUP'].includes(stage.competition.competitionType)
       || !stage.competition.season
       || stage.competition.season.leagueId !== leagueId) {
       throw new CompetitionError('COMPETITION_STAGE_NOT_IN_LEAGUE', '组别不属于当前联赛', 404);
