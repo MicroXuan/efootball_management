@@ -469,6 +469,17 @@ select { font: inherit; }
 .cup-card__meter { margin: 22px 0; padding-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; border-top: 1px solid var(--admin-border); }
 .cup-card__meter strong { color: var(--admin-text); font-size: 28px; letter-spacing: -.04em; }
 .cup-card__meter span { color: var(--admin-text-weak); font-size: 12px; }
+.cup-participant-list { margin: 0 0 18px; padding: 14px; border: 1px solid var(--admin-border); border-radius: 12px; background: #f8fafb; }
+.cup-participant-list__heading { margin-bottom: 10px; display: flex; justify-content: space-between; color: var(--admin-text-secondary); font-size: 12px; }
+.cup-participant { padding: 9px 0; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--admin-border); }
+.cup-participant img,
+.cup-participant__crest { width: 36px; height: 36px; flex: none; border-radius: 9px; object-fit: contain; background: var(--admin-surface); }
+.cup-participant__crest { display: grid; place-items: center; color: var(--admin-text-weak); font-size: 12px; }
+.cup-participant strong,
+.cup-participant span { display: block; }
+.cup-participant strong { color: var(--admin-text); font-size: 13px; }
+.cup-participant span { margin-top: 2px; color: var(--admin-text-weak); font-size: 11px; }
+.cup-participant-list__empty { margin: 0; color: var(--admin-text-weak); font-size: 12px; }
 .cup-bracket-empty { border: 1px dashed #afbdc2; border-radius: 16px; background: #fbfcfa; }
 .cup-bracket-empty .ant-card-body { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .cup-bracket-empty h3 { margin: 6px 0; color: var(--admin-text); font-size: 22px; }

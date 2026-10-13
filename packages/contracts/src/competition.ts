@@ -120,8 +120,6 @@ export const CreateSeasonCupRequestSchema = z.object({
   description: z.string().trim().max(2_000).default(''),
   competitionType: CupCompetitionTypeSchema,
   format: z.enum(['GROUP_KNOCKOUT', 'SINGLE_ELIMINATION']),
-  platform: GamePlatformSchema,
-  serverRegion: z.string().trim().min(1).max(32),
   registrationOpensAt: TimestampSchema,
   registrationClosesAt: TimestampSchema,
   startsAt: TimestampSchema,

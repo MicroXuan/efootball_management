@@ -105,6 +105,8 @@ it('creates a pure knockout cup with a complete timeline', async () => {
 
   await screen.findByText('当前赛季还没有杯赛');
   await userEvent.click(screen.getByRole('button', { name: '新建杯赛' }));
+  expect(screen.queryByLabelText('游戏平台')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('服务器区域')).not.toBeInTheDocument();
   await userEvent.type(screen.getByLabelText('杯赛名称'), 'S3 足总杯');
   fireEvent.change(screen.getByLabelText('报名开始'), { target: { value: '2026-10-03T09:00' } });
   fireEvent.change(screen.getByLabelText('报名截止'), { target: { value: '2026-10-04T09:00' } });
@@ -128,6 +130,43 @@ it('creates a pure knockout cup with a complete timeline', async () => {
       })
     })
   ));
+  const createCall = request.mock.calls.find(([, options]) => options?.method === 'POST');
+  expect(createCall?.[1]?.body).not.toHaveProperty('platform');
+  expect(createCall?.[1]?.body).not.toHaveProperty('serverRegion');
+});
+
+it('opens registration and shows registered team identity on the cup card', async () => {
+  const draftCup = { ...cup, status: 'DRAFT' as const, participantCount: 0, version: 1 };
+  const openCup = { ...draftCup, status: 'REGISTRATION_OPEN' as const, participantCount: 1, version: 2 };
+  let currentCup: typeof draftCup | typeof openCup = draftCup;
+  const participants = [{
+    id: '77777777-7777-4777-8777-777777777777', displayName: '上海海港', participantType: 'TEAM' as const,
+    teamLifecycleStatus: 'ACTIVE' as const, teamNumber: 24, teamName: '上海海港',
+    teamLogoUrl: 'https://static.example.com/shanghai-port.png', ownerDisplayName: '小宣'
+  }];
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith(`/cups/${cupId}/open-registration`) && options?.method === 'POST') {
+      currentCup = openCup;
+      return openCup;
+    }
+    if (path.endsWith(`/cups/${cupId}/participants`)) return participants;
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [currentCup] };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole('button', { name: '开放报名' }));
+  expect(await screen.findByText('24 · 上海海港')).toBeInTheDocument();
+  expect(screen.getByText('负责人：小宣')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '上海海港队徽' })).toHaveAttribute('src', participants[0]!.teamLogoUrl);
+  expect(screen.getByRole('button', { name: '截止报名' })).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/open-registration`,
+    expect.objectContaining({ method: 'POST', body: { expectedVersion: 1 } })
+  );
 });
 
 it('generates a draft bracket and requires explicit confirmation before publishing it', async () => {

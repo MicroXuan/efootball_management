@@ -6,11 +6,13 @@ import {
   ConfirmCupBracketProposalRequestSchema,
   GenerateCupBracketProposalRequestSchema,
   ResourceIdSchema,
+  VersionedMutationRequestSchema,
   type ConfirmCupGroupProposalRequest,
   type GenerateCupGroupProposalRequest,
   type ConfirmCupBracketProposalRequest,
   type GenerateCupBracketProposalRequest,
-  type ParsedCreateSeasonCupRequest
+  type ParsedCreateSeasonCupRequest,
+  type VersionedMutationRequest
 } from '@efm/contracts';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard.js';
 import { CurrentAdmin, type CurrentAdminIdentity } from '../admin-auth/current-admin.decorator.js';
@@ -53,6 +55,34 @@ export class AdminCupCompetitionsController {
       throw new CompetitionError('IDEMPOTENCY_KEY_REQUIRED', '必须提供 Idempotency-Key 请求头', 400);
     }
     return this.cups.create(admin.id, leagueId, seasonId, body, key);
+  }
+
+  @Post(':competitionId/open-registration')
+  openRegistration(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(VersionedMutationRequestSchema)) body: VersionedMutationRequest
+  ) {
+    return this.cups.transitionRegistration(
+      admin.id, leagueId, seasonId, competitionId, 'REGISTRATION_OPEN', body, this.key(key)
+    );
+  }
+
+  @Post(':competitionId/close-registration')
+  closeRegistration(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string,
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(VersionedMutationRequestSchema)) body: VersionedMutationRequest
+  ) {
+    return this.cups.transitionRegistration(
+      admin.id, leagueId, seasonId, competitionId, 'REGISTRATION_CLOSED', body, this.key(key)
+    );
   }
 
   @Post(':competitionId/group-proposals')

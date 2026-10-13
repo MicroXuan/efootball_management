@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Drawer, Empty, Form, Input, InputNumber, Select, Spin, Tag } from 'antd';
+import { Alert, Button, Card, Drawer, Empty, Form, Input, InputNumber, Select, Space, Spin, Tag } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -6,12 +6,14 @@ import {
   CupBracketProposalSchema,
   CupGroupProposalSchema,
   CupGroupViewSchema,
+  CompetitionParticipantSummarySchema,
   CreateSeasonCupRequestSchema,
   LeagueSeasonSummarySchema,
   SeasonCupSummarySchema,
   SeasonCupListResponseSchema,
   type CupBracketView,
   type CupGroupView,
+  type CompetitionParticipantSummary,
   type LeagueSeasonSummary,
   type SeasonCupSummary
 } from '@efm/contracts';
@@ -44,8 +46,6 @@ type CupFormFields = {
   name: string;
   description?: string;
   competitionType: 'GROUP_KNOCKOUT_CUP' | 'KNOCKOUT_CUP';
-  platform: 'MOBILE' | 'PLAYSTATION' | 'XBOX' | 'STEAM';
-  serverRegion: string;
   registrationOpensAt: string;
   registrationClosesAt: string;
   startsAt: string;
@@ -63,6 +63,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const [seasons, setSeasons] = useState<LeagueSeasonSummary[]>([]);
   const [seasonId, setSeasonId] = useState('');
   const [cups, setCups] = useState<SeasonCupSummary[]>([]);
+  const [participantsByCup, setParticipantsByCup] = useState<Record<string, CompetitionParticipantSummary[]>>({});
   const [selectedCup, setSelectedCup] = useState<SeasonCupSummary | null>(null);
   const [bracket, setBracket] = useState<CupBracketView | null>(null);
   const [groupView, setGroupView] = useState<CupGroupView | null>(null);
@@ -80,6 +81,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const bracketKey = useMutationKey();
   const groupKey = useMutationKey();
   const scheduleKey = useMutationKey();
+  const lifecycleKey = useMutationKey();
   const selectedSeason = seasons.find(({ id }) => id === seasonId) ?? null;
 
   const loadCups = useCallback(async (targetSeasonId: string, preserveCupId?: string) => {
@@ -89,6 +91,19 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       { schema: SeasonCupListResponseSchema }
     );
     setCups(result.items);
+    const participantEntries = await Promise.all(result.items
+      .filter(({ status }) => status !== 'DRAFT' && status !== 'CANCELLED')
+      .map(async (cup) => {
+        try {
+          const participants = await api.request(`/v1/cups/${cup.id}/participants`, {
+            schema: z.array(CompetitionParticipantSummarySchema)
+          });
+          return [cup.id, participants] as const;
+        } catch {
+          return [cup.id, []] as const;
+        }
+      }));
+    setParticipantsByCup(Object.fromEntries(participantEntries));
     const preserved = preserveCupId ? result.items.find(({ id }) => id === preserveCupId) ?? null : null;
     setSelectedCup(preserved);
     if (!preserved) {
@@ -305,8 +320,6 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         description: values.description ?? '',
         competitionType: values.competitionType,
         format: isGrouped ? 'GROUP_KNOCKOUT' : 'SINGLE_ELIMINATION',
-        platform: values.platform,
-        serverRegion: values.serverRegion,
         registrationOpensAt: asIso(values.registrationOpensAt),
         registrationClosesAt: asIso(values.registrationClosesAt),
         startsAt: asIso(values.startsAt),
@@ -328,6 +341,34 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       await loadCups(seasonId);
     } catch {
       setError('杯赛创建失败，请检查时间、人数与赛制设置');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const transitionRegistration = async (
+    cup: SeasonCupSummary,
+    action: 'open-registration' | 'close-registration'
+  ) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.request(
+        `/v1/admin/leagues/${leagueId}/seasons/${cup.seasonId}/cups/${cup.id}/${action}`,
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': lifecycleKey.current() },
+          schema: SeasonCupSummarySchema,
+          body: { expectedVersion: cup.version }
+        }
+      );
+      lifecycleKey.reset();
+      await loadCups(cup.seasonId, cup.id);
+    } catch {
+      setError(action === 'open-registration'
+        ? '开放报名失败，杯赛状态可能已更新'
+        : '截止报名失败，杯赛状态可能已更新');
     } finally {
       setSubmitting(false);
     }
@@ -422,11 +463,24 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         <h3>{cup.name}</h3>
         <p>{cup.description || '暂无杯赛说明'}</p>
         <div className="cup-card__meter"><strong>{cup.participantCount} / {cup.participantLimit}</strong><span>已报名 / 上限</span></div>
-        <Button type="primary" onClick={() => void (cup.competitionType === 'GROUP_KNOCKOUT_CUP'
-          ? loadGroups(cup)
-          : openBracket(cup))}>
-          {cup.competitionType === 'GROUP_KNOCKOUT_CUP' ? '管理分组' : '查看签表'}
-        </Button>
+        {cup.status !== 'DRAFT' && cup.status !== 'CANCELLED' ? <div className="cup-participant-list">
+          <div className="cup-participant-list__heading"><strong>已报名球队</strong><span>{participantsByCup[cup.id]?.length ?? 0} 支</span></div>
+          {(participantsByCup[cup.id] ?? []).length ? (participantsByCup[cup.id] ?? []).map((participant) => <div className="cup-participant" key={participant.id}>
+            {participant.teamLogoUrl
+              ? <img src={participant.teamLogoUrl} alt={`${participant.teamName ?? participant.displayName}队徽`} />
+              : <span className="cup-participant__crest" aria-hidden="true">队</span>}
+            <div><strong>{participant.teamNumber ?? '—'} · {participant.teamName ?? participant.displayName}</strong><span>负责人：{participant.ownerDisplayName ?? '未记录'}</span></div>
+          </div>) : <p className="cup-participant-list__empty">尚无球队报名</p>}
+        </div> : null}
+        <Space wrap>
+          {cup.status === 'DRAFT' ? <Button type="primary" loading={submitting} onClick={() => void transitionRegistration(cup, 'open-registration')}>开放报名</Button> : null}
+          {cup.status === 'REGISTRATION_OPEN' ? <Button type="primary" loading={submitting} onClick={() => void transitionRegistration(cup, 'close-registration')}>截止报名</Button> : null}
+          <Button onClick={() => void (cup.competitionType === 'GROUP_KNOCKOUT_CUP'
+            ? loadGroups(cup)
+            : openBracket(cup))}>
+            {cup.competitionType === 'GROUP_KNOCKOUT_CUP' ? '管理分组' : '查看签表'}
+          </Button>
+        </Space>
       </Card>)}
     </div>}
 
@@ -474,7 +528,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         onValuesChange={() => createKey.reset()}
         onFinish={createCup}
         initialValues={{
-          competitionType: 'KNOCKOUT_CUP', platform: 'MOBILE', serverRegion: '国服', participantLimit: 16,
+          competitionType: 'KNOCKOUT_CUP', participantLimit: 16,
           targetGroupSize: 4, qualifiersPerGroup: 2
         }}
       >
@@ -488,11 +542,6 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           onChange={(value) => setCupType(value)}
         /></Form.Item>
         <div className="inline-fields">
-          <Form.Item label="游戏平台" name="platform" rules={[{ required: true }]}><Select options={[
-            { label: '移动端', value: 'MOBILE' }, { label: 'PlayStation', value: 'PLAYSTATION' },
-            { label: 'Xbox', value: 'XBOX' }, { label: 'Steam', value: 'STEAM' }
-          ]} /></Form.Item>
-          <Form.Item label="服务器区域" name="serverRegion" rules={[{ required: true }]}><Input maxLength={32} /></Form.Item>
           <Form.Item label="参赛上限" name="participantLimit" rules={[{ required: true }]}><InputNumber min={2} max={128} /></Form.Item>
         </div>
         {cupType === 'GROUP_KNOCKOUT_CUP' ? <div className="inline-fields">

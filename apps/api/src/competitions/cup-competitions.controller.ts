@@ -27,6 +27,13 @@ export class CupCompetitionsController {
     return this.bracketQueries.getPublished(competitionId);
   }
 
+  @Get(':competitionId/participants')
+  participants(
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
+  ) {
+    return this.cups.listParticipants(competitionId);
+  }
+
   @Post(':competitionId/registration')
   @UseGuards(JwtAuthGuard)
   register(

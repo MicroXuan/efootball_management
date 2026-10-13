@@ -31,6 +31,16 @@ page { background: #0e1417; color: #f4f7f8; }
 .team-entry-hint { padding: 24rpx; display: grid; gap: 8rpx; border: 1rpx dashed #46545b; border-radius: 20rpx; color: #7e8b91; }
 .team-entry-hint text:first-child { color: #f4f7f8; font-weight: 700; }
 .registered-team { border-color: rgba(182,241,58,.34); background: linear-gradient(145deg, rgba(182,241,58,.08), #151d21); }
+.cup-participants-head { display: flex; align-items: center; justify-content: space-between; }
+.cup-participants-head .panel-title { margin-bottom: 12rpx; }
+.cup-participants-head > text { color: #b6f13a; font-size: 22rpx; font-weight: 800; }
+.cup-participants { display: flex; flex-direction: column; }
+.cup-participant { padding: 18rpx 0; display: flex; align-items: center; gap: 18rpx; border-top: 1rpx solid #2d393f; }
+.cup-participant__crest { width: 72rpx; height: 72rpx; flex: none; border-radius: 16rpx; background: #0e1417; }
+.cup-participant__crest--empty { display: flex; align-items: center; justify-content: center; color: #7e8b91; font-size: 22rpx; }
+.cup-participant__identity text { display: block; }
+.cup-participant__identity text:first-child { color: #f4f7f8; font-size: 24rpx; font-weight: 700; }
+.cup-participant__identity text:last-child { margin-top: 6rpx; color: #7e8b91; font-size: 19rpx; }
 .primary-button, .danger-button, .outline-button, .manager-button { min-height: 88rpx; border-radius: 16rpx; font-size: 24rpx; font-weight: 700; }
 .primary-button { background: #b6f13a; color: #0e1417; }.primary-button[disabled] { background: #263238; color: #7e8b91; }
 .danger-button { border: 2rpx solid #aab5ba; background: transparent; color: #aab5ba; }

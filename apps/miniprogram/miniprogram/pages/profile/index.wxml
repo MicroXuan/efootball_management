@@ -14,7 +14,7 @@
     <view class="login-panel">
       <view class="login-panel-line">
         <text>参赛者通道</text>
-        <text class="login-panel-code">球员档案 · 01</text>
+        <text class="login-panel-code">球员档案</text>
       </view>
       <button class="login-button" loading="{{loginLoading}}" disabled="{{loginLoading}}" bindtap="login">
         <text class="login-button__label">{{loginLoading ? '正在进入…' : '微信登录'}}</text>
@@ -27,7 +27,7 @@
   <view wx:else class="page-shell">
     <view class="topbar">
       <view><text class="eyebrow">成员身份</text><text class="page-title">我的</text></view>
-      <text class="record-mark">球员档案 · 01</text>
+      <text class="record-mark">球员档案</text>
     </view>
 
     <view class="identity-card">
@@ -81,7 +81,7 @@
 <view wx:else class="page-shell">
   <view class="topbar">
     <view><text class="eyebrow">成员身份</text><text class="page-title">我的</text></view>
-    <text class="record-mark">球员档案 · 01</text>
+    <text class="record-mark">球员档案</text>
   </view>
   <loading-state wx:if="{{state === 'loading'}}" label="正在加载身份资料" />
   <view wx:else class="state-card">

@@ -10,8 +10,6 @@ function input() {
     description: '赛季杯赛',
     competitionType: 'GROUP_KNOCKOUT_CUP' as const,
     format: 'GROUP_KNOCKOUT' as const,
-    platform: 'MOBILE' as const,
-    serverRegion: '国际服',
     registrationOpensAt: '2026-10-01T12:00:00.000Z',
     registrationClosesAt: '2026-10-10T12:00:00.000Z',
     startsAt: '2026-10-11T12:00:00.000Z',
@@ -22,11 +20,11 @@ function input() {
   };
 }
 
-function harness(options: { entryStatus?: string; ownerUserId?: string; participantCount?: number; existingStatus?: string } = {}) {
+function harness(options: { entryStatus?: string; ownerUserId?: string; participantCount?: number; existingStatus?: string; competitionStatus?: string } = {}) {
   const competition = {
     id: 'cup-1', seasonId: 'season-1', name: 'S3 足总杯', description: '赛季杯赛',
     competitionType: 'GROUP_KNOCKOUT_CUP', format: 'GROUP_KNOCKOUT', participantType: 'TEAM',
-    platform: 'MOBILE', serverRegion: '国际服', status: 'REGISTRATION_OPEN',
+    platform: 'MOBILE', serverRegion: '国际服', status: options.competitionStatus ?? 'REGISTRATION_OPEN',
     registrationOpensAt: new Date('2026-10-01T12:00:00.000Z'),
     registrationClosesAt: new Date('2026-10-10T12:00:00.000Z'),
     startsAt: new Date('2026-10-11T12:00:00.000Z'), endsAt: new Date('2026-11-30T12:00:00.000Z'),
@@ -36,7 +34,9 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
   };
   const entry = {
     id: 'entry-1', seasonId: 'season-1', ownerUserId: options.ownerUserId ?? 'user-1',
-    status: options.entryStatus ?? 'APPROVED', teamNameSnapshot: '上海海港'
+    status: options.entryStatus ?? 'APPROVED', teamNameSnapshot: '上海海港', teamNumberSnapshot: 24,
+    teamLogoUrlSnapshot: 'https://static.example.com/shanghai-port.png',
+    leagueTeam: { status: 'ACTIVE', teamNumber: 25, name: '当前海港', logoUrl: null, ownerAlias: '小宣' }
   };
   const registration = {
     id: 'registration-1', competitionId: 'cup-1', applicantId: 'user-1', gameAccountId: null,
@@ -46,10 +46,18 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
   };
   const transaction = {
     $queryRaw: jest.fn(async () => []),
-    leagueSeason: { findUnique: jest.fn(async () => ({ id: 'season-1', leagueId: 'league-1', status: 'IN_PROGRESS' })) },
+    leagueSeason: { findUnique: jest.fn(async () => ({
+      id: 'season-1', leagueId: 'league-1', status: 'IN_PROGRESS',
+      league: { defaultPlatform: 'PLAYSTATION', defaultServerRegion: '亚洲服' }
+    })) },
     competition: {
       create: jest.fn(async (...args: unknown[]) => { void args; return competition; }),
       findUnique: jest.fn(async () => competition),
+      updateMany: jest.fn(async ({ data }: { where?: Record<string, unknown>; data: { status: string; boundRuleVersion?: number; version?: unknown } }) => {
+        competition.status = data.status;
+        competition.version += 1;
+        return { count: 1 };
+      }),
       findMany: jest.fn(async (input: unknown) => {
         void input;
         return [{ ...competition, _count: { participants: 12 } }];
@@ -76,7 +84,11 @@ function harness(options: { entryStatus?: string; ownerUserId?: string; particip
     competitionParticipant: {
       aggregate: jest.fn(async () => ({ _max: { admissionSequence: 2 } })),
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'participant-1', ...data })),
-      deleteMany: jest.fn(async (input: { where: Record<string, unknown> }) => { void input; return { count: 1 }; })
+      deleteMany: jest.fn(async (input: { where: Record<string, unknown> }) => { void input; return { count: 1 }; }),
+      findMany: jest.fn(async () => [{
+        id: 'participant-1', participantType: 'TEAM', displayNameSnapshot: '上海海港',
+        seasonEntry: entry
+      }])
     }
   };
   const execute = jest.fn(async (
@@ -124,6 +136,7 @@ describe('CupCompetitionsService', () => {
     expect(authorization.requireLeagueAccess).toHaveBeenCalledWith('admin-1', 'league-1');
     expect(transaction.competition.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       seasonId: 'season-1', competitionType: 'GROUP_KNOCKOUT_CUP', participantType: 'TEAM',
+      platform: 'PLAYSTATION', serverRegion: '亚洲服',
       cupConfig: { create: { targetGroupSize: 4, qualifiersPerGroup: 2 } }
     }) });
     expect(transaction.competitionRuleVersion.create).toHaveBeenCalledWith({ data: expect.objectContaining({
@@ -133,6 +146,46 @@ describe('CupCompetitionsService', () => {
       action: 'admin.cup.create', resourceId: 'cup-1', leagueId: 'league-1'
     }));
     expect(result).toMatchObject({ id: 'cup-1', targetGroupSize: 4, qualifiersPerGroup: 2 });
+  });
+
+  it('opens cup registration with an optimistic version and audit record', async () => {
+    const { service, transaction, audit } = harness({ competitionStatus: 'DRAFT' });
+
+    const result = await service.transitionRegistration(
+      'admin-1', 'league-1', 'season-1', 'cup-1', 'REGISTRATION_OPEN',
+      { expectedVersion: 1 }, 'open-cup'
+    );
+
+    expect(transaction.competition.updateMany).toHaveBeenCalledWith({
+      where: { id: 'cup-1', version: 1 },
+      data: { status: 'REGISTRATION_OPEN', boundRuleVersion: 1, version: { increment: 1 } }
+    });
+    expect(audit.record).toHaveBeenCalledWith(transaction, expect.objectContaining({
+      action: 'admin.cup.registration.open', resourceId: 'cup-1'
+    }));
+    expect(result).toMatchObject({ status: 'REGISTRATION_OPEN', version: 2 });
+  });
+
+  it('lists registered teams with seasonal crest, number, name, and owner', async () => {
+    const { service } = harness();
+
+    await expect(service.listParticipants('cup-1')).resolves.toEqual([expect.objectContaining({
+      id: 'participant-1', teamNumber: 24, teamName: '上海海港',
+      teamLogoUrl: 'https://static.example.com/shanghai-port.png', ownerDisplayName: '小宣'
+    })]);
+  });
+
+  it('closes an open cup registration window', async () => {
+    const { service, transaction } = harness();
+
+    await expect(service.transitionRegistration(
+      'admin-1', 'league-1', 'season-1', 'cup-1', 'REGISTRATION_CLOSED',
+      { expectedVersion: 1 }, 'close-cup'
+    )).resolves.toMatchObject({ status: 'REGISTRATION_CLOSED', version: 2 });
+    expect(transaction.competition.updateMany).toHaveBeenCalledWith({
+      where: { id: 'cup-1', version: 1 },
+      data: { status: 'REGISTRATION_CLOSED', version: { increment: 1 } }
+    });
   });
 
   it('registers an approved owned season entry immediately without a game account', async () => {

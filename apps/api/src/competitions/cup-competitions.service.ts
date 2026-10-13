@@ -1,10 +1,12 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CupRegistrationResponse,
+  CompetitionParticipantSummary,
   ParsedCreateSeasonCupRequest,
   RegisterSeasonCupRequest,
   SeasonCupListResponse,
   SeasonCupSummary,
+  VersionedMutationRequest,
   WithdrawSeasonCupRequest
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
@@ -83,7 +85,10 @@ export class CupCompetitionsService {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.adminReceipts.execute(actorAdminId, `admin.cup.create:${seasonId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM league_seasons WHERE id = ${seasonId} FOR UPDATE`;
-      const season = await transaction.leagueSeason.findUnique({ where: { id: seasonId } });
+      const season = await transaction.leagueSeason.findUnique({
+        where: { id: seasonId },
+        include: { league: { select: { defaultPlatform: true, defaultServerRegion: true } } }
+      });
       if (!season || season.leagueId !== leagueId || input.seasonId !== seasonId) {
         throw new CompetitionError('CUP_SEASON_NOT_FOUND', '赛季不属于当前联赛', 404);
       }
@@ -97,8 +102,8 @@ export class CupCompetitionsService {
           competitionType: input.competitionType,
           name: input.name,
           description: input.description,
-          platform: input.platform,
-          serverRegion: input.serverRegion,
+          platform: season.league.defaultPlatform,
+          serverRegion: season.league.defaultServerRegion,
           participantType: 'TEAM',
           format: input.format,
           registrationOpensAt: new Date(input.registrationOpensAt),
@@ -144,6 +149,115 @@ export class CupCompetitionsService {
         }
       });
     }, input);
+  }
+
+  async transitionRegistration(
+    actorAdminId: string,
+    leagueId: string,
+    seasonId: string,
+    competitionId: string,
+    target: 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED',
+    input: VersionedMutationRequest,
+    key: string
+  ): Promise<SeasonCupSummary> {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
+    await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
+    return this.adminReceipts.execute(
+      actorAdminId,
+      `admin.cup.registration:${competitionId}:${target}`,
+      key,
+      async (transaction) => {
+        await transaction.$queryRaw`SELECT id FROM competitions WHERE id = ${competitionId} FOR UPDATE`;
+        const competition = await transaction.competition.findUnique({
+          where: { id: competitionId },
+          include: { cupConfig: true }
+        });
+        if (!competition || competition.seasonId !== seasonId || !competition.cupConfig
+          || !this.isCup(competition.competitionType)) {
+          throw new CompetitionError('CUP_NOT_FOUND', '杯赛不存在', 404);
+        }
+        assertExpectedVersion(competition.version, input.expectedVersion, 'Cup competition');
+        const expectedStatus = target === 'REGISTRATION_OPEN' ? 'DRAFT' : 'REGISTRATION_OPEN';
+        if (competition.status !== expectedStatus) {
+          throw new CompetitionError('CUP_STATUS_INVALID', '杯赛当前状态不能执行该操作', 409);
+        }
+        const updated = await transaction.competition.updateMany({
+          where: { id: competitionId, version: input.expectedVersion },
+          data: {
+            status: target,
+            ...(target === 'REGISTRATION_OPEN' ? { boundRuleVersion: competition.activeRuleVersion } : {}),
+            version: { increment: 1 }
+          }
+        });
+        if (updated.count !== 1) {
+          throw new CompetitionError('VERSION_CONFLICT', '杯赛信息已更新，请刷新后重试', 409);
+        }
+        await this.audit.record(transaction, {
+          actorAdminId,
+          leagueId,
+          action: target === 'REGISTRATION_OPEN'
+            ? 'admin.cup.registration.open'
+            : 'admin.cup.registration.close',
+          resourceType: 'Competition',
+          resourceId: competitionId,
+          metadata: { seasonId, previousStatus: competition.status, nextStatus: target }
+        });
+        const refreshed = await transaction.competition.findUnique({
+          where: { id: competitionId },
+          include: { cupConfig: true }
+        });
+        if (!refreshed) throw new CompetitionError('CUP_NOT_FOUND', '杯赛不存在', 404);
+        return this.summary(refreshed);
+      },
+      input
+    );
+  }
+
+  async listParticipants(competitionId: string): Promise<CompetitionParticipantSummary[]> {
+    await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
+    const competition = await this.prisma.competition.findUnique({
+      where: { id: competitionId },
+      select: { status: true, competitionType: true }
+    });
+    if (!competition || competition.status === 'DRAFT' || !this.isCup(competition.competitionType)) {
+      throw new CompetitionError('CUP_NOT_FOUND', '杯赛不存在', 404);
+    }
+    const participants = await this.prisma.competitionParticipant.findMany({
+      where: { competitionId },
+      include: {
+        seasonEntry: {
+          select: {
+            teamNameSnapshot: true,
+            teamNumberSnapshot: true,
+            teamLogoUrlSnapshot: true,
+            leagueTeam: {
+              select: { status: true, teamNumber: true, name: true, logoUrl: true, ownerAlias: true }
+            }
+          }
+        }
+      },
+      orderBy: [{ admissionSequence: 'asc' }, { id: 'asc' }]
+    });
+    return participants
+      .map((participant) => {
+        const entry = participant.seasonEntry;
+        const team = entry?.leagueTeam;
+        const status = team?.status;
+        return {
+          id: participant.id,
+          displayName: participant.displayNameSnapshot,
+          participantType: participant.participantType,
+          teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null,
+          teamNumber: entry?.teamNumberSnapshot ?? team?.teamNumber ?? null,
+          teamName: entry?.teamNameSnapshot ?? team?.name ?? participant.displayNameSnapshot,
+          teamLogoUrl: entry?.teamLogoUrlSnapshot ?? team?.logoUrl ?? null,
+          ownerDisplayName: team?.ownerAlias ?? null
+        } satisfies CompetitionParticipantSummary;
+      })
+      .sort((left, right) => (left.teamNumber ?? Number.MAX_SAFE_INTEGER)
+        - (right.teamNumber ?? Number.MAX_SAFE_INTEGER));
   }
 
   async register(

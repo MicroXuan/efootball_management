@@ -1892,8 +1892,6 @@ describe('cup center contracts', () => {
       description: '当前赛季杯赛',
       competitionType: 'GROUP_KNOCKOUT_CUP',
       format: 'GROUP_KNOCKOUT',
-      platform: 'MOBILE',
-      serverRegion: '国际服',
       registrationOpensAt,
       registrationClosesAt,
       startsAt,
@@ -1905,6 +1903,8 @@ describe('cup center contracts', () => {
 
     assert.equal(parsed.targetGroupSize, 4);
     assert.equal(parsed.qualifiersPerGroup, 2);
+    assert.equal('platform' in parsed, false);
+    assert.equal('serverRegion' in parsed, false);
   });
 
   it('accepts pure knockout cups and rejects mismatched formats or invalid qualification rules', () => {
@@ -1914,8 +1914,6 @@ describe('cup center contracts', () => {
       description: '',
       competitionType: 'KNOCKOUT_CUP',
       format: 'SINGLE_ELIMINATION',
-      platform: 'MOBILE',
-      serverRegion: '国际服',
       registrationOpensAt,
       registrationClosesAt,
       startsAt,

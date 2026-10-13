@@ -10,7 +10,7 @@
       <text class="name">{{detail.name}}</text>
       <text class="description">{{detail.description || (isCup ? '属于本赛季球队的冠军争夺战。' : '一场讲规则、也讲公平的个人赛事。')}}</text>
       <view class="scoreboard">
-        <view><text class="score-label">平台 / 区服</text><text class="score-value">{{detail.platform}} · {{detail.serverRegion}}</text></view>
+        <view><text class="score-label">{{isCup ? '杯赛赛制' : '平台 / 区服'}}</text><text class="score-value">{{isCup ? (detail.competitionType === 'GROUP_KNOCKOUT_CUP' ? '小组赛 + 淘汰赛' : '单场淘汰') : detail.platform + ' · ' + detail.serverRegion}}</text></view>
         <view><text class="score-label">已录取</text><text class="score-value">{{detail.participantCount}} / {{detail.participantLimit}}</text></view>
       </view>
     </view>
@@ -49,6 +49,17 @@
       <view wx:if="{{isCup && cupRegistration && cupRegistration.status === 'APPROVED'}}" class="panel registered-team">
         <text class="panel-kicker">已报名球队</text><text class="panel-title">{{cupRegistration.teamName}}</text>
         <text class="account-meta">报名状态 · {{cupRegistration.status === 'APPROVED' ? '已通过' : '已撤回'}}</text>
+      </view>
+      <view wx:if="{{isCup}}" class="panel cup-participants-panel">
+        <view class="cup-participants-head"><view><text class="panel-kicker">参赛阵容</text><text class="panel-title">已报名球队</text></view><text>{{cupParticipants.length}} / {{detail.participantLimit}}</text></view>
+        <view wx:if="{{cupParticipants.length === 0}}" class="team-entry-hint"><text>等待球队报名</text><text>开放报名后，符合资格的赛季球队会显示在这里。</text></view>
+        <view wx:else class="cup-participants">
+          <view wx:for="{{cupParticipants}}" wx:key="id" class="cup-participant">
+            <image wx:if="{{item.teamLogoUrl}}" class="cup-participant__crest" src="{{item.teamLogoUrl}}" mode="aspectFit" />
+            <view wx:else class="cup-participant__crest cup-participant__crest--empty">队</view>
+            <view class="cup-participant__identity"><text>{{item.teamNumber === null ? '—' : item.teamNumber}} · {{item.teamName || item.displayName}}</text><text>{{item.ownerDisplayName || '负责人未记录'}}</text></view>
+          </view>
+        </view>
       </view>
       <button wx:if="{{detail.capabilities.canManage}}" class="manager-button" bindtap="manage">打开赛事工作台</button>
       <button wx:if="{{(!isCup && registration && registration.status === 'APPROVED') || (isCup && cupRegistration && cupRegistration.status === 'APPROVED')}}" class="outline-button wide" bindtap="openMyMatches">查看我的比赛</button>

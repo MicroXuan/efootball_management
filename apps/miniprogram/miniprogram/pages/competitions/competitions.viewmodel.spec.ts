@@ -6,6 +6,7 @@ import {
   formatLocalDate,
   lifecycleLabel,
   mergeCompetitionPages,
+  toCompetitionCard,
 } from './competitions.viewmodel'
 
 function competition(id: string): CompetitionSummary {
@@ -21,7 +22,7 @@ function competition(id: string): CompetitionSummary {
 
 describe('competition list view model', () => {
   it('builds a league cup context only when a season is present', () => {
-    expect(competitionListContext({ seasonId: 'season-1', leagueName: '传奇联赛' })).toEqual({
+    expect(competitionListContext({ seasonId: 'season-1', leagueName: encodeURIComponent('传奇联赛') })).toEqual({
       seasonId: 'season-1',
       category: 'CUP',
       kicker: '传奇联赛',
@@ -36,6 +37,13 @@ describe('competition list view model', () => {
     expect(competitionListContext({ leagueName: '不应生效' })).toMatchObject({
       seasonId: '', category: undefined, kicker: '赛事中枢', title: '赛事中枢',
     })
+  })
+
+  it('describes cup cards by competition format instead of platform and server', () => {
+    expect(toCompetitionCard({
+      ...competition('cup-1'), seasonId: 'season-1', competitionType: 'GROUP_KNOCKOUT_CUP',
+      participantType: 'TEAM', format: 'GROUP_KNOCKOUT',
+    })).toMatchObject({ isCup: true, formatName: '小组赛 + 淘汰赛' })
   })
 
   it('maps lifecycle labels and formats UTC with a supplied local offset', () => {

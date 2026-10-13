@@ -4,6 +4,7 @@ import type {
   CupRegistrationResponse,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
+  CompetitionParticipantSummary,
   GameAccountResponse,
   SeasonEntryResponse,
   StandingsSnapshotResponse,
@@ -31,6 +32,7 @@ Page({
     selectedAccountId: '',
     registration: null as CompetitionRegistrationResponse | null,
     cupRegistration: null as CupRegistrationResponse | null,
+    cupParticipants: [] as CompetitionParticipantSummary[],
     seasonEntry: null as SeasonEntryResponse | null,
     registrationEnabled: false,
     registrationReason: '',
@@ -61,10 +63,11 @@ Page({
     try {
       const publicDetail = await competitionsApi.detail(this.data.id)
       const showBracket = isCupCompetition(publicDetail)
-      const [matches, standings, bracket] = await Promise.all([
+      const [matches, standings, bracket, cupParticipants] = await Promise.all([
         competitionsApi.matches(this.data.id),
         competitionsApi.standings(this.data.id),
         showBracket ? competitionsApi.bracket(this.data.id).catch(() => null) : Promise.resolve(null),
+        showBracket ? competitionsApi.cupParticipants(this.data.id).catch(() => []) : Promise.resolve([]),
       ])
       const detail = session.getAccessToken()
         ? await competitionsApi.managerDetail(this.data.id).catch(() => publicDetail)
@@ -108,6 +111,7 @@ Page({
         selectedAccountId: displayAccounts.find(({ eligible }) => eligible)?.id ?? '',
         registration,
         cupRegistration,
+        cupParticipants,
         seasonEntry,
         registrationEnabled: availability.enabled,
         registrationReason: availability.reason,
