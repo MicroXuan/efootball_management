@@ -94,7 +94,10 @@ page { background: #0e1417; color: #f4f7f8; }
 .empty-panel { min-height: 180rpx; display: flex; align-items: center; color: #aab5ba; font-size: 23rpx; line-height: 1.6; }
 .bracket-summary { padding: 24rpx 26rpx; display: flex; align-items: center; justify-content: space-between; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
 .bracket-summary .panel-title { margin-bottom: 0; }
+.bracket-summary__actions { display: flex; align-items: center; gap: 12rpx; }
 .bracket-current { padding: 10rpx 16rpx; border: 1rpx solid #52652c; border-radius: 40rpx; color: #b6f13a; font-size: 18rpx; }
+.bracket-panorama-button { height: 58rpx; margin: 0; padding: 0 18rpx; border: 0; border-radius: 29rpx; background: #b6f13a; color: #0e1417; font-size: 18rpx; font-weight: 800; line-height: 58rpx; }
+.bracket-panorama-button::after { border: 0; }
 .bracket-scroll { width: 100%; border: 2rpx solid #344047; border-radius: 24rpx; background: linear-gradient(135deg, rgba(182,241,58,.035), transparent 42%), #11191d; }
 .bracket-track { min-height: 420rpx; padding: 24rpx 34rpx 34rpx; display: inline-flex; align-items: flex-start; gap: 74rpx; }
 .bracket-round { width: 410rpx; flex: none; opacity: .76; }

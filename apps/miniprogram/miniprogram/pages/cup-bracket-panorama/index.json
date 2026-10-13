@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "全景签表",
+  "navigationBarBackgroundColor": "#091014",
+  "navigationBarTextStyle": "white",
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

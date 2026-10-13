@@ -23,6 +23,7 @@ type DetailPage = {
   data: Record<string, unknown>
   load(): Promise<void>
   openMyMatches(): void
+  openBracketPanorama(): void
   selectScheduleStage(event: { currentTarget: { dataset: { id?: string } } }): void
 }
 
@@ -107,6 +108,16 @@ describe('competition detail page loading', () => {
 
     expect(instance.data.activeTab).toBe('schedule')
     expect(wx.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('opens the full-screen bracket for the current cup', () => {
+    const instance = context()
+
+    page.openBracketPanorama.call(instance)
+
+    expect(wx.navigateTo).toHaveBeenCalledWith({
+      url: '/pages/cup-bracket-panorama/index?id=cup-1',
+    })
   })
 
   it('selects one cup stage at a time for the mobile matchday board', async () => {

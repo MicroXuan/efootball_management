@@ -45,6 +45,8 @@ describe('competition detail template', () => {
     expect(markup).toContain('bracketRounds')
     expect(markup).toContain('item.topOffset')
     expect(markup).toContain('item.pairingGap')
+    expect(markup).toContain('bindtap="openBracketPanorama"')
+    expect(markup).toContain('查看全景签表')
   })
 
   it('renders a stage-switching matchday board with team crests and numbered rounds', () => {

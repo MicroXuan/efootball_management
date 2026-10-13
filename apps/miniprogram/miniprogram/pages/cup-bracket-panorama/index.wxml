@@ -1,0 +1,59 @@
+<view class="panorama-page">
+  <loading-state wx:if="{{loading}}" label="正在展开完整签表" />
+  <view wx:elif="{{errorMessage}}" class="panorama-state">
+    <text class="panorama-state__code">BRACKET VIEW</text>
+    <text class="panorama-state__title">暂时无法查看全景签表</text>
+    <text class="panorama-state__copy">{{errorMessage}}</text>
+    <button class="panorama-state__button" bindtap="retry">重新加载</button>
+  </view>
+  <block wx:else>
+    <view class="panorama-toolbar">
+      <view class="panorama-heading">
+        <text class="panorama-heading__eyebrow">淘汰赛全景</text>
+        <text class="panorama-heading__title">{{competitionName}}</text>
+        <text class="panorama-heading__hint">双指缩放 · 单指拖动 · 查看完整晋级路径</text>
+      </view>
+      <view class="zoom-controls">
+        <button aria-label="缩小签表" bindtap="zoomOut">−</button>
+        <button class="zoom-controls__reset" bindtap="resetViewport">{{scale * 100}}%</button>
+        <button aria-label="放大签表" bindtap="zoomIn">＋</button>
+      </view>
+    </view>
+
+    <movable-area class="panorama-viewport" scale-area>
+      <movable-view class="panorama-mover" direction="all" out-of-bounds scale scale-min="0.6" scale-max="1.6" scale-value="{{scale}}" bindscale="trackScale" style="width: {{boardWidth}}rpx; height: {{boardHeight}}rpx;">
+        <view class="board-glow board-glow--left"></view>
+        <view class="board-glow board-glow--right"></view>
+        <view class="panorama-board" style="width: {{boardWidth}}rpx; height: {{boardHeight}}rpx;">
+          <view wx:for="{{rounds}}" wx:key="roundNumber" class="panorama-round {{item.roundNumber === bracket.currentRoundNumber ? 'is-current' : ''}}">
+            <view class="panorama-round__head">
+              <text>{{item.displayName}}</text>
+              <text>{{item.status === 'PUBLISHED' ? '进行中' : '待开始'}}</text>
+            </view>
+            <view class="panorama-round__pairings" style="padding-top: {{item.topOffset}}rpx; gap: {{item.pairingGap}}rpx;">
+              <view wx:for="{{item.pairings}}" wx:for-item="pairing" wx:for-index="pairingIndex" wx:key="id" class="panorama-pairing">
+                <view class="panorama-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}">
+                  <image wx:if="{{pairing.homeParticipant && pairing.homeParticipant.teamLogoUrl}}" src="{{pairing.homeParticipant.teamLogoUrl}}" mode="aspectFit" />
+                  <view wx:else class="panorama-team__crest">{{pairing.homeParticipant ? '队' : '?'}}</view>
+                  <view class="panorama-team__identity"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.homeParticipant && pairing.homeParticipant.teamNumber !== null ? '#' + pairing.homeParticipant.teamNumber : '席位待确认'}}</text></view>
+                  <text class="panorama-team__score">{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
+                </view>
+                <view class="panorama-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}">
+                  <image wx:if="{{pairing.awayParticipant && pairing.awayParticipant.teamLogoUrl}}" src="{{pairing.awayParticipant.teamLogoUrl}}" mode="aspectFit" />
+                  <view wx:else class="panorama-team__crest">{{pairing.awayParticipant ? '队' : '?'}}</view>
+                  <view class="panorama-team__identity"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.awayParticipant && pairing.awayParticipant.teamNumber !== null ? '#' + pairing.awayParticipant.teamNumber : '席位待确认'}}</text></view>
+                  <text class="panorama-team__score">{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
+                </view>
+                <view wx:if="{{item.roundNumber !== rounds.length}}" class="bracket-connector">
+                  <view class="bracket-connector__lead"></view>
+                  <view class="bracket-connector__branch" style="height: {{pairing.connectorHeight}}rpx; top: {{pairing.connectorOffset < 0 ? pairing.connectorOffset : 0}}rpx;"></view>
+                  <view class="bracket-connector__tail" style="top: {{pairing.connectorOffset}}rpx;"></view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </movable-view>
+    </movable-area>
+  </block>
+</view>

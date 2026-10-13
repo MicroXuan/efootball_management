@@ -6,6 +6,7 @@
     "pages/league-detail/index",
     "pages/season-standings/index",
     "pages/competition-detail/index",
+    "pages/cup-bracket-panorama/index",
     "pages/my-matches/index",
     "pages/match-result/index",
     "pages/competition-manage/index",

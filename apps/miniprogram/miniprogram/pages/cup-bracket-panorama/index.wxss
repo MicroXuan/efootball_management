@@ -1,0 +1,49 @@
+page { height: 100%; overflow: hidden; background: #091014; color: #f4f7f8; }
+.panorama-page { height: 100vh; position: relative; overflow: hidden; background: radial-gradient(circle at 50% 45%, rgba(59,151,88,.14), transparent 35%), linear-gradient(180deg, #10191d, #091014); }
+.panorama-toolbar { min-height: 142rpx; box-sizing: border-box; padding: 20rpx 28rpx; position: relative; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 24rpx; border-bottom: 1rpx solid #2f3d43; background: rgba(9,16,20,.94); }
+.panorama-heading text { display: block; }
+.panorama-heading__eyebrow { color: #b6f13a; font-size: 17rpx; font-weight: 800; letter-spacing: 4rpx; }
+.panorama-heading__title { margin-top: 6rpx; font-size: 30rpx; font-weight: 900; }
+.panorama-heading__hint { margin-top: 5rpx; color: #7e8b91; font-size: 17rpx; }
+.zoom-controls { flex: none; display: flex; align-items: center; overflow: hidden; border: 1rpx solid #46545b; border-radius: 42rpx; background: #151d21; }
+.zoom-controls button { min-width: 70rpx; height: 66rpx; margin: 0; padding: 0 18rpx; border-radius: 0; border-left: 1rpx solid #344047; background: transparent; color: #f4f7f8; font-size: 28rpx; font-weight: 800; line-height: 66rpx; }
+.zoom-controls button:first-child { border-left: 0; }
+.zoom-controls button::after { border: 0; }
+.zoom-controls .zoom-controls__reset { min-width: 112rpx; color: #b6f13a; font-size: 19rpx; }
+.panorama-viewport { width: 100%; height: calc(100vh - 142rpx); overflow: hidden; }
+.panorama-mover { position: relative; }
+.panorama-board { box-sizing: border-box; padding: 70rpx 80rpx; display: flex; align-items: flex-start; gap: 130rpx; background-image: linear-gradient(rgba(182,241,58,.025) 1rpx, transparent 1rpx), linear-gradient(90deg, rgba(182,241,58,.025) 1rpx, transparent 1rpx); background-size: 56rpx 56rpx; }
+.board-glow { width: 380rpx; height: 380rpx; position: absolute; top: 210rpx; border-radius: 50%; filter: blur(50rpx); opacity: .12; pointer-events: none; }
+.board-glow--left { left: 0; background: #35d9ff; }
+.board-glow--right { right: 0; background: #ff9d38; }
+.panorama-round { width: 410rpx; flex: none; position: relative; z-index: 1; opacity: .74; }
+.panorama-round.is-current { opacity: 1; }
+.panorama-round__head { height: 70rpx; box-sizing: border-box; padding: 0 6rpx 16rpx; display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2rpx solid #344047; }
+.panorama-round__head text:first-child { font-size: 25rpx; font-weight: 900; }
+.panorama-round__head text:last-child { color: #7e8b91; font-size: 17rpx; }
+.panorama-round.is-current .panorama-round__head { border-color: #b6f13a; }
+.panorama-round.is-current .panorama-round__head text:last-child { color: #b6f13a; }
+.panorama-round__pairings { display: flex; flex-direction: column; }
+.panorama-pairing { height: 132rpx; position: relative; box-sizing: border-box; border: 1rpx solid #46545b; border-radius: 16rpx; background: rgba(24,34,39,.96); box-shadow: 0 14rpx 34rpx rgba(0,0,0,.28); }
+.panorama-team { height: 65rpx; box-sizing: border-box; padding: 0 14rpx; display: grid; grid-template-columns: 46rpx minmax(0,1fr) 34rpx; align-items: center; gap: 11rpx; border-bottom: 1rpx solid #344047; color: #aab5ba; }
+.panorama-team:last-child { border-bottom: 0; }
+.panorama-team.is-winner { background: linear-gradient(90deg, rgba(182,241,58,.14), transparent); color: #f4f7f8; }
+.panorama-team image, .panorama-team__crest { width: 42rpx; height: 42rpx; border-radius: 10rpx; background: #0e1417; }
+.panorama-team__crest { display: flex; align-items: center; justify-content: center; color: #7e8b91; font-size: 16rpx; }
+.panorama-team__identity { min-width: 0; }
+.panorama-team__identity text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panorama-team__identity text:first-child { color: inherit; font-size: 19rpx; font-weight: 800; }
+.panorama-team__identity text:last-child { margin-top: 2rpx; color: #7e8b91; font-size: 14rpx; }
+.panorama-team__score { color: #f4f7f8; font-size: 22rpx; font-weight: 900; text-align: right; }
+.panorama-team.is-winner .panorama-team__score { color: #b6f13a; }
+.bracket-connector { width: 130rpx; height: 1rpx; position: absolute; top: 65rpx; right: -130rpx; }
+.bracket-connector__lead, .bracket-connector__tail { width: 65rpx; height: 2rpx; position: absolute; background: #526169; }
+.bracket-connector__lead { left: 0; top: 0; }
+.bracket-connector__branch { width: 2rpx; position: absolute; left: 65rpx; background: #526169; }
+.bracket-connector__tail { left: 65rpx; }
+.panorama-state { height: 100%; padding: 70rpx; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.panorama-state__code { color: #b6f13a; font-size: 17rpx; letter-spacing: 5rpx; }
+.panorama-state__title { margin-top: 18rpx; font-size: 36rpx; font-weight: 900; }
+.panorama-state__copy { margin-top: 16rpx; color: #aab5ba; font-size: 22rpx; line-height: 1.6; }
+.panorama-state__button { width: 250rpx; margin: 34rpx 0 0; border: 2rpx solid #b6f13a; background: transparent; color: #b6f13a; font-size: 22rpx; }
+.panorama-state__button::after { border: 0; }
