@@ -443,6 +443,12 @@ select { font: inherit; }
 .valuation-review-card { border-radius: 16px; border-color: #dfe6e9; box-shadow: 0 8px 24px rgba(29,42,48,.05); }
 .valuation-filters { margin: 18px 0; }
 .valuation-filters .ant-select { min-width: 170px; }
+.valuation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.valuation-fields .ant-input,
+.valuation-fields .ant-input-number { width: 100%; }
+.valuation-rule-guide { margin-bottom: 16px; }
+.valuation-rule-guide .ant-alert-description { color: #526069; line-height: 1.65; }
+.valuation-version-note { margin: -2px 0 16px; color: var(--admin-text-secondary); font-size: 12px; line-height: 1.6; }
 .valuation-review-card .ant-table-wrapper { overflow-x: auto; }
 
 /* Cup center */
@@ -684,6 +690,7 @@ select { font: inherit; }
   .admin-identity > span { display: none; }
   .admin-content { padding: 20px 16px; }
   .inline-fields,
+  .valuation-fields,
   .candidate-card-grid { grid-template-columns: 1fr; }
   .current-season-summary__heading { flex-direction: column; }
   .cup-command-bar .ant-card-body { align-items: stretch; flex-direction: column; }
