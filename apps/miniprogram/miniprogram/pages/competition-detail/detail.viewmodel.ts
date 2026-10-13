@@ -54,6 +54,10 @@ export type CupScheduleSection = {
   stageCode: CompetitionMatchResponse['stageCode']
   stageDisplayName: string
   matches: CompetitionMatchResponse[]
+  rounds: Array<{
+    roundNumber: number
+    matches: CompetitionMatchResponse[]
+  }>
 }
 
 export function cupScheduleSections(matches: CompetitionMatchResponse[]): CupScheduleSection[] {
@@ -64,11 +68,30 @@ export function cupScheduleSections(matches: CompetitionMatchResponse[]): CupSch
       stageCode: match.stageCode,
       stageDisplayName: match.stageDisplayName ?? '杯赛阶段',
       matches: [],
+      rounds: [],
     }
     section.matches.push(match)
     sections.set(match.stageId, section)
   }
-  return [...sections.values()]
+  return [...sections.values()].map((section) => {
+    const matches = [...section.matches].sort((left, right) => (
+      left.roundNumber - right.roundNumber || left.matchNumber - right.matchNumber
+    ))
+    const rounds = new Map<number, CompetitionMatchResponse[]>()
+    for (const match of matches) {
+      const roundMatches = rounds.get(match.roundNumber) ?? []
+      roundMatches.push(match)
+      rounds.set(match.roundNumber, roundMatches)
+    }
+    return {
+      ...section,
+      matches,
+      rounds: [...rounds.entries()].map(([roundNumber, roundMatches]) => ({
+        roundNumber,
+        matches: roundMatches,
+      })),
+    }
+  })
 }
 
 export type BracketBoardRound = CupBracketView['rounds'][number] & {

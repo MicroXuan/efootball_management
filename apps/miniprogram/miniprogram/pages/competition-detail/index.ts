@@ -24,6 +24,8 @@ Page({
     lifecycleName: '', registrationWindow: '', startLabel: '',
     matches: [] as CompetitionMatchResponse[],
     scheduleSections: [] as CupScheduleSection[],
+    selectedStageId: '',
+    activeCupSchedule: null as CupScheduleSection | null,
     standings: null as StandingsSnapshotResponse | null,
     bracket: null as CupBracketView | null,
     bracketRounds: [] as BracketBoardRound[],
@@ -50,6 +52,12 @@ Page({
   retry() { void this.load() },
   switchTab(event: { currentTarget: { dataset: { tab?: DetailTab } } }) {
     if (event.currentTarget.dataset.tab) this.setData({ activeTab: event.currentTarget.dataset.tab })
+  },
+  selectScheduleStage(event: { currentTarget: { dataset: { id?: string } } }) {
+    const stageId = event.currentTarget.dataset.id
+    if (!stageId) return
+    const section = this.data.scheduleSections.find((item) => item.stageId === stageId)
+    if (section) this.setData({ selectedStageId: stageId, activeCupSchedule: section })
   },
   manage() { wx.navigateTo({ url: `/pages/competition-manage/index?id=${encodeURIComponent(this.data.id)}` }) },
   openMyMatches() {
@@ -104,13 +112,19 @@ Page({
       const availability = showBracket
         ? cupRegistrationAvailability(completeDetail, seasonEntry, cupRegistration)
         : registrationAvailability(completeDetail, displayAccounts.filter(({ eligible }) => eligible).length)
+      const scheduleSections = showBracket ? cupScheduleSections(matches) : []
+      const activeCupSchedule = scheduleSections.find(({ stageId }) => stageId === this.data.selectedStageId)
+        ?? scheduleSections[0]
+        ?? null
       this.setData({
         detail: completeDetail,
         lifecycleName: lifecycleLabel(detail.status),
         registrationWindow: `截止 ${formatLocalDate(detail.registrationClosesAt)}`,
         startLabel: formatLocalDate(detail.startsAt),
         matches,
-        scheduleSections: showBracket ? cupScheduleSections(matches) : [],
+        scheduleSections,
+        selectedStageId: activeCupSchedule?.stageId ?? '',
+        activeCupSchedule,
         standings,
         bracket,
         bracketRounds: bracketBoardRounds(bracket),

@@ -293,6 +293,8 @@ it('generates and confirms groups, then generates and publishes each group sched
     `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[0]!.id}/schedule/generate`,
     expect.objectContaining({ body: { expectedStageVersion: 1 } })
   ));
+  expect(await screen.findByText('A 组赛程预览已生成，共 1 场')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'A 组重新生成赛程预览' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'A 组发布赛程' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[0]!.id}/schedule/publish`,

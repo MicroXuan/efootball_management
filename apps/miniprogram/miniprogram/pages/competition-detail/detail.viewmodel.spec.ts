@@ -84,22 +84,38 @@ describe('competition detail view model', () => {
 
   it('groups the complete cup schedule by published stage', () => {
     const group = (detailViewModel as unknown as {
-      cupScheduleSections?: (matches: CompetitionMatchResponse[]) => Array<{ stageDisplayName: string; matches: CompetitionMatchResponse[] }>
+      cupScheduleSections?: (matches: CompetitionMatchResponse[]) => Array<{
+        stageDisplayName: string
+        matches: CompetitionMatchResponse[]
+        rounds: Array<{ roundNumber: number; matches: CompetitionMatchResponse[] }>
+      }>
     }).cupScheduleSections
     expect(group).toBeTypeOf('function')
     if (!group) return
-    const match = (id: string, stageId: string, stageDisplayName: string) => ({
-      id, stageId, stageDisplayName,
+    const match = (id: string, stageId: string, stageDisplayName: string, roundNumber: number, matchNumber: number) => ({
+      id, stageId, stageDisplayName, roundNumber, matchNumber,
     }) as unknown as CompetitionMatchResponse
 
     expect(group([
-      match('group-match', 'group-a', 'A 组'),
-      match('semi-match', 'semi-final', '半决赛'),
-      match('final-match', 'final', '决赛'),
-    ]).map((section) => ({ name: section.stageDisplayName, count: section.matches.length }))).toEqual([
-      { name: 'A 组', count: 1 },
-      { name: '半决赛', count: 1 },
-      { name: '决赛', count: 1 },
+      match('group-round-2', 'group-a', 'A 组', 2, 3),
+      match('group-round-1-second', 'group-a', 'A 组', 1, 2),
+      match('group-round-1-first', 'group-a', 'A 组', 1, 1),
+      match('semi-match', 'semi-final', '半决赛', 1, 1),
+      match('final-match', 'final', '决赛', 1, 1),
+    ]).map((section) => ({
+      name: section.stageDisplayName,
+      count: section.matches.length,
+      rounds: section.rounds.map((round) => ({
+        number: round.roundNumber,
+        matches: round.matches.map(({ id }) => id),
+      })),
+    }))).toEqual([
+      { name: 'A 组', count: 3, rounds: [
+        { number: 1, matches: ['group-round-1-first', 'group-round-1-second'] },
+        { number: 2, matches: ['group-round-2'] },
+      ] },
+      { name: '半决赛', count: 1, rounds: [{ number: 1, matches: ['semi-match'] }] },
+      { name: '决赛', count: 1, rounds: [{ number: 1, matches: ['final-match'] }] },
     ])
   })
 })

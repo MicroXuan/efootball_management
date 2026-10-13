@@ -23,6 +23,7 @@ type DetailPage = {
   data: Record<string, unknown>
   load(): Promise<void>
   openMyMatches(): void
+  selectScheduleStage(event: { currentTarget: { dataset: { id?: string } } }): void
 }
 
 let page: DetailPage
@@ -106,5 +107,23 @@ describe('competition detail page loading', () => {
 
     expect(instance.data.activeTab).toBe('schedule')
     expect(wx.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('selects one cup stage at a time for the mobile matchday board', async () => {
+    const instance = context()
+    mocks.matches.mockResolvedValue([
+      { id: 'match-a', stageId: 'stage-a', stageCode: 'GROUP_A', stageDisplayName: 'A 组', roundNumber: 1, matchNumber: 1 },
+      { id: 'match-b', stageId: 'stage-b', stageCode: 'GROUP_B', stageDisplayName: 'B 组', roundNumber: 1, matchNumber: 1 },
+    ])
+
+    await page.load.call(instance)
+
+    expect(instance.data.selectedStageId).toBe('stage-a')
+    expect(instance.data.activeCupSchedule).toMatchObject({ stageId: 'stage-a', stageDisplayName: 'A 组' })
+
+    page.selectScheduleStage.call(instance, { currentTarget: { dataset: { id: 'stage-b' } } })
+
+    expect(instance.data.selectedStageId).toBe('stage-b')
+    expect(instance.data.activeCupSchedule).toMatchObject({ stageId: 'stage-b', stageDisplayName: 'B 组' })
   })
 })

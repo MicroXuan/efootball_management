@@ -46,4 +46,13 @@ describe('competition detail template', () => {
     expect(markup).toContain('item.topOffset')
     expect(markup).toContain('item.pairingGap')
   })
+
+  it('renders a stage-switching matchday board with team crests and numbered rounds', () => {
+    expect(markup).toContain('bindtap="selectScheduleStage"')
+    expect(markup).toContain("selectedStageId === item.stageId")
+    expect(markup).toContain('activeCupSchedule.rounds')
+    expect(markup).toContain('match.homeParticipant.teamLogoUrl')
+    expect(markup).toContain('match.awayParticipant.teamLogoUrl')
+    expect(markup).toContain('第 {{round.roundNumber}} 轮')
+  })
 })

@@ -76,6 +76,11 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const [cupType, setCupType] = useState<CupFormFields['competitionType']>('KNOCKOUT_CUP');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleFeedback, setScheduleFeedback] = useState<{
+    stageId: string;
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const [form] = Form.useForm<CupFormFields>();
   const createKey = useMutationKey();
   const bracketKey = useMutationKey();
@@ -259,6 +264,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
     if (!stage || submitting) return;
     setSubmitting(true);
     setError(null);
+    setScheduleFeedback(null);
     try {
       const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/generate`, {
         method: 'POST', headers: { 'Idempotency-Key': scheduleKey.current() }, schema: SchedulePreviewSchema,
@@ -271,8 +277,17 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           ? { ...item, version: preview.version, matchCount: preview.matchCount }
           : item)
       } : current);
+      setScheduleFeedback({
+        stageId,
+        type: 'success',
+        message: `${stage.displayName}赛程预览已生成，共 ${preview.matchCount} 场`
+      });
     } catch {
-      setError('小组赛程生成失败，请刷新后重试');
+      setScheduleFeedback({
+        stageId,
+        type: 'error',
+        message: `${stage.displayName}赛程生成失败，请刷新后重试`
+      });
     } finally {
       setSubmitting(false);
     }
@@ -491,6 +506,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       view={groupView}
       targets={groupTargets}
       reasons={groupReasons}
+      scheduleFeedback={scheduleFeedback}
       submitting={submitting}
       onTargetChange={(participantId, value) => setGroupTargets((current) => ({ ...current, [participantId]: value }))}
       onReasonChange={(participantId, value) => setGroupReasons((current) => ({ ...current, [participantId]: value }))}
@@ -567,6 +583,7 @@ function GroupWorkspace({
   view,
   targets,
   reasons,
+  scheduleFeedback,
   submitting,
   onTargetChange,
   onReasonChange,
@@ -580,6 +597,7 @@ function GroupWorkspace({
   view: CupGroupView;
   targets: Record<string, string>;
   reasons: Record<string, string>;
+  scheduleFeedback: { stageId: string; type: 'success' | 'error'; message: string } | null;
   submitting: boolean;
   onTargetChange: (participantId: string, value: string) => void;
   onReasonChange: (participantId: string, value: string) => void;
@@ -660,15 +678,20 @@ function GroupWorkspace({
         <Button onClick={onOpenBracket}>查看淘汰签表</Button>
       </div>
       <div className="cup-group-schedule-grid">
-        {view.stages.map((stage) => <article key={stage.id} className="cup-group-schedule-card">
+        {view.stages.map((stage) => {
+          const hasPreview = stage.matchCount > 0;
+          const feedback = scheduleFeedback?.stageId === stage.id ? scheduleFeedback : null;
+          return <article key={stage.id} className="cup-group-schedule-card">
           <div className="cup-group-schedule-card__status"><Tag color={stage.status === 'PUBLISHED' ? 'green' : 'gold'}>{stage.status === 'PUBLISHED' ? '已发布' : '待发布'}</Tag><span>{stage.matchCount ? `${stage.matchCount} 场` : '尚无赛程'}</span></div>
           <h4>{stage.displayName}</h4>
           <p><strong>{stage.participantCount} 支球队</strong><span>{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? '预览已生成' : '等待生成对阵'}</span></p>
+          {feedback ? <Alert showIcon type={feedback.type} title={feedback.message} /> : null}
           <div>
-            <Button aria-label={`${stage.displayName}生成赛程`} disabled={stage.status === 'PUBLISHED'} loading={submitting} onClick={() => onGenerateSchedule(stage.id)}>生成预览</Button>
+            <Button aria-label={`${stage.displayName}${hasPreview ? '重新生成赛程预览' : '生成赛程'}`} disabled={stage.status === 'PUBLISHED'} loading={submitting} onClick={() => onGenerateSchedule(stage.id)}>{hasPreview ? '重新生成预览' : '生成预览'}</Button>
             <Button aria-label={`${stage.displayName}发布赛程`} type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} loading={submitting} onClick={() => onPublishSchedule(stage.id)}>发布赛程</Button>
           </div>
-        </article>)}
+        </article>;
+        })}
       </div>
     </div> : null}
   </section>;
