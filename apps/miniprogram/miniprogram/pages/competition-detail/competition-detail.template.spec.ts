@@ -18,4 +18,12 @@ describe('competition detail template', () => {
     expect(markup).toContain("isCup ? (detail.competitionType === 'GROUP_KNOCKOUT_CUP'")
     expect(markup).not.toContain('<text class="score-label">平台 / 区服</text>')
   })
+
+  it('keeps the registration action with the eligible team before the participant roster', () => {
+    const action = markup.indexOf('class="registration-actions"')
+    const roster = markup.indexOf('class="panel cup-participants-panel"')
+
+    expect(action).toBeGreaterThan(-1)
+    expect(action).toBeLessThan(roster)
+  })
 })

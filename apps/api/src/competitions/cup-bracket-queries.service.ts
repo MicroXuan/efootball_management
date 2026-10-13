@@ -38,14 +38,19 @@ export class CupBracketQueriesService {
   }
 
   async getPublished(competitionId: string): Promise<CupBracketView> {
+    const proposal = await this.getPublishedOrNull(competitionId);
+    if (!proposal) throw this.notFound();
+    return proposal;
+  }
+
+  async getPublishedOrNull(competitionId: string): Promise<CupBracketView | null> {
     await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     const proposal = await this.prisma.cupBracketProposal.findFirst({
       where: { competitionId, status: 'CONFIRMED' },
       orderBy: { version: 'desc' },
       include: BRACKET_INCLUDE
     });
-    if (!proposal) throw this.notFound();
-    return this.view(proposal);
+    return proposal ? this.view(proposal) : null;
   }
 
   async getAdmin(actorAdminId: string, leagueId: string, competitionId: string): Promise<CupBracketView> {

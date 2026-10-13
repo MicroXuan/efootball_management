@@ -131,7 +131,7 @@ export const competitionsApi = {
     })
   },
   bracket(competitionId: string) {
-    return api.request<CupBracketView>({
+    return api.request<CupBracketView | null>({
       path: `/cups/${encodeURIComponent(competitionId)}/bracket`, skipAuth: true,
     })
   },

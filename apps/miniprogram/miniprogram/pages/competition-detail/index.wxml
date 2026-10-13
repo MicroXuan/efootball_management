@@ -50,6 +50,19 @@
         <text class="panel-kicker">已报名球队</text><text class="panel-title">{{cupRegistration.teamName}}</text>
         <text class="account-meta">报名状态 · {{cupRegistration.status === 'APPROVED' ? '已通过' : '已撤回'}}</text>
       </view>
+      <view class="registration-actions">
+        <view class="registration-actions__head">
+          <view><text class="panel-kicker">报名操作</text><text class="registration-actions__title">{{(isCup && cupRegistration && cupRegistration.status === 'APPROVED') || (!isCup && registration && registration.status === 'APPROVED') ? '参赛席位已确认' : '确认参赛资格'}}</text></view>
+          <text class="registration-actions__quota">{{detail.participantCount}} / {{detail.participantLimit}}</text>
+        </view>
+        <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
+        <button wx:if="{{!loggedIn}}" class="primary-button" bindtap="register">登录后报名</button>
+        <block wx:elif="{{(!isCup && registration && (registration.status === 'PENDING' || registration.status === 'APPROVED')) || (isCup && cupRegistration && cupRegistration.status === 'APPROVED')}}">
+          <button wx:if="{{(!isCup && registration.status === 'APPROVED') || isCup}}" class="outline-button wide" bindtap="openMyMatches">查看我的比赛</button>
+          <button class="danger-button" loading="{{acting}}" bindtap="withdraw">撤回报名</button>
+        </block>
+        <button wx:else class="primary-button" disabled="{{!registrationEnabled || acting}}" loading="{{acting}}" bindtap="register">{{registrationEnabled ? '提交报名' : registrationReason}}</button>
+      </view>
       <view wx:if="{{isCup}}" class="panel cup-participants-panel">
         <view class="cup-participants-head"><view><text class="panel-kicker">参赛阵容</text><text class="panel-title">已报名球队</text></view><text>{{cupParticipants.length}} / {{detail.participantLimit}}</text></view>
         <view wx:if="{{cupParticipants.length === 0}}" class="team-entry-hint"><text>等待球队报名</text><text>开放报名后，符合资格的赛季球队会显示在这里。</text></view>
@@ -62,11 +75,6 @@
         </view>
       </view>
       <button wx:if="{{detail.capabilities.canManage}}" class="manager-button" bindtap="manage">打开赛事工作台</button>
-      <button wx:if="{{(!isCup && registration && registration.status === 'APPROVED') || (isCup && cupRegistration && cupRegistration.status === 'APPROVED')}}" class="outline-button wide" bindtap="openMyMatches">查看我的比赛</button>
-      <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
-      <button wx:if="{{!loggedIn}}" class="primary-button" bindtap="register">登录后报名</button>
-      <button wx:elif="{{(!isCup && registration && (registration.status === 'PENDING' || registration.status === 'APPROVED')) || (isCup && cupRegistration && cupRegistration.status === 'APPROVED')}}" class="danger-button" loading="{{acting}}" bindtap="withdraw">撤回报名</button>
-      <button wx:else class="primary-button" disabled="{{!registrationEnabled || acting}}" loading="{{acting}}" bindtap="register">{{registrationEnabled ? '提交报名' : registrationReason}}</button>
     </view>
 
     <view wx:elif="{{activeTab === 'schedule'}}" class="section-stack">

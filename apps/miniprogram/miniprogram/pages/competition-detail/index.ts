@@ -63,15 +63,14 @@ Page({
     try {
       const publicDetail = await competitionsApi.detail(this.data.id)
       const showBracket = isCupCompetition(publicDetail)
+      const bracketAvailable = showBracket && publicDetail.status !== 'REGISTRATION_OPEN'
       const [matches, standings, bracket, cupParticipants] = await Promise.all([
         competitionsApi.matches(this.data.id),
         competitionsApi.standings(this.data.id),
-        showBracket ? competitionsApi.bracket(this.data.id).catch(() => null) : Promise.resolve(null),
+        bracketAvailable ? competitionsApi.bracket(this.data.id) : Promise.resolve(null),
         showBracket ? competitionsApi.cupParticipants(this.data.id).catch(() => []) : Promise.resolve([]),
       ])
-      const detail = session.getAccessToken()
-        ? await competitionsApi.managerDetail(this.data.id).catch(() => publicDetail)
-        : publicDetail
+      const detail = publicDetail
       let accounts: GameAccountResponse[] = []
       let registration: CompetitionRegistrationResponse | null = null
       let cupRegistration: CupRegistrationResponse | null = null
