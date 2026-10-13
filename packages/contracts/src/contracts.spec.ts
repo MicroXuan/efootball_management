@@ -1612,11 +1612,12 @@ describe('league team administration contracts', () => {
       leagueName: '九星联赛',
       roster: [{ ...rosterEntry, position: 'CB', heightCm: 190 }],
       ledger: [],
+      canManageValuations: false,
       currentWindow: null
     });
     assert.deepEqual(
-      { position: overview.roster[0]?.position, heightCm: overview.roster[0]?.heightCm },
-      { position: 'CB', heightCm: 190 }
+      { position: overview.roster[0]?.position, heightCm: overview.roster[0]?.heightCm, canManageValuations: overview.canManageValuations },
+      { position: 'CB', heightCm: 190, canManageValuations: false }
     );
 
     const transaction = RosterTransactionSchema.parse({

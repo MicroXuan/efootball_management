@@ -1,6 +1,6 @@
 import type { ValuationSubmissionStatus, ValuationWorkspace } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { countdownCopy, submissionStateCopy, validateValuationInput, valuationInputState, valuationPlayerView, valuationSummary } from './valuation.viewmodel'
+import { countdownCopy, submissionStateCopy, validateValuationInput, valuationInputState, valuationLoadError, valuationPlayerView, valuationSummary } from './valuation.viewmodel'
 
 const workspace = (status: ValuationSubmissionStatus | null = 'DRAFT'): ValuationWorkspace => ({
   window: { id: 'window-1', name: '季前申报', state: 'OPEN', startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-10-04T12:00:00.000Z', rule: { id: 'rule-1', version: 1, minimumValueMinor: 100, maximumValueMinor: 10000, maximumIncreaseBps: 2000, maximumDecreaseBps: 1000 } },
@@ -32,5 +32,16 @@ describe('valuation management view model', () => {
     expect(submissionStateCopy(workspace('REJECTED'))).toBe('已驳回，可修改后重新提交')
     const closed = workspace(); closed.window.state = 'CLOSED'
     expect(countdownCopy(closed)).toBe('申报已关闭，仅可查看')
+  })
+
+  it('presents a closed valuation window as unavailable instead of a retryable load failure', () => {
+    expect(valuationLoadError({
+      code: 'VALUATION_WINDOW_NOT_OPEN',
+      message: '当前没有开放的身价窗口',
+    })).toEqual({
+      title: '身价窗口未开放',
+      message: '当前没有开放的身价窗口',
+      retryable: false,
+    })
   })
 })

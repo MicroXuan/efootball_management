@@ -7,6 +7,23 @@ export type ValuationPlayerView = ValuationWorkspacePlayer & {
   changeState: '首次必填' | '沿用' | '已修改' | '超出范围'
 }
 
+type ValuationLoadFailure = { code?: string; message?: string } | null
+
+export function valuationLoadError(error: ValuationLoadFailure) {
+  if (error?.code === 'VALUATION_WINDOW_NOT_OPEN') {
+    return {
+      title: '身价窗口未开放',
+      message: error.message ?? '当前没有开放的身价窗口',
+      retryable: false,
+    }
+  }
+  return {
+    title: '暂时无法读取',
+    message: error?.message ?? '身价工作区加载失败，请稍后重试',
+    retryable: true,
+  }
+}
+
 export function countdownCopy(workspace: ValuationWorkspace, now = new Date()): string {
   if (workspace.window.state === 'CLOSED') return '申报已关闭，仅可查看'
   const target = workspace.window.state === 'SCHEDULED' ? workspace.window.startsAt : workspace.window.endsAt

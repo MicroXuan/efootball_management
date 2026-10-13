@@ -21,6 +21,10 @@ page { background: #0e1417; color: #f4f7f8; }
 .workspace-link__label { color: #f4f7f8; font-size: 23rpx; font-weight: 800; white-space: nowrap; }
 .workspace-link__description { overflow: hidden; color: #8f9ca2; font-size: 17rpx; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-link__arrow { color: #b6f13a; font-size: 34rpx; font-weight: 500; }
+.workspace-link--disabled { border-color: #2b3439; color: #778288; background: #12191d; }
+.workspace-link--disabled .workspace-link__marker { color: #849096; background: #273137; }
+.workspace-link--disabled .workspace-link__label,
+.workspace-link--disabled .workspace-link__arrow { color: #849096; }
 .section { margin-top: 48rpx; }
 .section-title { display: block; margin-bottom: 20rpx; font-size: 32rpx; font-weight: 800; }
 .roster-grid { display: grid; gap: 14rpx; }

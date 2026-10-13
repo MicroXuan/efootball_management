@@ -293,7 +293,8 @@ export class LeagueTeamsService {
 
   async getMyOverview(teamId: string, ownerUserId: string): Promise<MyLeagueTeamOverview> {
     const team = await this.getDetail(teamId, ownerUserId);
-    const [league, roster, ledger, currentWindow] = await Promise.all([
+    const now = new Date();
+    const [league, roster, ledger, currentWindow, activeValuationWindow] = await Promise.all([
       this.prisma.league.findUniqueOrThrow({ where: { id: team.leagueId }, select: { name: true } }),
       this.prisma.leaguePlayerOwnership.findMany({
         where: { leagueTeamId: teamId, status: 'ACTIVE' },
@@ -312,10 +313,19 @@ export class LeagueTeamsService {
       this.prisma.transferWindow.findFirst({
         where: {
           season: { leagueId: team.leagueId },
-          startsAt: { lte: new Date() },
-          endsAt: { gt: new Date() }
+          startsAt: { lte: now },
+          endsAt: { gt: now }
         },
         orderBy: { startsAt: 'asc' }
+      }),
+      this.prisma.valuationWindow.findFirst({
+        where: {
+          season: { leagueId: team.leagueId },
+          startsAt: { lte: now },
+          endsAt: { gt: now },
+          closedAt: null
+        },
+        select: { id: true }
       })
     ]);
     return {
@@ -355,6 +365,7 @@ export class LeagueTeamsService {
         note: entry.note,
         createdAt: entry.createdAt.toISOString()
       })),
+      canManageValuations: Boolean(activeValuationWindow),
       currentWindow: currentWindow ? {
         name: currentWindow.name,
         endsAt: currentWindow.endsAt.toISOString(),

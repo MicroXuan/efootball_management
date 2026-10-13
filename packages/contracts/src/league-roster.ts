@@ -347,6 +347,7 @@ export const MyLeagueTeamOverviewSchema = z.object({
   leagueName: z.string().min(1),
   roster: z.array(MyLeagueTeamRosterEntrySchema),
   ledger: z.array(FinanceLedgerListItemSchema),
+  canManageValuations: z.boolean(),
   currentWindow: z.object({
     name: z.string().min(1),
     endsAt: TimestampSchema,
