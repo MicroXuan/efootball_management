@@ -7,20 +7,13 @@ import {
 import { Alert, Button, Card, Input, Modal, Space, Spin, Tag } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 
 const loginLabels = {
   LOGGED_IN: { text: '在线', color: 'success' },
   LOGGED_OUT: { text: '离线', color: 'error' },
   UNKNOWN: { text: '状态未知', color: 'default' },
 } as const;
-
-function formatTime(value: string | null) {
-  if (!value) return '尚未收到';
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'short',
-    timeStyle: 'medium',
-  }).format(new Date(value));
-}
 
 export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
   const [devices, setDevices] = useState<AdminWechatBotDevice[] | null>(null);
@@ -162,7 +155,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
           {Array.from({ length: 12 }, (_, signalIndex) => <i key={signalIndex} />)}
         </div>
         <dl className="wechat-device-metrics">
-          <div><dt>最后心跳</dt><dd>{formatTime(device.lastHeartbeatAt)}</dd></div>
+          <div><dt>最后心跳</dt><dd>{device.lastHeartbeatAt ? formatDateTime(device.lastHeartbeatAt) : '尚未收到'}</dd></div>
           <div><dt>微信版本</dt><dd>{device.wechatVersion ?? '未上报'}</dd></div>
           <div><dt>发送队列</dt><dd>{device.outboundQueueDepth} 条</dd></div>
           <div><dt>熔断原因</dt><dd>{device.circuitReason ?? '无'}</dd></div>

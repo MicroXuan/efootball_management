@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { AuditLogSchema, type AuditLog } from '@efm/contracts';
 import { adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 import { presentAuditLog } from './audit-presentation';
 
 export function AuditPage({ api = adminApi }: { api?: AdminApi }) {
@@ -23,7 +24,7 @@ export function AuditPage({ api = adminApi }: { api?: AdminApi }) {
     <Card title="审计日志" className="data-card audit-card">
     {error ? <Alert role="alert" type="error" showIcon title="审计日志加载失败" /> : null}
     {loading ? <div className="loading-block"><Spin /></div> : items.length ? <Table rowKey="id" pagination={{ pageSize: 20 }} dataSource={items} columns={[
-      { title: '时间', dataIndex: 'createdAt', width: 176, render: (value) => new Date(value).toLocaleString('zh-CN') },
+      { title: '时间', dataIndex: 'createdAt', width: 210, render: (value) => formatDateTime(value) },
       { title: '操作人', render: (_, row) => presentAuditLog(row).actor },
       { title: '具体操作', render: (_, row) => presentAuditLog(row).action },
       { title: '影响对象', render: (_, row) => <div className="audit-subject"><strong>{presentAuditLog(row).subject}</strong><span>{presentAuditLog(row).summary}</span></div> },

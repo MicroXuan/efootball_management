@@ -54,6 +54,7 @@ it('shows percentage-based valuation rules with a concrete decrease example', as
   renderPage(request);
 
   expect(await screen.findByText('季前申报')).toBeInTheDocument();
+  expect(screen.getByText('2026年10月01日 08:00:00 — 2026年10月08日 08:00:00')).toBeInTheDocument();
   expect(screen.getByText('开放中')).toBeInTheDocument();
   expect(screen.getByText('V2')).toBeInTheDocument();
   expect(screen.getByLabelText('最大涨幅（%）')).toHaveValue('20');

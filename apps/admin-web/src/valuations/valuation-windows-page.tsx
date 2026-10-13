@@ -9,6 +9,7 @@ import {
 } from '@efm/contracts';
 import { z } from 'zod';
 import { adminApi, ApiError, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 import { useMutationKey } from '../lib/mutation-key';
 
 type Fields = {
@@ -193,7 +194,7 @@ export function ValuationWindowsPage({ api = adminApi }: { api?: AdminApi }) {
           columns={[
             { title: '窗口', dataIndex: 'name' },
             { title: '状态', render: (_, row) => <Tag color={states[row.state][1]}>{states[row.state][0]}</Tag> },
-            { title: '时间范围', render: (_, row) => `${row.startsAt} — ${row.endsAt}` },
+            { title: '时间范围', render: (_, row) => `${formatDateTime(row.startsAt)} — ${formatDateTime(row.endsAt)}` },
             { title: '规则版本', render: (_, row) => `V${row.currentRule.version}` },
             { title: '身价范围', render: (_, row) => `${row.currentRule.minimumValueMinor} — ${row.currentRule.maximumValueMinor}` },
             { title: '涨/跌上限', render: (_, row) => `${percent(row.currentRule.maximumIncreaseBps)}% / ${percent(row.currentRule.maximumDecreaseBps)}%` },

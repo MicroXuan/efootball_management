@@ -25,6 +25,7 @@ it('shows loading, offline, and circuit states without exposing stored hashes', 
   resolve({ items: [device] });
   expect(screen.getByRole('heading', { name: '群机器人' })).toBeInTheDocument();
   expect(await screen.findByText('联赛机器人 A')).toBeInTheDocument();
+  expect(screen.getByText('2026年10月09日 20:00:00')).toBeInTheDocument();
   expect(screen.getByText('离线')).toBeInTheDocument();
   expect(screen.getByText('熔断已开启')).toBeInTheDocument();
   expect(screen.queryByText(/secret-hash|tokenHash/)).not.toBeInTheDocument();

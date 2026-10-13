@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { PlayerAuctionBatchListItemSchema, PlayerAuctionBatchListResponseSchema } from '@efm/contracts';
 import { z } from 'zod';
 import { adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 
 type PlayerAuctionBatchListItem = z.infer<typeof PlayerAuctionBatchListItemSchema>;
 
@@ -35,7 +36,7 @@ export function AuctionListPage({ api = adminApi }: { api?: AdminApi }) {
       { title: '状态', dataIndex: 'status', render: (status: string) => <Tag color={status === 'ACTIVE' ? 'processing' : status === 'RECOVERY_REQUIRED' ? 'error' : status === 'COMPLETED' ? 'success' : 'default'}>{statusLabel[status] ?? status}</Tag> },
       { title: '出价渠道', dataIndex: 'bidChannel', render: (channel: string) => channel === 'MINIPROGRAM' ? '小程序大厅' : '微信群' },
       { title: '球员', dataIndex: 'lotCount', render: (count: number) => `${count} 位` },
-      { title: '更新时间', dataIndex: 'updatedAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+      { title: '更新时间', dataIndex: 'updatedAt', render: (value: string) => formatDateTime(value) },
       { title: '操作', render: (_: unknown, row) => row.status === 'DRAFT' ? <Link to={`/leagues/${leagueId}/auctions/${row.id}/edit`}>继续配置</Link> : <Link to={`/leagues/${leagueId}/auctions/${row.id}`}>查看拍卖台</Link> }
     ]} /></Card> : null}
   </div>;

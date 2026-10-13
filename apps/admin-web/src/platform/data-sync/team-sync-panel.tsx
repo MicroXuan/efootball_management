@@ -9,6 +9,7 @@ import {
   type TeamSyncItemPage
 } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../../lib/api';
+import { formatDateTime } from '../../lib/date-time';
 
 type TeamSyncItem = TeamSyncItemPage['items'][number];
 const DEFAULT_STATUSES = ['PENDING', 'FAILED'];
@@ -179,7 +180,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
           rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
           onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setPage(1); setSelectedIds([]); } })}
           columns={[
-            { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+            { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) },
             { title: '同步方式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
             { title: '任务状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
             { title: '已检查', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
@@ -215,7 +216,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
 }
 
 function selectedRunDescription(run: PlatformSyncRunSummary) {
-  return `当前显示 ${new Date(run.createdAt).toLocaleString('zh-CN')} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
+  return `当前显示 ${formatDateTime(run.createdAt)} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
 }
 
 function TeamSnapshot({ title, value }: { title: string; value: TeamSyncItem['current'] }) {
