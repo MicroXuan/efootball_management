@@ -55,4 +55,10 @@ describe('competition detail template', () => {
     expect(markup).toContain('match.awayParticipant.teamLogoUrl')
     expect(markup).toContain('第 {{round.roundNumber}} 轮')
   })
+
+  it('keeps all four group selectors visible in one row without horizontal scrolling', () => {
+    expect(markup).not.toContain('class="schedule-stage-scroll"')
+    expect(markup).toContain('class="schedule-stage-switcher"')
+    expect(styles).toMatch(/\.schedule-stage-switcher\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/)
+  })
 })

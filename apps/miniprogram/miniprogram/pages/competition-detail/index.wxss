@@ -66,9 +66,8 @@ page { background: #0e1417; color: #f4f7f8; }
 .cup-schedule-head > text { color: #b6f13a; font-size: 18rpx; font-weight: 800; }
 .cup-schedule-title { display: block; margin-top: 6rpx; color: #f4f7f8; font-size: 27rpx; font-weight: 800; }
 .cup-schedule-section .match-card { border-width: 1rpx; border-radius: 18rpx; background: #172126; }
-.schedule-stage-scroll { width: 100%; white-space: nowrap; }
-.schedule-stage-switcher { padding: 2rpx; display: inline-flex; gap: 12rpx; }
-.schedule-stage-button { min-width: 128rpx; height: 68rpx; margin: 0; padding: 0 26rpx; border: 1rpx solid #344047; border-radius: 34rpx; background: #151d21; color: #7e8b91; font-size: 21rpx; font-weight: 700; line-height: 68rpx; }
+.schedule-stage-switcher { padding: 2rpx; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10rpx; }
+.schedule-stage-button { width: 100%; min-width: 0; height: 68rpx; margin: 0; padding: 0; border: 1rpx solid #344047; border-radius: 18rpx; background: #151d21; color: #7e8b91; font-size: 21rpx; font-weight: 700; line-height: 68rpx; }
 .schedule-stage-button::after { border: 0; }
 .schedule-stage-button.is-active { border-color: #b6f13a; background: rgba(182,241,58,.12); color: #eaffE8; }
 .matchday-board { gap: 22rpx; }

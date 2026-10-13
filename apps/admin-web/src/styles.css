@@ -524,12 +524,14 @@ select { font: inherit; }
 .cup-group-schedules__heading h3 { margin: 5px 0 0; color: var(--admin-text); font-size: 22px; letter-spacing: -.025em; }
 .cup-group-schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 .cup-group-schedule-card { padding: 18px; border: 1px solid #d5ddda; border-radius: 15px; background: #fff; box-shadow: 0 5px 18px rgba(29,42,48,.04); }
-.cup-group-schedule-card__status, .cup-group-schedule-card p, .cup-group-schedule-card > div:last-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cup-group-schedule-card__status, .cup-group-schedule-card p, .cup-group-schedule-card__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cup-group-schedule-card__status > span { color: var(--admin-text-weak); font-size: 12px; }
 .cup-group-schedule-card h4 { margin: 18px 0 6px; color: var(--admin-text); font-size: 24px; }
 .cup-group-schedule-card p { margin: 0 0 18px; align-items: flex-end; }
 .cup-group-schedule-card p strong { color: var(--admin-text); }
 .cup-group-schedule-card p span { color: var(--admin-text-secondary); font-size: 12px; }
+.cup-group-schedule-card__actions { flex-wrap: wrap; justify-content: flex-start; }
+.cup-schedule-preview { margin-top: 22px; padding: 22px; border: 1px solid #d5ddda; border-radius: 16px; background: #fff; }
 .bracket-stage { overflow: hidden; padding: 26px; border: 1px solid #2c393f; border-radius: 18px; color: #eef3f4; background: radial-gradient(circle at 15% 0%, rgba(182,241,58,.09), transparent 28%), #121a1e; box-shadow: 0 16px 46px rgba(16,23,27,.14); }
 .bracket-stage > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
 .bracket-stage .section-kicker { color: #8f9ca2; }

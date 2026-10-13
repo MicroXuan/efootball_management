@@ -80,11 +80,9 @@
     <view wx:elif="{{activeTab === 'schedule'}}" class="section-stack">
       <view wx:if="{{matches.length === 0}}" class="empty-panel">赛程发布后会显示在这里。</view>
       <block wx:elif="{{isCup}}">
-        <scroll-view wx:if="{{scheduleSections.length > 1}}" class="schedule-stage-scroll" scroll-x enhanced show-scrollbar="{{false}}">
-          <view class="schedule-stage-switcher">
-            <button wx:for="{{scheduleSections}}" wx:key="stageId" class="schedule-stage-button {{selectedStageId === item.stageId ? 'is-active' : ''}}" data-id="{{item.stageId}}" bindtap="selectScheduleStage">{{item.stageDisplayName}}</button>
-          </view>
-        </scroll-view>
+        <view wx:if="{{scheduleSections.length > 1}}" class="schedule-stage-switcher">
+          <button wx:for="{{scheduleSections}}" wx:key="stageId" class="schedule-stage-button {{selectedStageId === item.stageId ? 'is-active' : ''}}" data-id="{{item.stageId}}" bindtap="selectScheduleStage">{{item.stageDisplayName}}</button>
+        </view>
         <view wx:if="{{activeCupSchedule}}" class="cup-schedule-section matchday-board">
           <view class="cup-schedule-head"><view><text class="panel-kicker">比赛日看板</text><text class="cup-schedule-title">{{activeCupSchedule.stageDisplayName}}</text></view><text>{{activeCupSchedule.matches.length}} 场</text></view>
           <view wx:for="{{activeCupSchedule.rounds}}" wx:for-item="round" wx:key="roundNumber" class="matchday-round">
