@@ -60,7 +60,12 @@ export class TeamAssetsService {
       where: { leagueTeamId: teamId, status: { in: ['ACTIVE', 'DISAPPEARED', 'RETIRED'] } },
       include: {
         footballPlayer: true,
-        currentPlayerCard: { include: { attributes: true } }
+        currentPlayerCard: {
+          include: {
+            attributes: true,
+            autoBuilds: { orderBy: [{ calculatedAt: 'desc' }, { createdAt: 'desc' }], take: 1 }
+          }
+        }
       },
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
@@ -87,6 +92,7 @@ export class TeamAssetsService {
       teamNumber: team.teamNumber,
       divisionName: entry.competitionParticipants[0]?.stageMemberships[0]?.stage.displayName ?? null,
       teamLogoUrl: team.logoUrl,
+      ownerAlias: team.ownerAlias,
       ownerDisplayName: team.owner.displayName,
       ownerPublicUserNo: team.owner.publicUserNo,
       ownerAvatarUrl: team.owner.avatarUrl,
@@ -114,7 +120,7 @@ export class TeamAssetsService {
           age: this.integer(attributes.age),
           heightCm: this.integer(attributes.heightCm ?? attributes.height),
           preferredFoot: this.text(attributes.preferredFoot ?? attributes.foot),
-          atRating: this.integer(attributes.atRating ?? attributes.at),
+          atRating: ownership.currentPlayerCard.autoBuilds[0]?.maxOverall ?? null,
           acquiredAt: ownership.acquiredAt.toISOString(),
           salaryMinor: ownership.salaryMinor,
           rosterStatus: ownership.status,

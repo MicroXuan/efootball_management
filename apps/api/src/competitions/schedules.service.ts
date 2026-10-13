@@ -382,8 +382,13 @@ export class SchedulesService {
       displayName: participant.displayNameSnapshot,
       participantType: participant.participantType,
       teamLifecycleStatus: status === 'ACTIVE' || status === 'ARCHIVED' ? status : null,
-      teamLogoUrl: participant.seasonEntry?.teamLogoUrlSnapshot ?? null,
-      ownerDisplayName: participant.seasonEntry?.owner.displayName ?? null
+      teamNumber: participant.seasonEntry?.teamNumberSnapshot
+        ?? participant.seasonEntry?.leagueTeam.teamNumber ?? null,
+      teamName: participant.seasonEntry?.teamNameSnapshot
+        ?? participant.seasonEntry?.leagueTeam.name ?? null,
+      teamLogoUrl: participant.seasonEntry?.teamLogoUrlSnapshot
+        ?? participant.seasonEntry?.leagueTeam.logoUrl ?? null,
+      ownerDisplayName: participant.seasonEntry?.leagueTeam.ownerAlias ?? null
     };
   }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from threading import Event, Thread
 
 from efm_wechat_bridge.wechatauto_receiver import WechatautoReceiver
 
@@ -38,6 +39,57 @@ def test_normalizes_enabled_group_text_with_resolved_sender() -> None:
     assert event.conversation_type == "GROUP"
     assert event.sender_id == "member-wxid"
     assert event.sent_at == datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
+
+
+def test_normalizes_group_sender_from_pinned_library_content_prefix() -> None:
+    receiver = WechatautoReceiver(
+        database=object(),
+        enabled_group_ids={"league@chatroom"},
+        robot_user_id="robot-wxid",
+    )
+
+    event = receiver.normalize(raw_message(
+        sender_username="",
+        content="wxid_member_123:\n查询赛程",
+    ))
+
+    assert event is not None
+    assert event.sender_id == "wxid_member_123"
+    assert event.text == "查询赛程"
+
+
+def test_normalizes_group_command_with_database_control_padding() -> None:
+    receiver = WechatautoReceiver(
+        database=object(),
+        enabled_group_ids={"league@chatroom"},
+        robot_user_id="robot-wxid",
+    )
+
+    event = receiver.normalize(raw_message(
+        sender_username="",
+        content="wxid_member_123:\n查询赛程\x00\x01\x00",
+    ))
+
+    assert event is not None
+    assert event.sender_id == "wxid_member_123"
+    assert event.text == "查询赛程"
+
+
+def test_rejects_untrusted_group_sender_prefixes() -> None:
+    receiver = WechatautoReceiver(
+        database=object(),
+        enabled_group_ids={"league@chatroom"},
+        robot_user_id="robot-wxid",
+    )
+
+    assert receiver.normalize(raw_message(
+        sender_username="",
+        content="18:\n查询赛程",
+    )) is None
+    assert receiver.normalize(raw_message(
+        sender_username="member-wxid",
+        content="wxid_other:\n查询赛程",
+    )) is None
 
 
 def test_allows_only_private_binding_commands() -> None:
@@ -160,6 +212,43 @@ def test_health_sanitizes_database_failures() -> None:
     assert health.error_code == "WECHAT_DATABASE_UNAVAILABLE"
     assert "secret" not in (health.detail or "")
     assert "wxid_sensitive" not in (health.detail or "")
+
+
+def test_serializes_database_access_across_health_and_group_scans() -> None:
+    class NonThreadSafeDatabase:
+        def __init__(self) -> None:
+            self.health_entered = Event()
+            self.release_health = Event()
+            self.concurrent_access = Event()
+
+        def get_self_info(self) -> object:
+            self.health_entered.set()
+            assert self.release_health.wait(timeout=1)
+            return {"username": "robot-wxid"}
+
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            if not self.release_health.is_set():
+                self.concurrent_access.set()
+            return []
+
+    database = NonThreadSafeDatabase()
+    receiver = WechatautoReceiver(
+        database=database,
+        enabled_group_ids=set(),
+        robot_user_id="robot-wxid",
+    )
+    health_thread = Thread(target=receiver.health)
+    groups_thread = Thread(target=receiver.observed_groups)
+
+    health_thread.start()
+    assert database.health_entered.wait(timeout=1)
+    groups_thread.start()
+    database.concurrent_access.wait(timeout=0.1)
+    database.release_health.set()
+    health_thread.join(timeout=1)
+    groups_thread.join(timeout=1)
+
+    assert database.concurrent_access.is_set() is False
 
 
 def test_pinned_library_rows_are_hydrated_with_server_id_and_contact_name() -> None:

@@ -1,4 +1,24 @@
 page { background: #0e1417; color: #f4f7f8; }
+.login-shell { min-height:100vh; box-sizing:border-box; padding:calc(env(safe-area-inset-top) + 52rpx) 56rpx calc(env(safe-area-inset-bottom) + 190rpx); display:flex; flex-direction:column; overflow:hidden; background:radial-gradient(circle at 50% 12%, rgba(182,241,58,.07), transparent 32%), #0e1417; }
+.login-stadium-mark { position:relative; height:330rpx; flex:none; display:flex; align-items:center; justify-content:center; }
+.login-pitch-ring { position:absolute; width:420rpx; height:280rpx; border:2rpx solid #344047; border-radius:44rpx; box-shadow:0 0 0 56rpx rgba(52,64,71,.12); }
+.login-pitch-ring::before,.login-pitch-ring::after { position:absolute; background:#344047; content:''; }
+.login-pitch-ring::before { width:2rpx; height:280rpx; left:50%; top:0; }
+.login-pitch-ring::after { width:112rpx; height:112rpx; top:82rpx; left:154rpx; border:2rpx solid #344047; border-radius:50%; background:transparent; }
+.login-ball { position:relative; z-index:1; font-size:104rpx; filter:drop-shadow(0 24rpx 32rpx rgba(0,0,0,.38)); }
+.login-brand-block { margin-top:30rpx; display:flex; flex-direction:column; }
+.login-eyebrow { color:#aab5ba; font-size:20rpx; font-weight:700; letter-spacing:6rpx; }
+.login-title { margin-top:18rpx; font-size:72rpx; font-weight:850; line-height:1; letter-spacing:2rpx; }
+.login-subtitle { margin-top:26rpx; max-width:560rpx; color:#aab5ba; font-size:27rpx; line-height:1.7; }
+.login-panel { margin-top:auto; padding:32rpx; border:2rpx solid #344047; border-radius:24rpx; background:#151d21; box-shadow:0 20rpx 54rpx rgba(0,0,0,.26); }
+.login-panel-line { display:flex; justify-content:space-between; color:#aab5ba; font-size:22rpx; letter-spacing:2rpx; }
+.login-panel-code { color:#7e8b91; }
+.login-button { min-height:92rpx; margin-top:34rpx; padding:0 32rpx; border:0; border-radius:16rpx; display:flex; align-items:center; justify-content:center; box-sizing:border-box; background:#b6f13a; color:#111810; font-size:30rpx; font-weight:800; letter-spacing:3rpx; }
+.login-button__label { line-height:1; }
+.login-button::after { border:0; }
+.login-button[disabled] { background:#263238; color:#7e8b91; }
+.login-error-copy { display:block; margin-top:24rpx; color:#ffaaa5; font-size:23rpx; line-height:1.5; }
+.login-privacy-copy { display:block; margin-top:24rpx; color:#7e8b91; font-size:21rpx; line-height:1.55; }
 .page-shell { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 38rpx) 30rpx 110rpx; background: radial-gradient(circle at 82% 8%, rgba(182,241,58,.06), transparent 32%), #0e1417; }
 .topbar,.identity-card,.section-head,.team-card,.team-name-line { display:flex; align-items:center; }
 .topbar,.section-head { justify-content:space-between; }
@@ -10,7 +30,6 @@ page { background: #0e1417; color: #f4f7f8; }
 .avatar-fallback { display:flex; align-items:center; justify-content:center; background:#183123; font-size:42rpx; }
 .identity-copy { min-width:0; margin-left:22rpx; display:flex; flex:1; flex-direction:column; }
 .member-name { overflow:hidden; font-size:34rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
-.member-region { margin-top:8rpx; color:#aab5ba; font-size:21rpx; }
 .number-block { flex:none; padding-left:18rpx; border-left:2rpx solid rgba(142,164,151,.2); text-align:right; }
 .number-label,.copy-hint { display:block; color:#aab5ba; font-size:17rpx; }
 .public-number { display:block; margin:7rpx 0 4rpx; color:#f4f7f8; font-family:inherit; font-size:27rpx; font-weight:800; letter-spacing:2rpx; }
@@ -37,6 +56,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .state-card.compact { min-height:230rpx; }
 .state-title { margin-top:18rpx; font-size:31rpx; font-weight:800; }
 .state-copy { margin-top:14rpx; color:#aab5ba; font-size:23rpx; line-height:1.65; }
+.login-error { display:block; margin-top:18rpx; color:#ff9c8e; font-size:21rpx; line-height:1.5; }
 .primary-button,.outline-button { min-height:88rpx; margin:28rpx 0 0; border-radius: 16rpx; font-weight:800; }
 .primary-button::after,.outline-button::after { border:0; }
 .primary-button { min-width:280rpx; background:#b6f13a; color:#111810; }

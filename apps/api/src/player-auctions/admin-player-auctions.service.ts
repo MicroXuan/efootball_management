@@ -5,6 +5,7 @@ import type {
   PreparePlayerAuctionBatchRequest,
   ReplacePlayerAuctionLotsRequest,
   ReviewPlayerAuctionLotRequest,
+  PlayerAuctionTransitionRequest,
   UpdatePlayerAuctionBatchRequest
 } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -13,6 +14,7 @@ import { AdminAuthorizationService } from '../admin/admin-authorization.service.
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PlayerAuctionError, auctionVersionConflict } from './player-auction.errors.js';
+import { PlayerAuctionStateService } from './player-auction-state.service.js';
 
 const DETAIL_INCLUDE = {
   groupBinding: { select: { displayName: true } },
@@ -33,7 +35,7 @@ const DETAIL_INCLUDE = {
 
 type AuctionClient = Prisma.TransactionClient | PrismaService;
 type BatchRecord = Prisma.PlayerAuctionBatchGetPayload<{ include: typeof DETAIL_INCLUDE }>;
-type BatchSummaryInput = Pick<BatchRecord, 'id' | 'leagueId' | 'groupBindingId' | 'name' | 'status' | 'currentLotId' | 'version' | 'createdAt' | 'updatedAt' | 'groupBinding'> & {
+type BatchSummaryInput = Pick<BatchRecord, 'id' | 'leagueId' | 'groupBindingId' | 'bidChannel' | 'name' | 'status' | 'currentLotId' | 'version' | 'createdAt' | 'updatedAt' | 'groupBinding'> & {
   _count?: { lots: number };
   lots?: BatchRecord['lots'];
 };
@@ -46,7 +48,8 @@ export class AdminPlayerAuctionsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Inject(PlayerAuctionStateService) private readonly state: PlayerAuctionStateService
   ) {}
 
   async list(actorAdminId: string, leagueId: string) {
@@ -78,12 +81,18 @@ export class AdminPlayerAuctionsService {
       if (!group) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
       if (group.version !== input.expectedVersion) throw auctionVersionConflict();
       const created = await tx.playerAuctionBatch.create({
-        data: { leagueId, groupBindingId: group.id, name: input.name, createdByAdminId: actorAdminId }
+        data: {
+          leagueId,
+          groupBindingId: group.id,
+          bidChannel: input.bidChannel,
+          name: input.name,
+          createdByAdminId: actorAdminId
+        }
       });
       await this.audit.record(tx, {
         actorAdminId, leagueId, action: 'admin.player-auction.create',
         resourceType: 'PlayerAuctionBatch', resourceId: created.id,
-        metadata: { groupBindingId: group.id, name: input.name }
+        metadata: { groupBindingId: group.id, bidChannel: input.bidChannel, name: input.name }
       });
       return this.view(await this.batch(tx, leagueId, created.id));
     }, input);
@@ -96,7 +105,11 @@ export class AdminPlayerAuctionsService {
       this.requireDraft(batch);
       const updated = await tx.playerAuctionBatch.updateMany({
         where: { id: batchId, leagueId, version: input.expectedVersion, status: 'DRAFT' },
-        data: { name: input.name, version: { increment: 1 } }
+        data: {
+          name: input.name,
+          ...(input.bidChannel ? { bidChannel: input.bidChannel } : {}),
+          version: { increment: 1 }
+        }
       });
       if (updated.count !== 1) throw auctionVersionConflict();
       return this.view(await this.batch(tx, leagueId, batchId));
@@ -165,6 +178,7 @@ export class AdminPlayerAuctionsService {
       const batch = await this.batch(tx, leagueId, batchId);
       this.requireDraft(batch);
       if (batch.lots.length === 0) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '至少配置一名拍卖球员', 409);
+      await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM wechat_group_bindings WHERE id = ${batch.groupBindingId} FOR UPDATE`;
       const group = await tx.wechatGroupBinding.findFirst({
         where: {
@@ -180,13 +194,13 @@ export class AdminPlayerAuctionsService {
       }
       const conflict = await tx.playerAuctionBatch.findFirst({
         where: {
-          groupBindingId: batch.groupBindingId,
+          leagueId,
           id: { not: batchId },
           status: { in: ['READY', 'ACTIVE', 'PAUSED', 'RECOVERY_REQUIRED'] }
         },
         select: { id: true }
       });
-      if (conflict) throw new PlayerAuctionError('AUCTION_GROUP_BUSY', '该微信群已有未结束的拍卖', 409);
+      if (conflict) throw new PlayerAuctionError('AUCTION_LEAGUE_BUSY', '该联赛已有未结束的拍卖', 409);
       const updated = await tx.playerAuctionBatch.updateMany({
         where: { id: batchId, leagueId, version: input.expectedVersion, status: 'DRAFT' },
         data: { status: 'READY', version: { increment: 1 } }
@@ -196,6 +210,45 @@ export class AdminPlayerAuctionsService {
         actorAdminId, leagueId, action: 'admin.player-auction.prepare',
         resourceType: 'PlayerAuctionBatch', resourceId: batchId,
         metadata: { lotCount: batch.lots.length, groupBindingId: batch.groupBindingId }
+      });
+      return this.view(await this.batch(tx, leagueId, batchId));
+    }, input);
+  }
+
+  start(actorAdminId: string, leagueId: string, batchId: string, input: PlayerAuctionTransitionRequest, key: string) {
+    return this.transition(actorAdminId, leagueId, batchId, input, key, 'start');
+  }
+
+  pause(actorAdminId: string, leagueId: string, batchId: string, input: PlayerAuctionTransitionRequest, key: string) {
+    return this.transition(actorAdminId, leagueId, batchId, input, key, 'pause');
+  }
+
+  resume(actorAdminId: string, leagueId: string, batchId: string, input: PlayerAuctionTransitionRequest, key: string) {
+    return this.transition(actorAdminId, leagueId, batchId, input, key, 'resume');
+  }
+
+  private async transition(
+    actorAdminId: string,
+    leagueId: string,
+    batchId: string,
+    input: PlayerAuctionTransitionRequest,
+    key: string,
+    action: 'start' | 'pause' | 'resume'
+  ) {
+    await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
+    return this.receipts.execute(actorAdminId, `admin.player-auction.${action}:${batchId}`, key, async (tx) => {
+      const batch = await this.batch(tx, leagueId, batchId);
+      await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
+      if (action === 'start') await this.state.startBatch(tx, batch.id, input.expectedVersion);
+      else if (action === 'pause') await this.state.pauseBatch(tx, batch.id, input.expectedVersion);
+      else await this.state.resumeBatch(tx, batch.id, input.expectedVersion);
+      await this.audit.record(tx, {
+        actorAdminId,
+        leagueId,
+        action: `admin.player-auction.${action}`,
+        resourceType: 'PlayerAuctionBatch',
+        resourceId: batchId,
+        metadata: { previousStatus: batch.status }
       });
       return this.view(await this.batch(tx, leagueId, batchId));
     }, input);
@@ -303,7 +356,8 @@ export class AdminPlayerAuctionsService {
   private summary(batch: BatchSummaryInput) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
-      groupDisplayName: batch.groupBinding.displayName, name: batch.name, status: batch.status,
+      bidChannel: batch.bidChannel, groupDisplayName: batch.groupBinding.displayName,
+      name: batch.name, status: batch.status,
       lotCount: batch._count?.lots ?? batch.lots?.length ?? 0, currentLotId: batch.currentLotId,
       version: batch.version, createdAt: batch.createdAt.toISOString(), updatedAt: batch.updatedAt.toISOString()
     };
@@ -312,7 +366,8 @@ export class AdminPlayerAuctionsService {
   private view(batch: BatchRecord) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
-      name: batch.name, status: batch.status, currentLotId: batch.currentLotId, version: batch.version,
+      bidChannel: batch.bidChannel, name: batch.name, status: batch.status,
+      currentLotId: batch.currentLotId, version: batch.version,
       startedAt: batch.startedAt?.toISOString() ?? null, completedAt: batch.completedAt?.toISOString() ?? null,
       cancelledAt: batch.cancelledAt?.toISOString() ?? null, createdAt: batch.createdAt.toISOString(),
       updatedAt: batch.updatedAt.toISOString(), lots: batch.lots.map((lot) => this.lotView(lot))
@@ -329,9 +384,11 @@ export class AdminPlayerAuctionsService {
       deadlineEpoch: lot.deadlineEpoch, pausedRemainingMs: lot.pausedRemainingMs, version: lot.version,
       bids: lot.bids.map((bid) => ({
         id: bid.id, leagueTeamId: bid.leagueTeamId, teamName: bid.leagueTeam?.name ?? null,
-        userId: bid.userId, amount: bid.amount, result: bid.result, rejectionReason: bid.rejectionReason,
+        userId: bid.userId, source: bid.source, amount: bid.amount,
+        result: bid.result, rejectionReason: bid.rejectionReason,
         wechatMessageId: bid.wechatMessageId, wechatSortKey: bid.wechatSortKey,
-        wechatSentAt: bid.wechatSentAt.toISOString(), receivedAt: bid.receivedAt.toISOString()
+        wechatSentAt: bid.wechatSentAt?.toISOString() ?? null,
+        submittedAt: bid.submittedAt.toISOString(), receivedAt: bid.receivedAt.toISOString()
       })),
       review: lot.review ? this.reviewView(lot.review) : null,
       startedAt: lot.startedAt?.toISOString() ?? null, closedAt: lot.closedAt?.toISOString() ?? null,

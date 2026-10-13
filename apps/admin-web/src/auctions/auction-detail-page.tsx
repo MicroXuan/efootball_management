@@ -14,7 +14,7 @@ type ReviewDecision = 'CONFIRM' | 'ADJUST' | 'VOID';
 
 const reviewResponseSchema = z.object({ lotId: z.string(), status: z.string(), review: z.unknown() });
 const statusLabel: Record<string, string> = {
-  DRAFT: '草稿', READY: '待群内开始', ACTIVE: '进行中', PAUSED: '已暂停', COMPLETED: '已结束',
+  DRAFT: '草稿', READY: '待开始', ACTIVE: '进行中', PAUSED: '已暂停', COMPLETED: '已结束',
   CANCELLED: '已取消', RECOVERY_REQUIRED: '需要人工恢复', QUEUED: '等待中', PENDING_REVIEW: '待审核',
   REVIEWED: '已确认', VOID: '已作废', NO_BID: '无人出价'
 };
@@ -37,6 +37,7 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
   const [priceByLot, setPriceByLot] = useState<Record<string, number>>({});
   const [reasonByLot, setReasonByLot] = useState<Record<string, string>>({});
   const [cancelReason, setCancelReason] = useState('管理员取消拍卖');
+  const [busyAction, setBusyAction] = useState<string>();
 
   const load = useCallback(async () => {
     setError(undefined);
@@ -91,13 +92,25 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
       setError(caught instanceof ApiError && caught.code === 'VERSION_CONFLICT' ? '拍卖状态已变化，请刷新后再操作' : '取消拍卖失败');
     } finally { setBusyLotId(undefined); }
   };
+  const transition = async (action: 'start' | 'pause' | 'resume') => {
+    if (!batch) return;
+    setBusyAction(action); setError(undefined); setNotice(undefined);
+    try {
+      const updated = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}/${action}`, {
+        method: 'POST', headers: { 'Idempotency-Key': requestKey() }, schema: PlayerAuctionBatchDetailSchema,
+        body: { expectedVersion: batch.version }
+      });
+      setBatch(updated); setNotice(action === 'start' ? '拍卖已开始。' : action === 'pause' ? '拍卖已暂停。' : '拍卖已继续。');
+    } catch { setError('拍卖状态已变化，请刷新后再操作'); } finally { setBusyAction(undefined); }
+  };
 
   if (!batch && !error) return <div className="loading-block"><Spin /><span>正在读取拍卖记录…</span></div>;
   if (!batch) return <Alert role="alert" type="error" showIcon title={error} action={<Button onClick={() => void load()}>重试</Button>} />;
   return <div className="auction-detail-page">
-    <header className="auction-page__header"><div><span className="section-kicker">人工拍卖审核台</span><h2>{batch.name}</h2><p>微信群负责实时出价，管理台保留完整记录并由管理员确认最终结果。</p></div><div className="auction-header-actions">{batch.status === 'DRAFT' ? <Link className="ant-btn" to={`/leagues/${leagueId}/auctions/${batch.id}/edit`}>编辑草稿</Link> : null}<Button onClick={() => void load()}>刷新</Button><Tag color={batch.status === 'ACTIVE' ? 'processing' : batch.status === 'RECOVERY_REQUIRED' ? 'error' : batch.status === 'COMPLETED' ? 'success' : 'default'}>{statusLabel[batch.status] ?? batch.status}</Tag></div></header>
+    <header className="auction-page__header"><div><span className="section-kicker">人工拍卖审核台</span><h2>{batch.name}</h2><p>{batch.bidChannel === 'WECHAT_GROUP' ? '微信群接收纯数字出价，管理台保留记录并由管理员确认最终结果。' : '小程序大厅接收实时出价；群通知不可用时，拍卖仍会继续。'}</p></div><div className="auction-header-tools"><div className="auction-header-actions">{batch.status === 'DRAFT' ? <Link className="ant-btn" to={`/leagues/${leagueId}/auctions/${batch.id}/edit`}>编辑草稿</Link> : null}{batch.status === 'READY' ? <Button type="primary" loading={busyAction === 'start'} onClick={() => void transition('start')}>开始拍卖</Button> : null}{batch.status === 'ACTIVE' ? <Button loading={busyAction === 'pause'} onClick={() => void transition('pause')}>暂停拍卖</Button> : null}{batch.status === 'PAUSED' ? <Button type="primary" loading={busyAction === 'resume'} onClick={() => void transition('resume')}>继续拍卖</Button> : null}<Button onClick={() => void load()}>刷新</Button></div><div className="auction-status-panel" role="status" aria-label="当前拍卖状态"><span>当前状态</span><Tag color={batch.status === 'ACTIVE' ? 'processing' : batch.status === 'RECOVERY_REQUIRED' ? 'error' : batch.status === 'COMPLETED' ? 'success' : 'default'}>{statusLabel[batch.status] ?? batch.status}</Tag></div></div></header>
     {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}{notice ? <Alert role="status" type="success" showIcon title={notice} /> : null}
     <Alert className="auction-review-boundary" type="info" showIcon title="审核只记录结果，不会自动修改资金或阵容。" description={`当前有 ${pendingCount} 位球员等待人工审核；每轮结束后系统会自动进入下一位或结束批次，审核不会阻塞拍卖。`} />
+    {batch.bidChannel === 'MINIPROGRAM' ? <Alert type="success" showIcon title="小程序拍卖入口" description={<code>{`/pages/auction-room/index?batchId=${batch.id}`}</code>} /> : null}
     {!['COMPLETED', 'CANCELLED'].includes(batch.status) ? <Card className="auction-cancel-card" title="终止本批次"><div><p>仅在误建批次或无法继续时使用，取消后不可恢复。</p><Input aria-label="取消原因" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div><Popconfirm title="确认取消整个拍卖批次？" description="该操作会立即停止本批次，且不能撤销。" okText="确认取消" cancelText="返回" onConfirm={() => void cancelBatch()}><Button danger loading={busyLotId === 'cancel'}>取消拍卖</Button></Popconfirm></Card> : null}
     <div className="auction-lot-rail" aria-label="拍卖球员顺序">{batch.lots.map((lot) => <a key={lot.id} href={`#lot-${lot.id}`} className={lot.id === batch.currentLotId ? 'is-current' : ''}><span>{String(lot.displayOrder).padStart(2, '0')}</span><strong>{lot.playerName}</strong><small>{statusLabel[lot.status] ?? lot.status}</small></a>)}</div>
     {batch.lots.length === 0 ? <Card><Empty description="尚未配置拍卖球员" /></Card> : batch.lots.map((lot) => {
@@ -105,7 +118,8 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
       return <Card id={`lot-${lot.id}`} key={lot.id} className={`auction-review-card ${lot.id === batch.currentLotId ? 'is-current' : ''}`} title={<span><small>第 {lot.displayOrder} 位</small>{lot.playerName}</span>} extra={<Tag>{statusLabel[lot.status] ?? lot.status}</Tag>}>
         <div className="auction-result-summary"><div><span>起拍价</span><strong>⭐{lot.startingPrice}⭐</strong></div><div><span>最低加价</span><strong>⭐{lot.minimumIncrement}⭐</strong></div><div><span>计算成交价</span><strong>{lot.currentPrice ? `⭐${lot.currentPrice}⭐` : '—'}</strong></div><div><span>计算中标球队</span><strong>{lot.bids.find((bid) => bid.id === lot.currentHighestBidId)?.teamName ?? '—'}</strong></div></div>
         <Table className="auction-bid-table" rowKey="id" size="small" pagination={false} dataSource={lot.bids} locale={{ emptyText: '暂无出价记录' }} columns={[
-          { title: '微信群时间', dataIndex: 'wechatSentAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+          { title: batch.bidChannel === 'WECHAT_GROUP' ? '微信群时间' : '小程序提交时间', dataIndex: 'submittedAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+          { title: '来源', dataIndex: 'source', render: (value: string) => value === 'MINIPROGRAM' ? '小程序' : '微信群' },
           { title: '球队', dataIndex: 'teamName', render: (value: string | null) => value ?? '未识别' },
           { title: '出价', dataIndex: 'amount', render: (value: number) => `⭐${value}⭐` },
           { title: '判定', dataIndex: 'result', render: (value: string) => <Tag color={value === 'VALID' ? 'success' : 'default'}>{resultLabel[value] ?? value}</Tag> }

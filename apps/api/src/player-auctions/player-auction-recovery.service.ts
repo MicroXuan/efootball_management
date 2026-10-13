@@ -24,7 +24,7 @@ export class PlayerAuctionRecoveryService {
     if (this.unavailableDevices.has(deviceId)) return 0;
     this.unavailableDevices.add(deviceId);
     const batches = await this.prisma.playerAuctionBatch.findMany({
-      where: { status: { in: ['ACTIVE', 'PAUSED'] }, groupBinding: { deviceId } },
+      where: { bidChannel: 'WECHAT_GROUP', status: { in: ['ACTIVE', 'PAUSED'] }, groupBinding: { deviceId } },
       select: { id: true, groupBindingId: true }
     });
     for (const batch of batches) await this.state.enterRecovery(batch.groupBindingId, reason);
@@ -65,7 +65,7 @@ export class PlayerAuctionRecoveryService {
 
   async recoverOverdueOnBootstrap() {
     const groups = await this.prisma.playerAuctionBatch.findMany({
-      where: { status: 'ACTIVE', lots: { some: { status: 'ACTIVE', deadlineAt: { lte: new Date() } } } },
+      where: { bidChannel: 'WECHAT_GROUP', status: 'ACTIVE', lots: { some: { status: 'ACTIVE', deadlineAt: { lte: new Date() } } } },
       select: { groupBindingId: true }
     });
     for (const group of groups) await this.state.enterRecovery(group.groupBindingId, 'APPLICATION_RESTART_AMBIGUITY');
@@ -81,6 +81,8 @@ export class PlayerAuctionRecoveryService {
       }
       const allowed = await this.authorization.can(actorUserId, 'league.auction.manage', { type: 'LEAGUE', id: batch.leagueId });
       if (!allowed) throw new PlayerAuctionError('AUCTION_FORBIDDEN', '没有恢复该联赛拍卖的权限', 403);
+      if (batch.bidChannel !== 'WECHAT_GROUP') throw new PlayerAuctionError('AUCTION_RECOVERY_NOT_REQUIRED', '小程序拍卖不依赖微信群桥接恢复', 409);
+      await this.locks.lockLeague(tx, batch.leagueId);
       await this.locks.lockGroup(tx, batch.groupBindingId);
       await this.locks.lockBatch(tx, batch.id);
       await this.locks.lockLot(tx, batch.currentLotId);

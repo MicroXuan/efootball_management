@@ -10,11 +10,11 @@ describe('PlayerAuctionStateService', () => {
     const lot: any = { id: 'lot-1', batchId: batch.id, status: 'QUEUED', displayOrder: 1 };
     const tx: any = {
       wechatGroupBinding: { findUnique: jest.fn(async () => group) },
-      playerAuctionBatch: { findFirst: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) },
+      playerAuctionBatch: { findFirst: jest.fn(async () => batch), findUnique: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) },
       playerAuctionLot: { findFirst: jest.fn(async () => lot), findUnique: jest.fn(async () => lot), update: jest.fn(async ({ data }: any) => Object.assign(lot, data)) }
     };
     const prisma: any = { $transaction: jest.fn(async (work: any) => work(tx)) };
-    const locks: any = { lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: jest.fn(async () => now) };
+    const locks: any = { lockLeague: jest.fn(), lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: jest.fn(async () => now) };
     const auth: any = { can: jest.fn(async () => true) };
     const service = new PlayerAuctionStateService(prisma, locks, auth);
 
@@ -37,7 +37,7 @@ describe('PlayerAuctionStateService', () => {
     const tx = { wechatGroupBinding: { findUnique: jest.fn(async () => ({ id: 'group-1', leagueId: 'league-1', enabled: true })) } };
     const service = new PlayerAuctionStateService(
       { $transaction: async (work: any) => work(tx) } as never,
-      { lockGroup: jest.fn() } as never,
+      { lockLeague: jest.fn(), lockGroup: jest.fn() } as never,
       { can: jest.fn(async () => false) } as never
     );
     await expect(service.start('group-1', 'user-1')).rejects.toMatchObject({ code: 'AUCTION_FORBIDDEN' });

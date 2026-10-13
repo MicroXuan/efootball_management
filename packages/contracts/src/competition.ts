@@ -468,7 +468,12 @@ export const MyCompetitionListQuerySchema = z.object({
 
 export const MyMatchListQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20)
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  seasonId: ResourceIdSchema.optional(),
+  upcomingOnly: z.union([
+    z.boolean(),
+    z.enum(['true', 'false']).transform((value) => value === 'true')
+  ]).optional()
 });
 
 export const CompetitionRegistrationResponseSchema = z.object({
@@ -538,6 +543,8 @@ export const CompetitionParticipantSummarySchema = z.object({
   displayName: z.string(),
   participantType: CompetitionParticipantTypeSchema,
   teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable(),
+  teamNumber: z.number().int().nonnegative().nullable().default(null),
+  teamName: z.string().trim().min(1).nullable().default(null),
   teamLogoUrl: z.string().url().nullable().default(null),
   ownerDisplayName: z.string().trim().min(1).max(32).nullable().default(null)
 });
@@ -700,6 +707,7 @@ export type MyMatchListQuery = z.output<typeof MyMatchListQuerySchema>;
 export type CompetitionRules = z.infer<typeof CompetitionRulesSchema>;
 export type CompetitionSummary = z.infer<typeof CompetitionSummarySchema>;
 export type CompetitionDetail = z.infer<typeof CompetitionDetailSchema>;
+export type CompetitionParticipantSummary = z.infer<typeof CompetitionParticipantSummarySchema>;
 export type CompetitionListResponse = z.infer<typeof CompetitionListResponseSchema>;
 export type CompetitionMatchListResponse = z.infer<typeof CompetitionMatchListResponseSchema>;
 export type CompetitionRegistrationResponse = z.infer<typeof CompetitionRegistrationResponseSchema>;

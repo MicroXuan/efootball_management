@@ -3,6 +3,7 @@ import { ResourceIdSchema } from './common.js';
 import {
   FinanceLedgerDirectionSchema,
   FinanceLedgerEntrySchema,
+  FinanceSettlementCategorySchema,
   RosterEntryStatusSchema,
   RosterTransactionTypeSchema
 } from './league-roster.js';
@@ -38,6 +39,7 @@ export const TeamAssetOverviewSchema = z.object({
   teamNumber: z.number().int().nonnegative().nullable(),
   divisionName: z.string().min(1).nullable(),
   teamLogoUrl: z.string().nullable(),
+  ownerAlias: z.string().min(1),
   ownerDisplayName: z.string().min(1),
   ownerPublicUserNo: z.string().regex(/^\d{6}$/),
   ownerAvatarUrl: z.string().nullable(),
@@ -97,7 +99,45 @@ export const TeamFinanceSummarySchema = z.object({
   debitTotalMinor: ValuationMoneyMinorSchema,
   balanceMinor: z.number().int(),
   uncategorizedEntryCount: z.number().int().nonnegative(),
+  settlementItems: z.array(z.object({
+    category: FinanceSettlementCategorySchema,
+    amountMinor: z.number().int()
+  })).default([]),
+  settlementTotalMinor: z.number().int().default(0),
   entries: z.array(FinanceLedgerEntrySchema)
+});
+
+export const FinanceSettlementAmountsSchema = z.object({
+  transactionAmountMinor: ValuationMoneyMinorSchema,
+  luxuryTaxMinor: ValuationMoneyMinorSchema,
+  offseasonFeeMinor: ValuationMoneyMinorSchema,
+  unfinishedMatchPenaltyMinor: ValuationMoneyMinorSchema,
+  playerAuctionMinor: ValuationMoneyMinorSchema,
+  teamAuctionMinor: ValuationMoneyMinorSchema,
+  rookieSelectionMinor: ValuationMoneyMinorSchema,
+  installmentPaymentMinor: ValuationMoneyMinorSchema,
+  otherAdjustmentMinor: ValuationMoneyMinorSchema
+});
+
+export const UpsertTeamFinanceSettlementRequestSchema = z.object({
+  leagueTeamId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  amounts: FinanceSettlementAmountsSchema,
+  note: z.string().trim().max(512).default(''),
+  reason: z.string().trim().min(1).max(512)
+});
+
+export const TeamFinanceSettlementItemSchema = z.object({
+  category: FinanceSettlementCategorySchema,
+  amountMinor: z.number().int()
+});
+
+export const TeamFinanceSettlementSummarySchema = z.object({
+  leagueId: ResourceIdSchema,
+  teamId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  items: z.array(TeamFinanceSettlementItemSchema),
+  totalMinor: z.number().int()
 });
 
 export const CreateManualFinanceEntryRequestSchema = z.object({
@@ -140,6 +180,10 @@ export type PlayerValuationHistoryResponse = z.infer<typeof PlayerValuationHisto
 export type LeagueTransactionListItem = z.infer<typeof LeagueTransactionListItemSchema>;
 export type LeagueTransactionListResponse = z.infer<typeof LeagueTransactionListResponseSchema>;
 export type TeamFinanceSummary = z.infer<typeof TeamFinanceSummarySchema>;
+export type FinanceSettlementAmounts = z.infer<typeof FinanceSettlementAmountsSchema>;
+export type UpsertTeamFinanceSettlementRequest = z.infer<typeof UpsertTeamFinanceSettlementRequestSchema>;
+export type TeamFinanceSettlementItem = z.infer<typeof TeamFinanceSettlementItemSchema>;
+export type TeamFinanceSettlementSummary = z.infer<typeof TeamFinanceSettlementSummarySchema>;
 export type CreateManualFinanceEntryRequest = z.infer<typeof CreateManualFinanceEntryRequestSchema>;
 export type TransactionFeeRuleVersion = z.infer<typeof TransactionFeeRuleVersionSchema>;
 export type CreateTransactionFeeRuleRequest = z.infer<typeof CreateTransactionFeeRuleRequestSchema>;

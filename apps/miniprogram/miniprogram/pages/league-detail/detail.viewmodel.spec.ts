@@ -8,6 +8,8 @@ import {
   seasonStructureCopy,
   selectSeason,
   standingsAccess,
+  workspaceModuleGroups,
+  workspaceModules,
   workspaceSummary,
 } from './detail.viewmodel'
 
@@ -89,7 +91,7 @@ describe('league detail view model', () => {
 
   it('presents enrolled workspace data and stable empty states', () => {
     const workspace = workspaceFixture()
-    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2*', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
+    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2', rankNotice: '同分待定', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
     expect(workspaceSummary({ ...workspace, division: null, currentRank: null, nextMatch: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', nextMatch: '暂无待进行比赛' })
   })
 
@@ -117,6 +119,23 @@ describe('league detail view model', () => {
     ])
   })
 
+  it('groups visible workspace actions without adding another navigation level', () => {
+    const groups = workspaceModuleGroups(workspaceModules(workspaceFixture()))
+
+    expect(groups.map((group) => [group.key, group.label])).toEqual([
+      ['competition', '比赛'],
+      ['team', '球队'],
+      ['transactions', '交易'],
+      ['personal', '个人'],
+    ])
+    expect(groups.map((group) => group.modules.map((module) => module.key))).toEqual([
+      ['standings', 'cups'],
+      ['assets', 'valuations'],
+      ['transactions', 'finance'],
+      ['favorites'],
+    ])
+  })
+
   it('builds stable module routes and refuses navigation into a closed valuation window', () => {
     const routeFor = (detailViewModel as unknown as {
       workspaceModuleRoute?: (key: string, workspace: LeagueWorkspaceResponse, leagueName?: string) => string | null
@@ -135,6 +154,15 @@ describe('league detail view model', () => {
     expect(routeFor?.('cups', workspace, '中国超级联赛')).toBe('/pages/competitions/index?seasonId=season-1&leagueName=%E4%B8%AD%E5%9B%BD%E8%B6%85%E7%BA%A7%E8%81%94%E8%B5%9B')
     expect(routeFor?.('favorites', workspace)).toBe('/pages/favorites/index')
     expect(routeFor?.('valuations', workspace)).toBeNull()
+  })
+
+  it('shows the player auction entry only to a logged-in league team owner', () => {
+    const access = (detailViewModel as unknown as {
+      playerAuctionAccess?: (loggedIn: boolean, hasLeagueTeam: boolean) => { enabled: boolean; route: string | null }
+    }).playerAuctionAccess
+    expect(access?.(true, true)).toEqual({ enabled: true, route: '/pages/player-auctions/index' })
+    expect(access?.(true, false)).toEqual({ enabled: false, route: null })
+    expect(access?.(false, false)).toEqual({ enabled: false, route: null })
   })
 
   it.each([

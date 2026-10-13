@@ -70,7 +70,9 @@ export class PlayerAuctionCommandHandler {
       }
     } catch (error) {
       const response = error instanceof HttpException ? error.getResponse() : null;
-      text = typeof response === 'object' && response !== null && 'message' in response
+      text = typeof response === 'object' && response !== null && 'code' in response && response.code === 'AUCTION_CHANNEL_MISMATCH'
+        ? '本批次请点击小程序拍卖大厅出价。'
+        : typeof response === 'object' && response !== null && 'message' in response
         ? String(response.message)
         : '拍卖操作失败，请稍后重试。';
     }

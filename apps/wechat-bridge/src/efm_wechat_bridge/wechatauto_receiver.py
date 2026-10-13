@@ -5,6 +5,7 @@ import re
 import json
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
+from threading import RLock
 from typing import Any, Protocol
 
 from .models import InboundEvent, ObservedGroup, OutboxTask
@@ -13,6 +14,8 @@ from .transport import SendResult, SendStatus, TransportHealth
 
 _BINDING_COMMAND = re.compile(r"^绑定\s+\d{6}$")
 _GROUP_COMMAND = re.compile(r"^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$")
+_GROUP_SENDER_PREFIX = re.compile(r"^(wxid_[0-9A-Za-z_]+):\s*\r?\n")
+_TRAILING_CONTROL_PADDING = re.compile(r"[\x00-\x1f\x7f]+$")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.@:-]{1,256}$")
 _TEXT_TYPES = {1, "1", "TEXT", "文本"}
 
@@ -47,11 +50,13 @@ class WechatautoReceiver:
         self._robot_user_id = robot_user_id
         self._expected_wechat_version = expected_wechat_version
         self._version_provider = version_provider
+        self._database_lock = RLock()
         self._scanned_cursors: dict[str, int] = {}
         self._private_targets: dict[str, str] = {}
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
-        self._enabled_group_ids = frozenset(groups)
+        with self._database_lock:
+            self._enabled_group_ids = frozenset(groups)
 
     @classmethod
     def from_live(
@@ -80,6 +85,10 @@ class WechatautoReceiver:
         )
 
     def health(self) -> TransportHealth:
+        with self._database_lock:
+            return self._health_unlocked()
+
+    def _health_unlocked(self) -> TransportHealth:
         try:
             getter = getattr(self._database, "get_self_info")
             info = getter()
@@ -100,6 +109,10 @@ class WechatautoReceiver:
             return self._unhealthy("WECHAT_DATABASE_UNAVAILABLE")
 
     def observed_groups(self) -> list[ObservedGroup]:
+        with self._database_lock:
+            return self._observed_groups_unlocked()
+
+    def _observed_groups_unlocked(self) -> list[ObservedGroup]:
         sessions = self._sessions()
         groups: dict[str, ObservedGroup] = {}
         for session in sessions:
@@ -121,6 +134,10 @@ class WechatautoReceiver:
         return [groups[key] for key in sorted(groups)]
 
     def poll(self, after_watermark: str | None) -> list[InboundEvent]:
+        with self._database_lock:
+            return self._poll_unlocked(after_watermark)
+
+    def _poll_unlocked(self, after_watermark: str | None) -> list[InboundEvent]:
         cursors = self._parse_cursors(after_watermark)
         rows: list[dict[str, object]] = []
         scanned: dict[str, int] = dict(cursors)
@@ -167,10 +184,12 @@ class WechatautoReceiver:
         return sorted(unique.values(), key=lambda event: (event.sequence or "", event.message_id))
 
     def scanned_cursors(self) -> dict[str, int]:
-        return dict(self._scanned_cursors)
+        with self._database_lock:
+            return dict(self._scanned_cursors)
 
     def private_targets(self) -> dict[str, str]:
-        return dict(self._private_targets)
+        with self._database_lock:
+            return dict(self._private_targets)
 
     def normalize(self, raw: Mapping[str, object]) -> InboundEvent | None:
         conversation_id = self._safe_string(raw.get("conversation_id"))
@@ -180,11 +199,8 @@ class WechatautoReceiver:
         if (
             not conversation_id
             or not message_id
-            or not sender_id
             or not _SAFE_ID.fullmatch(conversation_id)
             or not _SAFE_ID.fullmatch(message_id)
-            or not _SAFE_ID.fullmatch(sender_id)
-            or sender_id == self._robot_user_id
             or raw_sender_id == 2
             or raw.get("is_self") is True
             or raw.get("type") not in _TEXT_TYPES
@@ -198,6 +214,21 @@ class WechatautoReceiver:
         if not isinstance(text, str):
             return None
         text = text.strip()
+        if group:
+            prefix = _GROUP_SENDER_PREFIX.match(text)
+            if prefix:
+                prefixed_sender_id = prefix.group(1)
+                if sender_id and sender_id != prefixed_sender_id:
+                    return None
+                sender_id = prefixed_sender_id
+                text = text[prefix.end():].strip()
+        text = _TRAILING_CONTROL_PADDING.sub("", text).strip()
+        if (
+            not sender_id
+            or not _SAFE_ID.fullmatch(sender_id)
+            or sender_id == self._robot_user_id
+        ):
+            return None
         if not text or len(text) > 2_000:
             return None
         if group and not _GROUP_COMMAND.fullmatch(text):

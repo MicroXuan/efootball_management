@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
-import { RosterEntryStatus } from '../generated/prisma/client.js';
+import { PlayerAuctionBidChannel, RosterEntryStatus } from '../generated/prisma/client.js';
 import { PrismaService } from './prisma.service.js';
 
 config({ path: '../../.env', quiet: true });
@@ -210,6 +210,15 @@ describe('PrismaService', () => {
     expect(prisma.leagueTransactionFeeRuleVersion).toBeDefined();
     expect(RosterEntryStatus.DISAPPEARED).toBe('DISAPPEARED');
     expect(RosterEntryStatus.RETIRED).toBe('RETIRED');
+  });
+
+  it('exposes dual-channel player auction delegates and enums', () => {
+    expect(prisma.playerAuctionBatch).toBeDefined();
+    expect(prisma.playerAuctionLot).toBeDefined();
+    expect(prisma.playerAuctionBid).toBeDefined();
+    expect(prisma.playerAuctionReview).toBeDefined();
+    expect(PlayerAuctionBidChannel.WECHAT_GROUP).toBe('WECHAT_GROUP');
+    expect(PlayerAuctionBidChannel.MINIPROGRAM).toBe('MINIPROGRAM');
   });
 
   it('enforces league-scoped team ownership and numbering while preserving public user numbers', async () => {

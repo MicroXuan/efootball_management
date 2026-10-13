@@ -19,7 +19,6 @@ export type ProfileTeamView = {
 export type ProfileView = {
   displayName: string
   avatarUrl: string
-  region: string
   publicUserNoDisplay: string
   publicUserNoCopy: string
   hasTeams: boolean
@@ -54,7 +53,6 @@ export function profileView(
   return {
     displayName: user?.displayName.trim() || '微信用户',
     avatarUrl: user?.avatarUrl || '',
-    region: user?.region?.trim() || '未设置地区',
     publicUserNoDisplay: number.display,
     publicUserNoCopy: number.copy,
     hasTeams: presented.length > 0,

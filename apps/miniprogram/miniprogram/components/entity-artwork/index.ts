@@ -1,3 +1,5 @@
+import { resolveImageSource } from '../../services/image-source'
+
 Component({
   properties: {
     src: { type: String, value: '' },
@@ -5,11 +7,17 @@ Component({
     shape: { type: String, value: 'square' },
   },
 
-  data: { imageFailed: false },
+  data: { displaySrc: '', requestedSrc: '', imageFailed: false },
 
   observers: {
-    src() {
-      this.setData({ imageFailed: false })
+    src(src: string) {
+      this.setData({ displaySrc: '', requestedSrc: src, imageFailed: false })
+      if (!src) return
+      void resolveImageSource(src, (options) => wx.downloadFile(options)).then((displaySrc) => {
+        if (this.data.requestedSrc === src) this.setData({ displaySrc })
+      }).catch(() => {
+        if (this.data.requestedSrc === src) this.setData({ imageFailed: true })
+      })
     },
   },
 

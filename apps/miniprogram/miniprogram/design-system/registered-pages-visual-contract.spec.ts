@@ -89,8 +89,8 @@ describe('registered browsing pages visual boundary', () => {
     const markup = readFileSync(resolve(miniRoot, 'pages/leagues/index.wxml'), 'utf8')
 
     expect(markup).toContain('class="league-banner')
-    expect(markup).toContain('mode="aspectFill"')
-    expect(markup).toContain('binderror="onBannerError"')
+    expect(markup).toContain("background-image: url('{{bannerDisplayUrl}}')")
+    expect(markup).not.toContain('<image')
     expect(markup).not.toContain('联赛中心')
     expect(markup).not.toContain('发现公开联赛')
   })
@@ -121,6 +121,20 @@ describe('registered browsing pages visual boundary', () => {
       const markup = readFileSync(resolve(miniRoot, `pages/${page}/index.wxml`), 'utf8')
       expect(markup, page).toContain('efm-equal-tabs')
     }
+  })
+
+  it.each(['leagues', 'players'])('%s keeps scroll content above the floating tab bar', (page) => {
+    const styles = readFileSync(resolve(miniRoot, `pages/${page}/index.wxss`), 'utf8')
+
+    expect(styles).toMatch(/padding:[^;]*calc\(env\(safe-area-inset-bottom\) \+ 190rpx\)/s)
+  })
+
+  it('keeps the league discovery surface compact enough to preview multiple leagues', () => {
+    const styles = readFileSync(resolve(miniRoot, 'pages/leagues/index.wxss'), 'utf8')
+
+    expect(styles).toMatch(/\.league-banner\s*{[^}]*height:\s*160rpx/s)
+    expect(styles).toMatch(/\.league-card__identity\s*{[^}]*min-height:\s*136rpx/s)
+    expect(styles).toMatch(/\.season-strip\s*{[^}]*min-height:\s*88rpx/s)
   })
 
   it('keeps the favorite control as a compact badge inside the player card', () => {

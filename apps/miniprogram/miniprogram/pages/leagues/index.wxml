@@ -1,14 +1,12 @@
 <view class="page-shell leagues-page">
-  <view class="league-banner {{bannerUrl && !bannerFailed ? 'has-image' : 'is-fallback'}}" aria-label="联赛主题图">
-    <image
-      wx:if="{{bannerUrl && !bannerFailed}}"
+  <view wx:if="{{!bannerLayerVisible}}" class="tab-exit-mask"></view>
+  <view class="league-banner {{bannerMode === 'image' ? 'has-image' : bannerMode === 'fallback' ? 'is-fallback' : 'is-loading'}}" aria-label="联赛主题图">
+    <view
+      wx:if="{{bannerLayerVisible && bannerMode === 'image'}}"
       class="league-banner__image"
-      src="{{bannerUrl}}"
-      mode="aspectFill"
-      lazy-load="{{true}}"
-      binderror="onBannerError"
-    />
-    <view wx:else class="league-banner__fallback">
+      style="background-image: url('{{bannerDisplayUrl}}');"
+    ></view>
+    <view wx:elif="{{bannerLayerVisible && bannerMode === 'fallback'}}" class="league-banner__fallback">
       <view class="pitch-line pitch-line--outer"></view>
       <view class="pitch-line pitch-line--center"></view>
       <view class="pitch-dot"></view>

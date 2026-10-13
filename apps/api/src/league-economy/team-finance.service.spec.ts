@@ -3,7 +3,7 @@ import { TeamFinanceService } from './team-finance.service.js';
 
 const at = new Date('2026-10-02T12:00:00.000Z');
 
-function harness() {
+function harness(settlementEntries: Array<Record<string, unknown>> = []) {
   const team = { id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', league: { currentSeasonId: 'season-1' as string | null } };
   const season = { id: 'season-1', leagueId: 'league-1' };
   const entries = [
@@ -13,7 +13,10 @@ function harness() {
   const tx = {
     leagueTeam: { findFirst: jest.fn(async () => team) },
     leagueSeason: { findFirst: jest.fn(async () => season) },
-    financeLedgerEntry: { create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'entry-new', createdAt: at, ...data })) }
+    financeLedgerEntry: {
+      findMany: jest.fn(async () => settlementEntries),
+      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: `entry-${String(data.settlementCategory ?? 'new')}`, createdAt: at, ...data }))
+    }
   };
   const prisma = {
     leagueTeam: { findUnique: jest.fn(async () => team) },
@@ -24,15 +27,16 @@ function harness() {
   const authorization = { requireLeagueManager: jest.fn(async () => undefined) };
   const receipts = { execute: jest.fn(async (_admin: string, _operation: string, _key: string, work: (client: typeof tx) => Promise<unknown>) => work(tx)) };
   const audit = { record: jest.fn(async () => undefined) };
+  const visibility = { requireVisible: jest.fn(async () => 'league-1') };
   return {
     service: new TeamFinanceService(
       prisma as never,
       authorization as never,
       receipts as never,
       audit as never,
-      { requireVisible: jest.fn(async () => 'league-1') } as never
+      visibility as never
     ),
-    prisma, tx, authorization, receipts, audit, team
+    prisma, tx, authorization, receipts, audit, visibility, team
   };
 }
 
@@ -74,6 +78,74 @@ describe('TeamFinanceService', () => {
     await expect(service.getSeasonSummary('user-1', 'team-1', null)).resolves.toMatchObject({
       seasonId: null, uncategorizedEntryCount: 1
     });
+  });
+
+  it('writes audited debit deltas for current settlement targets', async () => {
+    const { service, tx, receipts, audit } = harness();
+    const result = await service.upsertSettlement('admin-1', 'league-1', {
+      leagueTeamId: 'team-1', seasonId: 'season-1',
+      amounts: {
+        transactionAmountMinor: 10, luxuryTaxMinor: 404, offseasonFeeMinor: 0,
+        unfinishedMatchPenaltyMinor: 0, playerAuctionMinor: 0, teamAuctionMinor: 0,
+        rookieSelectionMinor: 0, installmentPaymentMinor: 0, otherAdjustmentMinor: 0
+      },
+      note: '实时结算', reason: '管理员核对'
+    }, 'settlement-key');
+
+    expect(receipts.execute).toHaveBeenCalledWith(
+      'admin-1', 'finance-settlement.upsert:league-1:team-1:season-1', 'settlement-key',
+      expect.any(Function), expect.any(Object)
+    );
+    expect(tx.financeLedgerEntry.create).toHaveBeenCalledTimes(2);
+    expect(tx.financeLedgerEntry.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      direction: 'DEBIT', settlementCategory: 'LUXURY_TAX', amountMinor: 404
+    }) });
+    expect(audit.record).toHaveBeenCalledWith(tx, expect.objectContaining({
+      action: 'FINANCE_SETTLEMENT_UPDATED', resourceId: 'team-1', reason: '管理员核对'
+    }));
+    expect(result).toMatchObject({ totalMinor: 414 });
+    expect(result.items).toHaveLength(9);
+  });
+
+  it('creates no rows for unchanged targets and credits a reduced target', async () => {
+    const existing = [
+      { direction: 'DEBIT', settlementCategory: 'TRANSACTION_AMOUNT', amountMinor: 10 },
+      { direction: 'DEBIT', settlementCategory: 'LUXURY_TAX', amountMinor: 404 }
+    ];
+    const unchanged = harness(existing);
+    const input = {
+      leagueTeamId: 'team-1', seasonId: 'season-1',
+      amounts: {
+        transactionAmountMinor: 10, luxuryTaxMinor: 404, offseasonFeeMinor: 0,
+        unfinishedMatchPenaltyMinor: 0, playerAuctionMinor: 0, teamAuctionMinor: 0,
+        rookieSelectionMinor: 0, installmentPaymentMinor: 0, otherAdjustmentMinor: 0
+      },
+      note: '', reason: '复核无变化'
+    } as const;
+    await unchanged.service.upsertSettlement('admin-1', 'league-1', input, 'unchanged');
+    expect(unchanged.tx.financeLedgerEntry.create).not.toHaveBeenCalled();
+
+    const reduced = harness(existing);
+    await reduced.service.upsertSettlement('admin-1', 'league-1', {
+      ...input, amounts: { ...input.amounts, luxuryTaxMinor: 300 }, reason: '下调税额'
+    }, 'reduced');
+    expect(reduced.tx.financeLedgerEntry.create).toHaveBeenCalledTimes(1);
+    expect(reduced.tx.financeLedgerEntry.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      direction: 'CREDIT', settlementCategory: 'LUXURY_TAX', amountMinor: 104
+    }) });
+  });
+
+  it('aggregates categorized rows for owner summaries without counting legacy rows', async () => {
+    const { service, prisma } = harness();
+    prisma.financeLedgerEntry.findMany.mockResolvedValueOnce([
+      { id: 'tax-debit', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: 'season-1', rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', settlementCategory: 'LUXURY_TAX', amountMinor: 404, note: '', createdAt: at },
+      { id: 'tax-credit', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: 'season-1', rosterTransactionId: null, direction: 'CREDIT', type: 'LUXURY_TAX', settlementCategory: 'LUXURY_TAX', amountMinor: 4, note: '', createdAt: at },
+      { id: 'legacy', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: 'season-1', rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', amountMinor: 999, note: '', createdAt: at }
+    ] as never);
+    const result = await service.getSeasonSummary('user-1', 'team-1', 'season-1');
+    expect(result.settlementItems).toHaveLength(9);
+    expect(result.settlementItems.find(({ category }) => category === 'LUXURY_TAX')).toMatchObject({ amountMinor: 400 });
+    expect(result.settlementTotalMinor).toBe(400);
   });
 
   it('rejects unauthorized owners and administrators', async () => {

@@ -8,11 +8,8 @@ page { background: #0e1417; color: #f4f7f8; }
 }
 
 .league-hero,
-.progress-card,
-.season-picker-card,
-.season-board,
+.season-overview-card,
 .entry-card,
-.standings-entry,
 .workspace-card,
 .state-card {
   margin-top: 22rpx;
@@ -27,47 +24,52 @@ page { background: #0e1417; color: #f4f7f8; }
   position: relative;
   margin-top: 0;
   overflow: hidden;
-  padding: 34rpx;
+  padding: 22rpx;
   background:
     linear-gradient(135deg, rgba(182, 241, 58, 0.07), transparent 46%),
     #151d21;
 }
 
-.league-hero__topline,
-.hero-season,
-.section-heading,
-.picker-control,
+.league-hero--compact { padding-bottom: 20rpx; }
+.league-hero__main,
+.hero-season-row,
+.season-switcher,
 .board-head,
-.team-line,
 .timeline,
-.entry-readonly {
+.entry-summary,
+.entry-team {
   display: flex;
   align-items: center;
 }
 
-.hero-season,
-.section-heading,
-.picker-control,
+.league-hero__main { display: flex; gap: 18rpx; }
+.league-hero__copy { min-width: 0; flex: 1; }
+
+.hero-season-row,
+.season-switcher,
 .board-head,
 .timeline,
-.entry-readonly { justify-content: space-between; }
+.entry-summary { justify-content: space-between; }
 
-.league-mark { width: 112rpx; flex: none; }
-.hero-kicker { margin-left: 22rpx; color: #aab5ba; font-size: 18rpx; font-weight: 750; letter-spacing: 3rpx; }
-.hero-title { display: block; margin-top: 28rpx; font-size: 48rpx; font-weight: 850; letter-spacing: -1rpx; line-height: 1.18; }
-.hero-copy,
+.league-mark { width: 72rpx; flex: none; }
+.hero-kicker { display: block; color: #aab5ba; font-size: 16rpx; font-weight: 750; letter-spacing: 3rpx; }
+.hero-title { display: block; margin-top: 5rpx; font-size: 34rpx; font-weight: 850; letter-spacing: -1rpx; line-height: 1.18; }
+.hero-copy { display: block; margin-top: 7rpx; color: #aab5ba; font-size: 18rpx; line-height: 1.45; }
 .structure-copy,
-.state-copy { display: block; margin-top: 16rpx; color: #aab5ba; font-size: 22rpx; line-height: 1.65; }
+.state-copy { display: block; margin-top: 12rpx; color: #aab5ba; font-size: 20rpx; line-height: 1.55; }
 
-.hero-season {
-  margin-top: 30rpx;
-  padding-top: 24rpx;
+.hero-season-row {
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  gap: 12rpx;
   border-top: 2rpx solid #2d393f;
 }
-
-.hero-season__label { display: block; color: #7e8b91; font-size: 18rpx; font-weight: 700; letter-spacing: 3rpx; }
-.hero-season__name { display: block; margin-top: 8rpx; font-size: 28rpx; font-weight: 800; }
-.action-button { min-height: 88rpx; margin-top: 26rpx; font-size: 25rpx; }
+.season-switcher__picker { min-width: 0; flex: 1; }
+.season-switcher { min-height: 58rpx; padding: 0 14rpx; border: 2rpx solid #344047; border-radius: 14rpx; background: #1c262b; }
+.season-switcher__label { display: block; color: #7e8b91; font-size: 15rpx; font-weight: 700; letter-spacing: 2rpx; }
+.season-switcher__name { display: block; margin-top: 2rpx; font-size: 20rpx; font-weight: 850; }
+.season-switcher__action { height: 42rpx; padding: 0 4rpx 0 12rpx; display: flex; flex: none; align-items: center; gap: 10rpx; color: #b6f13a; font-size: 17rpx; font-weight: 800; }
+.season-switcher__chevron { width: 12rpx; height: 12rpx; box-sizing: border-box; border-right: 3rpx solid #b6f13a; border-bottom: 3rpx solid #b6f13a; transform: rotate(45deg) translateY(-3rpx); }
 
 .section-kicker,
 .board-kicker,
@@ -80,13 +82,10 @@ page { background: #0e1417; color: #f4f7f8; }
 }
 
 .section-title,
-.board-title { display: block; margin-top: 9rpx; font-size: 32rpx; font-weight: 800; }
+.board-title { display: block; margin-top: 7rpx; font-size: 30rpx; font-weight: 800; }
 .season-number { color: #7e8b91; font-size: 28rpx; font-weight: 800; }
-.progress-card season-rail { margin-top: 34rpx; }
-
-.field-label { display: block; margin-bottom: 12rpx; color: #aab5ba; font-size: 20rpx; font-weight: 700; }
-.picker-control { min-height: 84rpx; padding: 0 22rpx; border: 2rpx solid #344047; border-radius: 16rpx; background: #1c262b; font-size: 25rpx; font-weight: 700; }
-.picker-arrow { color: #b6f13a; font-size: 26rpx; }
+.season-overview__rail { margin-top: 24rpx; padding: 20rpx 18rpx; border: 2rpx solid #2d393f; border-radius: 18rpx; background: #1c262b; }
+.season-overview__label { display: block; margin-bottom: 24rpx; color: #aab5ba; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
 
 .metric-grid { margin-top: 30rpx; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12rpx; }
 .metric-grid view { min-width: 0; padding: 22rpx 14rpx; border: 2rpx solid #2d393f; border-radius: 16rpx; background: #1c262b; }
@@ -96,49 +95,51 @@ page { background: #0e1417; color: #f4f7f8; }
 .metric-label { margin-top: 7rpx; color: #aab5ba; font-size: 18rpx; line-height: 1.35; }
 .timeline { margin-top: 20rpx; padding-top: 20rpx; border-top: 2rpx solid #2d393f; color: #aab5ba; font-size: 20rpx; }
 
-.team-line { margin-top: 26rpx; }
-.team-mark { width: 82rpx; margin-right: 20rpx; flex: none; }
-.team-name,
-.entry-status { display: block; }
-.team-name { font-size: 28rpx; font-weight: 800; }
-.entry-status { margin-top: 7rpx; color: #aab5ba; font-size: 20rpx; }
+.entry-card { padding: 22rpx 26rpx; }
+.entry-card--priority { border-color: #546b37; background: #1a2420; }
+.entry-summary { gap: 18rpx; }
+.entry-summary__status { display: block; margin-top: 7rpx; font-size: 24rpx; font-weight: 850; }
+.entry-team { min-width: 0; justify-content: flex-end; }
+.team-mark { width: 58rpx; margin-right: 12rpx; flex: none; }
+.team-name { max-width: 180rpx; overflow: hidden; color: #d9efac; font-size: 20rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .error-copy { display: block; margin-top: 20rpx; color: #ffaaa5; font-size: 21rpx; line-height: 1.5; }
-.entry-readonly { margin-top: 24rpx; padding: 20rpx; border: 2rpx solid #2d393f; border-radius: 16rpx; background: #1c262b; }
-.entry-readonly-label { color: #aab5ba; font-size: 20rpx; }
-.entry-readonly-value { margin-left: 18rpx; color: #f4f7f8; font-size: 22rpx; font-weight: 800; text-align: right; }
 
 .state-card { min-height: 320rpx; display: flex; align-items: flex-start; justify-content: center; flex-direction: column; }
 .state-card.compact { min-height: 220rpx; }
 .state-title { margin-top: 18rpx; font-size: 32rpx; font-weight: 800; }
 .outline-button { min-height: 76rpx; margin: 26rpx 0 0; padding: 0 26rpx; font-size: 23rpx; font-weight: 750; }
-.standings-entry { display:flex;align-items:center;justify-content:space-between; }
-.standings-entry__title { display:block;margin-top:10rpx;font-size:30rpx;font-weight:850; }
-.standings-entry__hint { display:block;margin-top:10rpx;color:#aab5ba;font-size:20rpx; }
-.standings-entry__arrow { color:#b6f13a;font-size:30rpx;font-weight:850; }
-.standings-entry.is-locked { opacity:.72; }
-.standings-entry.is-locked .standings-entry__arrow { color:#7e8b91;font-size:18rpx;letter-spacing:2rpx; }
 .workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
 .workspace-title { display: block; margin-top: 9rpx; font-size: 34rpx; font-weight: 850; }
 .workspace-division { padding: 10rpx 15rpx; border: 2rpx solid #546b37; border-radius: 18rpx; background: #202c25; color: #d9efac; font-size: 18rpx; font-weight: 800; }
 .workspace-metrics { display: grid; grid-template-columns: 180rpx minmax(0, 1fr); gap: 14rpx; margin-top: 26rpx; }
 .workspace-metrics > view { min-width: 0; padding: 22rpx; border: 2rpx solid #2d393f; border-radius: 18rpx; background: #1c262b; }
+.workspace-metric--schedule { transition: border-color 120ms ease, background-color 120ms ease; }
+.workspace-metric--schedule:active { border-color: #7eaa28; background: #202c25; }
 .workspace-metric__label,
 .workspace-metric__meta { display: block; color: #aab5ba; font-size: 17rpx; }
+.workspace-rank-row { display: flex; align-items: center; gap: 10rpx; }
 .workspace-rank { display: block; margin-top: 8rpx; color: #b6f13a; font-size: 48rpx; font-weight: 900; }
+.workspace-rank-notice { margin-top: 10rpx; padding: 4rpx 8rpx; border: 1rpx solid #6d7c56; border-radius: 8rpx; color: #d9efac; background: #202c25; font-size: 15rpx; font-weight: 750; }
 .workspace-next { display: block; margin-top: 10rpx; font-size: 22rpx; font-weight: 850; line-height: 1.35; }
 .workspace-metric__meta { margin-top: 8rpx; }
+.workspace-schedule-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12rpx; }
+.workspace-schedule-arrow { flex: none; color: #b6f13a; font-size: 16rpx; font-weight: 800; }
 
-.module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-top: 18rpx; }
-.module-tile { position: relative; min-width: 0; min-height: 188rpx; box-sizing: border-box; padding: 20rpx; overflow: hidden; border: 2rpx solid #344047; border-radius: 18rpx; background: #1c262b; }
-.module-tile.is-wide { grid-column: span 2; min-height: 160rpx; }
+.workspace-groups { margin-top: 20rpx; }
+.workspace-group + .workspace-group { margin-top: 22rpx; }
+.workspace-group__head { padding: 0 2rpx; color: #aab5ba; font-size: 16rpx; font-weight: 750; letter-spacing: 3rpx; }
+.module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; margin-top: 10rpx; }
+.module-tile { position: relative; min-width: 0; min-height: 148rpx; box-sizing: border-box; padding: 16rpx; overflow: hidden; border: 2rpx solid #344047; border-radius: 18rpx; background: #1c262b; }
+.module-tile.is-wide { grid-column: span 2; min-height: 132rpx; }
 .module-tile.is-personal { border-color: #46584b; background: #1a2420; }
+.module-tile.is-auction { border-color: #546b37; background: #1a2420; }
 .module-tile.is-locked { border-color: #2d393f; background: #171f23; }
 .module-topline,
 .module-footer { display: flex; align-items: center; justify-content: space-between; gap: 14rpx; }
-.module-marker { width: 48rpx; height: 48rpx; border-radius: 14rpx; background: #b6f13a; color: #111810; font-size: 20rpx; font-weight: 900; line-height: 48rpx; text-align: center; }
+.module-marker { width: 42rpx; height: 42rpx; border-radius: 12rpx; background: #b6f13a; color: #111810; font-size: 18rpx; font-weight: 900; line-height: 42rpx; text-align: center; }
 .module-state { color: #b6f13a; font-size: 16rpx; font-weight: 750; }
-.module-title { display: block; margin-top: 20rpx; color: #f4f7f8; font-size: 25rpx; font-weight: 850; }
-.module-footer { align-items: flex-end; margin-top: 9rpx; }
+.module-title { display: block; margin-top: 13rpx; color: #f4f7f8; font-size: 23rpx; font-weight: 850; }
+.module-footer { align-items: flex-end; margin-top: 7rpx; }
 .module-description { min-width: 0; color: #aab5ba; font-size: 17rpx; line-height: 1.45; }
 .module-arrow { flex: none; color: #b6f13a; font-size: 24rpx; font-weight: 850; }
 .module-tile.is-locked .module-marker { background: #273238; color: #7e8b91; }

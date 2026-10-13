@@ -73,20 +73,22 @@ describe('player catalog lifecycle', () => {
   });
 
   afterAll(async () => {
-    const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
-    const cardIds = cards.map(({ id }) => id);
-    const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
-    if (cardIds.length) await prisma.playerCardVersion.deleteMany({ where: { playerCardId: { in: cardIds } } });
-    await prisma.catalogRelease.deleteMany({ where: { batch: { sourceId } } });
-    await prisma.importRecord.deleteMany({ where: { batch: { sourceId } } });
-    await prisma.importBatch.deleteMany({ where: { sourceId } });
-    await prisma.playerCardSkill.deleteMany({ where: { playerCard: { sourceId } } });
-    await prisma.playerCardAttribute.deleteMany({ where: { playerCard: { sourceId } } });
-    await prisma.playerCard.deleteMany({ where: { sourceId } });
-    await prisma.cardPack.deleteMany({ where: { sourceId } });
-    await prisma.footballPlayerSource.deleteMany({ where: { sourceId } });
-    if (playerIds.length) await prisma.footballPlayer.deleteMany({ where: { id: { in: playerIds } } });
-    await prisma.dataSource.deleteMany({ where: { id: sourceId } });
+    if (sourceId) {
+      const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
+      const cardIds = cards.map(({ id }) => id);
+      const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
+      if (cardIds.length) await prisma.playerCardVersion.deleteMany({ where: { playerCardId: { in: cardIds } } });
+      await prisma.catalogRelease.deleteMany({ where: { batch: { sourceId } } });
+      await prisma.importRecord.deleteMany({ where: { batch: { sourceId } } });
+      await prisma.importBatch.deleteMany({ where: { sourceId } });
+      await prisma.playerCardSkill.deleteMany({ where: { playerCard: { sourceId } } });
+      await prisma.playerCardAttribute.deleteMany({ where: { playerCard: { sourceId } } });
+      await prisma.playerCard.deleteMany({ where: { sourceId } });
+      await prisma.cardPack.deleteMany({ where: { sourceId } });
+      await prisma.footballPlayerSource.deleteMany({ where: { sourceId } });
+      if (playerIds.length) await prisma.footballPlayer.deleteMany({ where: { id: { in: playerIds } } });
+      await prisma.dataSource.deleteMany({ where: { id: sourceId } });
+    }
     const users = await prisma.user.findMany({
       where: { wechatOpenId: { in: createdOpenIds } }, select: { id: true }
     });

@@ -80,11 +80,13 @@ describe('PlayerCatalogService', () => {
   });
 
   beforeEach(async () => {
+    sourceId = '';
     sourceCode = `catalog-${randomUUID()}`;
     sourceId = (await prisma.dataSource.create({ data: { code: sourceCode, name: 'Catalog test' } })).id;
   });
 
   afterEach(async () => {
+    if (!sourceId) return;
     const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
     const cardIds = cards.map(({ id }) => id);
     const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];

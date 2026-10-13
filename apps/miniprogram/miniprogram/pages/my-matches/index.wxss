@@ -1,1 +1,26 @@
-page { background:#0e1417; color:#f4f7f8; }.matches-page{min-height:100vh;box-sizing:border-box;padding:calc(env(safe-area-inset-top) + 30rpx) 26rpx calc(env(safe-area-inset-bottom) + 48rpx);background:radial-gradient(circle at 85% 0%,rgba(182, 241, 58,.06),transparent 25%),#0e1417}.page-head,.match-head,.versus{display:flex;align-items:center;justify-content:space-between}.kicker{display:block;color:#aab5ba;font-size:17rpx;letter-spacing:5rpx}.title{display:block;margin-top:8rpx;font-family:inherit;font-size:52rpx;font-weight:800}.mark{color:#7e8b91;font-size:17rpx;letter-spacing:2rpx}.match-list{margin-top:34rpx}.match-card{margin-bottom:22rpx;padding:28rpx;border:2rpx solid #344047;border-radius:24rpx;background:#151d21;box-shadow:0 16rpx 44rpx rgba(0,0,0,.18)}.match-head{color:#aab5ba;font-size:20rpx}.planned{display:block;margin-top:12rpx;color:#aab5ba;font-size:19rpx}.versus{margin-top:26rpx;gap:16rpx;font-size:25rpx;font-weight:800}.vs{color:#7e8b91;font-size:17rpx}.score{display:block;margin-top:16rpx;color:#f4f7f8;font-size:36rpx;text-align:center}.action{min-height:84rpx;margin-top:24rpx;border-radius:16rpx;background:#b6f13a;color:#111810;font-size:23rpx;font-weight:800}.action::after{border:0}.action.is-disabled{background:#263238;color:#7e8b91}.state{min-height:520rpx;display:flex;flex-direction:column;justify-content:center;gap:16rpx;color:#aab5ba;font-size:23rpx}.state text:first-child{color:#f4f7f8;font-size:32rpx;font-weight:800}
+page { background:#0e1417; color:#f4f7f8; }
+.matches-page { min-height:100vh; box-sizing:border-box; padding:calc(env(safe-area-inset-top) + 30rpx) 26rpx calc(env(safe-area-inset-bottom) + 48rpx); background:radial-gradient(circle at 85% 0%,rgba(182,241,58,.06),transparent 25%),#0e1417; }
+.page-head,.match-head,.match-meta,.season-picker-row { display:flex; align-items:center; justify-content:space-between; }
+.kicker { display:block; color:#aab5ba; font-size:17rpx; letter-spacing:5rpx; }
+.title { display:block; margin-top:8rpx; font-size:52rpx; font-weight:800; }
+.mark { color:#7e8b91; font-size:17rpx; letter-spacing:2rpx; }
+.season-picker { display:block; margin-top:28rpx; }
+.season-picker-row { min-height:86rpx; padding:0 24rpx; border:2rpx solid #344047; border-radius:18rpx; background:#151d21; color:#aab5ba; font-size:21rpx; }
+.season-picker-row text:last-child { color:#f4f7f8; font-size:24rpx; font-weight:750; }
+.match-list { margin-top:26rpx; }
+.match-card { margin-bottom:22rpx; padding:26rpx 22rpx 30rpx; border:2rpx solid #344047; border-radius:24rpx; background:#151d21; box-shadow:0 16rpx 44rpx rgba(0,0,0,.18); }
+.match-head { color:#aab5ba; font-size:20rpx; }
+.match-head>text:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.state-tag { flex:none; margin-left:16rpx; color:#b6f13a; font-size:18rpx; font-weight:750; }
+.match-meta { margin-top:12rpx; color:#7e8b91; font-size:18rpx; }
+.match-meta text:first-child { color:#b6f13a; font-weight:750; }
+.fixture-grid { display:grid; grid-template-columns:minmax(0,1fr) 112rpx minmax(0,1fr); align-items:center; margin-top:28rpx; }
+.fixture-team { min-width:0; display:flex; flex-direction:column; align-items:center; text-align:center; }
+.team-badge { width:82rpx; height:82rpx; border-radius:16rpx; }
+.team-identity { width:100%; margin-top:14rpx; overflow:hidden; font-size:23rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.team-owner { width:100%; margin-top:7rpx; overflow:hidden; color:#aab5ba; font-size:19rpx; text-overflow:ellipsis; white-space:nowrap; }
+.fixture-center { height:100%; display:flex; align-items:center; justify-content:center; color:#f4f7f8; font-size:31rpx; font-weight:900; font-variant-numeric:tabular-nums; text-align:center; }
+.archived { margin-top:7rpx; color:#ff9c8e; font-size:17rpx; }
+.state { min-height:520rpx; display:flex; flex-direction:column; justify-content:center; gap:16rpx; color:#aab5ba; font-size:23rpx; }
+.state text:first-child { color:#f4f7f8; font-size:32rpx; font-weight:800; }
+@media (max-width:340px) { .fixture-grid { grid-template-columns:minmax(0,1fr) 86rpx minmax(0,1fr); } .team-badge { width:70rpx; height:70rpx; } .team-identity { font-size:20rpx; } .fixture-center { font-size:26rpx; } }

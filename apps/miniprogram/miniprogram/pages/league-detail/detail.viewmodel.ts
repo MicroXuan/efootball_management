@@ -74,9 +74,14 @@ export function standingsAccess(entry: SeasonEntryResponse | null): {
   return { enabled: false, label: '报名后开放', hint: '仅当前赛季正式参赛球队可查看' }
 }
 
+export function playerAuctionAccess(loggedIn: boolean, hasLeagueTeam: boolean) {
+  const enabled = loggedIn && hasLeagueTeam
+  return { enabled, route: enabled ? '/pages/player-auctions/index' : null }
+}
+
 export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
   const rank = workspace.currentRank
-    ? `${workspace.currentRank.rank}${workspace.currentRank.tiePending ? '*' : ''}`
+    ? String(workspace.currentRank.rank)
     : '—'
   const nextMatch = workspace.nextMatch
     ? `第 ${workspace.nextMatch.roundNumber} 轮 · 对阵 ${workspace.nextMatch.opponentName}`
@@ -86,6 +91,7 @@ export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
     teamShortName: workspace.team.shortName,
     divisionName: workspace.division?.displayName ?? '等待正式分组',
     rank,
+    rankNotice: workspace.currentRank?.tiePending ? '同分待定' : '',
     rankMeta: workspace.currentRank ? `${workspace.currentRank.played} 场 · ${workspace.currentRank.points} 分` : '排名尚未产生',
     nextMatch,
     nextMatchTime: workspace.nextMatch?.plannedAt?.slice(0, 16).replace('T', ' ') ?? '时间待定',
@@ -110,6 +116,12 @@ export type WorkspaceModule = {
   enabled: boolean
   tone: 'active' | 'locked' | 'personal'
   wide?: boolean
+}
+
+export type WorkspaceModuleGroup = {
+  key: 'competition' | 'team' | 'transactions' | 'personal'
+  label: '比赛' | '球队' | '交易' | '个人'
+  modules: WorkspaceModule[]
 }
 
 export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceModule[] {
@@ -147,6 +159,28 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
       key: 'favorites', marker: '藏', label: '我的收藏', description: '查看球员当前最强卡片',
       stateLabel: '个人球探簿', enabled: true, tone: 'personal', wide: true,
     },
+  ]
+}
+
+export function workspaceModuleGroups(modules: readonly WorkspaceModule[]): WorkspaceModuleGroup[] {
+  const byKey = new Map(modules.map((module) => [module.key, module]))
+  const group = (
+    key: WorkspaceModuleGroup['key'],
+    label: WorkspaceModuleGroup['label'],
+    moduleKeys: WorkspaceModuleKey[],
+  ): WorkspaceModuleGroup => ({
+    key,
+    label,
+    modules: moduleKeys.flatMap((moduleKey) => {
+      const module = byKey.get(moduleKey)
+      return module ? [module] : []
+    }),
+  })
+  return [
+    group('competition', '比赛', ['standings', 'cups']),
+    group('team', '球队', ['assets', 'valuations']),
+    group('transactions', '交易', ['transactions', 'finance']),
+    group('personal', '个人', ['favorites']),
   ]
 }
 

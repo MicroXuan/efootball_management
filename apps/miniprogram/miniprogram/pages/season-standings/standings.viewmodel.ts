@@ -12,8 +12,13 @@ export type StandingsTab = {
 
 export type StandingRowView = StandingsRowResponse & {
   rankLabel: string
+  medalLabel: string
+  rankAccent: boolean
   isMine: boolean
   tieLabel: string
+  teamIdentityLabel: string
+  teamLogoSrc: string
+  logoFallback: string
 }
 
 export function stageShortLabel(code: string): string {
@@ -37,12 +42,22 @@ export function initialStageIndex(response: DivisionStandingsResponse): number {
   return mine >= 0 ? mine : 0
 }
 
+export function seasonStandingsTitle(displayName: string): string {
+  const name = displayName.trim()
+  return name.endsWith('积分榜') ? name : `${name}积分榜`
+}
+
 export function standingRows(rows: readonly StandingsRowResponse[], myTeamName: string): StandingRowView[] {
-  return rows.map((row) => ({
+  return rows.map((row, index) => ({
     ...row,
-    rankLabel: row.tiePending ? `${row.rank}*` : String(row.rank),
+    rankLabel: String(index + 1),
+    medalLabel: ['🥇', '🥈', '🥉'][index] ?? '',
+    rankAccent: index === 3,
     isMine: Boolean(myTeamName) && row.displayName === myTeamName,
     tieLabel: row.tiePending ? '同分待定' : '',
+    teamIdentityLabel: row.teamNumber === null ? row.teamName : `${row.teamNumber}-${row.teamName}`,
+    teamLogoSrc: row.teamLogoUrl ?? '',
+    logoFallback: row.teamShortName.slice(0, 2),
   }))
 }
 

@@ -4,6 +4,7 @@ import {
   CompetitionStageCodeSchema,
   CompetitionStageSummarySchema,
   ExpectedVersionSchema,
+  StandingsRowResponseSchema,
   StandingsSnapshotResponseSchema
 } from './competition.js';
 import { GamePlatformSchema } from './game-account.js';
@@ -400,13 +401,26 @@ export const SeasonAllocationDecisionSchema = z.object({
   }
 });
 
+export const DivisionStandingsRowResponseSchema = StandingsRowResponseSchema.extend({
+  teamNumber: z.number().int().min(0).max(9_999).nullable(),
+  teamName: z.string().trim().min(1).max(64),
+  teamShortName: z.string().trim().min(1).max(24),
+  teamLogoUrl: NullableLogoUrlSchema,
+  ownerDisplayName: z.string().trim().min(1).max(32)
+});
+
+export const DivisionStandingsSnapshotResponseSchema = StandingsSnapshotResponseSchema.extend({
+  rows: z.array(DivisionStandingsRowResponseSchema)
+});
+
 export const DivisionStandingsResponseSchema = z.object({
   seasonId: ResourceIdSchema,
+  seasonDisplayName: z.string().trim().min(1).max(64),
   competitionId: ResourceIdSchema,
   myStageId: ResourceIdSchema.nullable(),
   groups: z.array(z.object({
     stage: CompetitionStageSummarySchema,
-    standings: StandingsSnapshotResponseSchema
+    standings: DivisionStandingsSnapshotResponseSchema
   }))
 });
 

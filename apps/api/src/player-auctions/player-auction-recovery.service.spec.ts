@@ -10,18 +10,32 @@ describe('PlayerAuctionRecoveryService', () => {
     await service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT');
     await service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT');
     expect(state.enterRecovery).toHaveBeenCalledTimes(1);
+    expect(prisma.playerAuctionBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ bidChannel: 'WECHAT_GROUP' })
+    }));
+  });
+
+  it('does not move miniprogram auctions into bridge recovery', async () => {
+    const state: any = { enterRecovery: jest.fn() };
+    const prisma: any = { playerAuctionBatch: { findMany: jest.fn(async () => []) } };
+    const service = new PlayerAuctionRecoveryService(prisma, state, {} as never, {} as never, {} as never, { heartbeatTimeoutMs: 30_000 } as never);
+    await expect(service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT')).resolves.toBe(0);
+    expect(state.enterRecovery).not.toHaveBeenCalled();
+    expect(prisma.playerAuctionBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ bidChannel: 'WECHAT_GROUP' })
+    }));
   });
 
   it('authorized recovery performs an explicit full 30-second restart', async () => {
     const now = new Date('2026-10-09T12:00:00.000Z');
-    const batch: any = { id: 'batch-1', leagueId: 'league-1', groupBindingId: 'group-1', currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED' };
+    const batch: any = { id: 'batch-1', bidChannel: 'WECHAT_GROUP', leagueId: 'league-1', groupBindingId: 'group-1', currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED' };
     const lot: any = { id: 'lot-1', status: 'PAUSED' };
     const tx: any = { playerAuctionBatch: { findUnique: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) }, playerAuctionLot: { findUnique: jest.fn(async () => lot), update: jest.fn(async ({ data }: any) => Object.assign(lot, data)) } };
     const service = new PlayerAuctionRecoveryService(
       { $transaction: async (work: any) => work(tx) } as never,
       {} as never,
       { can: jest.fn(async () => true) } as never,
-      { lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: jest.fn(async () => now) } as never,
+      { lockLeague: jest.fn(), lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: jest.fn(async () => now) } as never,
       { enqueue: jest.fn() } as never,
       { heartbeatTimeoutMs: 30_000 } as never
     );

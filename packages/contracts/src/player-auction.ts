@@ -5,6 +5,8 @@ const TimestampSchema = z.iso.datetime();
 const PositiveMoneySchema = z.number().int().positive().max(2_147_483_647);
 const NullableTimestampSchema = TimestampSchema.nullable();
 
+export const PlayerAuctionBidChannelSchema = z.enum(['WECHAT_GROUP', 'MINIPROGRAM']);
+
 export const PlayerAuctionBatchStatusSchema = z.enum([
   'DRAFT',
   'READY',
@@ -45,11 +47,17 @@ export const PlayerAuctionReviewDecisionSchema = z.enum(['CONFIRM', 'ADJUST', 'V
 export const CreatePlayerAuctionBatchRequestSchema = z.object({
   groupBindingId: ResourceIdSchema,
   name: z.string().trim().min(1).max(128),
+  bidChannel: PlayerAuctionBidChannelSchema.default('WECHAT_GROUP'),
   expectedVersion: ExpectedVersionSchema
 });
 
 export const UpdatePlayerAuctionBatchRequestSchema = z.object({
   name: z.string().trim().min(1).max(128),
+  bidChannel: PlayerAuctionBidChannelSchema.optional(),
+  expectedVersion: ExpectedVersionSchema
+});
+
+export const PlayerAuctionTransitionRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema
 });
 
@@ -113,13 +121,73 @@ export const PlayerAuctionBidSchema = z.object({
   leagueTeamId: ResourceIdSchema.nullable(),
   teamName: z.string().trim().min(1).max(128).nullable(),
   userId: ResourceIdSchema.nullable(),
+  source: PlayerAuctionBidChannelSchema,
   amount: PositiveMoneySchema,
   result: PlayerAuctionBidResultSchema,
   rejectionReason: z.string().max(512).nullable(),
-  wechatMessageId: z.string().trim().min(1).max(256),
-  wechatSortKey: z.string().trim().min(1).max(128),
-  wechatSentAt: TimestampSchema,
+  wechatMessageId: z.string().trim().min(1).max(256).nullable(),
+  wechatSortKey: z.string().trim().min(1).max(128).nullable(),
+  wechatSentAt: NullableTimestampSchema,
+  submittedAt: TimestampSchema,
   receivedAt: TimestampSchema
+});
+
+export const PlaceMiniprogramAuctionBidRequestSchema = z.object({
+  amount: PositiveMoneySchema,
+  lotId: ResourceIdSchema,
+  deadlineEpoch: z.number().int().min(0)
+});
+
+export const MyPlayerAuctionListQuerySchema = z.object({
+  status: z.enum(['active', 'all']).default('active')
+});
+
+export const MyPlayerAuctionListItemSchema = z.object({
+  batchId: ResourceIdSchema,
+  league: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(64) }),
+  team: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(128) }),
+  name: z.string().trim().min(1).max(128),
+  status: PlayerAuctionBatchStatusSchema,
+  currentLotId: ResourceIdSchema.nullable(),
+  currentPlayerName: z.string().trim().min(1).max(128).nullable(),
+  deadlineAt: NullableTimestampSchema,
+  sharePath: z.string().startsWith('/pages/auction-room/index?batchId=')
+});
+
+export const MyPlayerAuctionPublicBidSchema = z.object({
+  id: ResourceIdSchema,
+  teamName: z.string().trim().min(1).max(128),
+  amount: PositiveMoneySchema,
+  submittedAt: TimestampSchema
+});
+
+export const MyPlayerAuctionLotSummarySchema = z.object({
+  id: ResourceIdSchema,
+  displayOrder: z.number().int().positive(),
+  playerName: z.string().trim().min(1).max(128),
+  playerSnapshot: z.record(z.string(), z.unknown()),
+  startingPrice: PositiveMoneySchema,
+  minimumIncrement: PositiveMoneySchema,
+  status: PlayerAuctionLotStatusSchema,
+  currentPrice: PositiveMoneySchema.nullable(),
+  deadlineAt: NullableTimestampSchema,
+  deadlineEpoch: z.number().int().min(0),
+  bids: z.array(MyPlayerAuctionPublicBidSchema)
+});
+
+export const MyPlayerAuctionRoomSchema = z.object({
+  batchId: ResourceIdSchema,
+  name: z.string().trim().min(1).max(128),
+  status: PlayerAuctionBatchStatusSchema,
+  bidChannel: z.literal('MINIPROGRAM'),
+  serverNow: TimestampSchema,
+  league: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(64) }),
+  team: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(128) }),
+  canBid: z.boolean(),
+  minimumValidPrice: PositiveMoneySchema.nullable(),
+  currentLot: MyPlayerAuctionLotSummarySchema.nullable(),
+  queue: z.array(MyPlayerAuctionLotSummarySchema.omit({ bids: true })),
+  sharePath: z.string().startsWith('/pages/auction-room/index?batchId=')
 });
 
 export const PlayerAuctionReviewSchema = z.object({
@@ -163,6 +231,7 @@ export const PlayerAuctionBatchListItemSchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
   groupBindingId: ResourceIdSchema,
+  bidChannel: PlayerAuctionBidChannelSchema,
   groupDisplayName: z.string().trim().min(1).max(128),
   name: z.string().trim().min(1).max(128),
   status: PlayerAuctionBatchStatusSchema,
@@ -181,6 +250,7 @@ export const PlayerAuctionBatchDetailSchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
   groupBindingId: ResourceIdSchema,
+  bidChannel: PlayerAuctionBidChannelSchema,
   name: z.string().trim().min(1).max(128),
   status: PlayerAuctionBatchStatusSchema,
   currentLotId: ResourceIdSchema.nullable(),
@@ -201,8 +271,14 @@ export function formatAuctionMoney(value: number): string {
 export type PlayerAuctionBatchStatus = z.infer<typeof PlayerAuctionBatchStatusSchema>;
 export type PlayerAuctionLotStatus = z.infer<typeof PlayerAuctionLotStatusSchema>;
 export type PlayerAuctionBidResult = z.infer<typeof PlayerAuctionBidResultSchema>;
+export type PlayerAuctionBidChannel = z.infer<typeof PlayerAuctionBidChannelSchema>;
+export type PlaceMiniprogramAuctionBidRequest = z.infer<typeof PlaceMiniprogramAuctionBidRequestSchema>;
+export type MyPlayerAuctionListQuery = z.infer<typeof MyPlayerAuctionListQuerySchema>;
+export type MyPlayerAuctionListItem = z.infer<typeof MyPlayerAuctionListItemSchema>;
+export type MyPlayerAuctionRoom = z.infer<typeof MyPlayerAuctionRoomSchema>;
 export type CreatePlayerAuctionBatchRequest = z.infer<typeof CreatePlayerAuctionBatchRequestSchema>;
 export type UpdatePlayerAuctionBatchRequest = z.infer<typeof UpdatePlayerAuctionBatchRequestSchema>;
+export type PlayerAuctionTransitionRequest = z.infer<typeof PlayerAuctionTransitionRequestSchema>;
 export type ReplacePlayerAuctionLotsRequest = z.infer<typeof ReplacePlayerAuctionLotsRequestSchema>;
 export type PreparePlayerAuctionBatchRequest = z.infer<typeof PreparePlayerAuctionBatchRequestSchema>;
 export type CancelPlayerAuctionBatchRequest = z.infer<typeof CancelPlayerAuctionBatchRequestSchema>;

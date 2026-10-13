@@ -104,6 +104,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const [scheduleVersions, setScheduleVersions] = useState<Record<string, number>>({});
   const [schedulePreviews, setSchedulePreviews] = useState<Record<string, SchedulePreview>>({});
   const [scheduleModes, setScheduleModes] = useState<Record<string, 'view' | 'manage'>>({});
+  const [activeScheduleStageId, setActiveScheduleStageId] = useState<string | null>(null);
   const [scheduleBusyStageId, setScheduleBusyStageId] = useState<string | null>(null);
   const [scoreEditor, setScoreEditor] = useState<CompetitionMatchResponse | null>(null);
   const [homeScore, setHomeScore] = useState<number | null>(null);
@@ -218,6 +219,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
       mutationKey.reset();
       setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
       setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setActiveScheduleStageId(stageId);
       setNotice(`赛程预览已生成，共 ${preview.matchCount} 场`);
       setConfirmed((current) => current ? {
         ...current,
@@ -258,10 +260,12 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
         delete next[stageId];
         return next;
       });
+      setActiveScheduleStageId(null);
       return;
     }
     if (schedulePreviews[stageId]) {
       setScheduleModes((current) => ({ ...current, [stageId]: mode }));
+      setActiveScheduleStageId(stageId);
       return;
     }
     setScheduleBusyStageId(stageId); setError(null);
@@ -271,6 +275,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
       });
       setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
       setScheduleModes((current) => ({ ...current, [stageId]: mode }));
+      setActiveScheduleStageId(stageId);
     } catch {
       setError('已发布赛程加载失败，请刷新后重试');
     } finally {
@@ -339,6 +344,8 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   };
 
   if (loading) return <div className="loading-block"><Spin /></div>;
+  const activeScheduleStage = confirmed?.stages.find(({ id }) => id === activeScheduleStageId) ?? null;
+  const activeSchedulePreview = activeScheduleStage ? schedulePreviews[activeScheduleStage.id] : null;
   return <div className="allocation-workspace">
     <Card className="allocation-toolbar">
       <Space wrap><strong>分组与赛程</strong><Select aria-label="选择赛季" value={seasonId || undefined} placeholder="选择赛季" options={seasons.map((item) => ({ label: item.displayName, value: item.id }))} onChange={(value) => { setSeasonId(value); setConfirmed(null); void loadProposal(value); }} />
@@ -376,11 +383,15 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
               : <Button loading={scheduleBusyStageId === stage.id} onClick={() => void generateSchedule(stage.id)}>{preview ? '重新生成预览' : '生成预览'}</Button>}
             <Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button>
           </Space>
-          {preview && (stage.status !== 'PUBLISHED' || scheduleModes[stage.id])
-            ? <ScheduleBoard preview={preview} onEditScore={scheduleModes[stage.id] === 'manage' ? openScoreEditor : undefined} />
-            : null}
         </article>;
       })}</div>
+      {activeScheduleStage && activeSchedulePreview ? <section className="allocation-schedule-panel" aria-label={`${activeScheduleStage.displayName}赛程`}>
+        <header className="allocation-schedule-panel__header">
+          <div><span className="section-kicker">当前查看</span><h3>{activeScheduleStage.displayName}赛程</h3></div>
+          <Tag color={activeScheduleStage.status === 'PUBLISHED' ? 'green' : 'gold'}>{activeScheduleStage.status === 'PUBLISHED' ? '已发布' : '预览'}</Tag>
+        </header>
+        <ScheduleBoard preview={activeSchedulePreview} onEditScore={scheduleModes[activeScheduleStage.id] === 'manage' ? openScoreEditor : undefined} />
+      </section> : null}
     </Card> : null}
     <Modal
       open={Boolean(scoreEditor)}

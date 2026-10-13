@@ -164,6 +164,27 @@ describe('league teams page', () => {
     expect(screen.getByRole('button', { name: '创建球队' })).toBeEnabled();
   });
 
+  it('paginates long team lists and reports the visible range', async () => {
+    const teams = Array.from({ length: 12 }, (_, index) => ({
+      ...baseTeam,
+      id: `${String(index + 1).padStart(8, '0')}-5555-4555-8555-555555555555`,
+      ownerUserId: `${String(index + 1).padStart(8, '0')}-7777-4777-8777-777777777777`,
+      ownerPublicUserNo: String(index + 1).padStart(6, '0'),
+      teamNumber: index + 1,
+      name: `测试球队${String(index + 1).padStart(2, '0')}`
+    }));
+    const request = mockRoutes({ teams });
+    renderPage(request);
+
+    expect(await screen.findByText('1-测试球队01')).toBeInTheDocument();
+    expect(screen.getByText('共 12 支球队，当前显示 1-10')).toBeInTheDocument();
+    expect(screen.queryByText('11-测试球队11')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTitle('2'));
+    expect(await screen.findByText('11-测试球队11')).toBeInTheDocument();
+    expect(screen.getByText('共 12 支球队，当前显示 11-12')).toBeInTheDocument();
+  });
+
   it('renders the empty state and requires exact six-digit lookup before creation', async () => {
     const request = mockRoutes();
     renderPage(request);

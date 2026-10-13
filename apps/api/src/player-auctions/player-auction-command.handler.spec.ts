@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 /* eslint-disable @typescript-eslint/no-explicit-any -- focused command-router test doubles */
 import { PlayerAuctionCommandHandler } from './player-auction-command.handler.js';
 import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
+import { PlayerAuctionError } from './player-auction.errors.js';
 
 describe('PlayerAuctionCommandHandler', () => {
   function harness(commandText: string, identity: any = { userId: 'user-1', status: 'ACTIVE' }) {
@@ -31,5 +32,16 @@ describe('PlayerAuctionCommandHandler', () => {
     expect(bids.placeBid).toHaveBeenCalledWith('in-1', 120);
     expect(outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: '【申花】出价有效：⭐120⭐，倒计时重置为 30 秒。' }));
     await expect(harness('120元').handler.handle('in-1')).resolves.toBe(false);
+  });
+
+  it('directs group bidders to the miniprogram room for app-channel batches', async () => {
+    const setup = harness('120');
+    setup.bids.placeBid.mockRejectedValueOnce(
+      new PlayerAuctionError('AUCTION_CHANNEL_MISMATCH', '当前拍卖仅接受小程序出价', 409)
+    );
+    await setup.handler.handle('in-1');
+    expect(setup.outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      text: '本批次请点击小程序拍卖大厅出价。'
+    }));
   });
 });

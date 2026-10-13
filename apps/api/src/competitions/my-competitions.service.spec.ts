@@ -163,13 +163,14 @@ describe('MyCompetitionsService', () => {
     ]);
     catalogIds.push(myShell.id, otherShell.id);
     const [myTeam, otherTeam] = await Promise.all([
-      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: userId, ownerAlias: '我的玩家', catalogTeamId: myShell.id, name: '上海海港', shortName: '海港' } }),
-      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: opponentId, ownerAlias: '对手玩家', catalogTeamId: otherShell.id, name: '北京国安', shortName: '国安' } })
+      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: userId, ownerAlias: '梅西（小宣）', catalogTeamId: myShell.id, teamNumber: 25, name: '上海海港', shortName: '海港', logoUrl: 'https://static.example.com/shanghai-port-current.png' } }),
+      prisma.leagueTeam.create({ data: { leagueId: league.id, ownerUserId: opponentId, ownerAlias: '国安经理', catalogTeamId: otherShell.id, teamNumber: 9, name: '北京国安', shortName: '国安', logoUrl: 'https://static.example.com/beijing-current.png' } })
     ]);
     const [myEntry, otherEntry] = await Promise.all([
       prisma.seasonEntry.create({ data: {
         seasonId: season.id, leagueTeamId: myTeam.id, ownerUserId: userId, source: 'NEW_APPLICATION', status: 'APPROVED',
-        teamNameSnapshot: myTeam.name, teamShortNameSnapshot: myTeam.shortName
+        teamNameSnapshot: '历史上海海港', teamShortNameSnapshot: myTeam.shortName,
+        teamNumberSnapshot: 20, teamLogoUrlSnapshot: 'https://static.example.com/shanghai-port-season.png'
       } }),
       prisma.seasonEntry.create({ data: {
         seasonId: season.id, leagueTeamId: otherTeam.id, ownerUserId: opponentId, source: 'NEW_APPLICATION', status: 'APPROVED',
@@ -216,15 +217,52 @@ describe('MyCompetitionsService', () => {
       stageId: stage.id, roundNumber: 1, matchNumber: 1, pairingKey: 'cup-final',
       homeParticipantId: mine.id, awayParticipantId: opponent.id, status: 'AWAITING_RESULT'
     } });
+    await prisma.competitionMatch.create({ data: {
+      stageId: stage.id, roundNumber: 2, matchNumber: 2, pairingKey: 'cup-finished',
+      homeParticipantId: mine.id, awayParticipantId: opponent.id, status: 'CONFIRMED'
+    } }).then(async (finished) => {
+      const official = await prisma.matchResultVersion.create({ data: {
+        matchId: finished.id, version: 1, homeScore: 3, awayScore: 1,
+        status: 'OFFICIAL', submittedById: managerId, submissionSide: 'MANAGER'
+      } });
+      await prisma.competitionMatch.update({
+        where: { id: finished.id },
+        data: { officialResultVersionId: official.id }
+      });
+    });
 
     const competitions = await service.listCompetitions(userId, { limit: 10 });
     expect(competitions.items[0]).toMatchObject({
       competition: { id: competition.id, seasonId: season.id },
-      registration: { seasonEntryId: myEntry.id, teamName: '上海海港' }
+      registration: { seasonEntryId: myEntry.id, teamName: '历史上海海港' }
     });
     const matches = await service.listMatches(userId, { limit: 10 });
-    expect(matches.items).toHaveLength(1);
-    expect(matches.items[0]).toMatchObject({ myParticipantId: mine.id, action: 'SUBMIT' });
+    expect(matches.items).toHaveLength(2);
+    expect(matches.items[0]).toMatchObject({
+      myParticipantId: mine.id,
+      action: 'SUBMIT',
+      match: {
+        homeParticipant: {
+          teamNumber: 20,
+          teamName: '历史上海海港',
+          teamLogoUrl: 'https://static.example.com/shanghai-port-season.png',
+          ownerDisplayName: '梅西（小宣）'
+        },
+        awayParticipant: {
+          teamNumber: 9,
+          teamName: otherTeam.name,
+          teamLogoUrl: 'https://static.example.com/beijing-current.png',
+          ownerDisplayName: '国安经理'
+        }
+      }
+    });
+    expect(matches.items[1]).toMatchObject({
+      action: 'DONE',
+      match: { officialResult: { homeScore: 3, awayScore: 1 } }
+    });
+    const upcoming = await service.listMatches(userId, { limit: 10, seasonId: season.id, upcomingOnly: true });
+    expect(upcoming.items).toHaveLength(1);
+    expect(upcoming.items[0]).toMatchObject({ myParticipantId: mine.id, action: 'SUBMIT' });
     await prisma.leagueTeam.update({ where: { id: myTeam.id }, data: { status: 'ARCHIVED' } });
     await expect(service.listCompetitions(userId, { limit: 10 }))
       .resolves.toMatchObject({ items: [] });

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import subprocess
+from types import SimpleNamespace
 from dataclasses import replace
+from pathlib import Path
 
 from efm_wechat_bridge.windows_session import NativeWindowsProbe, SessionSnapshot, WindowsSessionGuard
 
@@ -77,3 +80,53 @@ def test_native_probe_requires_active_wts_connection(monkeypatch) -> None:
     snapshot = NativeWindowsProbe().inspect()
 
     assert snapshot.interactive is False
+
+
+def test_file_version_passes_executable_path_over_stdin(monkeypatch) -> None:
+    executable = Path(r"D:\my soft\Weixin\Weixin.exe")
+
+    def powershell(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        stdout = "4.1.15.50\n" if kwargs.get("input") == str(executable) else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr("efm_wechat_bridge.windows_session.subprocess.run", powershell)
+
+    assert NativeWindowsProbe._file_version(executable) == "4.1.15.50"
+
+
+def test_foreground_probe_handles_64_bit_window_handles_and_win32_failures(monkeypatch) -> None:
+    class Function:
+        def __init__(self, result=True, *, error: Exception | None = None) -> None:
+            self.result = result
+            self.error = error
+            self.calls: list[tuple[object, ...]] = []
+
+        def __call__(self, *args: object) -> object:
+            self.calls.append(args)
+            if self.error:
+                raise self.error
+            return self.result
+
+    handle = 0x000001F234567890
+    show = Function()
+    activate = Function()
+    current = Function(handle)
+    user32 = SimpleNamespace(
+        ShowWindow=show,
+        SetForegroundWindow=activate,
+        GetForegroundWindow=current,
+    )
+    monkeypatch.setattr("efm_wechat_bridge.windows_session.platform.system", lambda: "Windows")
+    monkeypatch.setattr(
+        "efm_wechat_bridge.windows_session.ctypes.windll",
+        SimpleNamespace(user32=user32),
+        raising=False,
+    )
+    probe = NativeWindowsProbe()
+    probe._window_handle = handle
+
+    assert probe.foreground_wechat() is True
+    assert show.calls[0][0].value == handle  # type: ignore[union-attr]
+
+    user32.SetForegroundWindow = Function(error=OSError("win32 failure"))
+    assert probe.foreground_wechat() is False

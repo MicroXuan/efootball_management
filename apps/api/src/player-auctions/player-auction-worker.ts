@@ -51,6 +51,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
         await this.closeDueLot(lot.id, lot.deadlineEpoch);
         continue;
       }
+      if (lot.batch.bidChannel !== 'WECHAT_GROUP') continue;
       const remainingSeconds = Math.ceil(remainingMs / 1_000);
       const previous = lot.lastCountdownMark ?? 30;
       const crossed = MARKS.filter((mark) => mark < previous && remainingSeconds <= mark);
@@ -75,13 +76,19 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
 
   async closeDueLot(lotId: string, epoch: number) {
     return this.prisma.$transaction(async (tx) => {
+      const snapshot = await tx.playerAuctionLot.findUnique({
+        where: { id: lotId },
+        include: { batch: { select: { id: true, leagueId: true } } }
+      });
+      if (!snapshot) return false;
+      await this.locks.lockLeague(tx, snapshot.batch.leagueId);
+      await this.locks.lockBatch(tx, snapshot.batchId);
       await this.locks.lockLot(tx, lotId);
       const lot = await tx.playerAuctionLot.findUnique({
         where: { id: lotId },
         include: { currentHighestBid: { include: { leagueTeam: { select: { name: true } } } } }
       });
       if (!lot || lot.status !== 'ACTIVE' || lot.deadlineEpoch !== epoch || !lot.deadlineAt) return false;
-      await this.locks.lockBatch(tx, lot.batchId);
       const batch = await tx.playerAuctionBatch.findUnique({
         where: { id: lot.batchId },
         include: { groupBinding: { select: { deviceId: true, wechatGroupId: true } } }
@@ -126,6 +133,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
           data: { status: 'COMPLETED', currentLotId: null, completedAt: now, version: { increment: 1 } }
         });
       }
+      if (batch.bidChannel !== 'WECHAT_GROUP') return true;
       const text = lot.currentHighestBid?.leagueTeam
         ? this.formatter.pendingReview(lot.playerNameSnapshot, lot.currentHighestBid.leagueTeam.name, lot.currentPrice ?? lot.startingPrice)
         : this.formatter.noBid(lot.playerNameSnapshot);

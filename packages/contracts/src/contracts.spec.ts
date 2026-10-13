@@ -33,6 +33,7 @@ import {
   WithdrawSeasonCupRequestSchema,
   CupRegistrationResponseSchema,
   MyCompetitionResponseSchema,
+  MyMatchListQuerySchema,
   GenerateCupGroupProposalRequestSchema,
   ConfirmCupGroupProposalRequestSchema,
   CupGroupProposalSchema,
@@ -81,6 +82,7 @@ import {
   TransferWindowSchema,
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
+  FinanceSettlementCategorySchema,
   LeagueTeamDetailSchema,
   LeagueTeamAdminListStatusSchema,
   LeagueTeamLifecycleRequestSchema,
@@ -108,7 +110,10 @@ import {
 } from './index.js';
 import {
   CreatePlayerAuctionBatchRequestSchema,
+  PlaceMiniprogramAuctionBidRequestSchema,
+  MyPlayerAuctionRoomSchema,
   PlayerAuctionBatchDetailSchema,
+  PlayerAuctionBidChannelSchema,
   PlayerAuctionBatchStatusSchema,
   PlayerAuctionBidResultSchema,
   PlayerAuctionLotStatusSchema,
@@ -140,6 +145,8 @@ import {
   SaveValuationDraftRequestSchema,
   TeamAssetOverviewSchema,
   TeamFinanceSummarySchema,
+  TeamFinanceSettlementSummarySchema,
+  UpsertTeamFinanceSettlementRequestSchema,
   ValuationWindowSchema,
   ValuationWorkspaceSchema
 } from './index.js';
@@ -350,6 +357,7 @@ describe('league economy contracts', () => {
       teamNumber: 7,
       divisionName: '冠军 A 组',
       teamLogoUrl: null,
+      ownerAlias: '梅西（小宣）',
       ownerDisplayName: '小宣',
       ownerPublicUserNo: '100069',
       ownerAvatarUrl: null,
@@ -363,6 +371,7 @@ describe('league economy contracts', () => {
       players: []
     });
     assert.equal(assets.valuationCompleteness, 'INCOMPLETE');
+    assert.equal(assets.ownerAlias, '梅西（小宣）');
     assert.equal(assets.divisionName, '冠军 A 组');
     assert.throws(() => TeamAssetOverviewSchema.parse({ ...assets, valuationCompleteness: 'PARTIAL' }));
 
@@ -380,6 +389,8 @@ describe('league economy contracts', () => {
       entries: []
     });
     assert.equal(finance.seasonId, null);
+    assert.deepEqual(finance.settlementItems, []);
+    assert.equal(finance.settlementTotalMinor, 0);
     assert.equal(CreateManualFinanceEntryRequestSchema.parse({
       leagueTeamId: ids.team,
       seasonId: null,
@@ -390,6 +401,69 @@ describe('league economy contracts', () => {
       reason: '管理员纠正历史余额',
       idempotencyKey: 'finance-adjustment-1'
     }).seasonId, null);
+  });
+
+  it('defines all seasonal finance settlement categories and batch targets', () => {
+    const categories = [
+      'TRANSACTION_AMOUNT', 'LUXURY_TAX', 'OFFSEASON_FEE', 'UNFINISHED_MATCH_PENALTY',
+      'PLAYER_AUCTION', 'TEAM_AUCTION', 'ROOKIE_SELECTION', 'INSTALLMENT_PAYMENT',
+      'OTHER_ADJUSTMENT'
+    ] as const;
+    assert.deepEqual(categories.map((category) => FinanceSettlementCategorySchema.parse(category)), categories);
+
+    const request = UpsertTeamFinanceSettlementRequestSchema.parse({
+      leagueTeamId: ids.team,
+      seasonId: ids.season,
+      amounts: {
+        transactionAmountMinor: 10,
+        luxuryTaxMinor: 404,
+        offseasonFeeMinor: 0,
+        unfinishedMatchPenaltyMinor: 0,
+        playerAuctionMinor: 0,
+        teamAuctionMinor: 0,
+        rookieSelectionMinor: 0,
+        installmentPaymentMinor: 0,
+        otherAdjustmentMinor: 0
+      },
+      note: 'S20 实时结算',
+      reason: '管理员核对赛季结算'
+    });
+    assert.equal(request.amounts.luxuryTaxMinor, 404);
+    assert.throws(() => UpsertTeamFinanceSettlementRequestSchema.parse({
+      ...request,
+      amounts: { ...request.amounts, luxuryTaxMinor: -1 }
+    }));
+    assert.throws(() => UpsertTeamFinanceSettlementRequestSchema.parse({ ...request, reason: ' ' }));
+  });
+
+  it('keeps legacy ledger rows valid and parses ordered settlement summaries', () => {
+    const legacy = FinanceLedgerEntrySchema.parse({
+      id: ids.submission,
+      leagueId: ids.league,
+      leagueTeamId: ids.team,
+      seasonId: ids.season,
+      rosterTransactionId: null,
+      direction: 'DEBIT',
+      type: 'LUXURY_TAX',
+      amountMinor: 404,
+      note: '',
+      createdAt: startsAt
+    });
+    assert.equal(legacy.settlementCategory, null);
+
+    const summary = TeamFinanceSettlementSummarySchema.parse({
+      leagueId: ids.league,
+      teamId: ids.team,
+      seasonId: ids.season,
+      items: [
+        { category: 'TRANSACTION_AMOUNT', amountMinor: 10 },
+        { category: 'LUXURY_TAX', amountMinor: 404 }
+      ],
+      totalMinor: 414
+    });
+    assert.equal(summary.items[0]?.category, 'TRANSACTION_AMOUNT');
+    assert.equal(summary.totalMinor, 414);
+    assert.equal(TeamFinanceSettlementSummarySchema.parse({ ...summary, totalMinor: -5 }).totalMinor, -5);
   });
 
   it('requires Chinese-ready audit display context', () => {
@@ -428,6 +502,18 @@ describe('league economy contracts', () => {
       createdAt: startsAt
     });
     assert.equal(audit.resourceId, 'global');
+  });
+
+  it('accepts season-scoped upcoming match queries', () => {
+    assert.deepEqual(MyMatchListQuerySchema.parse({
+      seasonId: ids.season,
+      upcomingOnly: 'true',
+      limit: '100'
+    }), {
+      seasonId: ids.season,
+      upcomingOnly: true,
+      limit: 100
+    });
   });
 });
 
@@ -1183,16 +1269,20 @@ describe('league team administration contracts', () => {
       displayName: '上海海港',
       participantType: 'TEAM',
       teamLifecycleStatus: 'ARCHIVED',
+      teamNumber: 25,
+      teamName: '历史上海海港',
       teamLogoUrl: 'https://static.example.com/shanghai-port.png',
-      ownerDisplayName: '海港玩家'
+      ownerDisplayName: '梅西（小宣）'
     });
     assert.deepEqual(participant, {
       id: ids.user,
       displayName: '上海海港',
       participantType: 'TEAM',
       teamLifecycleStatus: 'ARCHIVED',
+      teamNumber: 25,
+      teamName: '历史上海海港',
       teamLogoUrl: 'https://static.example.com/shanghai-port.png',
-      ownerDisplayName: '海港玩家'
+      ownerDisplayName: '梅西（小宣）'
     });
     assert.deepEqual(CompetitionParticipantSummarySchema.parse({
       id: ids.user,
@@ -1204,6 +1294,8 @@ describe('league team administration contracts', () => {
       displayName: '个人选手',
       participantType: 'INDIVIDUAL',
       teamLifecycleStatus: null,
+      teamNumber: null,
+      teamName: null,
       teamLogoUrl: null,
       ownerDisplayName: null
     });
@@ -1657,8 +1749,9 @@ describe('tiered league contracts', () => {
       reason: null,
       createdAt
     }).overridden, false);
-    assert.equal(DivisionStandingsResponseSchema.parse({
+    assert.deepEqual(DivisionStandingsResponseSchema.parse({
       seasonId: ids.season,
+      seasonDisplayName: '九星S1赛季',
       competitionId: ids.competition,
       myStageId: ids.stage,
       groups: [{
@@ -1673,6 +1766,11 @@ describe('tiered league contracts', () => {
           rows: [{
             participantId: ids.participant,
             displayName: '上海海港',
+            teamNumber: 3,
+            teamName: '上海海港',
+            teamShortName: '海港',
+            teamLogoUrl: 'https://example.com/haigang.png',
+            ownerDisplayName: '海港玩家',
             teamLifecycleStatus: 'ACTIVE',
             played: 0,
             wins: 0,
@@ -1690,7 +1788,29 @@ describe('tiered league contracts', () => {
           }]
         }
       }]
-    }).groups[0]?.standings.rows[0]?.rank, 1);
+    }).groups[0]?.standings.rows[0], {
+      participantId: ids.participant,
+      displayName: '上海海港',
+      teamNumber: 3,
+      teamName: '上海海港',
+      teamShortName: '海港',
+      teamLogoUrl: 'https://example.com/haigang.png',
+      ownerDisplayName: '海港玩家',
+      teamLifecycleStatus: 'ACTIVE',
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      basePoints: 0,
+      adjustmentPoints: 0,
+      totalPoints: 0,
+      rank: 1,
+      tiePending: false,
+      tieBreakValues: {}
+    });
   });
 
   it('parses an enrolled league workspace summary', () => {
@@ -2263,6 +2383,36 @@ describe('player auction contracts', () => {
   const bidId = '77777777-7777-4777-8777-777777777777';
   const now = '2026-10-09T12:00:00.000Z';
 
+  it('parses channel-aware auction batches', () => {
+    assert.equal(PlayerAuctionBidChannelSchema.parse('WECHAT_GROUP'), 'WECHAT_GROUP');
+    assert.equal(PlayerAuctionBidChannelSchema.parse('MINIPROGRAM'), 'MINIPROGRAM');
+    assert.throws(() => PlayerAuctionBidChannelSchema.parse('BOTH'));
+    assert.equal(CreatePlayerAuctionBatchRequestSchema.parse({
+      groupBindingId,
+      name: '小程序拍卖',
+      bidChannel: 'MINIPROGRAM',
+      expectedVersion: 2
+    }).bidChannel, 'MINIPROGRAM');
+  });
+
+  it('parses miniprogram bid requests', () => {
+    assert.deepEqual(PlaceMiniprogramAuctionBidRequestSchema.parse({
+      amount: 120,
+      lotId,
+      deadlineEpoch: 4
+    }), { amount: 120, lotId, deadlineEpoch: 4 });
+  });
+
+  it('rejects invalid auction money and epochs', () => {
+    for (const input of [
+      { amount: 0, lotId, deadlineEpoch: 4 },
+      { amount: 1.5, lotId, deadlineEpoch: 4 },
+      { amount: 120, lotId: 'not-a-resource-id', deadlineEpoch: 4 },
+      { amount: 120, lotId, deadlineEpoch: -1 },
+      { amount: 120, lotId, deadlineEpoch: 1.5 }
+    ]) assert.throws(() => PlaceMiniprogramAuctionBidRequestSchema.parse(input));
+  });
+
   it('accepts the complete batch, lot, and bid status vocabulary', () => {
     for (const status of ['DRAFT', 'READY', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', 'RECOVERY_REQUIRED']) {
       assert.equal(PlayerAuctionBatchStatusSchema.parse(status), status);
@@ -2332,6 +2482,7 @@ describe('player auction contracts', () => {
       id: batchId,
       leagueId,
       groupBindingId,
+      bidChannel: 'WECHAT_GROUP',
       name: '十月拍卖',
       status: 'ACTIVE',
       currentLotId: lotId,
@@ -2362,12 +2513,14 @@ describe('player auction contracts', () => {
           leagueTeamId: teamId,
           teamName: '上海申花',
           userId: leagueId,
+          source: 'WECHAT_GROUP',
           amount: 120,
           result: 'VALID',
           rejectionReason: null,
           wechatMessageId: 'wechat-1',
           wechatSortKey: '0001',
           wechatSentAt: now,
+          submittedAt: now,
           receivedAt: now
         }],
         review: null,
@@ -2377,7 +2530,94 @@ describe('player auction contracts', () => {
       }]
     });
     assert.equal(detail.lots[0]?.currentPrice, 120);
+    assert.equal(detail.bidChannel, 'WECHAT_GROUP');
     assert.equal(formatAuctionMoney(120), '⭐120⭐');
     assert.equal('currentPriceDisplay' in detail.lots[0]!, false);
+  });
+
+  it('parses channel-neutral bid views', () => {
+    const detail = PlayerAuctionBatchDetailSchema.parse({
+      id: batchId,
+      leagueId,
+      groupBindingId,
+      bidChannel: 'MINIPROGRAM',
+      name: '应用内拍卖',
+      status: 'ACTIVE',
+      currentLotId: lotId,
+      version: 1,
+      startedAt: now,
+      completedAt: null,
+      cancelledAt: null,
+      createdAt: now,
+      updatedAt: now,
+      lots: [{
+        id: lotId,
+        displayOrder: 1,
+        playerId,
+        playerCardId: null,
+        playerName: '车范根',
+        playerSnapshot: {},
+        startingPrice: 50,
+        minimumIncrement: 10,
+        status: 'ACTIVE',
+        currentPrice: 120,
+        currentHighestBidId: bidId,
+        deadlineAt: now,
+        deadlineEpoch: 2,
+        pausedRemainingMs: null,
+        version: 1,
+        bids: [{
+          id: bidId,
+          leagueTeamId: teamId,
+          teamName: '上海申花',
+          userId: leagueId,
+          source: 'MINIPROGRAM',
+          amount: 120,
+          result: 'VALID',
+          rejectionReason: null,
+          wechatMessageId: null,
+          wechatSortKey: null,
+          wechatSentAt: null,
+          submittedAt: now,
+          receivedAt: now
+        }],
+        review: null,
+        startedAt: now,
+        closedAt: null,
+        reviewedAt: null
+      }]
+    });
+    assert.equal(detail.lots[0]?.bids[0]?.source, 'MINIPROGRAM');
+    assert.equal(detail.lots[0]?.bids[0]?.wechatSentAt, null);
+  });
+
+  it('parses a participant room without transport-specific bid fields', () => {
+    const room = MyPlayerAuctionRoomSchema.parse({
+      batchId,
+      name: '应用内拍卖',
+      status: 'ACTIVE',
+      bidChannel: 'MINIPROGRAM',
+      serverNow: now,
+      league: { id: leagueId, name: '九星联赛' },
+      team: { id: teamId, name: '上海申花' },
+      canBid: true,
+      minimumValidPrice: 130,
+      currentLot: {
+        id: lotId,
+        displayOrder: 1,
+        playerName: '车范根',
+        playerSnapshot: { position: 'CF' },
+        startingPrice: 50,
+        minimumIncrement: 10,
+        status: 'ACTIVE',
+        currentPrice: 120,
+        deadlineAt: now,
+        deadlineEpoch: 4,
+        bids: [{ id: bidId, teamName: '上海申花', amount: 120, submittedAt: now }]
+      },
+      queue: [],
+      sharePath: `/pages/auction-room/index?batchId=${batchId}`
+    });
+    assert.equal(room.currentLot?.bids[0]?.amount, 120);
   });
 });

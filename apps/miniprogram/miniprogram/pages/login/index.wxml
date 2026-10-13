@@ -7,7 +7,7 @@
   <view class="brand-block">
     <text class="eyebrow">赛事运营中枢</text>
     <text class="title">非概念实况</text>
-    <text class="subtitle">赛事、战队与球员资产，在同一块战术板上。</text>
+    <text class="subtitle">赛事、战队、球员，实时调度。</text>
   </view>
 
   <view class="login-panel">
@@ -20,7 +20,7 @@
       loading="{{loading}}"
       disabled="{{loading}}"
       bindtap="login"
-    >{{loading ? '正在进入…' : '微信登录'}}</button>
+    ><text class="login-button__label">{{loading ? '正在进入…' : '微信登录'}}</text></button>
     <text wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</text>
     <text class="privacy-copy">登录即用于识别参赛身份，不读取未授权的微信资料。</text>
   </view>

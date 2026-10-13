@@ -102,11 +102,23 @@ class NativeWindowsProbe:
     def foreground_wechat(self) -> bool:
         if not self._window_handle or platform.system() != "Windows":
             return False
-        user32 = ctypes.windll.user32
-        user32.ShowWindow(self._window_handle, 9)
-        if not user32.SetForegroundWindow(self._window_handle):
+        try:
+            user32 = ctypes.windll.user32
+            user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            user32.ShowWindow.restype = ctypes.c_bool
+            user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+            user32.SetForegroundWindow.restype = ctypes.c_bool
+            user32.GetForegroundWindow.argtypes = []
+            user32.GetForegroundWindow.restype = ctypes.c_void_p
+            window = ctypes.c_void_p(self._window_handle)
+            user32.ShowWindow(window, 9)
+            if not user32.SetForegroundWindow(window):
+                return False
+            foreground = user32.GetForegroundWindow()
+            foreground_value = foreground.value if isinstance(foreground, ctypes.c_void_p) else foreground
+            return int(foreground_value or 0) == self._window_handle
+        except Exception:
             return False
-        return int(user32.GetForegroundWindow()) == self._window_handle
 
     @staticmethod
     def _interactive_session() -> bool:
@@ -185,11 +197,18 @@ class NativeWindowsProbe:
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "(Get-Item -LiteralPath $args[0]).VersionInfo.FileVersion",
-            str(path),
+            "$path = [Console]::In.ReadToEnd(); "
+            "(Get-Item -LiteralPath $path).VersionInfo.FileVersion",
         ]
         try:
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+            completed = subprocess.run(
+                command,
+                input=str(path),
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
         except (OSError, subprocess.SubprocessError):
             return None
         value = completed.stdout.strip()

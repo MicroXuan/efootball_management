@@ -18,38 +18,21 @@ export class PlayerAuctionStateService {
   start(groupBindingId: string, actorUserId: string) {
     return this.withAuthorizedGroup(groupBindingId, actorUserId, async (tx, group) => {
       const batch = await this.batchForGroup(tx, group.id, ['READY']);
-      await this.locks.lockBatch(tx, batch.id);
-      const lot = await tx.playerAuctionLot.findFirst({ where: { batchId: batch.id, status: 'QUEUED' }, orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] });
-      if (!lot) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '没有可开始的拍卖球员', 409);
-      await this.locks.lockLot(tx, lot.id);
-      const now = await this.locks.now(tx);
-      const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
-      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, pausedRemainingMs: null, version: { increment: 1 } } });
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', currentLotId: lot.id, startedAt: batch.startedAt ?? now, version: { increment: 1 } } });
-      return { transition: 'STARTED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
+      return this.startBatch(tx, batch.id);
     });
   }
 
   pause(groupBindingId: string, actorUserId: string) {
     return this.withAuthorizedGroup(groupBindingId, actorUserId, async (tx, group) => {
-      const { batch, lot } = await this.activeContext(tx, group.id, 'ACTIVE');
-      const now = await this.locks.now(tx);
-      const remaining = Math.max(0, (lot.deadlineAt?.getTime() ?? now.getTime()) - now.getTime());
-      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'PAUSED', deadlineAt: null, pausedRemainingMs: remaining, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'PAUSED', version: { increment: 1 } } });
-      return { transition: 'PAUSED' as const, batchId: batch.id, lotId: lot.id, remainingMs: remaining };
+      const batch = await this.batchForGroup(tx, group.id, ['ACTIVE']);
+      return this.pauseBatch(tx, batch.id);
     });
   }
 
   resume(groupBindingId: string, actorUserId: string) {
     return this.withAuthorizedGroup(groupBindingId, actorUserId, async (tx, group) => {
-      const { batch, lot } = await this.activeContext(tx, group.id, 'PAUSED');
-      const now = await this.locks.now(tx);
-      const remaining = lot.pausedRemainingMs ?? FULL_DURATION_MS;
-      const deadlineAt = new Date(now.getTime() + remaining);
-      await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', version: { increment: 1 } } });
-      return { transition: 'RESUMED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
+      const batch = await this.batchForGroup(tx, group.id, ['PAUSED']);
+      return this.resumeBatch(tx, batch.id);
     });
   }
 
@@ -86,8 +69,45 @@ export class PlayerAuctionStateService {
     });
   }
 
+  async startBatch(tx: Prisma.TransactionClient, batchId: string, expectedVersion?: number) {
+    await this.locks.lockBatch(tx, batchId);
+    const batch = await tx.playerAuctionBatch.findUnique({ where: { id: batchId } });
+    if (!batch || batch.status !== 'READY') throw new PlayerAuctionError('AUCTION_STATE_INVALID', '只有待开始的拍卖可以开始', 409);
+    if (expectedVersion !== undefined && batch.version !== expectedVersion) throw new PlayerAuctionError('VERSION_CONFLICT', '拍卖配置已更新，请刷新后重试', 409);
+    const lot = await tx.playerAuctionLot.findFirst({ where: { batchId, status: 'QUEUED' }, orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] });
+    if (!lot) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '没有可开始的拍卖球员', 409);
+    await this.locks.lockLot(tx, lot.id);
+    const now = await this.locks.now(tx);
+    const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
+    await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, pausedRemainingMs: null, version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', currentLotId: lot.id, startedAt: batch.startedAt ?? now, version: { increment: 1 } } });
+    return { transition: 'STARTED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
+  }
+
+  async pauseBatch(tx: Prisma.TransactionClient, batchId: string, expectedVersion?: number) {
+    const { batch, lot } = await this.batchContext(tx, batchId, 'ACTIVE', expectedVersion);
+    const now = await this.locks.now(tx);
+    const remaining = Math.max(0, (lot.deadlineAt?.getTime() ?? now.getTime()) - now.getTime());
+    await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'PAUSED', deadlineAt: null, pausedRemainingMs: remaining, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'PAUSED', version: { increment: 1 } } });
+    return { transition: 'PAUSED' as const, batchId: batch.id, lotId: lot.id, remainingMs: remaining };
+  }
+
+  async resumeBatch(tx: Prisma.TransactionClient, batchId: string, expectedVersion?: number) {
+    const { batch, lot } = await this.batchContext(tx, batchId, 'PAUSED', expectedVersion);
+    const now = await this.locks.now(tx);
+    const remaining = lot.pausedRemainingMs ?? FULL_DURATION_MS;
+    const deadlineAt = new Date(now.getTime() + remaining);
+    await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', version: { increment: 1 } } });
+    return { transition: 'RESUMED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
+  }
+
   private withAuthorizedGroup<T>(groupBindingId: string, actorUserId: string, work: (tx: Prisma.TransactionClient, group: { id: string; leagueId: string }) => Promise<T>) {
     return this.prisma.$transaction(async (tx) => {
+      const snapshot = await tx.wechatGroupBinding.findUnique({ where: { id: groupBindingId } });
+      if (!snapshot?.enabled) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未绑定或已停用', 409);
+      await this.locks.lockLeague(tx, snapshot.leagueId);
       await this.locks.lockGroup(tx, groupBindingId);
       const group = await tx.wechatGroupBinding.findUnique({ where: { id: groupBindingId } });
       if (!group?.enabled) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未绑定或已停用', 409);
@@ -103,10 +123,11 @@ export class PlayerAuctionStateService {
     return batch;
   }
 
-  private async activeContext(tx: Prisma.TransactionClient, groupBindingId: string, status: 'ACTIVE' | 'PAUSED') {
-    const batch = await this.batchForGroup(tx, groupBindingId, [status]);
-    await this.locks.lockBatch(tx, batch.id);
-    if (!batch.currentLotId) throw new PlayerAuctionError('AUCTION_CURRENT_LOT_MISSING', '当前没有拍卖球员', 409);
+  private async batchContext(tx: Prisma.TransactionClient, batchId: string, status: 'ACTIVE' | 'PAUSED', expectedVersion?: number) {
+    await this.locks.lockBatch(tx, batchId);
+    const batch = await tx.playerAuctionBatch.findUnique({ where: { id: batchId } });
+    if (!batch || batch.status !== status || !batch.currentLotId) throw new PlayerAuctionError('AUCTION_STATE_INVALID', '拍卖状态不一致', 409);
+    if (expectedVersion !== undefined && batch.version !== expectedVersion) throw new PlayerAuctionError('VERSION_CONFLICT', '拍卖配置已更新，请刷新后重试', 409);
     await this.locks.lockLot(tx, batch.currentLotId);
     const lot = await tx.playerAuctionLot.findUnique({ where: { id: batch.currentLotId } });
     if (!lot || lot.status !== status) throw new PlayerAuctionError('AUCTION_STATE_INVALID', '拍卖状态不一致', 409);

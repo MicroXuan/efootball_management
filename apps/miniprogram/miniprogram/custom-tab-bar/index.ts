@@ -1,6 +1,9 @@
 import { tabIndexForRoute, tabRouteForIndex } from './tabbar.viewmodel'
 
 type TabEvent = { currentTarget: { dataset: { index?: number } } }
+type TabLeaveAwarePage = {
+  beforeTabLeave?: (navigate: () => void) => void
+}
 
 Component({
   data: {
@@ -26,7 +29,14 @@ Component({
       const url = tabRouteForIndex(index)
       if (!url || index === this.data.selected) return
       this.setData({ selected: index })
-      wx.switchTab({ url })
+      const navigate = () => wx.switchTab({ url })
+      const pages = getCurrentPages()
+      const current = pages[pages.length - 1] as unknown as TabLeaveAwarePage | undefined
+      if (current?.beforeTabLeave) {
+        current.beforeTabLeave(navigate)
+        return
+      }
+      navigate()
     },
   },
 })

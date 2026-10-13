@@ -3,7 +3,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .catalog-page {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: calc(env(safe-area-inset-top) + 12rpx) 26rpx calc(env(safe-area-inset-bottom) + 44rpx);
+  padding: calc(env(safe-area-inset-top) + 12rpx) 26rpx calc(env(safe-area-inset-bottom) + 190rpx);
   background:
     radial-gradient(circle at 8% 0%, rgba(182, 241, 58, 0.12), transparent 28%),
     #0e1417;
