@@ -19,6 +19,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .section-stack { display: flex; flex-direction: column; gap: 20rpx; }
 .panel, .match-card, .standing-table, .empty-panel { padding: 26rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
 .panel-title { display: block; margin: 8rpx 0 20rpx; font-size: 29rpx; font-weight: 800; }
+.panel-title--compact { margin-top: 0; }
 .fact { padding: 17rpx 0; border-top: 1rpx solid #2d393f; color: #c6d1cb; font-size: 22rpx; }
 .fact text:last-child { color: #f4f7f8; }
 .rule-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
@@ -30,11 +31,17 @@ page { background: #0e1417; color: #f4f7f8; }
 .account-name { color: #f4f7f8; font-size: 24rpx; }.account-meta { margin-top: 5rpx; font-size: 18rpx; }
 .team-entry-hint { padding: 24rpx; display: grid; gap: 8rpx; border: 1rpx dashed #46545b; border-radius: 20rpx; color: #7e8b91; }
 .team-entry-hint text:first-child { color: #f4f7f8; font-weight: 700; }
-.registered-team { border-color: rgba(182,241,58,.34); background: linear-gradient(145deg, rgba(182,241,58,.08), #151d21); }
 .registration-actions { padding: 24rpx; display: flex; flex-direction: column; gap: 18rpx; border: 2rpx solid rgba(182,241,58,.52); border-radius: 24rpx; background: linear-gradient(135deg, rgba(182,241,58,.12), #151d21 58%); box-shadow: 0 18rpx 42rpx rgba(0,0,0,.22); }
 .registration-actions__head { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
 .registration-actions__title { display: block; margin-top: 7rpx; color: #f4f7f8; font-size: 28rpx; font-weight: 800; }
 .registration-actions__quota { flex: none; color: #b6f13a; font-size: 23rpx; font-weight: 800; }
+.registration-actions__team { padding-top: 18rpx; border-top: 1rpx solid rgba(182,241,58,.2); }
+.registration-actions__team-label { display: block; margin-bottom: 10rpx; color: #aab5ba; font-size: 19rpx; }
+.registration-actions__team .account { margin-top: 0; }
+.registration-actions__team-row { padding: 18rpx 20rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; border: 1rpx solid rgba(182,241,58,.42); border-radius: 16rpx; background: rgba(182,241,58,.06); }
+.registration-actions__team-row text:first-child { color: #f4f7f8; font-size: 23rpx; font-weight: 700; }
+.registration-actions__team-row text:last-child { color: #b6f13a; font-size: 18rpx; }
+.registration-actions button { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 0 24rpx; line-height: 1.2; }
 .registration-actions .primary-button, .registration-actions .danger-button { width: 100%; margin: 0; }
 .registration-actions .outline-button + .danger-button { margin-top: 12rpx; }
 .cup-participants-head { display: flex; align-items: center; justify-content: space-between; }

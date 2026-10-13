@@ -23,7 +23,7 @@
     </view>
 
     <view wx:if="{{activeTab === 'overview'}}" class="section-stack">
-      <view class="panel"><text class="panel-kicker">报名信息</text><text class="panel-title">报名信息</text>
+      <view class="panel"><text class="panel-title panel-title--compact">报名信息</text>
         <view class="fact"><text>报名时间</text><text>{{registrationWindow}}</text></view>
         <view class="fact"><text>开赛时间</text><text>{{startLabel}}</text></view>
         <view class="fact"><text>赛制</text><text>{{isCup ? (detail.competitionType === 'GROUP_KNOCKOUT_CUP' ? '小组赛 + 淘汰赛' : '单场淘汰') : '个人单循环'}}</text></view>
@@ -38,22 +38,22 @@
           <text>{{item.eligible ? (selectedAccountId === item.id ? '已选' : '选择') : item.disabledReason}}</text>
         </view>
       </view>
-      <view wx:if="{{loggedIn && isCup && (!cupRegistration || cupRegistration.status === 'WITHDRAWN')}}" class="panel account-panel">
-        <text class="panel-kicker">赛季球队</text><text class="panel-title">使用本赛季球队报名</text>
-        <view wx:if="{{seasonEntry}}" class="account {{seasonEntry.status === 'APPROVED' ? 'is-selected' : 'is-disabled'}}">
-          <view><text class="account-name">{{seasonEntry.teamNameSnapshot}}</text><text class="account-meta">{{seasonEntry.teamShortNameSnapshot}} · 球队编号 {{seasonEntry.teamNumberSnapshot === null ? '—' : seasonEntry.teamNumberSnapshot}}</text></view>
-          <text>{{seasonEntry.status === 'APPROVED' ? '符合资格' : '尚未通过审核'}}</text>
-        </view>
-        <view wx:else class="team-entry-hint"><text>暂无本赛季参赛球队</text><text>请先在联赛页面完成赛季报名或续赛确认。</text></view>
-      </view>
-      <view wx:if="{{isCup && cupRegistration && cupRegistration.status === 'APPROVED'}}" class="panel registered-team">
-        <text class="panel-kicker">已报名球队</text><text class="panel-title">{{cupRegistration.teamName}}</text>
-        <text class="account-meta">报名状态 · {{cupRegistration.status === 'APPROVED' ? '已通过' : '已撤回'}}</text>
-      </view>
       <view class="registration-actions">
         <view class="registration-actions__head">
           <view><text class="panel-kicker">报名操作</text><text class="registration-actions__title">{{(isCup && cupRegistration && cupRegistration.status === 'APPROVED') || (!isCup && registration && registration.status === 'APPROVED') ? '参赛席位已确认' : '确认参赛资格'}}</text></view>
           <text class="registration-actions__quota">{{detail.participantCount}} / {{detail.participantLimit}}</text>
+        </view>
+        <view wx:if="{{loggedIn && isCup && (!cupRegistration || cupRegistration.status === 'WITHDRAWN')}}" class="registration-actions__team">
+          <text class="registration-actions__team-label">使用本赛季球队报名</text>
+          <view wx:if="{{seasonEntry}}" class="account {{seasonEntry.status === 'APPROVED' ? 'is-selected' : 'is-disabled'}}">
+            <view><text class="account-name">{{seasonEntry.teamNameSnapshot}}</text><text class="account-meta">{{seasonEntry.teamShortNameSnapshot}} · 球队编号 {{seasonEntry.teamNumberSnapshot === null ? '—' : seasonEntry.teamNumberSnapshot}}</text></view>
+            <text>{{seasonEntry.status === 'APPROVED' ? '符合资格' : '尚未通过审核'}}</text>
+          </view>
+          <view wx:else class="team-entry-hint"><text>暂无本赛季参赛球队</text><text>请先在联赛页面完成赛季报名或续赛确认。</text></view>
+        </view>
+        <view wx:elif="{{isCup && cupRegistration && cupRegistration.status === 'APPROVED'}}" class="registration-actions__team registration-actions__team--confirmed">
+          <text class="registration-actions__team-label">参赛球队</text>
+          <view class="registration-actions__team-row"><text>{{cupRegistration.teamName}}</text><text>报名状态 · 已通过</text></view>
         </view>
         <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
         <button wx:if="{{!loggedIn}}" class="primary-button" bindtap="register">登录后报名</button>
