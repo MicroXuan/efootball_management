@@ -61,7 +61,9 @@ Page({
   },
   manage() { wx.navigateTo({ url: `/pages/competition-manage/index?id=${encodeURIComponent(this.data.id)}` }) },
   openBracketPanorama() {
-    wx.navigateTo({ url: `/pages/cup-bracket-panorama/index?id=${encodeURIComponent(this.data.id)}` })
+    const myTeamName = this.data.cupRegistration?.teamName ?? this.data.seasonEntry?.teamNameSnapshot ?? ''
+    const mineQuery = myTeamName ? `&mine=${encodeURIComponent(myTeamName)}` : ''
+    wx.navigateTo({ url: `/pages/cup-bracket-panorama/index?id=${encodeURIComponent(this.data.id)}${mineQuery}` })
   },
   openMyMatches() {
     if (this.data.isCup) {

@@ -12,6 +12,8 @@ type PanoramaPage = {
   zoomOut(): void
   resetViewport(): void
   trackScale(event: { detail: { scale: number } }): void
+  switchView(event: { currentTarget: { dataset: { view?: 'route' | 'board' } } }): void
+  toggleMine(): void
 }
 
 let page: PanoramaPage
@@ -53,7 +55,20 @@ describe('cup bracket panorama page', () => {
     expect(mocks.cupParticipants).toHaveBeenCalledWith('cup-1')
     expect(instance.data.competitionName).toBe('足总杯')
     expect(instance.data.rounds).toHaveLength(1)
+    expect(instance.data.viewMode).toBe('route')
     expect(instance.data.loading).toBe(false)
+    expect(wx.setNavigationBarTitle).toHaveBeenCalledWith({ title: '足总杯 · 淘汰签表' })
+  })
+
+  it('switches between the readable route and complete board and toggles my team focus', () => {
+    const instance = context()
+    instance.data.focusMine = false
+
+    page.switchView.call(instance, { currentTarget: { dataset: { view: 'board' } } })
+    expect(instance.data.viewMode).toBe('board')
+
+    page.toggleMine.call(instance)
+    expect(instance.data.focusMine).toBe(true)
   })
 
   it('offers bounded zoom controls and a readable reset scale', () => {

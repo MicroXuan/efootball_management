@@ -1,6 +1,6 @@
 import type { CupBracketView } from '@efm/contracts'
 import { competitionsApi } from '../../services/competitions'
-import { panoramaBoard, type PanoramaRound } from './panorama.viewmodel'
+import { panoramaBoard, type PanoramaRound, type PanoramaRouteSection } from './panorama.viewmodel'
 
 const MIN_SCALE = 0.6
 const MAX_SCALE = 1.6
@@ -15,13 +15,19 @@ Page({
     competitionName: '',
     bracket: null as CupBracketView | null,
     rounds: [] as PanoramaRound[],
+    routeSections: [] as PanoramaRouteSection[],
+    myRouteSections: [] as PanoramaRouteSection[],
     boardWidth: 0,
     boardHeight: 0,
     scale: DEFAULT_SCALE,
+    viewMode: 'route' as 'route' | 'board',
+    focusMine: false,
+    hasMyTeam: false,
+    myTeamName: '',
   },
 
   onLoad(options: Record<string, string | undefined>) {
-    this.setData({ id: options.id ?? '' })
+    this.setData({ id: options.id ?? '', myTeamName: options.mine ?? '' })
     void this.load()
   },
 
@@ -39,14 +45,17 @@ Page({
         competitionsApi.bracket(this.data.id),
         competitionsApi.cupParticipants(this.data.id),
       ])
-      const board = panoramaBoard(bracket, participants)
-      wx.setNavigationBarTitle({ title: `${detail.name} · 全景签表` })
+      const board = panoramaBoard(bracket, participants, this.data.myTeamName)
+      wx.setNavigationBarTitle({ title: `${detail.name} · 淘汰签表` })
       this.setData({
         competitionName: detail.name,
         bracket,
         rounds: board.rounds,
+        routeSections: board.routeSections,
+        myRouteSections: board.myRouteSections,
         boardWidth: board.width,
         boardHeight: board.height,
+        hasMyTeam: board.hasMyTeam,
         errorMessage: bracket ? '' : '淘汰签表尚未生成。',
       })
     } catch {
@@ -55,6 +64,13 @@ Page({
       this.setData({ loading: false })
     }
   },
+
+  switchView(event: { currentTarget: { dataset: { view?: 'route' | 'board' } } }) {
+    const viewMode = event.currentTarget.dataset.view
+    if (viewMode) this.setData({ viewMode })
+  },
+
+  toggleMine() { this.setData({ focusMine: !this.data.focusMine }) },
 
   zoomIn() {
     this.setData({ scale: Math.min(MAX_SCALE, Number((this.data.scale + SCALE_STEP).toFixed(1))) })

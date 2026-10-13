@@ -127,7 +127,7 @@
           <view><text class="panel-kicker">淘汰轨道</text><text class="panel-title">通往决赛</text></view>
           <view class="bracket-summary__actions">
             <text class="bracket-current">{{bracket.currentRoundNumber ? '第 ' + bracket.currentRoundNumber + ' 轮' : '已决出冠军'}}</text>
-            <button class="bracket-panorama-button" bindtap="openBracketPanorama">查看全景签表</button>
+            <button class="bracket-panorama-button" bindtap="openBracketPanorama">查看晋级路线</button>
           </view>
         </view>
         <scroll-view class="bracket-scroll" scroll-x enhanced show-scrollbar="{{false}}">

@@ -1,59 +1,111 @@
 <view class="panorama-page">
-  <loading-state wx:if="{{loading}}" label="正在展开完整签表" />
+  <loading-state wx:if="{{loading}}" label="正在整理淘汰赛路线" />
   <view wx:elif="{{errorMessage}}" class="panorama-state">
     <text class="panorama-state__code">BRACKET VIEW</text>
-    <text class="panorama-state__title">暂时无法查看全景签表</text>
+    <text class="panorama-state__title">暂时无法查看淘汰签表</text>
     <text class="panorama-state__copy">{{errorMessage}}</text>
     <button class="panorama-state__button" bindtap="retry">重新加载</button>
   </view>
   <block wx:else>
     <view class="panorama-toolbar">
       <view class="panorama-heading">
-        <text class="panorama-heading__eyebrow">淘汰赛全景</text>
+        <text class="panorama-heading__eyebrow">淘汰赛路线</text>
         <text class="panorama-heading__title">{{competitionName}}</text>
-        <text class="panorama-heading__hint">双指缩放 · 单指拖动 · 查看完整晋级路径</text>
       </view>
-      <view class="zoom-controls">
-        <button aria-label="缩小签表" bindtap="zoomOut">−</button>
-        <button class="zoom-controls__reset" bindtap="resetViewport">{{scale * 100}}%</button>
-        <button aria-label="放大签表" bindtap="zoomIn">＋</button>
+      <view class="view-switch" aria-label="签表查看方式">
+        <button class="{{viewMode === 'route' ? 'is-active' : ''}}" data-view="route" bindtap="switchView">晋级路线</button>
+        <button class="{{viewMode === 'board' ? 'is-active' : ''}}" data-view="board" bindtap="switchView">完整签表</button>
       </view>
     </view>
 
-    <movable-area class="panorama-viewport" scale-area>
-      <movable-view class="panorama-mover" direction="all" out-of-bounds scale scale-min="0.6" scale-max="1.6" scale-value="{{scale}}" bindscale="trackScale" style="width: {{boardWidth}}rpx; height: {{boardHeight}}rpx;">
-        <view class="board-glow board-glow--left"></view>
-        <view class="board-glow board-glow--right"></view>
-        <view class="panorama-board" style="width: {{boardWidth}}rpx; height: {{boardHeight}}rpx;">
-          <view wx:for="{{rounds}}" wx:key="roundNumber" class="panorama-round {{item.roundNumber === bracket.currentRoundNumber ? 'is-current' : ''}}">
-            <view class="panorama-round__head">
-              <text>{{item.displayName}}</text>
-              <text>{{item.status === 'PUBLISHED' ? '进行中' : '待开始'}}</text>
+    <view wx:if="{{viewMode === 'route'}}" class="route-shell">
+      <view class="route-tools">
+        <view><text>竖屏阅读</text><text>从两个半区一路看到冠军战</text></view>
+        <button wx:if="{{hasMyTeam}}" class="mine-toggle {{focusMine ? 'is-active' : ''}}" bindtap="toggleMine">{{focusMine ? '查看全部' : '只看我的球队'}}</button>
+      </view>
+      <scroll-view class="route-viewport" scroll-y enhanced show-scrollbar="{{false}}">
+        <view class="route-content">
+          <view wx:for="{{focusMine ? myRouteSections : routeSections}}" wx:key="key" class="route-section route-section--{{item.key}}">
+            <view class="route-section__head">
+              <view class="route-section__badge">{{item.key === 'upper' ? '上' : item.key === 'lower' ? '下' : '冠'}}</view>
+              <view class="route-section__title">
+                <text wx:if="{{item.key === 'upper'}}">上半区</text>
+                <text wx:elif="{{item.key === 'lower'}}">下半区</text>
+                <text wx:else>冠军战</text>
+                <text>{{item.subtitle}}</text>
+              </view>
             </view>
-            <view class="panorama-round__pairings" style="padding-top: {{item.topOffset}}rpx; gap: {{item.pairingGap}}rpx;">
-              <view wx:for="{{item.pairings}}" wx:for-item="pairing" wx:for-index="pairingIndex" wx:key="id" class="panorama-pairing">
-                <view class="panorama-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}">
-                  <image wx:if="{{pairing.homeParticipant && pairing.homeParticipant.teamLogoUrl}}" src="{{pairing.homeParticipant.teamLogoUrl}}" mode="aspectFit" />
-                  <view wx:else class="panorama-team__crest">{{pairing.homeParticipant ? '队' : '?'}}</view>
-                  <view class="panorama-team__identity"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.homeParticipant && pairing.homeParticipant.teamNumber !== null ? '#' + pairing.homeParticipant.teamNumber : '席位待确认'}}</text></view>
-                  <text class="panorama-team__score">{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
+            <view wx:for="{{item.rounds}}" wx:for-item="round" wx:key="roundNumber" class="route-round">
+              <view class="route-round__head">
+                <text>{{round.displayName}}</text>
+                <text>{{round.roundNumber === bracket.currentRoundNumber ? '当前轮次' : round.status === 'PUBLISHED' ? '已发布' : '待开始'}}</text>
+              </view>
+              <view class="route-pairings">
+                <view wx:for="{{round.pairings}}" wx:for-item="pairing" wx:key="id" class="route-pairing {{pairing.isMyMatch ? 'is-my-match' : ''}}">
+                  <view class="route-pairing__meta"><text>第 {{pairing.pairingNumber}} 场</text><text>{{pairing.match && (pairing.match.status === 'CONFIRMED' || pairing.match.status === 'ADMIN_DECIDED') ? '已结束' : '待比赛'}}</text></view>
+                  <view class="route-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}} {{pairing.homeParticipant && pairing.homeParticipant.isMine ? 'is-mine' : ''}}">
+                    <image wx:if="{{pairing.homeParticipant && pairing.homeParticipant.teamLogoUrl}}" src="{{pairing.homeParticipant.teamLogoUrl}}" mode="aspectFit" />
+                    <view wx:else class="route-team__crest">{{pairing.homeParticipant ? '队' : '?'}}</view>
+                    <view class="route-team__identity"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.homeParticipant && pairing.homeParticipant.teamNumber !== null ? '球队编号 ' + pairing.homeParticipant.teamNumber : '席位待确认'}}</text></view>
+                    <text class="route-team__score">{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
+                  </view>
+                  <view class="route-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}} {{pairing.awayParticipant && pairing.awayParticipant.isMine ? 'is-mine' : ''}}">
+                    <image wx:if="{{pairing.awayParticipant && pairing.awayParticipant.teamLogoUrl}}" src="{{pairing.awayParticipant.teamLogoUrl}}" mode="aspectFit" />
+                    <view wx:else class="route-team__crest">{{pairing.awayParticipant ? '队' : '?'}}</view>
+                    <view class="route-team__identity"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.awayParticipant && pairing.awayParticipant.teamNumber !== null ? '球队编号 ' + pairing.awayParticipant.teamNumber : '席位待确认'}}</text></view>
+                    <text class="route-team__score">{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
+                  </view>
                 </view>
-                <view class="panorama-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}">
-                  <image wx:if="{{pairing.awayParticipant && pairing.awayParticipant.teamLogoUrl}}" src="{{pairing.awayParticipant.teamLogoUrl}}" mode="aspectFit" />
-                  <view wx:else class="panorama-team__crest">{{pairing.awayParticipant ? '队' : '?'}}</view>
-                  <view class="panorama-team__identity"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.awayParticipant && pairing.awayParticipant.teamNumber !== null ? '#' + pairing.awayParticipant.teamNumber : '席位待确认'}}</text></view>
-                  <text class="panorama-team__score">{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
-                </view>
-                <view wx:if="{{item.roundNumber !== rounds.length}}" class="bracket-connector">
-                  <view class="bracket-connector__lead"></view>
-                  <view class="bracket-connector__branch" style="height: {{pairing.connectorHeight}}rpx; top: {{pairing.connectorOffset < 0 ? pairing.connectorOffset : 0}}rpx;"></view>
-                  <view class="bracket-connector__tail" style="top: {{pairing.connectorOffset}}rpx;"></view>
+              </view>
+              <view wx:if="{{round.roundNumber !== bracket.rounds.length}}" class="route-advance"><text>胜者晋级</text><view></view></view>
+            </view>
+          </view>
+          <view class="route-bottom-space"></view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view wx:else class="board-shell">
+      <view class="board-tools">
+        <text>双指缩放 · 单指拖动</text>
+        <view class="zoom-controls">
+          <button aria-label="缩小签表" bindtap="zoomOut">−</button>
+          <button class="zoom-controls__reset" bindtap="resetViewport">{{scale * 100}}%</button>
+          <button aria-label="放大签表" bindtap="zoomIn">＋</button>
+        </view>
+      </view>
+      <movable-area class="panorama-viewport" scale-area>
+        <movable-view class="panorama-mover" direction="all" out-of-bounds scale scale-min="0.6" scale-max="1.6" scale-value="{{scale}}" bindscale="trackScale" style="width: {{boardWidth}}rpx; height: {{boardHeight}}rpx;">
+          <view class="board-glow board-glow--left"></view>
+          <view class="board-glow board-glow--right"></view>
+          <view class="panorama-board" style="width: {{boardWidth}}rpx; height: {{boardHeight}}rpx;">
+            <view wx:for="{{rounds}}" wx:key="roundNumber" class="panorama-round {{item.roundNumber === bracket.currentRoundNumber ? 'is-current' : ''}}">
+              <view class="panorama-round__head"><text>{{item.displayName}}</text><text>{{item.status === 'PUBLISHED' ? '进行中' : '待开始'}}</text></view>
+              <view class="panorama-round__pairings" style="padding-top: {{item.topOffset}}rpx; gap: {{item.pairingGap}}rpx;">
+                <view wx:for="{{item.pairings}}" wx:for-item="pairing" wx:key="id" class="panorama-pairing {{pairing.isMyMatch ? 'is-my-match' : ''}}">
+                  <view class="panorama-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}">
+                    <image wx:if="{{pairing.homeParticipant && pairing.homeParticipant.teamLogoUrl}}" src="{{pairing.homeParticipant.teamLogoUrl}}" mode="aspectFit" />
+                    <view wx:else class="panorama-team__crest">{{pairing.homeParticipant ? '队' : '?'}}</view>
+                    <view class="panorama-team__identity"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.homeParticipant && pairing.homeParticipant.teamNumber !== null ? '#' + pairing.homeParticipant.teamNumber : '席位待确认'}}</text></view>
+                    <text class="panorama-team__score">{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
+                  </view>
+                  <view class="panorama-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}">
+                    <image wx:if="{{pairing.awayParticipant && pairing.awayParticipant.teamLogoUrl}}" src="{{pairing.awayParticipant.teamLogoUrl}}" mode="aspectFit" />
+                    <view wx:else class="panorama-team__crest">{{pairing.awayParticipant ? '队' : '?'}}</view>
+                    <view class="panorama-team__identity"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.awayParticipant && pairing.awayParticipant.teamNumber !== null ? '#' + pairing.awayParticipant.teamNumber : '席位待确认'}}</text></view>
+                    <text class="panorama-team__score">{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
+                  </view>
+                  <view wx:if="{{item.roundNumber !== rounds.length}}" class="bracket-connector">
+                    <view class="bracket-connector__lead"></view>
+                    <view class="bracket-connector__branch" style="height: {{pairing.connectorHeight}}rpx; top: {{pairing.connectorOffset < 0 ? pairing.connectorOffset : 0}}rpx;"></view>
+                    <view class="bracket-connector__tail" style="top: {{pairing.connectorOffset}}rpx;"></view>
+                  </view>
                 </view>
               </view>
             </view>
           </view>
-        </view>
-      </movable-view>
-    </movable-area>
+        </movable-view>
+      </movable-area>
+    </view>
   </block>
 </view>

@@ -120,6 +120,17 @@ describe('competition detail page loading', () => {
     })
   })
 
+  it('passes the registered team into the bracket route for my-team highlighting', () => {
+    const instance = context()
+    instance.data.cupRegistration = { teamName: '阿森纳' }
+
+    page.openBracketPanorama.call(instance)
+
+    expect(wx.navigateTo).toHaveBeenCalledWith({
+      url: '/pages/cup-bracket-panorama/index?id=cup-1&mine=%E9%98%BF%E6%A3%AE%E7%BA%B3',
+    })
+  })
+
   it('selects one cup stage at a time for the mobile matchday board', async () => {
     const instance = context()
     mocks.matches.mockResolvedValue([
