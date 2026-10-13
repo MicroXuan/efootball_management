@@ -161,7 +161,7 @@ describe('CupBracketsService', () => {
     expect(store.cupBracketProposal.create).not.toHaveBeenCalled();
   });
 
-  it('confirms a draft bracket, publishes only the first round, creates matches, and advances byes', async () => {
+  it('confirms group-stage qualifiers without requiring every registered team in the knockout bracket', async () => {
     const firstPairings = [{
       id: 'pairing-1', pairingNumber: 1,
       homeParticipantId: 'participant-1', awayParticipantId: null,
@@ -192,10 +192,17 @@ describe('CupBracketsService', () => {
       $queryRaw: jest.fn(async () => []),
       competition: {
         findUnique: jest.fn(async () => ({
-          id: 'cup-1', competitionType: 'KNOCKOUT_CUP', status: 'REGISTRATION_CLOSED', version: 5,
-          season: { leagueId: 'league-1' },
-          participants: ['participant-1', 'participant-2', 'participant-3'].map((id) => ({ id })),
-          stages: []
+          id: 'cup-1', competitionType: 'GROUP_KNOCKOUT_CUP', status: 'IN_PROGRESS', version: 5,
+          season: { leagueId: 'league-1' }, cupConfig: { qualifiersPerGroup: 3 },
+          participants: ['participant-1', 'participant-2', 'participant-3', 'participant-4', 'participant-5']
+            .map((id) => ({ id })),
+          stages: [{
+            sequence: 1, stageCode: 'GROUP_A', status: 'PUBLISHED',
+            matches: [{ officialResultVersionId: 'result-1' }],
+            standingsSnapshots: [{ rows: [1, 2, 3, 4, 5].map((rank) => ({
+              participantId: `participant-${rank}`, rank, tiePending: false
+            })) }]
+          }]
         })),
         updateMany: jest.fn(async () => ({ count: 1 }))
       },
