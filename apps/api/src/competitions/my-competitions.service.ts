@@ -165,6 +165,8 @@ export class MyCompetitionsService {
       id: record.id,
       competitionId: record.stage.competitionId,
       stageId: record.stageId,
+      stageCode: record.stage.stageCode,
+      stageDisplayName: record.stage.displayName,
       roundNumber: record.roundNumber,
       matchNumber: record.matchNumber,
       homeParticipant: {

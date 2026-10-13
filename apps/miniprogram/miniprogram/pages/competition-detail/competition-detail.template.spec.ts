@@ -26,4 +26,11 @@ describe('competition detail template', () => {
     expect(action).toBeGreaterThan(-1)
     expect(action).toBeLessThan(roster)
   })
+
+  it('hides points rules for cups and renders the complete bracket board', () => {
+    expect(markup).toContain('wx:if="{{!isCup}}" class="panel"')
+    expect(markup).toContain('bracketRounds')
+    expect(markup).toContain('item.topOffset')
+    expect(markup).toContain('item.pairingGap')
+  })
 })

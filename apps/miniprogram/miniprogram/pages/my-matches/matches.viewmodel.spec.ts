@@ -10,7 +10,8 @@ const participant = (overrides: Partial<CompetitionParticipantSummary> = {}): Co
 
 const response = (finished: boolean): MyMatchResponse => ({
   match: {
-    id: 'match-1', competitionId: 'competition-1', stageId: 'stage-1', roundNumber: 2, matchNumber: 8,
+    id: 'match-1', competitionId: 'competition-1', stageId: 'stage-1', stageCode: 'CHAMPION_A',
+    stageDisplayName: '冠军 A 组', roundNumber: 2, matchNumber: 8,
     homeParticipant: participant(),
     awayParticipant: participant({ id: 'participant-2', displayName: '北京国安', teamNumber: 9, teamName: '北京国安', teamLogoUrl: null, ownerDisplayName: '国安经理' }),
     plannedAt: null, status: finished ? 'CONFIRMED' : 'AWAITING_RESULT', version: 1,

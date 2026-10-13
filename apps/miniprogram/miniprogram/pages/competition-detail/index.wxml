@@ -15,7 +15,7 @@
       </view>
     </view>
 
-    <view class="tabs efm-equal-tabs {{showBracket ? 'tabs--four' : ''}}">
+    <view id="competition-tabs" class="tabs efm-equal-tabs {{showBracket ? 'tabs--four' : ''}}">
       <button class="tab {{activeTab === 'overview' ? 'is-active' : ''}}" data-tab="overview" bindtap="switchTab">概览</button>
       <button class="tab {{activeTab === 'schedule' ? 'is-active' : ''}}" data-tab="schedule" bindtap="switchTab">赛程</button>
       <button class="tab {{activeTab === 'standings' ? 'is-active' : ''}}" data-tab="standings" bindtap="switchTab">积分榜</button>
@@ -28,7 +28,7 @@
         <view class="fact"><text>开赛时间</text><text>{{startLabel}}</text></view>
         <view class="fact"><text>赛制</text><text>{{isCup ? (detail.competitionType === 'GROUP_KNOCKOUT_CUP' ? '小组赛 + 淘汰赛' : '单场淘汰') : '个人单循环'}}</text></view>
       </view>
-      <view class="panel"><text class="panel-kicker">规则版本 {{detail.activeRuleVersion}}</text><text class="panel-title">积分规则</text>
+      <view wx:if="{{!isCup}}" class="panel"><text class="panel-kicker">规则版本 {{detail.activeRuleVersion}}</text><text class="panel-title">积分规则</text>
         <view class="rule-grid"><text>胜 {{detail.rules.winPoints}}</text><text>平 {{detail.rules.drawPoints}}</text><text>负 {{detail.rules.lossPoints}}</text></view>
       </view>
       <view wx:if="{{loggedIn && !isCup && !registration}}" class="panel account-panel">
@@ -58,7 +58,7 @@
         <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text>
         <button wx:if="{{!loggedIn}}" class="primary-button" bindtap="register">登录后报名</button>
         <block wx:elif="{{(!isCup && registration && (registration.status === 'PENDING' || registration.status === 'APPROVED')) || (isCup && cupRegistration && cupRegistration.status === 'APPROVED')}}">
-          <button wx:if="{{(!isCup && registration.status === 'APPROVED') || isCup}}" class="outline-button wide" bindtap="openMyMatches">查看我的比赛</button>
+          <button wx:if="{{(!isCup && registration.status === 'APPROVED') || isCup}}" class="outline-button wide" bindtap="openMyMatches">{{isCup ? '查看本杯赛赛程' : '查看我的比赛'}}</button>
           <button class="danger-button" loading="{{acting}}" bindtap="withdraw">撤回报名</button>
         </block>
         <button wx:else class="primary-button" disabled="{{!registrationEnabled || acting}}" loading="{{acting}}" bindtap="register">{{registrationEnabled ? '提交报名' : registrationReason}}</button>
@@ -79,11 +79,23 @@
 
     <view wx:elif="{{activeTab === 'schedule'}}" class="section-stack">
       <view wx:if="{{matches.length === 0}}" class="empty-panel">赛程发布后会显示在这里。</view>
-      <view wx:for="{{matches}}" wx:key="id" class="match-card">
-        <text class="round">第 {{item.roundNumber}} 轮 · 第 {{item.matchNumber}} 场</text>
-        <view class="versus"><text>{{item.homeParticipant.displayName}}{{item.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{item.awayParticipant.displayName}}{{item.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
-        <text wx:if="{{item.officialResult}}" class="official-score">{{item.officialResult.homeScore}} : {{item.officialResult.awayScore}}</text>
-      </view>
+      <block wx:elif="{{isCup}}">
+        <view wx:for="{{scheduleSections}}" wx:key="stageId" class="cup-schedule-section">
+          <view class="cup-schedule-head"><view><text class="panel-kicker">杯赛阶段</text><text class="cup-schedule-title">{{item.stageDisplayName}}</text></view><text>{{item.matches.length}} 场</text></view>
+          <view wx:for="{{item.matches}}" wx:for-item="match" wx:key="id" class="match-card">
+            <text class="round">第 {{match.roundNumber}} 轮 · 第 {{match.matchNumber}} 场</text>
+            <view class="versus"><text>{{match.homeParticipant.displayName}}{{match.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{match.awayParticipant.displayName}}{{match.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
+            <text wx:if="{{match.officialResult}}" class="official-score">{{match.officialResult.homeScore}} : {{match.officialResult.awayScore}}</text>
+          </view>
+        </view>
+      </block>
+      <block wx:else>
+        <view wx:for="{{matches}}" wx:key="id" class="match-card">
+          <text class="round">第 {{item.roundNumber}} 轮 · 第 {{item.matchNumber}} 场</text>
+          <view class="versus"><text>{{item.homeParticipant.displayName}}{{item.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text class="vs">对阵</text><text>{{item.awayParticipant.displayName}}{{item.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text></view>
+          <text wx:if="{{item.officialResult}}" class="official-score">{{item.officialResult.homeScore}} : {{item.officialResult.awayScore}}</text>
+        </view>
+      </block>
     </view>
 
     <view wx:elif="{{activeTab === 'standings'}}" class="section-stack">
@@ -103,9 +115,9 @@
         </view>
         <scroll-view class="bracket-scroll" scroll-x enhanced show-scrollbar="{{false}}">
           <view class="bracket-track">
-            <view wx:for="{{bracket.rounds}}" wx:key="roundNumber" class="bracket-round {{item.roundNumber === bracket.currentRoundNumber ? 'is-current' : ''}}">
+            <view wx:for="{{bracketRounds}}" wx:key="roundNumber" class="bracket-round {{item.roundNumber === bracket.currentRoundNumber ? 'is-current' : ''}}">
               <view class="bracket-round-head"><text>{{item.displayName}}</text><text>{{item.status === 'PUBLISHED' ? '进行中' : '待开始'}}</text></view>
-              <view class="bracket-pairings">
+              <view class="bracket-pairings" style="padding-top: {{item.topOffset}}rpx; gap: {{item.pairingGap}}rpx;">
                 <view wx:for="{{item.pairings}}" wx:for-item="pairing" wx:key="id" class="bracket-pairing">
                   <view class="bracket-team {{pairing.winnerParticipant && pairing.homeParticipant && pairing.winnerParticipant.id === pairing.homeParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}{{pairing.homeParticipant && pairing.homeParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text>{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text></view>
                   <view class="bracket-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}{{pairing.awayParticipant && pairing.awayParticipant.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}}</text><text>{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text></view>

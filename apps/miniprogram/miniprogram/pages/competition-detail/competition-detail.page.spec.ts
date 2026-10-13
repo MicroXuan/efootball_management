@@ -22,6 +22,7 @@ vi.mock('../../services/api', () => ({
 type DetailPage = {
   data: Record<string, unknown>
   load(): Promise<void>
+  openMyMatches(): void
 }
 
 let page: DetailPage
@@ -62,7 +63,7 @@ const cup = {
 
 beforeAll(async () => {
   vi.stubGlobal('Page', (definition: DetailPage) => { page = definition })
-  vi.stubGlobal('wx', { stopPullDownRefresh: vi.fn() })
+  vi.stubGlobal('wx', { stopPullDownRefresh: vi.fn(), navigateTo: vi.fn(), pageScrollTo: vi.fn() })
   await import('./index')
 })
 
@@ -94,5 +95,16 @@ describe('competition detail page loading', () => {
     expect(mocks.managerDetail).not.toHaveBeenCalled()
     expect(mocks.bracket).not.toHaveBeenCalled()
     expect(instance.data.detail).toEqual(cup)
+  })
+
+  it('opens the current cup schedule without leaving the competition', () => {
+    const instance = context()
+    instance.data.isCup = true
+    instance.data.activeTab = 'overview'
+
+    page.openMyMatches.call(instance)
+
+    expect(instance.data.activeTab).toBe('schedule')
+    expect(wx.navigateTo).not.toHaveBeenCalled()
   })
 })

@@ -13,7 +13,7 @@ import { ApiError, api } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
 import { session } from '../../services/session'
 import { competitionErrorMessage, formatLocalDate, lifecycleLabel } from '../competitions/competitions.viewmodel'
-import { cupRegistrationAvailability, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type EligibleAccount } from './detail.viewmodel'
+import { bracketBoardRounds, cupRegistrationAvailability, cupScheduleSections, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type BracketBoardRound, type CupScheduleSection, type EligibleAccount } from './detail.viewmodel'
 
 type DetailTab = 'overview' | 'schedule' | 'standings' | 'bracket'
 
@@ -23,8 +23,10 @@ Page({
     detail: null as CompetitionDetail | null,
     lifecycleName: '', registrationWindow: '', startLabel: '',
     matches: [] as CompetitionMatchResponse[],
+    scheduleSections: [] as CupScheduleSection[],
     standings: null as StandingsSnapshotResponse | null,
     bracket: null as CupBracketView | null,
+    bracketRounds: [] as BracketBoardRound[],
     showBracket: false,
     isCup: false,
     standingsIsEmpty: true,
@@ -50,7 +52,14 @@ Page({
     if (event.currentTarget.dataset.tab) this.setData({ activeTab: event.currentTarget.dataset.tab })
   },
   manage() { wx.navigateTo({ url: `/pages/competition-manage/index?id=${encodeURIComponent(this.data.id)}` }) },
-  openMyMatches() { wx.navigateTo({ url: '/pages/my-matches/index' }) },
+  openMyMatches() {
+    if (this.data.isCup) {
+      this.setData({ activeTab: 'schedule' })
+      wx.pageScrollTo({ selector: '#competition-tabs', duration: 300 })
+      return
+    }
+    wx.navigateTo({ url: '/pages/my-matches/index' })
+  },
   selectAccount(event: { currentTarget: { dataset: { id?: string; eligible?: boolean } } }) {
     if (event.currentTarget.dataset.eligible && event.currentTarget.dataset.id) {
       this.setData({ selectedAccountId: event.currentTarget.dataset.id })
@@ -101,8 +110,10 @@ Page({
         registrationWindow: `截止 ${formatLocalDate(detail.registrationClosesAt)}`,
         startLabel: formatLocalDate(detail.startsAt),
         matches,
+        scheduleSections: showBracket ? cupScheduleSections(matches) : [],
         standings,
         bracket,
+        bracketRounds: bracketBoardRounds(bracket),
         showBracket,
         isCup: showBracket,
         standingsIsEmpty: standingsEmpty(standings),

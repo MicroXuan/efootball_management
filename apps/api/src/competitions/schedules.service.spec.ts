@@ -159,6 +159,44 @@ describe('SchedulesService', () => {
     await expect(service.listPublic(event.id)).resolves.toHaveLength(6);
   });
 
+  it('returns every published cup stage with its display identity', async () => {
+    const event = await competition(4);
+    const participants = await prisma.competitionParticipant.findMany({
+      where: { competitionId: event.id }, orderBy: { admissionSequence: 'asc' }
+    });
+    const group = await prisma.competitionStage.create({
+      data: {
+        competitionId: event.id, sequence: 1, stageCode: 'GROUP_A', displayName: 'A 组',
+        capacity: 4, format: 'ROUND_ROBIN', status: 'PUBLISHED'
+      }
+    });
+    const final = await prisma.competitionStage.create({
+      data: {
+        competitionId: event.id, sequence: 2, stageCode: 'FINAL', displayName: '决赛',
+        capacity: 2, format: 'SINGLE_ELIMINATION', status: 'PUBLISHED'
+      }
+    });
+    await prisma.competitionMatch.createMany({ data: [{
+      stageId: group.id, roundNumber: 1, matchNumber: 1,
+      homeParticipantId: participants[0]!.id, awayParticipantId: participants[1]!.id,
+      pairingKey: 'group-a-1'
+    }, {
+      stageId: final.id, roundNumber: 1, matchNumber: 1,
+      homeParticipantId: participants[2]!.id, awayParticipantId: participants[3]!.id,
+      pairingKey: 'final-1'
+    }] });
+
+    const matches = await service.listPublic(event.id);
+
+    expect(matches.map((match) => ({
+      stageCode: (match as unknown as Record<string, unknown>).stageCode,
+      stageDisplayName: (match as unknown as Record<string, unknown>).stageDisplayName,
+    }))).toEqual([
+      { stageCode: 'GROUP_A', stageDisplayName: 'A 组' },
+      { stageCode: 'FINAL', stageDisplayName: '决赛' },
+    ]);
+  });
+
   it('rolls back draft replacement when regenerated matches cannot be inserted', async () => {
     const event = await competition(4);
     const original = await service.generate(actorId, event.id, randomUUID());
@@ -234,7 +272,7 @@ describe('tiered stage schedules', () => {
           return {
             id: `match-${index + 1}`, ...match, plannedAt: null, status: 'SCHEDULED', version: 1,
             createdAt: now, updatedAt: now, homeParticipant: home, awayParticipant: away,
-            officialResultVersion: null
+            officialResultVersion: null, stage
           };
         }))
       },

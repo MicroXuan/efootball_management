@@ -585,6 +585,8 @@ export const CompetitionMatchResponseSchema = z.object({
   id: ResourceIdSchema,
   competitionId: ResourceIdSchema,
   stageId: ResourceIdSchema,
+  stageCode: CompetitionStageCodeSchema.nullable(),
+  stageDisplayName: z.string().trim().min(1).max(64).nullable(),
   roundNumber: z.number().int().positive(),
   matchNumber: z.number().int().positive(),
   homeParticipant: CompetitionParticipantSummarySchema,

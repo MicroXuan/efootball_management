@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { CompetitionDetail, GameAccountResponse, StandingsSnapshotResponse } from '@efm/contracts'
-import { cupRegistrationAvailability, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty } from './detail.viewmodel'
+import type { CompetitionDetail, CompetitionMatchResponse, CupBracketView, GameAccountResponse, StandingsSnapshotResponse } from '@efm/contracts'
+import * as detailViewModel from './detail.viewmodel'
+
+const { cupRegistrationAvailability, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty } = detailViewModel
 
 const detail = {
   id: 'competition-1', platform: 'MOBILE', serverRegion: 'GLOBAL', status: 'REGISTRATION_OPEN',
@@ -49,5 +51,55 @@ describe('competition detail view model', () => {
     expect(cupRegistrationAvailability(cup, null, null).reason).toBe('你还没有本赛季的参赛球队')
     expect(cupRegistrationAvailability(cup, { status: 'PENDING' }, null).reason).toBe('赛季球队尚未通过审核')
     expect(cupRegistrationAvailability(cup, { status: 'APPROVED' }, { status: 'APPROVED' }).reason).toBe('球队已经报名')
+  })
+
+  it('lays out every knockout round as one aligned tournament board', () => {
+    const build = (detailViewModel as unknown as {
+      bracketBoardRounds?: (bracket: CupBracketView) => Array<{ topOffset: number; pairingGap: number }>
+    }).bracketBoardRounds
+    expect(build).toBeTypeOf('function')
+    if (!build) return
+    const participant = { id: 'team-1', displayName: '阿森纳', teamLifecycleStatus: 'ACTIVE' as const }
+    const pairing = {
+      id: 'pair-1', pairingNumber: 1, homeParticipant: participant, awayParticipant: participant,
+      winnerParticipant: null, isBye: false, match: null,
+    }
+    const bracket = {
+      competitionId: 'cup-1', proposalId: 'proposal-1', proposalVersion: 1,
+      proposalStatus: 'CONFIRMED', bracketSize: 4, currentRoundNumber: 1,
+      rounds: [{
+        stageId: 'stage-1', roundNumber: 1, stageCode: 'SEMI_FINAL', displayName: '半决赛',
+        status: 'PUBLISHED', pairings: [{ ...pairing }, { ...pairing, id: 'pair-2', pairingNumber: 2 }],
+      }, {
+        stageId: 'stage-2', roundNumber: 2, stageCode: 'FINAL', displayName: '决赛',
+        status: 'DRAFT', pairings: [{ ...pairing, id: 'pair-3' }],
+      }],
+    } as CupBracketView
+
+    expect(build(bracket).map(({ topOffset, pairingGap }) => ({ topOffset, pairingGap }))).toEqual([
+      { topOffset: 0, pairingGap: 16 },
+      { topOffset: 74, pairingGap: 164 },
+    ])
+  })
+
+  it('groups the complete cup schedule by published stage', () => {
+    const group = (detailViewModel as unknown as {
+      cupScheduleSections?: (matches: CompetitionMatchResponse[]) => Array<{ stageDisplayName: string; matches: CompetitionMatchResponse[] }>
+    }).cupScheduleSections
+    expect(group).toBeTypeOf('function')
+    if (!group) return
+    const match = (id: string, stageId: string, stageDisplayName: string) => ({
+      id, stageId, stageDisplayName,
+    }) as unknown as CompetitionMatchResponse
+
+    expect(group([
+      match('group-match', 'group-a', 'A 组'),
+      match('semi-match', 'semi-final', '半决赛'),
+      match('final-match', 'final', '决赛'),
+    ]).map((section) => ({ name: section.stageDisplayName, count: section.matches.length }))).toEqual([
+      { name: 'A 组', count: 1 },
+      { name: '半决赛', count: 1 },
+      { name: '决赛', count: 1 },
+    ])
   })
 })
