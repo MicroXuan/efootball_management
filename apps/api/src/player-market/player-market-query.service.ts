@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   PlayerAcquisitionApplication,
   PlayerApplicationListQuery,
@@ -51,7 +51,7 @@ export class PlayerMarketQueryService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PlayerMarketAccessService) private readonly access: PlayerMarketAccessService,
-    private readonly clock: () => Date = () => new Date()
+    @Optional() private readonly clock: () => Date = () => new Date()
   ) {}
 
   static encodeCursor(createdAt: Date, id: string): string {
