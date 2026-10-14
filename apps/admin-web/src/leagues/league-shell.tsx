@@ -1,6 +1,7 @@
 import { Alert, Tabs } from 'antd';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { useAdminSession } from '../auth/admin-session';
+import { featureFlags } from '../config/features';
 import { AdminIcon } from '../design-system/icons';
 
 export function LeagueShell() {
@@ -24,7 +25,7 @@ export function LeagueShell() {
         { key: 'valuation-reviews', label: <Link aria-current={activeKey === 'valuation-reviews' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-reviews`}><AdminIcon name="review" />身价审核</Link> },
         { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}><AdminIcon name="finance" />财务与交易</Link> },
         { key: 'auctions', label: <Link aria-current={activeKey === 'auctions' ? 'page' : undefined} to={`/leagues/${leagueId}/auctions`}><AdminIcon name="review" />球员拍卖</Link> },
-        { key: 'wechat-bot', label: <Link aria-current={activeKey === 'wechat-bot' ? 'page' : undefined} to={`/leagues/${leagueId}/wechat-bot`}><AdminIcon name="bot" />微信群机器人</Link> }
+        ...(featureFlags.wechatBot ? [{ key: 'wechat-bot', label: <Link aria-current={activeKey === 'wechat-bot' ? 'page' : undefined} to={`/leagues/${leagueId}/wechat-bot`}><AdminIcon name="bot" />微信群机器人</Link> }] : [])
       ]} /></nav>
     </div>
     <Outlet />

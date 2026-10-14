@@ -48,7 +48,7 @@
       <text class="chevron">›</text>
     </view>
 
-    <view class="favorites-entry" bindtap="openWechatBotBinding" role="button">
+    <view wx:if="{{features.wechatBot}}" class="favorites-entry" bindtap="openWechatBotBinding" role="button">
       <view class="favorites-icon">🤖</view>
       <view class="favorites-copy"><text class="favorites-title">绑定群机器人</text><text class="favorites-detail">绑定微信身份，使用“我的赛程”等群命令</text></view>
       <text class="chevron">›</text>
