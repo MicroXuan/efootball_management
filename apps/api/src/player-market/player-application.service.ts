@@ -12,6 +12,7 @@ import { MutationReceiptService } from '../competitions/mutation-receipt.service
 import { PlayerMarketAccessService } from './player-market-access.service.js';
 import { playerMarketError } from './player-market.errors.js';
 import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
+import { reconcileForcedApplication } from './forced-transfer-policy.js';
 
 const applicationInclude = {
   applicantLeagueTeam: true,
@@ -39,25 +40,18 @@ export class PlayerApplicationService {
     input: SubmitPlayerApplicationRequest,
     key: string
   ): Promise<PlayerAcquisitionApplication> {
-    if (input.type !== 'NORMAL_PURCHASE') {
-      throw playerMarketError('APPLICATION_TYPE_INVALID', '普通购买入口不能提交强报申请', 400);
-    }
     const scope = await this.access.requireParticipant(userId, leagueId, input.seasonId);
     return this.receipts.execute(userId, `player-market.submit:${leagueId}:${input.footballPlayerId}`, key, async (tx) => {
       await this.locks.lockTeam(tx, scope.leagueTeamId);
       await this.locks.lockPlayer(tx, leagueId, input.footballPlayerId);
       const now = this.clock();
-      const [team, window, ownership, rosterCount, card, valuation, restriction, existing] = await Promise.all([
+      const [team, window, ownership, rosterCount, valuation, restriction, existing] = await Promise.all([
         tx.leagueTeam.findUnique({ where: { id: scope.leagueTeamId } }),
         tx.transferWindow.findUnique({ where: { id: input.transferWindowId } }),
         tx.leaguePlayerOwnership.findUnique({
           where: { leagueId_footballPlayerId: { leagueId, footballPlayerId: input.footballPlayerId } }
         }),
         tx.leaguePlayerOwnership.count({ where: { leagueTeamId: scope.leagueTeamId, status: 'ACTIVE' } }),
-        tx.playerCard.findFirst({
-          where: { id: input.playerCardId, playerId: input.footballPlayerId, status: 'ACTIVE' },
-          include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } }
-        }),
         tx.leaguePlayerValuation.findUnique({
           where: { leagueId_footballPlayerId: { leagueId, footballPlayerId: input.footballPlayerId } }
         }),
@@ -74,15 +68,42 @@ export class PlayerApplicationService {
             seasonId: input.seasonId,
             applicantLeagueTeamId: scope.leagueTeamId,
             footballPlayerId: input.footballPlayerId,
-            type: 'NORMAL_PURCHASE',
+            type: input.type,
             status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }
           }
         })
       ]);
       this.assertTeam(team);
       this.assertWindow(window, input.seasonId, now);
-      if (ownership?.status === 'ACTIVE') throw playerMarketError('PLAYER_ALREADY_OWNED', '该球员已有归属球队');
       if (rosterCount >= 25) throw playerMarketError('ROSTER_CAPACITY_REACHED', '球队已满 25 人，请先下放球员');
+      let sourceLeagueTeamId: string | null = null;
+      let ownershipId: string | null = null;
+      let ownershipVersionSnapshot: number | null = null;
+      let playerCardId = input.playerCardId;
+      if (input.type === 'NORMAL_PURCHASE') {
+        if (ownership?.status === 'ACTIVE') throw playerMarketError('PLAYER_ALREADY_OWNED', '该球员已有归属球队');
+      } else {
+        if (!ownership || ownership.status !== 'ACTIVE' || ownership.leagueTeamId === scope.leagueTeamId) {
+          throw playerMarketError('FORCED_TRANSFER_TARGET_INVALID', '强报只能针对其他球队的现役球员');
+        }
+        if (ownership.id !== input.ownershipId
+          || ownership.version !== input.ownershipVersionSnapshot
+          || ownership.leagueTeamId !== input.sourceLeagueTeamId) {
+          throw playerMarketError('OWNERSHIP_CHANGED', '球员归属已经变化，请刷新后重试');
+        }
+        if (!valuation) throw playerMarketError('OFFICIAL_VALUE_REQUIRED', '强报球员缺少当前官方身价');
+        if (input.amountMinor < valuation.currentValueMinor) {
+          throw playerMarketError('FORCED_AMOUNT_BELOW_OFFICIAL_VALUE', '强报金额不得低于当前官方身价');
+        }
+        sourceLeagueTeamId = ownership.leagueTeamId;
+        ownershipId = ownership.id;
+        ownershipVersionSnapshot = ownership.version;
+        playerCardId = ownership.currentPlayerCardId;
+      }
+      const card = await tx.playerCard.findFirst({
+        where: { id: playerCardId, playerId: input.footballPlayerId, status: 'ACTIVE' },
+        include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } }
+      });
       if (!card) throw playerMarketError('PLAYER_CARD_NOT_AVAILABLE', '所选球员卡不可用', 404);
       if (restriction) throw playerMarketError('RELEASED_BY_TEAM_IN_WINDOW', '本队在当前窗口下放过该球员，不能回购');
       if (existing) throw playerMarketError('ACTIVE_APPLICATION_EXISTS', '本队已有一笔有效申请');
@@ -92,10 +113,13 @@ export class PlayerApplicationService {
           leagueId,
           seasonId: input.seasonId,
           transferWindowId: input.transferWindowId,
-          type: 'NORMAL_PURCHASE',
+          type: input.type,
           applicantLeagueTeamId: scope.leagueTeamId,
           footballPlayerId: input.footballPlayerId,
-          playerCardId: input.playerCardId,
+          playerCardId,
+          sourceLeagueTeamId,
+          ownershipId,
+          ownershipVersionSnapshot,
           amountMinor: input.amountMinor,
           valuationMinorSnapshot: valuation?.currentValueMinor ?? null,
           valuationVersionSnapshot: valuation?.version ?? null,
@@ -123,13 +147,52 @@ export class PlayerApplicationService {
       await this.access.requireOwnedTeam(userId, current.applicantLeagueTeamId, current.seasonId);
       await this.locks.lockTeam(tx, current.applicantLeagueTeamId);
       this.assertVersion(current.version, input.expectedVersion);
-      if (current.status !== 'PENDING') throw playerMarketError('APPLICATION_STATE_INVALID', '当前状态不能改价');
+      const amendable = current.type === 'FORCED_TRANSFER'
+        ? ['PENDING', 'REQUOTE_REQUIRED'].includes(current.status)
+        : current.status === 'PENDING';
+      if (!amendable) throw playerMarketError('APPLICATION_STATE_INVALID', '当前状态不能改价');
       const window = await tx.transferWindow.findUnique({ where: { id: current.transferWindowId } });
       const now = this.clock();
       this.assertWindow(window, current.seasonId, now);
+      let nextStatus = current.status;
+      if (current.type === 'FORCED_TRANSFER') {
+        if (input.amountMinor < current.amountMinor) {
+          throw playerMarketError('FORCED_AMOUNT_CANNOT_DECREASE', '强报补价不能低于当前报价');
+        }
+        await this.locks.lockPlayer(tx, current.leagueId, current.footballPlayerId);
+        const [ownership, valuation] = await Promise.all([
+          tx.leaguePlayerOwnership.findUnique({
+            where: { leagueId_footballPlayerId: { leagueId: current.leagueId, footballPlayerId: current.footballPlayerId } }
+          }),
+          tx.leaguePlayerValuation.findUnique({
+            where: { leagueId_footballPlayerId: { leagueId: current.leagueId, footballPlayerId: current.footballPlayerId } }
+          })
+        ]);
+        if (!valuation) throw playerMarketError('OFFICIAL_VALUE_REQUIRED', '强报球员缺少当前官方身价');
+        const decision = reconcileForcedApplication({
+          now,
+          windowEndsAt: window!.endsAt,
+          amountMinor: input.amountMinor,
+          currentOfficialValueMinor: valuation.currentValueMinor,
+          valuationVersionSnapshot: current.valuationVersionSnapshot,
+          currentValuationVersion: valuation.version,
+          ownershipIdSnapshot: current.ownershipId!,
+          ownershipVersionSnapshot: current.ownershipVersionSnapshot!,
+          currentOwnershipId: ownership?.id ?? null,
+          currentOwnershipVersion: ownership?.version ?? null,
+          currentOwnershipStatus: ownership?.status ?? null
+        });
+        if (decision.status === 'OWNERSHIP_CHANGED') {
+          throw playerMarketError('OWNERSHIP_CHANGED', '球员归属已经变化，请刷新后重试');
+        }
+        if (decision.status === 'REQUOTE_REQUIRED') {
+          throw playerMarketError('FORCED_AMOUNT_BELOW_OFFICIAL_VALUE', '补价不得低于当前官方身价');
+        }
+        nextStatus = 'PENDING';
+      }
       await tx.playerAcquisitionApplication.update({
         where: { id: current.id },
-        data: { amountMinor: input.amountMinor, lastSubmittedAt: now, version: { increment: 1 } }
+        data: { amountMinor: input.amountMinor, status: nextStatus, lastSubmittedAt: now, version: { increment: 1 } }
       });
       await this.appendEvent(tx, current.id, 'AMOUNT_CHANGED', current.status, current.status, current.amountMinor, input.amountMinor, userId, null);
       return this.response(await this.reload(tx, current.id));

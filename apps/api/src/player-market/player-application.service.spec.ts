@@ -41,7 +41,13 @@ function harness() {
     playerAcquisitionApplication: {
       findFirst: jest.fn(async () => existing),
       findUnique: jest.fn(async () => stored),
-      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => { stored = application(data); return stored; }),
+      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        stored = application({
+          ...data,
+          ...(data.sourceLeagueTeamId ? { sourceLeagueTeam: { id: 'team-2', teamNumber: 2, name: '对手队', logoUrl: null, ownerAlias: '对手' } } : {})
+        });
+        return stored;
+      }),
       update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
         stored = application({ ...stored, ...data, version: stored.version + 1, updatedAt: now });
         return stored;
@@ -110,5 +116,40 @@ describe('PlayerApplicationService', () => {
     access.requireOwnedTeam.mockRejectedValueOnce(Object.assign(new Error('forbidden'), { code: 'PLAYER_MARKET_TEAM_OWNER_REQUIRED' }));
     await expect(service.amend('other-user', 'application-1', { amountMinor: 700, expectedVersion: 1 }, 'other'))
       .rejects.toMatchObject({ code: 'PLAYER_MARKET_TEAM_OWNER_REQUIRED' });
+  });
+
+  it('submits a forced transfer against the current rival ownership and official value', async () => {
+    const { service, tx } = harness();
+    tx.leaguePlayerOwnership.findUnique.mockResolvedValueOnce({
+      id: 'ownership-rival', leagueTeamId: 'team-2', currentPlayerCardId: 'card-2',
+      status: 'ACTIVE', version: 4
+    } as never);
+    tx.playerCard.findFirst.mockResolvedValueOnce({
+      id: 'card-2', playerId: 'player-1', status: 'ACTIVE', overallRating: 92, autoBuilds: [{ maxOverall: 98 }]
+    });
+    const result = await service.submit('user-1', 'league-1', {
+      ...baseInput,
+      type: 'FORCED_TRANSFER',
+      playerCardId: 'card-2',
+      amountMinor: 700,
+      sourceLeagueTeamId: 'team-2',
+      ownershipId: 'ownership-rival',
+      ownershipVersionSnapshot: 4
+    }, 'forced');
+    expect(result).toMatchObject({
+      type: 'FORCED_TRANSFER', sourceTeam: expect.anything(), ownershipId: 'ownership-rival',
+      ownershipVersionSnapshot: 4, valuationVersionSnapshot: 1
+    });
+  });
+
+  it('rejects forced bids below official value', async () => {
+    const { service, tx } = harness();
+    tx.leaguePlayerOwnership.findUnique.mockResolvedValueOnce({
+      id: 'ownership-rival', leagueTeamId: 'team-2', currentPlayerCardId: 'card-2', status: 'ACTIVE', version: 4
+    } as never);
+    await expect(service.submit('user-1', 'league-1', {
+      ...baseInput, type: 'FORCED_TRANSFER', amountMinor: 499,
+      sourceLeagueTeamId: 'team-2', ownershipId: 'ownership-rival', ownershipVersionSnapshot: 4
+    }, 'forced-low')).rejects.toMatchObject({ code: 'FORCED_AMOUNT_BELOW_OFFICIAL_VALUE' });
   });
 });
