@@ -68,6 +68,14 @@ Page({
     wx.navigateTo({ url: '/pages/favorites/index' })
   },
 
+  openMyMatches() {
+    wx.navigateTo({ url: '/pages/my-matches/index' })
+  },
+
+  openPlayerAuctions() {
+    wx.navigateTo({ url: '/pages/player-auctions/index' })
+  },
+
   openWechatBotBinding() {
     wx.navigateTo({ url: '/pages/wechat-bot-binding/index' })
   },

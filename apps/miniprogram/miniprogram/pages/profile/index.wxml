@@ -42,10 +42,28 @@
       </view>
     </view>
 
-    <view class="favorites-entry" bindtap="openFavorites" role="button">
-      <view class="favorites-icon">★</view>
-      <view class="favorites-copy"><text class="favorites-title">我的收藏</text><text class="favorites-detail">查看球员当前自动加点最高能力卡</text></view>
-      <text class="chevron">›</text>
+    <view class="quick-actions">
+      <view class="quick-actions__head">
+        <view><text class="section-kicker">快捷入口</text><text class="quick-actions__title">现在要做什么</text></view>
+        <text class="quick-actions__mark">MATCH DESK</text>
+      </view>
+      <view class="quick-actions__grid">
+        <view class="quick-action" bindtap="openMyMatches" role="button">
+          <text class="quick-action__marker">赛</text>
+          <text class="quick-action__title">我的赛程</text>
+          <text class="quick-action__detail">待赛与结果</text>
+        </view>
+        <view class="quick-action" bindtap="openPlayerAuctions" role="button">
+          <text class="quick-action__marker">拍</text>
+          <text class="quick-action__title">球员拍卖</text>
+          <text class="quick-action__detail">进入拍卖大厅</text>
+        </view>
+        <view class="quick-action" bindtap="openFavorites" role="button">
+          <text class="quick-action__marker">藏</text>
+          <text class="quick-action__title">我的收藏</text>
+          <text class="quick-action__detail">常用球员卡</text>
+        </view>
+      </view>
     </view>
 
     <view wx:if="{{features.wechatBot}}" class="favorites-entry" bindtap="openWechatBotBinding" role="button">
