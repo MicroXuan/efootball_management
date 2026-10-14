@@ -167,7 +167,13 @@ export type PlayerCardPresentation = {
   }>
   radarMetrics: Array<{ key: string; label: string; value: number | null }>
   radarChart: RadarChartGeometry
-  positions: Array<{ code: PlayerPosition; label: string; rating: number | null; isPrimary: boolean }>
+  positions: Array<{
+    code: PlayerPosition
+    label: string
+    rating: number | null
+    isPrimary: boolean
+    tone: 'high' | 'medium' | 'low' | 'empty'
+  }>
 }
 
 export type RadarChartGeometry = {
@@ -435,7 +441,8 @@ export function playerCardPresentation(
             ? Math.min(110, Math.max(40, importedNumber + derivedRating - baseDerivedRating))
             : derivedRating ?? null
         : importedNumber ?? derivedRating ?? (code === detail.position ? overallRating : null)
-      return { code, label: positionLabels[code], rating, isPrimary: code === detail.position }
+      const tone = rating === null ? 'empty' : rating >= 80 ? 'high' : rating >= 70 ? 'medium' : 'low'
+      return { code, label: positionLabels[code], rating, isPrimary: code === detail.position, tone }
     }),
   }
 }

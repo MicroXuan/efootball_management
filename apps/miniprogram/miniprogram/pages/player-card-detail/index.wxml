@@ -81,9 +81,7 @@
               <view wx:for="{{presentation.radarChart.outline}}" wx:key="key" class="radar-outline" style="{{item.style}}"></view>
               <view wx:for="{{presentation.radarChart.dots}}" wx:key="key" class="radar-dot" style="{{item.style}}"></view>
             </view>
-          </view>
-          <view class="radar-legend">
-            <view wx:for="{{presentation.radarMetrics}}" wx:key="key" class="legend-item">
+            <view wx:for="{{presentation.radarMetrics}}" wx:key="key" wx:for-index="index" class="radar-label radar-label--{{index}}">
               <text>{{item.label}}</text><text>{{item.value === null ? '—' : item.value}}</text>
             </view>
           </view>
@@ -91,8 +89,10 @@
         <view class="visual-card">
           <text class="visual-title">位置适配</text>
           <text class="visual-note">主位置为卡片总评，其余为能力适配值</text>
-          <view class="position-map">
-            <view wx:for="{{presentation.positions}}" wx:key="code" class="position-cell {{item.isPrimary ? 'is-primary' : ''}} {{item.rating ? 'has-rating' : ''}}">
+          <view class="position-pitch">
+            <view class="pitch-mark pitch-mark--half"></view>
+            <view class="pitch-mark pitch-mark--circle"></view>
+            <view wx:for="{{presentation.positions}}" wx:key="code" class="position-cell position-cell--{{item.code}} tone-{{item.tone}} {{item.isPrimary ? 'is-primary' : ''}}">
               <text class="position-rating">{{item.rating || '—'}}</text>
               <text class="position-code">{{item.code}}</text>
             </view>
