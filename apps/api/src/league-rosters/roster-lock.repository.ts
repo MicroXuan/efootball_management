@@ -27,4 +27,13 @@ export class RosterLockRepository {
         FOR UPDATE`
     );
   }
+
+  async lockPlayerAndOwnership(
+    client: Prisma.TransactionClient,
+    leagueId: string,
+    footballPlayerId: string
+  ) {
+    await client.$queryRaw(Prisma.sql`SELECT id FROM football_players WHERE id = ${footballPlayerId} FOR UPDATE`);
+    await this.lockOwnership(client, leagueId, footballPlayerId);
+  }
 }
