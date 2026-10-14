@@ -18,7 +18,7 @@ describe('mini-program WeChat login', () => {
     expect(() => resolveWechatLoginCode({ errMsg: 'login:ok' })).toThrow('微信未返回登录凭证')
   })
 
-  it('uses the local development fallback when DevTools omits the code', async () => {
+  it('defers to the server-configured development identity when DevTools omits the code', async () => {
     const tokens: AuthTokenResponse = {
       accessToken: 'access',
       expiresInSeconds: 900,
@@ -37,7 +37,7 @@ describe('mini-program WeChat login', () => {
 
     expect(api.request).toHaveBeenCalledWith(expect.objectContaining({
       path: '/auth/wechat',
-      data: { code: 'test-code-local-user' },
+      data: { code: 'devtools-code-unavailable' },
     }))
     expect(session.setTokens).toHaveBeenCalledWith(tokens)
   })
