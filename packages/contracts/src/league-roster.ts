@@ -158,6 +158,9 @@ export const RosterEntrySchema = z.object({
   salaryRuleVersionId: ResourceIdSchema,
   salaryMinor: MoneyMinorSchema,
   acquiredAt: TimestampSchema,
+  acquisitionType: z.enum(['NORMAL', 'FORCED_TRANSFER']).optional(),
+  acquisitionSeasonId: ResourceIdSchema.nullable().optional(),
+  forcedTransferBadge: z.boolean().optional(),
   status: RosterEntryStatusSchema,
   version: z.number().int().positive()
 });
@@ -167,6 +170,7 @@ export const RosterTransactionTypeSchema = z.enum([
   'SELL',
   'RELEASE',
   'TRANSFER',
+  'FORCED_TRANSFER',
   'CARD_UPGRADE',
   'SALARY_RECALCULATION',
   'EMERGENCY_CORRECTION'
@@ -202,6 +206,9 @@ export const RosterMutationOwnershipSchema = z.object({
   salaryRuleVersionId: ResourceIdSchema,
   salaryMinor: MoneyMinorSchema,
   acquiredAt: TimestampSchema,
+  acquisitionType: z.enum(['NORMAL', 'FORCED_TRANSFER']).optional(),
+  acquisitionSeasonId: ResourceIdSchema.nullable().optional(),
+  forcedTransferBadge: z.boolean().optional(),
   status: RosterEntryStatusSchema,
   version: z.number().int().positive()
 });

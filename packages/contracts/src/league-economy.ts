@@ -14,6 +14,8 @@ const TimestampSchema = z.iso.datetime();
 export const ValuationCompletenessSchema = z.enum(['COMPLETE', 'INCOMPLETE']);
 
 export const TeamAssetPlayerSchema = z.object({
+  ownershipId: ResourceIdSchema.optional(),
+  ownershipVersion: z.number().int().positive().optional(),
   playerId: ResourceIdSchema,
   playerName: z.string().min(1),
   cardName: z.string().min(1),
@@ -29,7 +31,10 @@ export const TeamAssetPlayerSchema = z.object({
   salaryMinor: ValuationMoneyMinorSchema,
   rosterStatus: RosterEntryStatusSchema,
   currentValueMinor: ValuationMoneyMinorSchema.nullable(),
-  lastEffectiveAt: TimestampSchema.nullable()
+  lastEffectiveAt: TimestampSchema.nullable(),
+  canRelease: z.boolean().optional(),
+  releaseDisabledReason: z.string().min(1).nullable().optional(),
+  forcedTransferBadge: z.boolean().optional()
 });
 
 export const TeamAssetOverviewSchema = z.object({

@@ -98,9 +98,45 @@ enum RosterTransactionType {
   SELL
   RELEASE
   TRANSFER
+  FORCED_TRANSFER
   CARD_UPGRADE
   SALARY_RECALCULATION
   EMERGENCY_CORRECTION
+}
+
+enum PlayerApplicationType {
+  NORMAL_PURCHASE
+  FORCED_TRANSFER
+}
+
+enum PlayerApplicationStatus {
+  PENDING
+  APPROVED
+  NOT_SELECTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+  INELIGIBLE
+  REQUOTE_REQUIRED
+  OWNERSHIP_CHANGED
+}
+
+enum PlayerApplicationEventType {
+  SUBMITTED
+  AMOUNT_CHANGED
+  WITHDRAWN
+  APPROVED
+  REJECTED
+  NOT_SELECTED
+  EXPIRED
+  REQUOTE_REQUIRED
+  OWNERSHIP_CHANGED
+  INELIGIBLE
+}
+
+enum OwnershipAcquisitionType {
+  NORMAL
+  FORCED_TRANSFER
 }
 
 enum FinanceLedgerDirection {
@@ -497,6 +533,8 @@ model User {
   wechatIdentityBindings           WechatIdentityBinding[]                @relation("WechatIdentityUser")
   wechatBindingCodes               WechatBindingCode[]                    @relation("WechatBindingCodeUser")
   playerAuctionBids                PlayerAuctionBid[]                     @relation("PlayerAuctionBidUser")
+  playerApplicationEvents          PlayerAcquisitionApplicationEvent[]    @relation("PlayerApplicationEventUser")
+  playerReleaseRestrictions        PlayerReleaseRestriction[]             @relation("PlayerReleaseRestrictionUser")
 
   @@map("users")
 }
@@ -599,46 +637,48 @@ model PublicUserNumberSequence {
 }
 
 model AdminAccount {
-  id                           String                            @id @default(uuid()) @db.Char(36)
-  username                     String                            @unique @db.VarChar(64)
-  displayName                  String                            @map("display_name") @db.VarChar(64)
-  passwordHash                 String                            @map("password_hash") @db.VarChar(255)
-  status                       AdminStatus                       @default(ACTIVE)
-  platformRole                 AdminRole?                        @map("platform_role")
-  failedLoginCount             Int                               @default(0) @map("failed_login_count") @db.UnsignedInt
-  lockedUntil                  DateTime?                         @map("locked_until")
-  lastLoginAt                  DateTime?                         @map("last_login_at")
-  version                      Int                               @default(1) @db.UnsignedInt
-  createdAt                    DateTime                          @default(now()) @map("created_at")
-  updatedAt                    DateTime                          @updatedAt @map("updated_at")
-  sessions                     AdminSession[]
-  leagueRoles                  AdminLeagueRole[]                 @relation("AdminLeagueRoleAdmin")
-  grantedLeagueRoles           AdminLeagueRole[]                 @relation("AdminLeagueRoleGrantor")
-  auditLogs                    AuditLog[]                        @relation("AuditActor")
-  createdLeagues               League[]                          @relation("AdminLeagueCreator")
-  createdLeagueSeasons         LeagueSeason[]                    @relation("LeagueSeasonAdminCreator")
-  mutationReceipts             AdminMutationReceipt[]
-  createdSalaryRules           LeagueSalaryRuleVersion[]
-  createdTransferWindows       TransferWindow[]
-  rosterTransactions           RosterTransaction[]
-  createdValuationWindows      ValuationWindow[]                 @relation("ValuationWindowCreator")
-  createdValuationRules        ValuationWindowRuleVersion[]      @relation("ValuationRuleCreator")
-  reviewedValuationSubmissions ValuationSubmission[]             @relation("ValuationSubmissionReviewer")
-  createdTransactionFeeRules   LeagueTransactionFeeRuleVersion[] @relation("TransactionFeeRuleCreator")
-  allocationProposals          SeasonAllocationProposal[]        @relation("AllocationProposalCreator")
-  allocationDecisions          SeasonAllocationDecision[]        @relation("AllocationDecisionActor")
-  createdCompetitions          Competition[]                     @relation("CompetitionAdminCreator")
-  createdCompetitionRules      CompetitionRuleVersion[]          @relation("CompetitionRuleAdminCreator")
-  teamShellChanges             LeagueTeamShellHistory[]          @relation("TeamShellHistoryActor")
-  teamCatalogSyncRuns          TeamCatalogSyncRun[]              @relation("TeamCatalogSyncActor")
-  cupGroupProposals            CupGroupProposal[]                @relation("CupGroupProposalCreator")
-  cupBracketProposals          CupBracketProposal[]              @relation("CupBracketProposalCreator")
-  submittedMatchResults        MatchResultVersion[]              @relation("MatchResultAdminSubmitter")
-  createdWechatBotDevices      WechatBotDevice[]                 @relation("WechatBotDeviceCreator")
-  createdWechatGroupCapabilities WechatGroupCapability[]         @relation("WechatGroupCapabilityCreator")
-  createdWechatScheduleSources WechatGroupScheduleSource[]       @relation("WechatScheduleSourceCreator")
-  createdPlayerAuctionBatches  PlayerAuctionBatch[]               @relation("PlayerAuctionBatchCreator")
-  reviewedPlayerAuctionLots    PlayerAuctionReview[]              @relation("PlayerAuctionReviewAdmin")
+  id                             String                              @id @default(uuid()) @db.Char(36)
+  username                       String                              @unique @db.VarChar(64)
+  displayName                    String                              @map("display_name") @db.VarChar(64)
+  passwordHash                   String                              @map("password_hash") @db.VarChar(255)
+  status                         AdminStatus                         @default(ACTIVE)
+  platformRole                   AdminRole?                          @map("platform_role")
+  failedLoginCount               Int                                 @default(0) @map("failed_login_count") @db.UnsignedInt
+  lockedUntil                    DateTime?                           @map("locked_until")
+  lastLoginAt                    DateTime?                           @map("last_login_at")
+  version                        Int                                 @default(1) @db.UnsignedInt
+  createdAt                      DateTime                            @default(now()) @map("created_at")
+  updatedAt                      DateTime                            @updatedAt @map("updated_at")
+  sessions                       AdminSession[]
+  leagueRoles                    AdminLeagueRole[]                   @relation("AdminLeagueRoleAdmin")
+  grantedLeagueRoles             AdminLeagueRole[]                   @relation("AdminLeagueRoleGrantor")
+  auditLogs                      AuditLog[]                          @relation("AuditActor")
+  createdLeagues                 League[]                            @relation("AdminLeagueCreator")
+  createdLeagueSeasons           LeagueSeason[]                      @relation("LeagueSeasonAdminCreator")
+  mutationReceipts               AdminMutationReceipt[]
+  createdSalaryRules             LeagueSalaryRuleVersion[]
+  createdTransferWindows         TransferWindow[]
+  rosterTransactions             RosterTransaction[]
+  createdValuationWindows        ValuationWindow[]                   @relation("ValuationWindowCreator")
+  createdValuationRules          ValuationWindowRuleVersion[]        @relation("ValuationRuleCreator")
+  reviewedValuationSubmissions   ValuationSubmission[]               @relation("ValuationSubmissionReviewer")
+  createdTransactionFeeRules     LeagueTransactionFeeRuleVersion[]   @relation("TransactionFeeRuleCreator")
+  allocationProposals            SeasonAllocationProposal[]          @relation("AllocationProposalCreator")
+  allocationDecisions            SeasonAllocationDecision[]          @relation("AllocationDecisionActor")
+  createdCompetitions            Competition[]                       @relation("CompetitionAdminCreator")
+  createdCompetitionRules        CompetitionRuleVersion[]            @relation("CompetitionRuleAdminCreator")
+  teamShellChanges               LeagueTeamShellHistory[]            @relation("TeamShellHistoryActor")
+  teamCatalogSyncRuns            TeamCatalogSyncRun[]                @relation("TeamCatalogSyncActor")
+  cupGroupProposals              CupGroupProposal[]                  @relation("CupGroupProposalCreator")
+  cupBracketProposals            CupBracketProposal[]                @relation("CupBracketProposalCreator")
+  submittedMatchResults          MatchResultVersion[]                @relation("MatchResultAdminSubmitter")
+  createdWechatBotDevices        WechatBotDevice[]                   @relation("WechatBotDeviceCreator")
+  createdWechatGroupCapabilities WechatGroupCapability[]             @relation("WechatGroupCapabilityCreator")
+  createdWechatScheduleSources   WechatGroupScheduleSource[]         @relation("WechatScheduleSourceCreator")
+  createdPlayerAuctionBatches    PlayerAuctionBatch[]                @relation("PlayerAuctionBatchCreator")
+  reviewedPlayerAuctionLots      PlayerAuctionReview[]               @relation("PlayerAuctionReviewAdmin")
+  reviewedPlayerApplications     PlayerAcquisitionApplication[]      @relation("PlayerApplicationReviewer")
+  playerApplicationEvents        PlayerAcquisitionApplicationEvent[] @relation("PlayerApplicationEventAdmin")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -683,42 +723,44 @@ model AdminLeagueRole {
 }
 
 model League {
-  id                      String                            @id @default(uuid()) @db.Char(36)
-  name                    String                            @db.VarChar(64)
-  shortName               String                            @map("short_name") @db.VarChar(24)
-  description             String                            @default("") @db.VarChar(500)
-  logoUrl                 String?                           @map("logo_url") @db.VarChar(2048)
-  status                  LeagueStatus                      @default(ACTIVE)
-  isDeleted               Boolean                           @default(false) @map("is_deleted")
-  edition                 LeagueEdition                     @default(INTERNATIONAL)
-  currentSeasonId         String?                           @unique @map("current_season_id") @db.Char(36)
-  defaultPlatform         GamePlatform                      @map("default_platform")
-  defaultServerRegion     String                            @map("default_server_region") @db.VarChar(32)
-  defaultSuperCapacity    Int                               @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
-  defaultChampionCapacity Int                               @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
-  defaultPromotionCount   Int                               @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
-  createdById             String?                           @map("created_by_id") @db.Char(36)
-  createdByAdminId        String?                           @map("created_by_admin_id") @db.Char(36)
-  version                 Int                               @default(1) @db.UnsignedInt
-  createdAt               DateTime                          @default(now()) @map("created_at")
-  updatedAt               DateTime                          @updatedAt @map("updated_at")
-  creator                 User?                             @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  adminCreator            AdminAccount?                     @relation("AdminLeagueCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  seasons                 LeagueSeason[]
-  currentSeason           LeagueSeason?                     @relation("LeagueCurrentSeason", fields: [currentSeasonId], references: [id], onDelete: SetNull)
-  teams                   LeagueTeam[]
-  adminRoles              AdminLeagueRole[]
-  auditLogs               AuditLog[]
-  teamShellHistory        LeagueTeamShellHistory[]
-  salaryRuleVersions      LeagueSalaryRuleVersion[]
-  playerOwnerships        LeaguePlayerOwnership[]
-  rosterTransactions      RosterTransaction[]
-  financeLedgerEntries    FinanceLedgerEntry[]
-  playerValuations        LeaguePlayerValuation[]
-  playerValuationHistory  PlayerValuationHistory[]
-  transactionFeeRules     LeagueTransactionFeeRuleVersion[]
-  wechatGroupBindings     WechatGroupBinding[]
-  playerAuctionBatches    PlayerAuctionBatch[]
+  id                        String                            @id @default(uuid()) @db.Char(36)
+  name                      String                            @db.VarChar(64)
+  shortName                 String                            @map("short_name") @db.VarChar(24)
+  description               String                            @default("") @db.VarChar(500)
+  logoUrl                   String?                           @map("logo_url") @db.VarChar(2048)
+  status                    LeagueStatus                      @default(ACTIVE)
+  isDeleted                 Boolean                           @default(false) @map("is_deleted")
+  edition                   LeagueEdition                     @default(INTERNATIONAL)
+  currentSeasonId           String?                           @unique @map("current_season_id") @db.Char(36)
+  defaultPlatform           GamePlatform                      @map("default_platform")
+  defaultServerRegion       String                            @map("default_server_region") @db.VarChar(32)
+  defaultSuperCapacity      Int                               @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
+  defaultChampionCapacity   Int                               @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
+  defaultPromotionCount     Int                               @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
+  createdById               String?                           @map("created_by_id") @db.Char(36)
+  createdByAdminId          String?                           @map("created_by_admin_id") @db.Char(36)
+  version                   Int                               @default(1) @db.UnsignedInt
+  createdAt                 DateTime                          @default(now()) @map("created_at")
+  updatedAt                 DateTime                          @updatedAt @map("updated_at")
+  creator                   User?                             @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator              AdminAccount?                     @relation("AdminLeagueCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  seasons                   LeagueSeason[]
+  currentSeason             LeagueSeason?                     @relation("LeagueCurrentSeason", fields: [currentSeasonId], references: [id], onDelete: SetNull)
+  teams                     LeagueTeam[]
+  adminRoles                AdminLeagueRole[]
+  auditLogs                 AuditLog[]
+  teamShellHistory          LeagueTeamShellHistory[]
+  salaryRuleVersions        LeagueSalaryRuleVersion[]
+  playerOwnerships          LeaguePlayerOwnership[]
+  rosterTransactions        RosterTransaction[]
+  financeLedgerEntries      FinanceLedgerEntry[]
+  playerValuations          LeaguePlayerValuation[]
+  playerValuationHistory    PlayerValuationHistory[]
+  transactionFeeRules       LeagueTransactionFeeRuleVersion[]
+  wechatGroupBindings       WechatGroupBinding[]
+  playerAuctionBatches      PlayerAuctionBatch[]
+  playerApplications        PlayerAcquisitionApplication[]
+  playerReleaseRestrictions PlayerReleaseRestriction[]
 
   @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -746,38 +788,41 @@ model TeamProfile {
 }
 
 model LeagueTeam {
-  id                         String                    @id @default(uuid()) @db.Char(36)
-  leagueId                   String                    @map("league_id") @db.Char(36)
-  ownerUserId                String                    @map("owner_user_id") @db.Char(36)
-  ownerAlias                 String                    @map("owner_alias") @db.VarChar(32)
-  catalogTeamId              String                    @map("catalog_team_id") @db.Char(36)
-  teamNumber                 Int?                      @map("team_number") @db.UnsignedSmallInt
-  name                       String                    @db.VarChar(64)
-  shortName                  String                    @map("short_name") @db.VarChar(24)
-  logoUrl                    String?                   @map("logo_url") @db.VarChar(2048)
-  defaultGameAccountId       String?                   @map("default_game_account_id") @db.Char(36)
-  status                     LeagueTeamStatus          @default(ACTIVE)
-  rosterStatus               LeagueTeamRosterStatus    @default(COMPLIANT) @map("roster_status")
-  shellValueMinor            Int                       @default(0) @map("shell_value_minor") @db.UnsignedInt
-  version                    Int                       @default(1) @db.UnsignedInt
-  createdAt                  DateTime                  @default(now()) @map("created_at")
-  updatedAt                  DateTime                  @updatedAt @map("updated_at")
-  league                     League                    @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  owner                      User                      @relation("LeagueTeamOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  catalogTeam                TeamCatalogItem           @relation(fields: [catalogTeamId], references: [id], onDelete: Restrict)
-  defaultGameAccount         GameAccount?              @relation(fields: [defaultGameAccountId], references: [id], onDelete: SetNull)
+  id                         String                         @id @default(uuid()) @db.Char(36)
+  leagueId                   String                         @map("league_id") @db.Char(36)
+  ownerUserId                String                         @map("owner_user_id") @db.Char(36)
+  ownerAlias                 String                         @map("owner_alias") @db.VarChar(32)
+  catalogTeamId              String                         @map("catalog_team_id") @db.Char(36)
+  teamNumber                 Int?                           @map("team_number") @db.UnsignedSmallInt
+  name                       String                         @db.VarChar(64)
+  shortName                  String                         @map("short_name") @db.VarChar(24)
+  logoUrl                    String?                        @map("logo_url") @db.VarChar(2048)
+  defaultGameAccountId       String?                        @map("default_game_account_id") @db.Char(36)
+  status                     LeagueTeamStatus               @default(ACTIVE)
+  rosterStatus               LeagueTeamRosterStatus         @default(COMPLIANT) @map("roster_status")
+  shellValueMinor            Int                            @default(0) @map("shell_value_minor") @db.UnsignedInt
+  version                    Int                            @default(1) @db.UnsignedInt
+  createdAt                  DateTime                       @default(now()) @map("created_at")
+  updatedAt                  DateTime                       @updatedAt @map("updated_at")
+  league                     League                         @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  owner                      User                           @relation("LeagueTeamOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  catalogTeam                TeamCatalogItem                @relation(fields: [catalogTeamId], references: [id], onDelete: Restrict)
+  defaultGameAccount         GameAccount?                   @relation(fields: [defaultGameAccountId], references: [id], onDelete: SetNull)
   seasonEntries              SeasonEntry[]
   playerOwnerships           LeaguePlayerOwnership[]
-  outgoingRosterTransactions RosterTransaction[]       @relation("RosterTransactionSourceTeam")
-  incomingRosterTransactions RosterTransaction[]       @relation("RosterTransactionTargetTeam")
+  outgoingRosterTransactions RosterTransaction[]            @relation("RosterTransactionSourceTeam")
+  incomingRosterTransactions RosterTransaction[]            @relation("RosterTransactionTargetTeam")
   financeLedgerEntries       FinanceLedgerEntry[]
   valuationSnapshots         ValuationRosterSnapshot[]
   valuationSubmissions       ValuationSubmission[]
-  shellHistory               LeagueTeamShellHistory[]  @relation("ShellHistoryTeam")
-  relatedShellHistory        LeagueTeamShellHistory[]  @relation("ShellHistoryRelatedTeam")
-  playerAuctionBids          PlayerAuctionBid[]        @relation("PlayerAuctionBidTeam")
-  computedAuctionReviews     PlayerAuctionReview[]     @relation("PlayerAuctionComputedWinnerTeam")
-  reviewedAuctionReviews     PlayerAuctionReview[]     @relation("PlayerAuctionReviewedWinnerTeam")
+  shellHistory               LeagueTeamShellHistory[]       @relation("ShellHistoryTeam")
+  relatedShellHistory        LeagueTeamShellHistory[]       @relation("ShellHistoryRelatedTeam")
+  playerAuctionBids          PlayerAuctionBid[]             @relation("PlayerAuctionBidTeam")
+  computedAuctionReviews     PlayerAuctionReview[]          @relation("PlayerAuctionComputedWinnerTeam")
+  reviewedAuctionReviews     PlayerAuctionReview[]          @relation("PlayerAuctionReviewedWinnerTeam")
+  playerApplications         PlayerAcquisitionApplication[] @relation("PlayerApplicationApplicantTeam")
+  sourcedPlayerApplications  PlayerAcquisitionApplication[] @relation("PlayerApplicationSourceTeam")
+  playerReleaseRestrictions  PlayerReleaseRestriction[]
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
   @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
@@ -842,30 +887,30 @@ model LeagueTeamShellHistory {
 }
 
 model TeamCatalogSyncRun {
-  id             String                @id @default(uuid()) @db.Char(36)
-  actorAdminId   String                @map("actor_admin_id") @db.Char(36)
-  mode           TeamCatalogSyncMode
-  status         TeamCatalogSyncStatus @default(PENDING)
-  activeLeaseKey String?               @unique @map("active_lease_key") @db.VarChar(64)
-  leaseOwnerToken String?              @map("lease_owner_token") @db.Char(36)
-  requestedLimit Int?                  @map("requested_limit") @db.UnsignedInt
-  scannedCount   Int                   @default(0) @map("scanned_count") @db.UnsignedInt
-  addedCount     Int                   @default(0) @map("added_count") @db.UnsignedInt
-  updatedCount   Int                   @default(0) @map("updated_count") @db.UnsignedInt
-  missingCount   Int                   @default(0) @map("missing_count") @db.UnsignedInt
-  failedCount    Int                   @default(0) @map("failed_count") @db.UnsignedInt
-  currentOffset  Int                   @default(0) @map("current_offset") @db.UnsignedInt
-  currentPhase   String?               @map("current_phase") @db.VarChar(64)
-  heartbeatAt    DateTime?             @map("heartbeat_at")
-  leaseExpiresAt DateTime?             @map("lease_expires_at")
-  errorCode      String?               @map("error_code") @db.VarChar(128)
-  errorMessage   String?               @map("error_message") @db.VarChar(512)
-  startedAt      DateTime?             @map("started_at")
-  completedAt    DateTime?             @map("completed_at")
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
-  actorAdmin     AdminAccount          @relation("TeamCatalogSyncActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
-  items          TeamCatalogSyncItem[]
+  id              String                @id @default(uuid()) @db.Char(36)
+  actorAdminId    String                @map("actor_admin_id") @db.Char(36)
+  mode            TeamCatalogSyncMode
+  status          TeamCatalogSyncStatus @default(PENDING)
+  activeLeaseKey  String?               @unique @map("active_lease_key") @db.VarChar(64)
+  leaseOwnerToken String?               @map("lease_owner_token") @db.Char(36)
+  requestedLimit  Int?                  @map("requested_limit") @db.UnsignedInt
+  scannedCount    Int                   @default(0) @map("scanned_count") @db.UnsignedInt
+  addedCount      Int                   @default(0) @map("added_count") @db.UnsignedInt
+  updatedCount    Int                   @default(0) @map("updated_count") @db.UnsignedInt
+  missingCount    Int                   @default(0) @map("missing_count") @db.UnsignedInt
+  failedCount     Int                   @default(0) @map("failed_count") @db.UnsignedInt
+  currentOffset   Int                   @default(0) @map("current_offset") @db.UnsignedInt
+  currentPhase    String?               @map("current_phase") @db.VarChar(64)
+  heartbeatAt     DateTime?             @map("heartbeat_at")
+  leaseExpiresAt  DateTime?             @map("lease_expires_at")
+  errorCode       String?               @map("error_code") @db.VarChar(128)
+  errorMessage    String?               @map("error_message") @db.VarChar(512)
+  startedAt       DateTime?             @map("started_at")
+  completedAt     DateTime?             @map("completed_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  actorAdmin      AdminAccount          @relation("TeamCatalogSyncActor", fields: [actorAdminId], references: [id], onDelete: Restrict)
+  items           TeamCatalogSyncItem[]
 
   @@index([status, createdAt], map: "team_catalog_sync_runs_status_idx")
   @@index([status, leaseExpiresAt], map: "team_catalog_sync_runs_lease_idx")
@@ -900,40 +945,43 @@ model TeamCatalogSyncItem {
 
 /// The service locks the parent League row before starting a season and rejects an existing IN_PROGRESS sibling.
 model LeagueSeason {
-  id                   String                      @id @default(uuid()) @db.Char(36)
-  leagueId             String                      @map("league_id") @db.Char(36)
-  seasonNumber         Int                         @map("season_number") @db.UnsignedInt
-  displayName          String                      @map("display_name") @db.VarChar(64)
-  previousSeasonId     String?                     @unique @map("previous_season_id") @db.Char(36)
-  isFirstSeason        Boolean                     @default(false) @map("is_first_season")
-  registrationOpensAt  DateTime                    @map("registration_opens_at")
-  registrationClosesAt DateTime                    @map("registration_closes_at")
-  startsAt             DateTime                    @map("starts_at")
-  endsAt               DateTime                    @map("ends_at")
-  superCapacity        Int                         @map("super_capacity") @db.UnsignedSmallInt
-  championCapacity     Int                         @map("champion_capacity") @db.UnsignedSmallInt
-  promotionCount       Int                         @map("promotion_count") @db.UnsignedSmallInt
-  status               LeagueSeasonStatus          @default(DRAFT)
-  cancellationReason   String?                     @map("cancellation_reason") @db.VarChar(512)
-  createdById          String?                     @map("created_by_id") @db.Char(36)
-  createdByAdminId     String?                     @map("created_by_admin_id") @db.Char(36)
-  version              Int                         @default(1) @db.UnsignedInt
-  createdAt            DateTime                    @default(now()) @map("created_at")
-  updatedAt            DateTime                    @updatedAt @map("updated_at")
-  league               League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  currentForLeague     League?                     @relation("LeagueCurrentSeason")
-  previousSeason       LeagueSeason?               @relation("LeagueSeasonPredecessor", fields: [previousSeasonId], references: [id], onDelete: Restrict)
-  nextSeason           LeagueSeason?               @relation("LeagueSeasonPredecessor")
-  creator              User?                       @relation("LeagueSeasonCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  adminCreator         AdminAccount?               @relation("LeagueSeasonAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  entries              SeasonEntry[]
-  statusHistory        LeagueSeasonStatusHistory[]
-  transferWindows      TransferWindow[]
-  rosterTransactions   RosterTransaction[]
-  valuationWindows     ValuationWindow[]
-  financeLedgerEntries FinanceLedgerEntry[]
-  competitions         Competition[]
-  allocationProposals  SeasonAllocationProposal[]
+  id                        String                         @id @default(uuid()) @db.Char(36)
+  leagueId                  String                         @map("league_id") @db.Char(36)
+  seasonNumber              Int                            @map("season_number") @db.UnsignedInt
+  displayName               String                         @map("display_name") @db.VarChar(64)
+  previousSeasonId          String?                        @unique @map("previous_season_id") @db.Char(36)
+  isFirstSeason             Boolean                        @default(false) @map("is_first_season")
+  registrationOpensAt       DateTime                       @map("registration_opens_at")
+  registrationClosesAt      DateTime                       @map("registration_closes_at")
+  startsAt                  DateTime                       @map("starts_at")
+  endsAt                    DateTime                       @map("ends_at")
+  superCapacity             Int                            @map("super_capacity") @db.UnsignedSmallInt
+  championCapacity          Int                            @map("champion_capacity") @db.UnsignedSmallInt
+  promotionCount            Int                            @map("promotion_count") @db.UnsignedSmallInt
+  status                    LeagueSeasonStatus             @default(DRAFT)
+  cancellationReason        String?                        @map("cancellation_reason") @db.VarChar(512)
+  createdById               String?                        @map("created_by_id") @db.Char(36)
+  createdByAdminId          String?                        @map("created_by_admin_id") @db.Char(36)
+  version                   Int                            @default(1) @db.UnsignedInt
+  createdAt                 DateTime                       @default(now()) @map("created_at")
+  updatedAt                 DateTime                       @updatedAt @map("updated_at")
+  league                    League                         @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  currentForLeague          League?                        @relation("LeagueCurrentSeason")
+  previousSeason            LeagueSeason?                  @relation("LeagueSeasonPredecessor", fields: [previousSeasonId], references: [id], onDelete: Restrict)
+  nextSeason                LeagueSeason?                  @relation("LeagueSeasonPredecessor")
+  creator                   User?                          @relation("LeagueSeasonCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  adminCreator              AdminAccount?                  @relation("LeagueSeasonAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  entries                   SeasonEntry[]
+  statusHistory             LeagueSeasonStatusHistory[]
+  transferWindows           TransferWindow[]
+  rosterTransactions        RosterTransaction[]
+  valuationWindows          ValuationWindow[]
+  financeLedgerEntries      FinanceLedgerEntry[]
+  competitions              Competition[]
+  allocationProposals       SeasonAllocationProposal[]
+  playerApplications        PlayerAcquisitionApplication[]
+  acquiredPlayerOwnerships  LeaguePlayerOwnership[]        @relation("OwnershipAcquisitionSeason")
+  playerReleaseRestrictions PlayerReleaseRestriction[]
 
   @@unique([leagueId, seasonNumber], map: "league_seasons_number_unique")
   @@index([leagueId, status], map: "league_seasons_status_idx")
@@ -977,21 +1025,23 @@ model LeagueSalaryTier {
 }
 
 model TransferWindow {
-  id               String       @id @default(uuid()) @db.Char(36)
-  seasonId         String       @map("season_id") @db.Char(36)
-  name             String       @db.VarChar(64)
-  startsAt         DateTime     @map("starts_at")
-  endsAt           DateTime     @map("ends_at")
-  allowBuy         Boolean      @map("allow_buy")
-  allowSell        Boolean      @map("allow_sell")
-  allowTransfer    Boolean      @map("allow_transfer")
-  allowCardUpgrade Boolean      @map("allow_card_upgrade")
-  createdByAdminId String       @map("created_by_admin_id") @db.Char(36)
-  version          Int          @default(1) @db.UnsignedInt
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  season           LeagueSeason @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  createdByAdmin   AdminAccount @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  id                        String                         @id @default(uuid()) @db.Char(36)
+  seasonId                  String                         @map("season_id") @db.Char(36)
+  name                      String                         @db.VarChar(64)
+  startsAt                  DateTime                       @map("starts_at")
+  endsAt                    DateTime                       @map("ends_at")
+  allowBuy                  Boolean                        @map("allow_buy")
+  allowSell                 Boolean                        @map("allow_sell")
+  allowTransfer             Boolean                        @map("allow_transfer")
+  allowCardUpgrade          Boolean                        @map("allow_card_upgrade")
+  createdByAdminId          String                         @map("created_by_admin_id") @db.Char(36)
+  version                   Int                            @default(1) @db.UnsignedInt
+  createdAt                 DateTime                       @default(now()) @map("created_at")
+  updatedAt                 DateTime                       @updatedAt @map("updated_at")
+  season                    LeagueSeason                   @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin            AdminAccount                   @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  playerApplications        PlayerAcquisitionApplication[]
+  playerReleaseRestrictions PlayerReleaseRestriction[]
 
   @@index([seasonId, startsAt, endsAt], map: "transfer_windows_timeline_idx")
   @@index([createdByAdminId], map: "transfer_windows_creator_idx")
@@ -999,31 +1049,36 @@ model TransferWindow {
 }
 
 model LeaguePlayerOwnership {
-  id                  String                    @id @default(uuid()) @db.Char(36)
-  leagueId            String                    @map("league_id") @db.Char(36)
-  leagueTeamId        String                    @map("league_team_id") @db.Char(36)
-  footballPlayerId    String                    @map("football_player_id") @db.Char(36)
-  currentPlayerCardId String                    @map("current_player_card_id") @db.Char(36)
-  maxOverallSnapshot  Int                       @map("max_overall_snapshot") @db.UnsignedTinyInt
-  dtRatingSnapshot    Int?                      @map("dt_rating_snapshot") @db.UnsignedTinyInt
-  salaryRuleVersionId String                    @map("salary_rule_version_id") @db.Char(36)
-  salaryMinor         Int                       @map("salary_minor") @db.UnsignedInt
-  acquiredAt          DateTime                  @default(now()) @map("acquired_at")
-  status              RosterEntryStatus         @default(ACTIVE)
-  version             Int                       @default(1) @db.UnsignedInt
-  createdAt           DateTime                  @default(now()) @map("created_at")
-  updatedAt           DateTime                  @updatedAt @map("updated_at")
-  league              League                    @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  leagueTeam          LeagueTeam                @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
-  footballPlayer      FootballPlayer            @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
-  currentPlayerCard   PlayerCard                @relation(fields: [currentPlayerCardId], references: [id], onDelete: Restrict)
-  salaryRuleVersion   LeagueSalaryRuleVersion   @relation(fields: [salaryRuleVersionId], references: [id], onDelete: Restrict)
+  id                  String                         @id @default(uuid()) @db.Char(36)
+  leagueId            String                         @map("league_id") @db.Char(36)
+  leagueTeamId        String                         @map("league_team_id") @db.Char(36)
+  footballPlayerId    String                         @map("football_player_id") @db.Char(36)
+  currentPlayerCardId String                         @map("current_player_card_id") @db.Char(36)
+  maxOverallSnapshot  Int                            @map("max_overall_snapshot") @db.UnsignedTinyInt
+  dtRatingSnapshot    Int?                           @map("dt_rating_snapshot") @db.UnsignedTinyInt
+  salaryRuleVersionId String                         @map("salary_rule_version_id") @db.Char(36)
+  salaryMinor         Int                            @map("salary_minor") @db.UnsignedInt
+  acquisitionType     OwnershipAcquisitionType       @default(NORMAL) @map("acquisition_type")
+  acquisitionSeasonId String?                        @map("acquisition_season_id") @db.Char(36)
+  acquiredAt          DateTime                       @default(now()) @map("acquired_at")
+  status              RosterEntryStatus              @default(ACTIVE)
+  version             Int                            @default(1) @db.UnsignedInt
+  createdAt           DateTime                       @default(now()) @map("created_at")
+  updatedAt           DateTime                       @updatedAt @map("updated_at")
+  league              League                         @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueTeam          LeagueTeam                     @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  footballPlayer      FootballPlayer                 @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  currentPlayerCard   PlayerCard                     @relation(fields: [currentPlayerCardId], references: [id], onDelete: Restrict)
+  salaryRuleVersion   LeagueSalaryRuleVersion        @relation(fields: [salaryRuleVersionId], references: [id], onDelete: Restrict)
+  acquisitionSeason   LeagueSeason?                  @relation("OwnershipAcquisitionSeason", fields: [acquisitionSeasonId], references: [id], onDelete: Restrict)
   valuationSnapshots  ValuationRosterSnapshot[]
+  forcedApplications  PlayerAcquisitionApplication[]
 
   @@unique([leagueId, footballPlayerId], map: "league_player_ownerships_player_unique")
   @@index([leagueTeamId, status], map: "league_player_ownerships_team_status_idx")
   @@index([currentPlayerCardId], map: "league_player_ownerships_card_idx")
   @@index([salaryRuleVersionId], map: "league_player_ownerships_salary_rule_idx")
+  @@index([acquisitionSeasonId, acquisitionType], map: "league_player_ownerships_acquisition_idx")
   @@map("league_player_ownerships")
 }
 
@@ -1043,6 +1098,7 @@ model RosterTransaction {
   valuationSnapshotMinor      Int?                             @map("valuation_snapshot_minor") @db.UnsignedInt
   transactionFeeMinor         Int?                             @map("transaction_fee_minor") @db.UnsignedInt
   transactionFeeRuleVersionId String?                          @map("transaction_fee_rule_version_id") @db.Char(36)
+  playerApplicationId         String?                          @unique @map("player_application_id") @db.Char(36)
   reason                      String                           @db.VarChar(512)
   createdByAdminId            String                           @map("created_by_admin_id") @db.Char(36)
   createdAt                   DateTime                         @default(now()) @map("created_at")
@@ -1056,6 +1112,8 @@ model RosterTransaction {
   createdByAdmin              AdminAccount                     @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
   financeEntries              FinanceLedgerEntry[]
   transactionFeeRuleVersion   LeagueTransactionFeeRuleVersion? @relation(fields: [transactionFeeRuleVersionId], references: [id], onDelete: Restrict)
+  playerApplication           PlayerAcquisitionApplication?    @relation(fields: [playerApplicationId], references: [id], onDelete: Restrict)
+  releaseRestriction          PlayerReleaseRestriction?
 
   @@index([leagueId, createdAt, id], map: "roster_transactions_league_timeline_idx")
   @@index([seasonId, type], map: "roster_transactions_season_type_idx")
@@ -1069,22 +1127,113 @@ model RosterTransaction {
   @@map("roster_transactions")
 }
 
+model PlayerAcquisitionApplication {
+  id                       String                              @id @default(uuid()) @db.Char(36)
+  leagueId                 String                              @map("league_id") @db.Char(36)
+  seasonId                 String                              @map("season_id") @db.Char(36)
+  transferWindowId         String                              @map("transfer_window_id") @db.Char(36)
+  type                     PlayerApplicationType
+  applicantLeagueTeamId    String                              @map("applicant_league_team_id") @db.Char(36)
+  footballPlayerId         String                              @map("football_player_id") @db.Char(36)
+  playerCardId             String                              @map("player_card_id") @db.Char(36)
+  sourceLeagueTeamId       String?                             @map("source_league_team_id") @db.Char(36)
+  ownershipId              String?                             @map("ownership_id") @db.Char(36)
+  ownershipVersionSnapshot Int?                                @map("ownership_version_snapshot") @db.UnsignedInt
+  amountMinor              Int                                 @map("amount_minor") @db.UnsignedInt
+  valuationMinorSnapshot   Int?                                @map("valuation_minor_snapshot") @db.UnsignedInt
+  valuationVersionSnapshot Int?                                @map("valuation_version_snapshot") @db.UnsignedInt
+  status                   PlayerApplicationStatus             @default(PENDING)
+  firstValidSubmittedAt    DateTime                            @map("first_valid_submitted_at")
+  lastSubmittedAt          DateTime                            @map("last_submitted_at")
+  reviewedByAdminId        String?                             @map("reviewed_by_admin_id") @db.Char(36)
+  reviewedAt               DateTime?                           @map("reviewed_at")
+  reviewReason             String?                             @map("review_reason") @db.VarChar(512)
+  version                  Int                                 @default(1) @db.UnsignedInt
+  createdAt                DateTime                            @default(now()) @map("created_at")
+  updatedAt                DateTime                            @updatedAt @map("updated_at")
+  league                   League                              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season                   LeagueSeason                        @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  transferWindow           TransferWindow                      @relation(fields: [transferWindowId], references: [id], onDelete: Restrict)
+  applicantLeagueTeam      LeagueTeam                          @relation("PlayerApplicationApplicantTeam", fields: [applicantLeagueTeamId], references: [id], onDelete: Restrict)
+  footballPlayer           FootballPlayer                      @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  playerCard               PlayerCard                          @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
+  sourceLeagueTeam         LeagueTeam?                         @relation("PlayerApplicationSourceTeam", fields: [sourceLeagueTeamId], references: [id], onDelete: Restrict)
+  ownership                LeaguePlayerOwnership?              @relation(fields: [ownershipId], references: [id], onDelete: Restrict)
+  reviewedByAdmin          AdminAccount?                       @relation("PlayerApplicationReviewer", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
+  events                   PlayerAcquisitionApplicationEvent[]
+  rosterTransaction        RosterTransaction?
+
+  @@index([leagueId, seasonId, status, createdAt, id], map: "player_applications_market_idx")
+  @@index([applicantLeagueTeamId, status, updatedAt], map: "player_applications_team_status_idx")
+  @@index([leagueId, footballPlayerId, type, status], map: "player_applications_player_queue_idx")
+  @@index([ownershipId, ownershipVersionSnapshot, status, firstValidSubmittedAt, id], map: "player_applications_forced_order_idx")
+  @@index([transferWindowId, status], map: "player_applications_window_status_idx")
+  @@index([reviewedByAdminId], map: "player_applications_reviewer_idx")
+  @@map("player_acquisition_applications")
+}
+
+model PlayerAcquisitionApplicationEvent {
+  id              String                       @id @default(uuid()) @db.Char(36)
+  applicationId   String                       @map("application_id") @db.Char(36)
+  type            PlayerApplicationEventType
+  fromStatus      PlayerApplicationStatus?     @map("from_status")
+  toStatus        PlayerApplicationStatus      @map("to_status")
+  fromAmountMinor Int?                         @map("from_amount_minor") @db.UnsignedInt
+  toAmountMinor   Int?                         @map("to_amount_minor") @db.UnsignedInt
+  actorUserId     String?                      @map("actor_user_id") @db.Char(36)
+  actorAdminId    String?                      @map("actor_admin_id") @db.Char(36)
+  reason          String?                      @db.VarChar(512)
+  createdAt       DateTime                     @default(now()) @map("created_at")
+  application     PlayerAcquisitionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actorUser       User?                        @relation("PlayerApplicationEventUser", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorAdmin      AdminAccount?                @relation("PlayerApplicationEventAdmin", fields: [actorAdminId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt, id], map: "player_application_events_timeline_idx")
+  @@index([actorUserId, createdAt], map: "player_application_events_user_idx")
+  @@index([actorAdminId, createdAt], map: "player_application_events_admin_idx")
+  @@map("player_acquisition_application_events")
+}
+
+model PlayerReleaseRestriction {
+  id                  String            @id @default(uuid()) @db.Char(36)
+  leagueId            String            @map("league_id") @db.Char(36)
+  seasonId            String            @map("season_id") @db.Char(36)
+  transferWindowId    String            @map("transfer_window_id") @db.Char(36)
+  leagueTeamId        String            @map("league_team_id") @db.Char(36)
+  footballPlayerId    String            @map("football_player_id") @db.Char(36)
+  rosterTransactionId String            @unique @map("roster_transaction_id") @db.Char(36)
+  createdByUserId     String            @map("created_by_user_id") @db.Char(36)
+  createdAt           DateTime          @default(now()) @map("created_at")
+  league              League            @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season              LeagueSeason      @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  transferWindow      TransferWindow    @relation(fields: [transferWindowId], references: [id], onDelete: Restrict)
+  leagueTeam          LeagueTeam        @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  footballPlayer      FootballPlayer    @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  rosterTransaction   RosterTransaction @relation(fields: [rosterTransactionId], references: [id], onDelete: Restrict)
+  createdByUser       User              @relation("PlayerReleaseRestrictionUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([transferWindowId, leagueTeamId, footballPlayerId], map: "player_release_restrictions_unique")
+  @@index([leagueId, seasonId, footballPlayerId], map: "player_release_restrictions_player_idx")
+  @@index([createdByUserId, createdAt], map: "player_release_restrictions_user_idx")
+  @@map("player_release_restrictions")
+}
+
 model FinanceLedgerEntry {
-  id                  String                 @id @default(uuid()) @db.Char(36)
-  leagueId            String                 @map("league_id") @db.Char(36)
-  leagueTeamId        String                 @map("league_team_id") @db.Char(36)
-  seasonId            String?                @map("season_id") @db.Char(36)
-  rosterTransactionId String?                @map("roster_transaction_id") @db.Char(36)
+  id                  String                     @id @default(uuid()) @db.Char(36)
+  leagueId            String                     @map("league_id") @db.Char(36)
+  leagueTeamId        String                     @map("league_team_id") @db.Char(36)
+  seasonId            String?                    @map("season_id") @db.Char(36)
+  rosterTransactionId String?                    @map("roster_transaction_id") @db.Char(36)
   direction           FinanceLedgerDirection
   type                FinanceLedgerType
   settlementCategory  FinanceSettlementCategory? @map("settlement_category")
-  amountMinor         Int                    @map("amount_minor") @db.UnsignedInt
-  note                String                 @default("") @db.VarChar(512)
-  createdAt           DateTime               @default(now()) @map("created_at")
-  league              League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  leagueTeam          LeagueTeam             @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
-  season              LeagueSeason?          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  rosterTransaction   RosterTransaction?     @relation(fields: [rosterTransactionId], references: [id], onDelete: Restrict)
+  amountMinor         Int                        @map("amount_minor") @db.UnsignedInt
+  note                String                     @default("") @db.VarChar(512)
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  league              League                     @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueTeam          LeagueTeam                 @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  season              LeagueSeason?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  rosterTransaction   RosterTransaction?         @relation(fields: [rosterTransactionId], references: [id], onDelete: Restrict)
 
   @@index([leagueId, createdAt, id], map: "finance_ledger_entries_league_timeline_idx")
   @@index([leagueTeamId, createdAt, id], map: "finance_ledger_entries_team_timeline_idx")
@@ -1390,18 +1539,18 @@ model DataSource {
 }
 
 model FootballPlayer {
-  id                           String                    @id @default(uuid()) @db.Char(36)
-  nameZh                       String?                   @map("name_zh") @db.VarChar(128)
-  nameEn                       String?                   @map("name_en") @db.VarChar(128)
-  normalizedNameZh             String?                   @map("normalized_name_zh") @db.VarChar(128)
-  normalizedNameEn             String?                   @map("normalized_name_en") @db.VarChar(128)
-  shortName                    String?                   @map("short_name") @db.VarChar(64)
-  nationality                  String?                   @db.VarChar(64)
-  club                         String?                   @db.VarChar(128)
-  publishedAt                  DateTime?                 @map("published_at")
-  lastPublishedReleaseSequence Int?                      @map("last_published_release_sequence")
-  createdAt                    DateTime                  @default(now()) @map("created_at")
-  updatedAt                    DateTime                  @updatedAt @map("updated_at")
+  id                           String                         @id @default(uuid()) @db.Char(36)
+  nameZh                       String?                        @map("name_zh") @db.VarChar(128)
+  nameEn                       String?                        @map("name_en") @db.VarChar(128)
+  normalizedNameZh             String?                        @map("normalized_name_zh") @db.VarChar(128)
+  normalizedNameEn             String?                        @map("normalized_name_en") @db.VarChar(128)
+  shortName                    String?                        @map("short_name") @db.VarChar(64)
+  nationality                  String?                        @db.VarChar(64)
+  club                         String?                        @db.VarChar(128)
+  publishedAt                  DateTime?                      @map("published_at")
+  lastPublishedReleaseSequence Int?                           @map("last_published_release_sequence")
+  createdAt                    DateTime                       @default(now()) @map("created_at")
+  updatedAt                    DateTime                       @updatedAt @map("updated_at")
   sources                      FootballPlayerSource[]
   cards                        PlayerCard[]
   bestCard                     FootballPlayerBestCard?
@@ -1413,6 +1562,8 @@ model FootballPlayer {
   importRecords                ImportRecord[]
   favoritedBy                  UserPlayerFavorite[]
   playerAuctionLots            PlayerAuctionLot[]
+  playerApplications           PlayerAcquisitionApplication[]
+  playerReleaseRestrictions    PlayerReleaseRestriction[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
   @@index([normalizedNameEn], map: "football_players_name_en_idx")
@@ -1474,36 +1625,37 @@ model CardPack {
 }
 
 model PlayerCard {
-  id                           String                   @id @default(uuid()) @db.Char(36)
-  sourceId                     String                   @map("source_id") @db.Char(36)
-  externalId                   String                   @map("external_id") @db.VarChar(128)
-  playerId                     String                   @map("player_id") @db.Char(36)
-  cardPackId                   String?                  @map("card_pack_id") @db.Char(36)
-  cardName                     String                   @map("card_name") @db.VarChar(128)
+  id                           String                         @id @default(uuid()) @db.Char(36)
+  sourceId                     String                         @map("source_id") @db.Char(36)
+  externalId                   String                         @map("external_id") @db.VarChar(128)
+  playerId                     String                         @map("player_id") @db.Char(36)
+  cardPackId                   String?                        @map("card_pack_id") @db.Char(36)
+  cardName                     String                         @map("card_name") @db.VarChar(128)
   position                     PlayerPosition
-  overallRating                Int                      @map("overall_rating") @db.UnsignedTinyInt
-  cardType                     PlayerCardType           @map("card_type")
-  playStyle                    String?                  @map("play_style") @db.VarChar(128)
-  status                       PlayerCardStatus         @default(ACTIVE)
-  imageUrl                     String?                  @map("image_url") @db.VarChar(2048)
-  sourceUpdatedAt              DateTime?                @map("source_updated_at")
-  publishedAt                  DateTime?                @map("published_at")
-  lastPublishedReleaseSequence Int?                     @map("last_published_release_sequence")
-  createdAt                    DateTime                 @default(now()) @map("created_at")
-  updatedAt                    DateTime                 @updatedAt @map("updated_at")
-  source                       DataSource               @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  player                       FootballPlayer           @relation(fields: [playerId], references: [id], onDelete: Restrict)
-  cardPack                     CardPack?                @relation(fields: [cardPackId], references: [id], onDelete: SetNull)
+  overallRating                Int                            @map("overall_rating") @db.UnsignedTinyInt
+  cardType                     PlayerCardType                 @map("card_type")
+  playStyle                    String?                        @map("play_style") @db.VarChar(128)
+  status                       PlayerCardStatus               @default(ACTIVE)
+  imageUrl                     String?                        @map("image_url") @db.VarChar(2048)
+  sourceUpdatedAt              DateTime?                      @map("source_updated_at")
+  publishedAt                  DateTime?                      @map("published_at")
+  lastPublishedReleaseSequence Int?                           @map("last_published_release_sequence")
+  createdAt                    DateTime                       @default(now()) @map("created_at")
+  updatedAt                    DateTime                       @updatedAt @map("updated_at")
+  source                       DataSource                     @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  player                       FootballPlayer                 @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  cardPack                     CardPack?                      @relation(fields: [cardPackId], references: [id], onDelete: SetNull)
   attributes                   PlayerCardAttribute?
   skills                       PlayerCardSkill[]
   autoBuilds                   PlayerCardAutoBuild[]
   bestCardSelections           FootballPlayerBestCard[]
   leagueOwnerships             LeaguePlayerOwnership[]
-  oldRosterTransactions        RosterTransaction[]      @relation("RosterTransactionOldCard")
-  newRosterTransactions        RosterTransaction[]      @relation("RosterTransactionNewCard")
+  oldRosterTransactions        RosterTransaction[]            @relation("RosterTransactionOldCard")
+  newRosterTransactions        RosterTransaction[]            @relation("RosterTransactionNewCard")
   versions                     PlayerCardVersion[]
   importRecords                ImportRecord[]
   playerAuctionLots            PlayerAuctionLot[]
+  playerApplications           PlayerAcquisitionApplication[]
 
   @@unique([sourceId, externalId], map: "player_cards_identity_unique")
   @@index([position, cardType, overallRating], map: "player_cards_filter_idx")
@@ -1607,32 +1759,32 @@ model ImportBatch {
 }
 
 model ExternalSyncRun {
-  id             String                 @id @default(uuid()) @db.Char(36)
-  sourceId       String                 @map("source_id") @db.Char(36)
-  actorId        String                 @map("actor_id") @db.Char(36)
-  mode           ExternalSyncMode
-  status         ExternalSyncStatus     @default(PENDING)
-  activeLeaseKey String?                @unique @map("active_lease_key") @db.VarChar(64)
-  leaseOwnerToken String?               @map("lease_owner_token") @db.Char(36)
-  requestedLimit Int?                   @map("requested_limit") @db.UnsignedInt
-  sourceTotal    Int?                   @map("source_total") @db.UnsignedInt
-  scannedCount   Int                    @default(0) @map("scanned_count") @db.UnsignedInt
-  fetchedCount   Int                    @default(0) @map("fetched_count") @db.UnsignedInt
-  skippedCount   Int                    @default(0) @map("skipped_count") @db.UnsignedInt
-  failedCount    Int                    @default(0) @map("failed_count") @db.UnsignedInt
-  currentOffset  Int                    @default(0) @map("current_offset") @db.UnsignedInt
-  currentPhase   String?                @map("current_phase") @db.VarChar(64)
-  heartbeatAt    DateTime?              @map("heartbeat_at")
-  leaseExpiresAt DateTime?              @map("lease_expires_at")
-  errorCode      String?                @map("error_code") @db.VarChar(64)
-  errorMessage   String?                @map("error_message") @db.VarChar(512)
-  startedAt      DateTime?              @map("started_at")
-  finishedAt     DateTime?              @map("finished_at")
-  createdAt      DateTime               @default(now()) @map("created_at")
-  updatedAt      DateTime               @updatedAt @map("updated_at")
-  source         DataSource             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  items          ExternalSyncItem[]
-  batchLinks     ExternalSyncRunBatch[]
+  id              String                 @id @default(uuid()) @db.Char(36)
+  sourceId        String                 @map("source_id") @db.Char(36)
+  actorId         String                 @map("actor_id") @db.Char(36)
+  mode            ExternalSyncMode
+  status          ExternalSyncStatus     @default(PENDING)
+  activeLeaseKey  String?                @unique @map("active_lease_key") @db.VarChar(64)
+  leaseOwnerToken String?                @map("lease_owner_token") @db.Char(36)
+  requestedLimit  Int?                   @map("requested_limit") @db.UnsignedInt
+  sourceTotal     Int?                   @map("source_total") @db.UnsignedInt
+  scannedCount    Int                    @default(0) @map("scanned_count") @db.UnsignedInt
+  fetchedCount    Int                    @default(0) @map("fetched_count") @db.UnsignedInt
+  skippedCount    Int                    @default(0) @map("skipped_count") @db.UnsignedInt
+  failedCount     Int                    @default(0) @map("failed_count") @db.UnsignedInt
+  currentOffset   Int                    @default(0) @map("current_offset") @db.UnsignedInt
+  currentPhase    String?                @map("current_phase") @db.VarChar(64)
+  heartbeatAt     DateTime?              @map("heartbeat_at")
+  leaseExpiresAt  DateTime?              @map("lease_expires_at")
+  errorCode       String?                @map("error_code") @db.VarChar(64)
+  errorMessage    String?                @map("error_message") @db.VarChar(512)
+  startedAt       DateTime?              @map("started_at")
+  finishedAt      DateTime?              @map("finished_at")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+  source          DataSource             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  items           ExternalSyncItem[]
+  batchLinks      ExternalSyncRunBatch[]
 
   @@index([sourceId, status, createdAt], map: "external_sync_runs_source_status_idx")
   @@index([status, leaseExpiresAt], map: "external_sync_runs_lease_idx")
@@ -2314,23 +2466,23 @@ model WechatObservedGroup {
 }
 
 model WechatGroupBinding {
-  id              String                      @id @default(uuid()) @db.Char(36)
-  deviceId        String                      @map("device_id") @db.Char(36)
-  observedGroupId String                      @unique @map("observed_group_id") @db.Char(36)
-  wechatGroupId   String                      @map("wechat_group_id") @db.VarChar(256)
-  displayName     String                      @map("display_name") @db.VarChar(128)
-  leagueId        String                      @map("league_id") @db.Char(36)
-  enabled         Boolean                     @default(true)
-  lastConfirmedAt DateTime                    @default(now()) @map("last_confirmed_at")
-  version         Int                         @default(1) @db.UnsignedInt
-  createdAt       DateTime                    @default(now()) @map("created_at")
-  updatedAt       DateTime                    @updatedAt @map("updated_at")
-  device          WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  observedGroup   WechatObservedGroup         @relation(fields: [observedGroupId], references: [id], onDelete: Restrict)
-  league          League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  capabilities    WechatGroupCapability[]
-  scheduleSources WechatGroupScheduleSource[]
-  inboundMessages WechatInboundMessage[]
+  id                   String                      @id @default(uuid()) @db.Char(36)
+  deviceId             String                      @map("device_id") @db.Char(36)
+  observedGroupId      String                      @unique @map("observed_group_id") @db.Char(36)
+  wechatGroupId        String                      @map("wechat_group_id") @db.VarChar(256)
+  displayName          String                      @map("display_name") @db.VarChar(128)
+  leagueId             String                      @map("league_id") @db.Char(36)
+  enabled              Boolean                     @default(true)
+  lastConfirmedAt      DateTime                    @default(now()) @map("last_confirmed_at")
+  version              Int                         @default(1) @db.UnsignedInt
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  updatedAt            DateTime                    @updatedAt @map("updated_at")
+  device               WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  observedGroup        WechatObservedGroup         @relation(fields: [observedGroupId], references: [id], onDelete: Restrict)
+  league               League                      @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  capabilities         WechatGroupCapability[]
+  scheduleSources      WechatGroupScheduleSource[]
+  inboundMessages      WechatInboundMessage[]
   playerAuctionBatches PlayerAuctionBatch[]
 
   @@unique([deviceId, wechatGroupId], map: "wechat_group_bindings_device_group_unique")
@@ -2372,18 +2524,18 @@ model WechatGroupScheduleSource {
 }
 
 model WechatIdentityBinding {
-  id              String                      @id @default(uuid()) @db.Char(36)
-  deviceId        String                      @map("device_id") @db.Char(36)
-  wechatContactId String                      @map("wechat_contact_id") @db.VarChar(256)
-  userId          String                      @map("user_id") @db.Char(36)
-  status          WechatIdentityBindingStatus @default(ACTIVE)
-  boundAt         DateTime                    @default(now()) @map("bound_at")
-  unboundAt       DateTime?                   @map("unbound_at")
-  revokedReason   String?                     @map("revoked_reason") @db.VarChar(512)
-  createdAt       DateTime                    @default(now()) @map("created_at")
-  updatedAt       DateTime                    @updatedAt @map("updated_at")
-  device          WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  user            User                        @relation("WechatIdentityUser", fields: [userId], references: [id], onDelete: Restrict)
+  id                String                      @id @default(uuid()) @db.Char(36)
+  deviceId          String                      @map("device_id") @db.Char(36)
+  wechatContactId   String                      @map("wechat_contact_id") @db.VarChar(256)
+  userId            String                      @map("user_id") @db.Char(36)
+  status            WechatIdentityBindingStatus @default(ACTIVE)
+  boundAt           DateTime                    @default(now()) @map("bound_at")
+  unboundAt         DateTime?                   @map("unbound_at")
+  revokedReason     String?                     @map("revoked_reason") @db.VarChar(512)
+  createdAt         DateTime                    @default(now()) @map("created_at")
+  updatedAt         DateTime                    @updatedAt @map("updated_at")
+  device            WechatBotDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  user              User                        @relation("WechatIdentityUser", fields: [userId], references: [id], onDelete: Restrict)
   playerAuctionBids PlayerAuctionBid[]
 
   @@unique([deviceId, wechatContactId], map: "wechat_identity_bindings_device_contact_unique")
@@ -2479,27 +2631,27 @@ model WechatOutboxMessage {
 }
 
 model PlayerAuctionBatch {
-  id                    String                   @id @default(uuid()) @db.Char(36)
-  leagueId              String                   @map("league_id") @db.Char(36)
-  groupBindingId        String                   @map("group_binding_id") @db.Char(36)
-  bidChannel            PlayerAuctionBidChannel  @default(WECHAT_GROUP) @map("bid_channel")
-  name                  String                   @db.VarChar(128)
-  status                PlayerAuctionBatchStatus @default(DRAFT)
-  currentLotId          String?                  @unique @map("current_lot_id") @db.Char(36)
-  createdByAdminId      String                   @map("created_by_admin_id") @db.Char(36)
-  recoveryDetectedAt    DateTime?                @map("recovery_detected_at")
-  recoveryReason        String?                  @map("recovery_reason") @db.VarChar(512)
-  version               Int                      @default(1) @db.UnsignedInt
-  startedAt             DateTime?                @map("started_at")
-  completedAt           DateTime?                @map("completed_at")
-  cancelledAt           DateTime?                @map("cancelled_at")
-  createdAt             DateTime                 @default(now()) @map("created_at")
-  updatedAt             DateTime                 @updatedAt @map("updated_at")
-  league                League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  groupBinding          WechatGroupBinding       @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
-  createdByAdmin        AdminAccount             @relation("PlayerAuctionBatchCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
-  currentLot            PlayerAuctionLot?        @relation("PlayerAuctionCurrentLot", fields: [currentLotId], references: [id], onDelete: Restrict)
-  lots                  PlayerAuctionLot[]        @relation("PlayerAuctionBatchLots")
+  id                 String                   @id @default(uuid()) @db.Char(36)
+  leagueId           String                   @map("league_id") @db.Char(36)
+  groupBindingId     String                   @map("group_binding_id") @db.Char(36)
+  bidChannel         PlayerAuctionBidChannel  @default(WECHAT_GROUP) @map("bid_channel")
+  name               String                   @db.VarChar(128)
+  status             PlayerAuctionBatchStatus @default(DRAFT)
+  currentLotId       String?                  @unique @map("current_lot_id") @db.Char(36)
+  createdByAdminId   String                   @map("created_by_admin_id") @db.Char(36)
+  recoveryDetectedAt DateTime?                @map("recovery_detected_at")
+  recoveryReason     String?                  @map("recovery_reason") @db.VarChar(512)
+  version            Int                      @default(1) @db.UnsignedInt
+  startedAt          DateTime?                @map("started_at")
+  completedAt        DateTime?                @map("completed_at")
+  cancelledAt        DateTime?                @map("cancelled_at")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  league             League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  groupBinding       WechatGroupBinding       @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
+  createdByAdmin     AdminAccount             @relation("PlayerAuctionBatchCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  currentLot         PlayerAuctionLot?        @relation("PlayerAuctionCurrentLot", fields: [currentLotId], references: [id], onDelete: Restrict)
+  lots               PlayerAuctionLot[]       @relation("PlayerAuctionBatchLots")
 
   @@index([leagueId, status, createdAt], map: "player_auction_batches_league_status_idx")
   @@index([groupBindingId, status], map: "player_auction_batches_group_status_idx")
@@ -2508,35 +2660,35 @@ model PlayerAuctionBatch {
 }
 
 model PlayerAuctionLot {
-  id                     String                   @id @default(uuid()) @db.Char(36)
-  batchId                String                   @map("batch_id") @db.Char(36)
-  footballPlayerId       String                   @map("football_player_id") @db.Char(36)
-  playerCardId           String?                  @map("player_card_id") @db.Char(36)
-  displayOrder           Int                      @map("display_order") @db.UnsignedInt
-  playerNameSnapshot     String                   @map("player_name_snapshot") @db.VarChar(128)
-  playerSnapshot         Json                     @map("player_snapshot")
-  startingPrice          Int                      @map("starting_price") @db.UnsignedInt
-  minimumIncrement       Int                      @map("minimum_increment") @db.UnsignedInt
-  status                 PlayerAuctionLotStatus   @default(QUEUED)
-  currentPrice           Int?                     @map("current_price") @db.UnsignedInt
-  currentHighestBidId    String?                  @unique @map("current_highest_bid_id") @db.Char(36)
-  deadlineAt             DateTime?                @map("deadline_at")
-  deadlineEpoch          Int                      @default(0) @map("deadline_epoch") @db.UnsignedInt
-  lastCountdownMark      Int?                     @map("last_countdown_mark") @db.UnsignedTinyInt
-  pausedRemainingMs      Int?                     @map("paused_remaining_ms") @db.UnsignedInt
-  version                Int                      @default(1) @db.UnsignedInt
-  startedAt              DateTime?                @map("started_at")
-  closedAt               DateTime?                @map("closed_at")
-  reviewedAt             DateTime?                @map("reviewed_at")
-  createdAt              DateTime                 @default(now()) @map("created_at")
-  updatedAt              DateTime                 @updatedAt @map("updated_at")
-  batch                  PlayerAuctionBatch       @relation("PlayerAuctionBatchLots", fields: [batchId], references: [id], onDelete: Restrict)
-  currentForBatch        PlayerAuctionBatch?      @relation("PlayerAuctionCurrentLot")
-  footballPlayer         FootballPlayer           @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
-  playerCard             PlayerCard?              @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
-  currentHighestBid      PlayerAuctionBid?        @relation("PlayerAuctionLotHighestBid", fields: [currentHighestBidId], references: [id], onDelete: Restrict)
-  bids                   PlayerAuctionBid[]       @relation("PlayerAuctionLotBids")
-  review                 PlayerAuctionReview?
+  id                  String                 @id @default(uuid()) @db.Char(36)
+  batchId             String                 @map("batch_id") @db.Char(36)
+  footballPlayerId    String                 @map("football_player_id") @db.Char(36)
+  playerCardId        String?                @map("player_card_id") @db.Char(36)
+  displayOrder        Int                    @map("display_order") @db.UnsignedInt
+  playerNameSnapshot  String                 @map("player_name_snapshot") @db.VarChar(128)
+  playerSnapshot      Json                   @map("player_snapshot")
+  startingPrice       Int                    @map("starting_price") @db.UnsignedInt
+  minimumIncrement    Int                    @map("minimum_increment") @db.UnsignedInt
+  status              PlayerAuctionLotStatus @default(QUEUED)
+  currentPrice        Int?                   @map("current_price") @db.UnsignedInt
+  currentHighestBidId String?                @unique @map("current_highest_bid_id") @db.Char(36)
+  deadlineAt          DateTime?              @map("deadline_at")
+  deadlineEpoch       Int                    @default(0) @map("deadline_epoch") @db.UnsignedInt
+  lastCountdownMark   Int?                   @map("last_countdown_mark") @db.UnsignedTinyInt
+  pausedRemainingMs   Int?                   @map("paused_remaining_ms") @db.UnsignedInt
+  version             Int                    @default(1) @db.UnsignedInt
+  startedAt           DateTime?              @map("started_at")
+  closedAt            DateTime?              @map("closed_at")
+  reviewedAt          DateTime?              @map("reviewed_at")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  batch               PlayerAuctionBatch     @relation("PlayerAuctionBatchLots", fields: [batchId], references: [id], onDelete: Restrict)
+  currentForBatch     PlayerAuctionBatch?    @relation("PlayerAuctionCurrentLot")
+  footballPlayer      FootballPlayer         @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  playerCard          PlayerCard?            @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
+  currentHighestBid   PlayerAuctionBid?      @relation("PlayerAuctionLotHighestBid", fields: [currentHighestBidId], references: [id], onDelete: Restrict)
+  bids                PlayerAuctionBid[]     @relation("PlayerAuctionLotBids")
+  review              PlayerAuctionReview?
 
   @@unique([batchId, displayOrder], map: "player_auction_lots_batch_order_unique")
   @@index([batchId, status], map: "player_auction_lots_batch_status_idx")
@@ -2547,33 +2699,33 @@ model PlayerAuctionLot {
 }
 
 model PlayerAuctionBid {
-  id                String                   @id @default(uuid()) @db.Char(36)
-  lotId             String                   @map("lot_id") @db.Char(36)
-  inboundMessageId  String?                  @unique @map("inbound_message_id") @db.Char(36)
-  leagueTeamId      String?                  @map("league_team_id") @db.Char(36)
-  userId            String?                  @map("user_id") @db.Char(36)
-  identityBindingId String?                  @map("identity_binding_id") @db.Char(36)
-  source            PlayerAuctionBidChannel  @default(WECHAT_GROUP)
-  idempotencyKey    String?                  @map("idempotency_key") @db.VarChar(128)
-  amount            Int                      @db.UnsignedInt
+  id                String                  @id @default(uuid()) @db.Char(36)
+  lotId             String                  @map("lot_id") @db.Char(36)
+  inboundMessageId  String?                 @unique @map("inbound_message_id") @db.Char(36)
+  leagueTeamId      String?                 @map("league_team_id") @db.Char(36)
+  userId            String?                 @map("user_id") @db.Char(36)
+  identityBindingId String?                 @map("identity_binding_id") @db.Char(36)
+  source            PlayerAuctionBidChannel @default(WECHAT_GROUP)
+  idempotencyKey    String?                 @map("idempotency_key") @db.VarChar(128)
+  amount            Int                     @db.UnsignedInt
   result            PlayerAuctionBidResult
-  rejectionReason   String?                  @map("rejection_reason") @db.VarChar(512)
-  wechatMessageId   String?                  @map("wechat_message_id") @db.VarChar(256)
-  wechatSortKey     String?                  @map("wechat_sort_key") @db.VarChar(128)
-  wechatSentAt      DateTime?                @map("wechat_sent_at")
-  submittedAt       DateTime                 @map("submitted_at")
-  receivedAt        DateTime                 @map("received_at")
-  becameHighestAt   DateTime?                @map("became_highest_at")
-  createdAt         DateTime                 @default(now()) @map("created_at")
-  lot               PlayerAuctionLot         @relation("PlayerAuctionLotBids", fields: [lotId], references: [id], onDelete: Restrict)
-  highestForLot     PlayerAuctionLot?         @relation("PlayerAuctionLotHighestBid")
-  inboundMessage    WechatInboundMessage?    @relation(fields: [inboundMessageId], references: [id], onDelete: Restrict)
-  leagueTeam        LeagueTeam?              @relation("PlayerAuctionBidTeam", fields: [leagueTeamId], references: [id], onDelete: Restrict)
-  user              User?                    @relation("PlayerAuctionBidUser", fields: [userId], references: [id], onDelete: Restrict)
-  identityBinding   WechatIdentityBinding?   @relation(fields: [identityBindingId], references: [id], onDelete: Restrict)
+  rejectionReason   String?                 @map("rejection_reason") @db.VarChar(512)
+  wechatMessageId   String?                 @map("wechat_message_id") @db.VarChar(256)
+  wechatSortKey     String?                 @map("wechat_sort_key") @db.VarChar(128)
+  wechatSentAt      DateTime?               @map("wechat_sent_at")
+  submittedAt       DateTime                @map("submitted_at")
+  receivedAt        DateTime                @map("received_at")
+  becameHighestAt   DateTime?               @map("became_highest_at")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  lot               PlayerAuctionLot        @relation("PlayerAuctionLotBids", fields: [lotId], references: [id], onDelete: Restrict)
+  highestForLot     PlayerAuctionLot?       @relation("PlayerAuctionLotHighestBid")
+  inboundMessage    WechatInboundMessage?   @relation(fields: [inboundMessageId], references: [id], onDelete: Restrict)
+  leagueTeam        LeagueTeam?             @relation("PlayerAuctionBidTeam", fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  user              User?                   @relation("PlayerAuctionBidUser", fields: [userId], references: [id], onDelete: Restrict)
+  identityBinding   WechatIdentityBinding?  @relation(fields: [identityBindingId], references: [id], onDelete: Restrict)
 
-  @@index([lotId, wechatSentAt, wechatSortKey, wechatMessageId], map: "player_auction_bids_order_idx")
   @@unique([lotId, userId, idempotencyKey], map: "player_auction_bids_user_idempotency_unique")
+  @@index([lotId, wechatSentAt, wechatSortKey, wechatMessageId], map: "player_auction_bids_order_idx")
   @@index([lotId, submittedAt, id], map: "player_auction_bids_submitted_order_idx")
   @@index([leagueTeamId, createdAt], map: "player_auction_bids_team_idx")
   @@index([identityBindingId], map: "player_auction_bids_identity_idx")
@@ -2581,21 +2733,21 @@ model PlayerAuctionBid {
 }
 
 model PlayerAuctionReview {
-  id                       String                      @id @default(uuid()) @db.Char(36)
-  lotId                    String                      @unique @map("lot_id") @db.Char(36)
-  decision                 PlayerAuctionReviewDecision
-  computedWinnerTeamId     String?                     @map("computed_winner_team_id") @db.Char(36)
-  computedPrice            Int?                        @map("computed_price") @db.UnsignedInt
-  reviewedWinnerTeamId     String?                     @map("reviewed_winner_team_id") @db.Char(36)
-  reviewedPrice            Int?                        @map("reviewed_price") @db.UnsignedInt
-  reviewedByAdminId        String                      @map("reviewed_by_admin_id") @db.Char(36)
-  reason                   String?                     @db.VarChar(512)
-  reviewedAt               DateTime                    @default(now()) @map("reviewed_at")
-  createdAt                DateTime                    @default(now()) @map("created_at")
-  lot                      PlayerAuctionLot            @relation(fields: [lotId], references: [id], onDelete: Restrict)
-  computedWinnerTeam       LeagueTeam?                 @relation("PlayerAuctionComputedWinnerTeam", fields: [computedWinnerTeamId], references: [id], onDelete: Restrict)
-  reviewedWinnerTeam       LeagueTeam?                 @relation("PlayerAuctionReviewedWinnerTeam", fields: [reviewedWinnerTeamId], references: [id], onDelete: Restrict)
-  reviewedByAdmin          AdminAccount                @relation("PlayerAuctionReviewAdmin", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
+  id                   String                      @id @default(uuid()) @db.Char(36)
+  lotId                String                      @unique @map("lot_id") @db.Char(36)
+  decision             PlayerAuctionReviewDecision
+  computedWinnerTeamId String?                     @map("computed_winner_team_id") @db.Char(36)
+  computedPrice        Int?                        @map("computed_price") @db.UnsignedInt
+  reviewedWinnerTeamId String?                     @map("reviewed_winner_team_id") @db.Char(36)
+  reviewedPrice        Int?                        @map("reviewed_price") @db.UnsignedInt
+  reviewedByAdminId    String                      @map("reviewed_by_admin_id") @db.Char(36)
+  reason               String?                     @db.VarChar(512)
+  reviewedAt           DateTime                    @default(now()) @map("reviewed_at")
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  lot                  PlayerAuctionLot            @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  computedWinnerTeam   LeagueTeam?                 @relation("PlayerAuctionComputedWinnerTeam", fields: [computedWinnerTeamId], references: [id], onDelete: Restrict)
+  reviewedWinnerTeam   LeagueTeam?                 @relation("PlayerAuctionReviewedWinnerTeam", fields: [reviewedWinnerTeamId], references: [id], onDelete: Restrict)
+  reviewedByAdmin      AdminAccount                @relation("PlayerAuctionReviewAdmin", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
 
   @@index([computedWinnerTeamId], map: "player_auction_reviews_computed_team_idx")
   @@index([reviewedWinnerTeamId], map: "player_auction_reviews_reviewed_team_idx")

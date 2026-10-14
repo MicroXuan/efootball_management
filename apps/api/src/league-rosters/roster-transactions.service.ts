@@ -941,7 +941,7 @@ export class RosterTransactionsService {
       leagueId: string;
       seasonId: string;
       type: 'BUY' | 'SELL' | 'RELEASE' | 'TRANSFER' | 'CARD_UPGRADE'
-        | 'SALARY_RECALCULATION' | 'EMERGENCY_CORRECTION';
+        | 'FORCED_TRANSFER' | 'SALARY_RECALCULATION' | 'EMERGENCY_CORRECTION';
       footballPlayerId: string;
       sourceLeagueTeamId: string | null;
       targetLeagueTeamId: string | null;

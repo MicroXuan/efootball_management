@@ -60,6 +60,9 @@ import {
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
   PlayerCardDetailSchema,
+  PlayerApplicationStatusSchema,
+  SubmitPlayerApplicationRequestSchema,
+  ReleaseOwnedPlayerRequestSchema,
   PlayerFavoriteListQuerySchema,
   PlayerFavoriteStatusQuerySchema,
   PublicUserLookupSchema,
@@ -151,6 +154,86 @@ import {
   ValuationWindowSchema,
   ValuationWorkspaceSchema
 } from './index.js';
+
+describe('player market contracts', () => {
+  const seasonId = '11111111-1111-4111-8111-111111111111';
+  const transferWindowId = '22222222-2222-4222-8222-222222222222';
+  const footballPlayerId = '33333333-3333-4333-8333-333333333333';
+  const playerCardId = '44444444-4444-4444-8444-444444444444';
+  const sourceLeagueTeamId = '55555555-5555-4555-8555-555555555555';
+  const ownershipId = '66666666-6666-4666-8666-666666666666';
+
+  it('parses normal and forced player applications', () => {
+    assert.equal(SubmitPlayerApplicationRequestSchema.parse({
+      seasonId,
+      transferWindowId,
+      footballPlayerId,
+      playerCardId,
+      type: 'NORMAL_PURCHASE',
+      amountMinor: 500
+    }).type, 'NORMAL_PURCHASE');
+
+    assert.equal(SubmitPlayerApplicationRequestSchema.parse({
+      seasonId,
+      transferWindowId,
+      footballPlayerId,
+      playerCardId,
+      type: 'FORCED_TRANSFER',
+      amountMinor: 500,
+      sourceLeagueTeamId,
+      ownershipId,
+      ownershipVersionSnapshot: 3
+    }).type, 'FORCED_TRANSFER');
+  });
+
+  it('requires the current owner and ownership version for a forced transfer', () => {
+    const result = SubmitPlayerApplicationRequestSchema.safeParse({
+      seasonId,
+      transferWindowId,
+      footballPlayerId,
+      playerCardId,
+      type: 'FORCED_TRANSFER',
+      amountMinor: 500
+    });
+    assert.equal(result.success, false);
+  });
+
+  it('rejects invalid player application money boundaries', () => {
+    for (const amountMinor of [0, -1, 1.5, 4_294_967_296]) {
+      assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+        seasonId,
+        transferWindowId,
+        footballPlayerId,
+        playerCardId,
+        type: 'NORMAL_PURCHASE',
+        amountMinor
+      }).success, false);
+    }
+  });
+
+  it('includes every actionable player application state', () => {
+    for (const status of ['REQUOTE_REQUIRED', 'OWNERSHIP_CHANGED', 'INELIGIBLE'] as const) {
+      assert.equal(PlayerApplicationStatusSchema.parse(status), status);
+    }
+  });
+
+  it('requires complete optimistic release context and a reason', () => {
+    assert.equal(ReleaseOwnedPlayerRequestSchema.parse({
+      seasonId,
+      transferWindowId,
+      ownershipId,
+      expectedVersion: 2,
+      reason: '为新球员腾出阵容名额'
+    }).ownershipId, ownershipId);
+    assert.equal(ReleaseOwnedPlayerRequestSchema.safeParse({
+      seasonId,
+      transferWindowId,
+      ownershipId,
+      expectedVersion: 2,
+      reason: ' '
+    }).success, false);
+  });
+});
 
 describe('platform data sync contracts', () => {
   it('derives the salary ability from the PESDATA automatic build total', () => {
