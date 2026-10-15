@@ -36,6 +36,8 @@ export function marketPlayerCard(item: PlayerMarketPlayerSummary) {
   return {
     ...item,
     owner: teamIdentity(item.currentOwner),
+    portraitUrl: item.card?.imageUrl ?? '',
+    portraitFallback: item.playerName.trim().slice(0, 1) || '球',
     position: item.card?.position ?? '—',
     overallLabel: item.card?.maxOverall === null || item.card?.maxOverall === undefined ? '—' : String(item.card.maxOverall),
     officialValueLabel: amount(item.officialValueMinor),
