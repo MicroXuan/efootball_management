@@ -19,6 +19,8 @@
     "pages/team-assets/index",
     "pages/league-transactions/index",
     "pages/team-finance/index",
+    "pages/player-market/index",
+    "pages/player-market-detail/index",
     "pages/favorites/index",
     "pages/wechat-bot-binding/index",
     "pages/player-card-detail/index",

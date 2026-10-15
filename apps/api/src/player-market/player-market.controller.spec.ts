@@ -4,7 +4,7 @@ import { AdminPlayerMarketController } from './admin-player-market.controller.js
 
 describe('player market controllers', () => {
   it('delegates public market queries using the authenticated user', async () => {
-    const queries = { listMarket: jest.fn(async () => ({ items: [], nextCursor: null })) };
+    const queries = { listMarket: jest.fn(async () => ({ items: [], nextCursor: null, activeTransferWindowId: null })) };
     const controller = new MyPlayerMarketController(queries as never, {} as never, {} as never);
     await controller.market({ id: 'user-1', status: 'ACTIVE' }, 'league-1', { seasonId: 'season-1', ownership: 'ALL', limit: 30 });
     expect(queries.listMarket).toHaveBeenCalledWith('user-1', 'league-1', expect.objectContaining({ seasonId: 'season-1' }));

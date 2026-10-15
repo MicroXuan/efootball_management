@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "球员交易详情",
+  "backgroundColor": "#0E1417",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "loading-state": "/components/loading-state/index"
+  }
+}

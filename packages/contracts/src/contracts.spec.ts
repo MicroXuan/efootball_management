@@ -61,6 +61,7 @@ import {
   PlayerSearchQuerySchema,
   PlayerCardDetailSchema,
   PlayerApplicationStatusSchema,
+  PlayerMarketListResponseSchema,
   SubmitPlayerApplicationRequestSchema,
   ReleaseOwnedPlayerRequestSchema,
   PlayerFavoriteListQuerySchema,
@@ -232,6 +233,15 @@ describe('player market contracts', () => {
       expectedVersion: 2,
       reason: ' '
     }).success, false);
+  });
+
+  it('exposes the active transfer window needed for a new application', () => {
+    const response = PlayerMarketListResponseSchema.parse({
+      items: [],
+      nextCursor: null,
+      activeTransferWindowId: transferWindowId
+    });
+    assert.equal(response.activeTransferWindowId, transferWindowId);
   });
 });
 

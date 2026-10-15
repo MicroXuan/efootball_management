@@ -77,7 +77,8 @@ export const PlayerMarketQuerySchema = z.object({
 
 export const PlayerMarketListResponseSchema = z.object({
   items: z.array(PlayerMarketPlayerSummarySchema),
-  nextCursor: z.string().nullable()
+  nextCursor: z.string().nullable(),
+  activeTransferWindowId: ResourceIdSchema.nullable()
 });
 
 export const PlayerApplicationEventSchema = z.object({
@@ -158,6 +159,7 @@ export const PlayerMarketAnnouncementListResponseSchema = z.object({
 });
 
 export const PlayerMarketPlayerDetailSchema = PlayerMarketPlayerSummarySchema.extend({
+  activeTransferWindowId: ResourceIdSchema.nullable(),
   myApplication: PlayerAcquisitionApplicationSchema.nullable(),
   publicApplications: z.array(PlayerAcquisitionApplicationSchema)
 });

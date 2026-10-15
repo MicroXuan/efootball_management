@@ -1,0 +1,47 @@
+<view class="page-shell">
+  <view class="market-head">
+    <text class="eyebrow">联赛交易中心</text>
+    <text class="page-title">球员市场</text>
+    <text class="page-copy">查归属、看公开进度，再提交购买或强报申请。</text>
+  </view>
+  <view class="view-tabs">
+    <button class="view-tab {{view === 'players' ? 'is-active' : ''}}" data-view="players" bindtap="switchView">找球员</button>
+    <button class="view-tab {{view === 'public' ? 'is-active' : ''}}" data-view="public" bindtap="switchView">公开申请</button>
+    <button class="view-tab {{view === 'announcements' ? 'is-active' : ''}}" data-view="announcements" bindtap="switchView">成交公告</button>
+    <button class="view-tab {{view === 'mine' ? 'is-active' : ''}}" data-view="mine" bindtap="switchView">我的申请</button>
+  </view>
+
+  <view wx:if="{{view === 'players'}}" class="filters">
+    <view class="search-row"><input value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="searchPlayers" placeholder="搜索球员、俱乐部" /><button bindtap="searchPlayers">搜索</button></view>
+    <view class="picker-row">
+      <picker range="{{positions}}" range-key="label" value="{{positionIndex}}" bindchange="onPositionChange"><view class="filter-picker"><text>位置</text><text>{{positions[positionIndex].label}}⌄</text></view></picker>
+      <picker range="{{ownerships}}" range-key="label" value="{{ownershipIndex}}" bindchange="onOwnershipChange"><view class="filter-picker"><text>归属</text><text>{{ownerships[ownershipIndex].label}}⌄</text></view></picker>
+    </view>
+  </view>
+
+  <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员市场" />
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">暂时无法读取</text><text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadView">重新加载</button></view>
+  <view wx:elif="{{state === 'empty'}}" class="state-card"><text class="state-title">这里还没有内容</text><text class="state-copy">筛选结果、申请进度或成交公告产生后会显示在这里。</text></view>
+
+  <view wx:elif="{{view === 'players'}}" class="card-list">
+    <view wx:for="{{players}}" wx:key="playerId" class="player-card" data-player-id="{{item.playerId}}" bindtap="openPlayer">
+      <view class="rating-tile"><text class="rating">{{item.overallLabel}}</text><text>{{item.position}}</text></view>
+      <view class="player-main"><view class="name-row"><text class="player-name">{{item.playerName}}</text><text wx:if="{{item.forcedTransferBadge}}" class="forced-badge">强报</text></view><text class="player-meta">{{item.nationality || '国籍未知'}} · {{item.club || '俱乐部未知'}}</text><text class="price">官方身价 {{item.officialValueLabel}}</text></view>
+      <view class="action-block"><text class="action-label {{item.actionEnabled ? 'is-ready' : ''}}">{{item.actionLabel}}</text><text class="arrow">›</text></view>
+      <view wx:if="{{item.owner}}" class="owner-row"><view class="crest"><image wx:if="{{item.owner.logoUrl}}" src="{{item.owner.logoUrl}}" mode="aspectFit" /><text wx:else>{{item.owner.fallback}}</text></view><view class="owner-copy"><text>{{item.owner.numberLabel}} · {{item.owner.name}}</text><text>{{item.owner.ownerAlias}}</text></view></view>
+      <view wx:else class="owner-row owner-row--free"><text>自由球员 · 暂无所属球队</text></view>
+    </view>
+  </view>
+
+  <view wx:elif="{{view === 'announcements'}}" class="card-list">
+    <view wx:for="{{announcements}}" wx:key="id" class="notice-card"><view><text class="notice-kind">{{item.kindLabel}}</text><text class="notice-player">{{item.playerName}}</text></view><text class="notice-price">{{item.amountLabel}}</text><text class="notice-message">{{item.message}}</text><text class="notice-time">{{item.timeLabel}}</text></view>
+  </view>
+
+  <view wx:else class="card-list">
+    <view wx:for="{{applications}}" wx:key="id" class="application-card" data-player-id="{{item.playerId}}" bindtap="openPlayer">
+      <view class="application-head"><view><text class="notice-kind">{{item.typeLabel}}</text><text class="notice-player">{{item.playerName}}</text></view><view><text class="application-status">{{item.statusLabel}}</text><text class="notice-price">{{item.amountLabel}}</text></view></view>
+      <text class="team-line">{{item.applicant.numberLabel}} · {{item.applicant.name}}（{{item.applicant.ownerAlias}}）</text>
+      <view class="timeline"><view wx:for="{{item.timeline}}" wx:for-item="event" wx:key="id" class="timeline-row"><text>{{event.label}}</text><text>{{event.detail || event.time}}</text></view></view>
+    </view>
+  </view>
+</view>

@@ -143,7 +143,7 @@ describe('atomic league roster API', () => {
       return prisma.leagueTeam.create({ data: {
         leagueId: league.id,
         ownerUserId: user.id,
-        ownerAlias: user.displayName,
+        ownerAlias: user.displayName ?? `${label} ${index + 1}`,
         catalogTeamId: shell.id,
         teamNumber: index + 1,
         name,

@@ -163,7 +163,8 @@ export class PlayerMarketQueryService {
     const last = page.at(-1);
     return {
       items,
-      nextCursor: players.length > query.limit && last ? PlayerMarketQueryService.encodeCursor(last.createdAt, last.id) : null
+      nextCursor: players.length > query.limit && last ? PlayerMarketQueryService.encodeCursor(last.createdAt, last.id) : null,
+      activeTransferWindowId: window?.id ?? null
     };
   }
 
@@ -175,6 +176,7 @@ export class PlayerMarketQueryService {
     const scope = await this.access.requireParticipant(userId, leagueId, seasonId);
     return {
       ...player,
+      activeTransferWindowId: result.activeTransferWindowId,
       myApplication: applications.items.find((item) => item.applicantTeam.teamId === scope.leagueTeamId) ?? null,
       publicApplications: applications.items
     };
