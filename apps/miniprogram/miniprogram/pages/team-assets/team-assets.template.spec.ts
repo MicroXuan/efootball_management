@@ -23,4 +23,18 @@ describe('team assets template', () => {
     expect(markup).toContain('{{assets.identityCopy}}')
     expect(markup).toContain('{{assets.divisionCopy}}')
   })
+
+  it('only exposes release on eligible active players and explains the irreversible effect', () => {
+    expect(markup).toContain('wx:if="{{item.releaseEnabled}}"')
+    expect(markup).toContain('data-ownership-id="{{item.ownershipId}}"')
+    expect(markup).toContain('bindtap="confirmRelease"')
+    expect(markup).toContain('本赛季强报')
+    const controller = readFileSync(resolve(__dirname, 'index.ts'), 'utf8')
+    expect(controller).toContain('立即生效')
+    expect(controller).toContain('没有收入')
+    expect(controller).toContain('不能自动撤销')
+    expect(controller).toContain('后续申请失败也不会返回')
+    expect(controller).toContain('returnTo')
+    expect(controller).toContain('wx.navigateBack')
+  })
 })

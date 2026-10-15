@@ -447,6 +447,8 @@ describe('league economy contracts', () => {
     const assets = TeamAssetOverviewSchema.parse({
       leagueId: ids.league,
       teamId: ids.team,
+      seasonId: ids.season,
+      activeTransferWindowId: ids.window,
       teamName: '海港竞技',
       teamNumber: 7,
       divisionName: '冠军 A 组',

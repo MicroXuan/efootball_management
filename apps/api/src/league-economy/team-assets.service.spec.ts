@@ -90,6 +90,7 @@ describe('TeamAssetsService', () => {
 
     expect(result).toMatchObject({
       teamName: '海港竞技', teamNumber: 7, ownerAlias: '梅西（小宣）', ownerDisplayName: '小宣', shellValueMinor: 5000,
+      seasonId: 'season-1', activeTransferWindowId: 'window-1',
       divisionName: '冠军 A 组',
       activePlayerCount: 2, activeSalaryMinor: 1200, knownPlayerValueMinor: 8000,
       totalKnownValueMinor: 13_000, missingValuationCount: 1, valuationCompleteness: 'INCOMPLETE'

@@ -40,6 +40,8 @@ export const TeamAssetPlayerSchema = z.object({
 export const TeamAssetOverviewSchema = z.object({
   leagueId: ResourceIdSchema,
   teamId: ResourceIdSchema,
+  seasonId: ResourceIdSchema.nullable(),
+  activeTransferWindowId: ResourceIdSchema.nullable(),
   teamName: z.string().min(1),
   teamNumber: z.number().int().nonnegative().nullable(),
   divisionName: z.string().min(1).nullable(),

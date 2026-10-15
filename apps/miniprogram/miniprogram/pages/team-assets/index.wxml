@@ -28,6 +28,7 @@
       <view class="metric"><text>{{assets.shellCopy}}</text><label>队壳价值</label></view>
       <view class="metric"><text>{{assets.activePlayerCount}}<text class="metric-suffix">/25</text></text><label>一线人数</label></view>
     </view>
+    <view wx:if="{{errorMessage}}" class="release-error">{{errorMessage}}</view>
 
     <view class="roster-head">
       <view>
@@ -59,6 +60,7 @@
           <view wx:else class="player-image image-placeholder">{{item.position || '—'}}</view>
           <view class="player-copy">
             <text class="player-name">{{item.playerName}}</text>
+            <text wx:if="{{item.forcedTransferLabel}}" class="forced-transfer-badge">本赛季强报</text>
             <text class="card-copy">{{item.positionCopy}}</text>
             <text class="origin-copy">{{item.originCopy}}</text>
           </view>
@@ -77,6 +79,11 @@
           <view><label>AT</label><text>{{item.atCopy}}</text></view>
           <view><label>工资</label><text>{{item.salaryCopy}}</text></view>
         </view>
+        <view wx:if="{{item.releaseEnabled}}" class="release-row">
+          <text>下放后立即释放 1 个阵容名额</text>
+          <button class="release-button" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmRelease" loading="{{releasingOwnershipId === item.ownershipId}}" disabled="{{!!releasingOwnershipId}}">下放</button>
+        </view>
+        <view wx:elif="{{selectedStatus === 'ACTIVE' && item.releaseDisabledCopy}}" class="release-disabled">{{item.releaseDisabledCopy}}</view>
       </view>
     </view>
   </block>

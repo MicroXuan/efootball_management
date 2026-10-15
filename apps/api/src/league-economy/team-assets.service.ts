@@ -100,6 +100,8 @@ export class TeamAssetsService {
     return {
       leagueId: team.leagueId,
       teamId: team.id,
+      seasonId: team.league.currentSeasonId,
+      activeTransferWindowId: releaseWindow?.id ?? null,
       teamName: team.name,
       teamNumber: team.teamNumber,
       divisionName: entry.competitionParticipants[0]?.stageMemberships[0]?.stage.displayName ?? null,
