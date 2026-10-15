@@ -87,7 +87,8 @@ export const LeagueTransactionListItemSchema = z.object({
   transactionFeeMinor: ValuationMoneyMinorSchema.nullable(),
   transactionFeeRuleVersionId: ResourceIdSchema.nullable(),
   reason: z.string().min(1).max(512),
-  createdByAdminId: ResourceIdSchema,
+  createdByAdminId: ResourceIdSchema.nullable(),
+  createdByUserId: ResourceIdSchema.nullable().default(null),
   createdAt: TimestampSchema
 });
 

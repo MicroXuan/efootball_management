@@ -57,13 +57,16 @@ describe('atomic league roster API', () => {
   });
 
   afterAll(async () => {
+    const createdAdminIds = [adminId, unscopedAdminId].filter((id): id is string => Boolean(id));
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId } });
     await prisma.auditLog.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.financeLedgerEntry.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.playerReleaseRestriction.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.rosterTransaction.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.transferWindow.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
     await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId: { in: leagueIds } } });
     await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
@@ -83,18 +86,28 @@ describe('atomic league roster API', () => {
       where: { id: { in: cards.map(({ playerId }) => playerId) } }
     });
     await prisma.dataSource.deleteMany({ where: { id: { in: sourceIds } } });
-    await prisma.adminSession.deleteMany({ where: { adminId: { in: [adminId, unscopedAdminId] } } });
+    await prisma.adminSession.deleteMany({ where: { adminId: { in: createdAdminIds } } });
+    await prisma.mutationReceipt.deleteMany({ where: { actorId: { in: userIds } } });
+    await prisma.refreshSession.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-    await prisma.adminAccount.deleteMany({ where: { id: { in: [adminId, unscopedAdminId] } } });
-    await app.close();
+    await prisma.adminAccount.deleteMany({ where: { id: { in: createdAdminIds } } });
+    await app?.close();
     await prisma.$disconnect();
   });
 
   async function fixture(label: string) {
     const now = Date.now();
-    const users = await Promise.all([1, 2].map((index) => prisma.user.create({
-      data: { wechatOpenId: `roster-e2e-${label}-${index}-${suffix}`, displayName: `${label} ${index}` }
-    })));
+    const userTokens: string[] = [];
+    const users: Array<{ id: string; displayName: string | null }> = [];
+    for (const index of [1, 2]) {
+      const login = await request(app.getHttpServer()).post('/v1/auth/wechat')
+        .send({ code: `test-code-roster-e2e-${label}-${index}-${suffix}` }).expect(200);
+      userTokens.push(login.body.accessToken as string);
+      users.push(await prisma.user.update({
+        where: { wechatOpenId: `test-openid-roster-e2e-${label}-${index}-${suffix}` },
+        data: { displayName: `${label} ${index}` }
+      }));
+    }
     userIds.push(...users.map(({ id }) => id));
     const league = await prisma.league.create({
       data: {
@@ -137,6 +150,19 @@ describe('atomic league roster API', () => {
         shortName
       } });
     }));
+    await Promise.all(teams.map((team, index) => prisma.seasonEntry.create({
+      data: {
+        seasonId: season.id,
+        leagueTeamId: team.id,
+        ownerUserId: users[index]!.id,
+        source: 'NEW_APPLICATION',
+        status: 'APPROVED',
+        teamNameSnapshot: team.name,
+        teamShortNameSnapshot: team.shortName,
+        teamNumberSnapshot: team.teamNumber,
+        leagueEditionSnapshot: 'INTERNATIONAL'
+      }
+    })));
     await prisma.leagueSalaryRuleVersion.create({
       data: {
         leagueId: league.id,
@@ -164,7 +190,8 @@ describe('atomic league roster API', () => {
       data: { code: `roster-e2e-${label}-${suffix}`, name: `Roster E2E ${label}` }
     });
     sourceIds.push(source.id);
-    return { league, season, teams, source };
+    const window = await prisma.transferWindow.findFirstOrThrow({ where: { seasonId: season.id } });
+    return { league, season, teams, source, window, userTokens };
   }
 
   async function createCard(sourceId: string, name: string, footballPlayerId?: string) {
@@ -264,6 +291,36 @@ describe('atomic league roster API', () => {
       .toBe('TEAM_SALARY_CAP_EXCEEDED');
     await expect(prisma.leaguePlayerOwnership.count({
       where: { leagueTeamId: f.teams[0]!.id, status: 'ACTIVE' }
+    })).resolves.toBe(1);
+  });
+
+  it('lets the owning user release a player and records the user actor', async () => {
+    const f = await fixture('user-release');
+    const player = await createCard(f.source.id, 'User release');
+    const acquired = await request(app.getHttpServer()).post('/v1/admin/roster/acquisitions')
+      .set(auth()).send(acquisition(f.season.id, f.teams[0]!.id, player.card.id)).expect(201);
+
+    const released = await request(app.getHttpServer())
+      .post(`/v1/me/league-teams/${f.teams[0]!.id}/roster/${acquired.body.ownership.id}/release`)
+      .set('Authorization', `Bearer ${f.userTokens[0]}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        seasonId: f.season.id,
+        transferWindowId: f.window.id,
+        ownershipId: acquired.body.ownership.id,
+        expectedVersion: acquired.body.ownership.version,
+        reason: '为签入新球员腾出名额'
+      })
+      .expect(201);
+
+    expect(() => RosterMutationResponseSchema.parse(released.body)).not.toThrow();
+    expect(released.body).toMatchObject({
+      ownership: { status: 'RELEASED' },
+      transaction: { createdByAdminId: null, createdByUserId: f.teams[0]!.ownerUserId },
+      summary: { rosterCount: 0 }
+    });
+    await expect(prisma.playerReleaseRestriction.count({
+      where: { leagueTeamId: f.teams[0]!.id, footballPlayerId: player.player.id }
     })).resolves.toBe(1);
   });
 

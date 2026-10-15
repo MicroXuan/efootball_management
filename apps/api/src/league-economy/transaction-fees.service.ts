@@ -164,6 +164,7 @@ export class TransactionFeesService {
         transactionFeeRuleVersionId: row.transactionFeeRuleVersionId,
         reason: row.reason,
         createdByAdminId: row.createdByAdminId,
+        createdByUserId: row.createdByUserId,
         createdAt: row.createdAt.toISOString()
       })),
       nextCursor: rows.length > limit ? page.at(-1)?.id ?? null : null

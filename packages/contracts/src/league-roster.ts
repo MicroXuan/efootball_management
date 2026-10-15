@@ -192,7 +192,8 @@ export const RosterTransactionSchema = z.object({
   transactionFeeMinor: NonNegativeMoneyMinorSchema.nullable().default(null),
   transactionFeeRuleVersionId: ResourceIdSchema.nullable().default(null),
   reason: z.string().min(1).max(512),
-  createdByAdminId: ResourceIdSchema,
+  createdByAdminId: ResourceIdSchema.nullable(),
+  createdByUserId: ResourceIdSchema.nullable().default(null),
   createdAt: TimestampSchema
 });
 

@@ -535,6 +535,7 @@ model User {
   playerAuctionBids                PlayerAuctionBid[]                     @relation("PlayerAuctionBidUser")
   playerApplicationEvents          PlayerAcquisitionApplicationEvent[]    @relation("PlayerApplicationEventUser")
   playerReleaseRestrictions        PlayerReleaseRestriction[]             @relation("PlayerReleaseRestrictionUser")
+  rosterTransactions               RosterTransaction[]                    @relation("RosterTransactionUserCreator")
 
   @@map("users")
 }
@@ -658,7 +659,7 @@ model AdminAccount {
   mutationReceipts               AdminMutationReceipt[]
   createdSalaryRules             LeagueSalaryRuleVersion[]
   createdTransferWindows         TransferWindow[]
-  rosterTransactions             RosterTransaction[]
+  rosterTransactions             RosterTransaction[]                 @relation("RosterTransactionAdminCreator")
   createdValuationWindows        ValuationWindow[]                   @relation("ValuationWindowCreator")
   createdValuationRules          ValuationWindowRuleVersion[]        @relation("ValuationRuleCreator")
   reviewedValuationSubmissions   ValuationSubmission[]               @relation("ValuationSubmissionReviewer")
@@ -1100,7 +1101,8 @@ model RosterTransaction {
   transactionFeeRuleVersionId String?                          @map("transaction_fee_rule_version_id") @db.Char(36)
   playerApplicationId         String?                          @unique @map("player_application_id") @db.Char(36)
   reason                      String                           @db.VarChar(512)
-  createdByAdminId            String                           @map("created_by_admin_id") @db.Char(36)
+  createdByAdminId            String?                          @map("created_by_admin_id") @db.Char(36)
+  createdByUserId             String?                          @map("created_by_user_id") @db.Char(36)
   createdAt                   DateTime                         @default(now()) @map("created_at")
   league                      League                           @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   season                      LeagueSeason                     @relation(fields: [seasonId], references: [id], onDelete: Restrict)
@@ -1109,7 +1111,8 @@ model RosterTransaction {
   targetLeagueTeam            LeagueTeam?                      @relation("RosterTransactionTargetTeam", fields: [targetLeagueTeamId], references: [id], onDelete: Restrict)
   oldPlayerCard               PlayerCard?                      @relation("RosterTransactionOldCard", fields: [oldPlayerCardId], references: [id], onDelete: Restrict)
   newPlayerCard               PlayerCard?                      @relation("RosterTransactionNewCard", fields: [newPlayerCardId], references: [id], onDelete: Restrict)
-  createdByAdmin              AdminAccount                     @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  createdByAdmin              AdminAccount?                    @relation("RosterTransactionAdminCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  createdByUser               User?                            @relation("RosterTransactionUserCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   financeEntries              FinanceLedgerEntry[]
   transactionFeeRuleVersion   LeagueTransactionFeeRuleVersion? @relation(fields: [transactionFeeRuleVersionId], references: [id], onDelete: Restrict)
   playerApplication           PlayerAcquisitionApplication?    @relation(fields: [playerApplicationId], references: [id], onDelete: Restrict)
@@ -1123,6 +1126,7 @@ model RosterTransaction {
   @@index([oldPlayerCardId], map: "roster_transactions_old_card_idx")
   @@index([newPlayerCardId], map: "roster_transactions_new_card_idx")
   @@index([createdByAdminId], map: "roster_transactions_creator_idx")
+  @@index([createdByUserId], map: "roster_transactions_user_creator_idx")
   @@index([transactionFeeRuleVersionId], map: "roster_transactions_fee_rule_idx")
   @@map("roster_transactions")
 }

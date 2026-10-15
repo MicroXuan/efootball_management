@@ -70,6 +70,18 @@ export class TeamAssetsService {
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
     const active = ownerships.filter(({ status }) => status === 'ACTIVE');
+    const now = new Date();
+    const releaseWindow = team.league.currentSeasonId
+      ? await this.prisma.transferWindow.findFirst({
+        where: {
+          seasonId: team.league.currentSeasonId,
+          allowSell: true,
+          startsAt: { lte: now },
+          endsAt: { gt: now }
+        },
+        orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
+      })
+      : null;
     const valuations = await this.prisma.leaguePlayerValuation.findMany({
       where: {
         leagueId: team.leagueId,
@@ -107,6 +119,8 @@ export class TeamAssetsService {
         const attributes = this.attributes(ownership.currentPlayerCard.attributes?.attributesJson);
         const valuation = valuationByPlayer.get(ownership.footballPlayerId);
         return {
+          ownershipId: ownership.id,
+          ownershipVersion: ownership.version,
           playerId: ownership.footballPlayerId,
           playerName: ownership.footballPlayer.nameZh
             ?? ownership.footballPlayer.nameEn
@@ -125,7 +139,13 @@ export class TeamAssetsService {
           salaryMinor: ownership.salaryMinor,
           rosterStatus: ownership.status,
           currentValueMinor: valuation?.currentValueMinor ?? null,
-          lastEffectiveAt: valuation?.effectiveAt.toISOString() ?? null
+          lastEffectiveAt: valuation?.effectiveAt.toISOString() ?? null,
+          canRelease: ownership.status === 'ACTIVE' && Boolean(releaseWindow),
+          releaseDisabledReason: ownership.status !== 'ACTIVE'
+            ? 'OWNERSHIP_NOT_ACTIVE'
+            : releaseWindow ? null : 'TRANSFER_WINDOW_CLOSED',
+          forcedTransferBadge: ownership.acquisitionType === 'FORCED_TRANSFER'
+            && ownership.acquisitionSeasonId === team.league.currentSeasonId
         };
       })
     };

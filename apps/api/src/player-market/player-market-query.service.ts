@@ -14,6 +14,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { playerMarketError } from './player-market.errors.js';
 import { PlayerMarketAccessService } from './player-market-access.service.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 
 export type MarketActionContext = {
   owned: boolean;
@@ -51,7 +52,8 @@ export class PlayerMarketQueryService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PlayerMarketAccessService) private readonly access: PlayerMarketAccessService,
-    @Optional() private readonly clock: () => Date = () => new Date()
+    @Optional() private readonly clock: () => Date = () => new Date(),
+    @Optional() @Inject(AdminAuthorizationService) private readonly authorization?: AdminAuthorizationService
   ) {}
 
   static encodeCursor(createdAt: Date, id: string): string {
@@ -180,6 +182,16 @@ export class PlayerMarketQueryService {
 
   async listApplications(userId: string, leagueId: string, query: PlayerApplicationListQuery): Promise<PlayerApplicationListResponse> {
     const scope = await this.access.requireParticipant(userId, leagueId, query.seasonId);
+    return this.applicationList(leagueId, query, scope.leagueTeamId);
+  }
+
+  async listApplicationsForAdmin(adminId: string, leagueId: string, query: PlayerApplicationListQuery): Promise<PlayerApplicationListResponse> {
+    if (!this.authorization) throw new Error('Admin authorization service is required');
+    await this.authorization.requireLeagueManager(adminId, leagueId);
+    return this.applicationList(leagueId, query, null);
+  }
+
+  private async applicationList(leagueId: string, query: PlayerApplicationListQuery, mineTeamId: string | null): Promise<PlayerApplicationListResponse> {
     const cursor = query.cursor ? PlayerMarketQueryService.decodeCursor(query.cursor) : null;
     const rows = await this.prisma.playerAcquisitionApplication.findMany({
       where: {
@@ -188,7 +200,7 @@ export class PlayerMarketQueryService {
         ...(query.type ? { type: query.type } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.playerId ? { footballPlayerId: query.playerId } : {}),
-        ...(query.scope === 'MINE' ? { applicantLeagueTeamId: scope.leagueTeamId } : {}),
+        ...(query.scope === 'MINE' && mineTeamId ? { applicantLeagueTeamId: mineTeamId } : {}),
         ...(cursor ? { OR: [{ createdAt: { gt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { gt: cursor.id } }] } : {})
       },
       include: {
