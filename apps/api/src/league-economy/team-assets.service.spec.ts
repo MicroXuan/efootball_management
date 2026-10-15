@@ -14,7 +14,7 @@ function harness() {
   const ownerships = [
     {
       id: 'ownership-1', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-1',
-      acquiredAt: at, status: 'ACTIVE', salaryMinor: 800,
+      acquiredAt: at, status: 'ACTIVE', salaryMinor: 800, version: 2, acquisitionType: 'FORCED_TRANSFER', acquisitionSeasonId: 'season-1',
       footballPlayer: { nameZh: '有效球员', nameEn: null, shortName: null, nationality: '中国', club: '上海海港' },
       currentPlayerCard: {
         cardName: '精选卡', imageUrl: null, position: 'CF',
@@ -24,19 +24,19 @@ function harness() {
     },
     {
       id: 'ownership-2', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-2',
-      acquiredAt: at, status: 'ACTIVE', salaryMinor: 400,
+      acquiredAt: at, status: 'ACTIVE', salaryMinor: 400, version: 1, acquisitionType: 'NORMAL', acquisitionSeasonId: null,
       footballPlayer: { nameZh: null, nameEn: 'Missing Value', shortName: null, nationality: null, club: null },
       currentPlayerCard: { cardName: '基础卡', imageUrl: null, position: 'CB', attributes: null, autoBuilds: [] }
     },
     {
       id: 'ownership-3', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-3',
-      acquiredAt: at, status: 'DISAPPEARED', salaryMinor: 300,
+      acquiredAt: at, status: 'DISAPPEARED', salaryMinor: 300, version: 1, acquisitionType: 'NORMAL', acquisitionSeasonId: null,
       footballPlayer: { nameZh: '消失球员', nameEn: null, shortName: null, nationality: null, club: null },
       currentPlayerCard: { cardName: '旧卡', imageUrl: null, position: 'AMF', attributes: null, autoBuilds: [] }
     },
     {
       id: 'ownership-4', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-4',
-      acquiredAt: at, status: 'RETIRED', salaryMinor: 200,
+      acquiredAt: at, status: 'RETIRED', salaryMinor: 200, version: 1, acquisitionType: 'NORMAL', acquisitionSeasonId: null,
       footballPlayer: { nameZh: '退役球员', nameEn: null, shortName: null, nationality: null, club: null },
       currentPlayerCard: { cardName: '传奇卡', imageUrl: null, position: 'GK', attributes: null, autoBuilds: [] }
     }
@@ -55,6 +55,7 @@ function harness() {
       { footballPlayerId: 'player-1', currentValueMinor: 8000, effectiveAt: at },
       { footballPlayerId: 'player-3', currentValueMinor: 9999, effectiveAt: at }
     ]) },
+    transferWindow: { findFirst: jest.fn(async () => ({ id: 'window-1' })) },
     seasonEntry: {
       findFirst: jest.fn<() => Promise<typeof seasonEntry | null>>(async () => seasonEntry)
     },
@@ -89,6 +90,7 @@ describe('TeamAssetsService', () => {
 
     expect(result).toMatchObject({
       teamName: '海港竞技', teamNumber: 7, ownerAlias: '梅西（小宣）', ownerDisplayName: '小宣', shellValueMinor: 5000,
+      seasonId: 'season-1', activeTransferWindowId: 'window-1',
       divisionName: '冠军 A 组',
       activePlayerCount: 2, activeSalaryMinor: 1200, knownPlayerValueMinor: 8000,
       totalKnownValueMinor: 13_000, missingValuationCount: 1, valuationCompleteness: 'INCOMPLETE'
@@ -97,7 +99,8 @@ describe('TeamAssetsService', () => {
       .toEqual(['ACTIVE', 'ACTIVE', 'DISAPPEARED', 'RETIRED']);
     expect(result.players[0]).toMatchObject({
       position: 'CF', nationality: '中国', club: '上海海港', age: 22, heightCm: 180,
-      atRating: 103, salaryMinor: 800, currentValueMinor: 8000
+      atRating: 103, salaryMinor: 800, currentValueMinor: 8000,
+      ownershipId: 'ownership-1', ownershipVersion: 2, canRelease: true, forcedTransferBadge: true
     });
     expect(result.players[2]?.currentValueMinor).toBe(9999);
   });

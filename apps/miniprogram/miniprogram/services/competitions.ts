@@ -4,6 +4,7 @@ import type {
   CompetitionListResponse,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
+  CompetitionParticipantSummary,
   CupRegistrationResponse,
   MyCompetitionListResponse,
   MyMatchListResponse,
@@ -130,8 +131,13 @@ export const competitionsApi = {
     })
   },
   bracket(competitionId: string) {
-    return api.request<CupBracketView>({
+    return api.request<CupBracketView | null>({
       path: `/cups/${encodeURIComponent(competitionId)}/bracket`, skipAuth: true,
+    })
+  },
+  cupParticipants(competitionId: string) {
+    return api.request<CompetitionParticipantSummary[]>({
+      path: `/cups/${encodeURIComponent(competitionId)}/participants`, skipAuth: true,
     })
   },
   submitResult(matchId: string, input: SubmitMatchResultRequest) {

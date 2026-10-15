@@ -371,6 +371,21 @@ describe('player card detail view model', () => {
     expect(presentation.positions).toHaveLength(13)
   })
 
+  it('assigns readable heat-map tones to position ratings', () => {
+    const presentation = playerCardPresentation(detail({
+      position: 'CF',
+      overallRating: 88,
+      attributes: { positionRatings: { CF: 88, SS: 80, AMF: 74, CMF: 69 } },
+      autoBuild: null,
+    }), false)
+
+    expect(presentation.positions.find(({ code }) => code === 'CF')).toMatchObject({ tone: 'high', isPrimary: true })
+    expect(presentation.positions.find(({ code }) => code === 'SS')?.tone).toBe('high')
+    expect(presentation.positions.find(({ code }) => code === 'AMF')?.tone).toBe('medium')
+    expect(presentation.positions.find(({ code }) => code === 'CMF')?.tone).toBe('low')
+    expect(presentation.positions.find(({ code }) => code === 'GK')?.tone).toBe('empty')
+  })
+
   it('creates deterministic radar polygon vertices within the chart bounds', () => {
     expect(radarVertices([100, 100, 100, 100, 100, 100], 200, 200)).toEqual([
       { x: 100, y: 20 },

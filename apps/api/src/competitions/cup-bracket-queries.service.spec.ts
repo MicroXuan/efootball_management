@@ -88,4 +88,10 @@ describe('CupBracketQueriesService', () => {
     const { service } = harness(null);
     await expect(service.getPublished('cup-1')).rejects.toMatchObject({ code: 'CUP_BRACKET_NOT_FOUND' });
   });
+
+  it('treats a missing public bracket as an expected empty state', async () => {
+    const { service } = harness(null);
+
+    await expect(service.getPublishedOrNull('cup-1')).resolves.toBeNull();
+  });
 });

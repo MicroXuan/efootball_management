@@ -221,8 +221,24 @@ export class CupBracketsService {
           where: { id: competitionId },
           include: {
             season: { select: { leagueId: true } },
+            cupConfig: true,
             participants: { select: { id: true } },
-            stages: { select: { sequence: true, stageCode: true } }
+            stages: {
+              orderBy: [{ sequence: 'asc' }, { id: 'asc' }],
+              include: {
+                matches: { select: { id: true, officialResultVersionId: true } },
+                standingsSnapshots: {
+                  orderBy: { version: 'desc' },
+                  take: 1,
+                  include: {
+                    rows: {
+                      orderBy: [{ rank: 'asc' }, { participantId: 'asc' }],
+                      select: { participantId: true, rank: true, tiePending: true }
+                    }
+                  }
+                }
+              }
+            }
           }
         });
         if (!competition || competition.season?.leagueId !== leagueId
@@ -247,14 +263,20 @@ export class CupBracketsService {
         if (!proposal || proposal.competitionId !== competitionId || proposal.status !== 'DRAFT') {
           throw new CompetitionError('CUP_BRACKET_PROPOSAL_NOT_FOUND', '未找到可确认的淘汰签表', 404);
         }
-        const participantIds = new Set(competition.participants.map(({ id }) => id));
         const firstRound = proposal.rounds[0];
         const seededIds = firstRound?.pairings.flatMap((pairing) => [
           pairing.homeParticipantId,
           pairing.awayParticipantId
         ].filter((id): id is string => Boolean(id))) ?? [];
-        if (!firstRound || seededIds.length !== participantIds.size
-          || seededIds.some((id) => !participantIds.has(id))) {
+        const expectedQualifierIds = new Set(
+          competition.competitionType === 'GROUP_KNOCKOUT_CUP'
+            ? this.qualifiers(competition).map(({ participantId }) => participantId)
+            : competition.participants.map(({ id }) => id)
+        );
+        const seededIdSet = new Set(seededIds);
+        if (!firstRound || seededIdSet.size !== seededIds.length
+          || seededIdSet.size !== expectedQualifierIds.size
+          || seededIds.some((id) => !expectedQualifierIds.has(id))) {
           throw new CompetitionError('CUP_BRACKET_PROPOSAL_STALE', '参赛队伍已经变化，请重新生成签表', 409);
         }
 

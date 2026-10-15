@@ -17,12 +17,13 @@ Page({
       this.setData({
         state: 'loaded', overview, rosterEmpty: flags.empty, overCap: flags.overCap,
         roster: overview.roster.map(rosterPlayerView),
-        actions: [...teamDetailActions(overview.team.id, overview.team.leagueId)]
+        actions: [...teamDetailActions(overview.team.id, overview.team.leagueId, overview.canManageValuations)]
       })
     } catch { this.setData({ state: 'error', errorMessage: '球队档案加载失败，请稍后重试' }) }
   },
   openSection(event: WechatMiniprogram.TouchEvent) {
     const url = event.currentTarget.dataset.url as string | undefined
     if (url) wx.navigateTo({ url })
+    else wx.showToast({ title: '当前没有开放的身价窗口', icon: 'none' })
   },
 })

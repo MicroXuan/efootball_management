@@ -112,6 +112,7 @@ describe('league detail view model', () => {
       expect.objectContaining({ key: 'standings', label: '积分榜', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'assets', label: '球队资产', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'transactions', label: '交易记录', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'playerMarket', label: '球员市场', stateLabel: '公开透明', enabled: true }),
       expect.objectContaining({ key: 'finance', label: '球队财务', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'valuations', label: '身价管理', stateLabel: '窗口未开放', enabled: false }),
       expect.objectContaining({ key: 'cups', label: '杯赛中心', stateLabel: '可查看', enabled: true }),
@@ -131,7 +132,7 @@ describe('league detail view model', () => {
     expect(groups.map((group) => group.modules.map((module) => module.key))).toEqual([
       ['standings', 'cups'],
       ['assets', 'valuations'],
-      ['transactions', 'finance'],
+      ['playerMarket', 'transactions', 'finance'],
       ['favorites'],
     ])
   })
@@ -150,6 +151,7 @@ describe('league detail view model', () => {
     })
 
     expect(routeFor?.('transactions', workspace)).toBe('/pages/league-transactions/index?leagueId=league-1')
+    expect(routeFor?.('playerMarket', workspace)).toBe('/pages/player-market/index?leagueId=league-1&seasonId=season-1&teamId=team-1')
     expect(routeFor?.('finance', workspace)).toBe('/pages/team-finance/index?teamId=team-1&seasonId=season-1')
     expect(routeFor?.('cups', workspace, '中国超级联赛')).toBe('/pages/competitions/index?seasonId=season-1&leagueName=%E4%B8%AD%E5%9B%BD%E8%B6%85%E7%BA%A7%E8%81%94%E8%B5%9B')
     expect(routeFor?.('favorites', workspace)).toBe('/pages/favorites/index')

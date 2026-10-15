@@ -36,13 +36,13 @@ describe('league team detail viewmodel', () => {
   })
 
   it('builds four consistent team workspace entries', () => {
-    const teamDetailActions = (viewmodel as unknown as { teamDetailActions?: (teamId: string, leagueId: string) => unknown }).teamDetailActions
+    const teamDetailActions = (viewmodel as unknown as { teamDetailActions?: (teamId: string, leagueId: string, canManageValuations: boolean) => unknown }).teamDetailActions
     expect(teamDetailActions).toBeTypeOf('function')
-    expect(teamDetailActions?.('team-1', 'league-1')).toEqual([
-      { key: 'assets', marker: '资', label: '球队资产', description: '阵容与总价值', url: '/pages/team-assets/index?teamId=team-1' },
-      { key: 'valuations', marker: '价', label: '身价管理', description: '调整球员身价', url: '/pages/valuation-manage/index?teamId=team-1' },
-      { key: 'transactions', marker: '交', label: '交易记录', description: '查看转会明细', url: '/pages/league-transactions/index?leagueId=league-1' },
-      { key: 'finance', marker: '财', label: '财务流水', description: '工资与收支', url: '/pages/team-finance/index?teamId=team-1' }
+    expect(teamDetailActions?.('team-1', 'league-1', false)).toEqual([
+      { key: 'assets', marker: '资', label: '球队资产', description: '阵容与总价值', enabled: true, url: '/pages/team-assets/index?teamId=team-1' },
+      { key: 'valuations', marker: '价', label: '身价管理', description: '当前没有开放的身价窗口', enabled: false, url: null },
+      { key: 'transactions', marker: '交', label: '交易记录', description: '查看转会明细', enabled: true, url: '/pages/league-transactions/index?leagueId=league-1' },
+      { key: 'finance', marker: '财', label: '财务流水', description: '工资与收支', enabled: true, url: '/pages/team-finance/index?teamId=team-1' }
     ])
   })
 })

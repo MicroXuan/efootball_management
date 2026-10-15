@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-export type AdminIconName = 'league' | 'administrators' | 'audit' | 'sync' | 'bot' | 'teams' | 'seasons' | 'allocation' | 'cup' | 'salary' | 'transfer' | 'valuation' | 'review' | 'finance';
+export type AdminIconName = 'league' | 'administrators' | 'audit' | 'sync' | 'bot' | 'teams' | 'seasons' | 'allocation' | 'cup' | 'salary' | 'transfer' | 'valuation' | 'review' | 'market' | 'finance';
 
 const labels: Record<AdminIconName, string> = {
   league: '联赛',
@@ -16,6 +16,7 @@ const labels: Record<AdminIconName, string> = {
   transfer: '转会',
   valuation: '身价',
   review: '审核',
+  market: '球员申请',
   finance: '财务',
 };
 
@@ -33,6 +34,7 @@ const paths: Record<AdminIconName, ReactElement> = {
   transfer: <><path d="M4 8h13M14 5l3 3-3 3M20 16H7M10 13l-3 3 3 3" /></>,
   valuation: <><circle cx="12" cy="12" r="8" /><path d="M9 9.5c0-1 1.1-1.8 3-1.8s3 .8 3 1.8-1 1.6-3 2-3 1-3 2 1.1 1.8 3 1.8 3-.8 3-1.8M12 6v12" /></>,
   review: <><path d="M7 3h10v4H7zM5 5H3v16h18V5h-2" /><path d="m8 14 2.5 2.5L16 11" /></>,
+  market: <><circle cx="8" cy="8" r="3" /><path d="M3.5 18c.6-3.4 2-5 4.5-5 1.5 0 2.7.5 3.5 1.4" /><path d="M14 8h7M18 5l3 3-3 3M21 16h-7M17 13l-3 3 3 3" /></>,
   finance: <><path d="M4 6h16v13H4zM4 9h16" /><path d="M8 14h3M15 14h1M8 17h8" /></>,
 };
 

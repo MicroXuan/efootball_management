@@ -1,4 +1,5 @@
 import type { CurrentUserResponse } from '@efm/contracts'
+import { featureFlags } from '../../config/features'
 import { ApiError, api } from '../../services/api'
 import { auth } from '../../services/auth'
 import { leaguesApi } from '../../services/leagues'
@@ -18,6 +19,7 @@ Page({
     errorMessage: '',
     loginLoading: false,
     loggedIn: false,
+    features: featureFlags,
     profile: profileView(null, []) as ProfileView,
   },
 
@@ -64,6 +66,14 @@ Page({
 
   openFavorites() {
     wx.navigateTo({ url: '/pages/favorites/index' })
+  },
+
+  openMyMatches() {
+    wx.navigateTo({ url: '/pages/my-matches/index' })
+  },
+
+  openPlayerAuctions() {
+    wx.navigateTo({ url: '/pages/player-auctions/index' })
   },
 
   openWechatBotBinding() {

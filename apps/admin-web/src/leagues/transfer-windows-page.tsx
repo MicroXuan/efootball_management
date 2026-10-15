@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { LeagueSeasonSummarySchema, TransferWindowListResponseSchema, TransferWindowSchema, type TransferWindow } from '@efm/contracts';
 import { z } from 'zod';
 import { adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 
 type Fields = { name: string; startsAt: string; endsAt: string; allowBuy: boolean; allowSell: boolean; allowTransfer: boolean; allowCardUpgrade: boolean };
 const empty: Fields = { name: '', startsAt: '', endsAt: '', allowBuy: true, allowSell: true, allowTransfer: true, allowCardUpgrade: true };
@@ -46,7 +47,9 @@ export function TransferWindowsPage({ api = adminApi }: { api?: AdminApi }) {
       {error ? <Alert role="alert" type="warning" showIcon title={error} /> : null}
       <Select aria-label="选择赛季" value={seasonId || undefined} onChange={setSeasonId} options={seasons.map((season) => ({ value: season.id, label: season.displayName }))} />
       <Table pagination={false} rowKey="id" dataSource={windows} columns={[
-        { title: '名称', dataIndex: 'name' }, { title: '开始', dataIndex: 'startsAt' }, { title: '结束', dataIndex: 'endsAt' },
+        { title: '名称', dataIndex: 'name' },
+        { title: '开始', dataIndex: 'startsAt', render: (value: string) => formatDateTime(value) },
+        { title: '结束', dataIndex: 'endsAt', render: (value: string) => formatDateTime(value) },
         { title: '允许操作', render: (_, row) => [row.allowBuy && '购买', row.allowSell && '出售', row.allowTransfer && '转会', row.allowCardUpgrade && '升卡'].filter(Boolean).join(' / ') },
         { title: '操作', render: (_, row) => <Button type="link" onClick={() => edit(row)}>编辑</Button> }
       ]} />

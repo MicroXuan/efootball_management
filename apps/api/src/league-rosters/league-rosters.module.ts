@@ -27,6 +27,7 @@ import { PlayerValuationsModule } from '../player-valuations/player-valuations.m
   exports: [
     SalaryRulesService,
     TransferWindowsService,
+    RosterLockRepository,
     RosterTransactionsService,
     SalaryRecalculationService
   ]

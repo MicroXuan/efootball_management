@@ -64,7 +64,7 @@ it('keeps an existing draft on its saved eligible group', async () => {
   expect(screen.getByRole('combobox', { name: '通知微信群' })).toBeDisabled();
 });
 
-it('links to WeChat group configuration when no auction group is eligible', async () => {
+it('does not expose the hidden WeChat bot configuration when no auction group is eligible', async () => {
   const api = { request: vi.fn(() => Promise.resolve({
     bindings: [{
       id: 'query', deviceId: 'device-1', leagueId, wechatGroupId: 'query@chatroom', displayName: '赛程查询群',
@@ -75,6 +75,6 @@ it('links to WeChat group configuration when no auction group is eligible', asyn
   })) } as unknown as AdminApi;
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
 
-  const link = await screen.findByRole('link', { name: '前往微信群机器人配置' });
-  expect(link).toHaveAttribute('href', `/leagues/${leagueId}/wechat-bot`);
+  expect(await screen.findByText('暂无可用的拍卖通知群')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '前往微信群机器人配置' })).not.toBeInTheDocument();
 });

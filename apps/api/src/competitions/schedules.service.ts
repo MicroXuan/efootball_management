@@ -24,6 +24,7 @@ export const SCHEDULE_GENERATOR = Symbol('SCHEDULE_GENERATOR');
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
+    stage: true;
     homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true; owner: true } } } };
     awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true; owner: true } } } };
     officialResultVersion: true;
@@ -277,12 +278,13 @@ export class SchedulesService {
 
   async listPublic(competitionId: string): Promise<ScheduleMatch[]> {
     await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
-    const stage = await this.prisma.competitionStage.findFirst({
-      where: { competitionId, status: 'PUBLISHED' }, select: { id: true }
+    const stages = await this.prisma.competitionStage.findMany({
+      where: { competitionId, status: 'PUBLISHED' },
+      select: { id: true },
+      orderBy: { sequence: 'asc' }
     });
-    if (!stage) return [];
-    const matches = await this.matches(this.prisma, stage.id);
-    return matches.map((match) => this.matchResponse(match));
+    const matches = await Promise.all(stages.map((stage) => this.matches(this.prisma, stage.id)));
+    return matches.flat().map((match) => this.matchResponse(match));
   }
 
   async listStagePublic(stageId: string): Promise<ScheduleMatch[]> {
@@ -341,6 +343,7 @@ export class SchedulesService {
     return client.competitionMatch.findMany({
       where: { stageId },
       include: {
+        stage: true,
         homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true, owner: true } } } },
         awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true, owner: true } } } },
         officialResultVersion: true
@@ -354,6 +357,8 @@ export class SchedulesService {
       id: match.id,
       competitionId: match.homeParticipant.competitionId,
       stageId: match.stageId,
+      stageCode: match.stage.stageCode,
+      stageDisplayName: match.stage.displayName,
       roundNumber: match.roundNumber,
       pairingKey: match.pairingKey,
       matchNumber: match.matchNumber,
@@ -418,7 +423,7 @@ export class SchedulesService {
     leagueId: string
   ): asserts stage is NonNullable<typeof stage> {
     if (!stage) throw new CompetitionError('COMPETITION_STAGE_NOT_FOUND', '未找到联赛组别', 404);
-    if (stage.competition.competitionType !== 'DIVISION_LEAGUE'
+    if (!['DIVISION_LEAGUE', 'GROUP_KNOCKOUT_CUP'].includes(stage.competition.competitionType)
       || !stage.competition.season
       || stage.competition.season.leagueId !== leagueId) {
       throw new CompetitionError('COMPETITION_STAGE_NOT_IN_LEAGUE', '组别不属于当前联赛', 404);

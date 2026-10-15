@@ -11,6 +11,7 @@ import {
   type FinanceLedgerListResponse, type LeagueSeasonSummary, type LeagueTransactionListResponse, type TransactionFeeRuleVersion
 } from '@efm/contracts';
 import { adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 import { useMutationKey } from '../lib/mutation-key';
 import { z } from 'zod';
 
@@ -27,7 +28,6 @@ const transactionTypeLabels: Record<string, string> = {
 };
 
 const money = (value: number | null) => value === null ? '未记录' : value.toLocaleString('zh-CN');
-const dateTime = (value: string) => value.slice(0, 16).replace('T', ' ');
 
 type ManualFields = {
   leagueTeamId: string; seasonId?: string; direction: 'CREDIT' | 'DEBIT';
@@ -146,7 +146,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
     <Space wrap><Button type="primary" onClick={() => setManualOpen(true)}>新增财务项目</Button><Button onClick={openSettlement}>赛季结算金额</Button><Button onClick={() => setFeeOpen(true)}>配置手续费规则</Button></Space>
     <Typography.Paragraph type="secondary">所有分类均以中文展示，技术类型码仅保留在接口和审计详情中。</Typography.Paragraph>
     <Table pagination={false} rowKey="id" dataSource={data.items} columns={[
-      { title: '时间', dataIndex: 'createdAt' }, { title: '球队', dataIndex: 'teamName' },
+      { title: '时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) }, { title: '球队', dataIndex: 'teamName' },
       { title: '赛季', render: (_, row) => row.seasonId ?? '历史未归档' },
       { title: '方向', render: (_, row) => <Tag color={row.direction === 'CREDIT' ? 'success' : 'gold'}>{row.direction === 'CREDIT' ? '收入' : '支出'}</Tag> },
       { title: '类型', render: (_, row) => financeTypeLabels[row.type] ?? '其他项目' },
@@ -201,7 +201,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
       买入、转会、出售、解约和卡片调整会自动写入这里。历史不可编辑，确保金额与手续费可追溯。
     </Typography.Paragraph>
     <Table pagination={false} rowKey="id" dataSource={transactions.items} scroll={{ x: 960 }} locale={{ emptyText: '暂无阵容交易记录' }} columns={[
-      { title: '时间', dataIndex: 'createdAt', render: (value: string) => dateTime(value) },
+      { title: '时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) },
       { title: '类型', render: (_, row) => <Tag color={row.type === 'EMERGENCY_CORRECTION' ? 'gold' : 'green'}>{transactionTypeLabels[row.type] ?? '其他交易'}</Tag> },
       { title: '球员', dataIndex: 'playerName' },
       { title: '买卖双方', render: (_, row) => `${row.sourceTeamName ?? '外部'} → ${row.targetTeamName ?? '外部'}` },

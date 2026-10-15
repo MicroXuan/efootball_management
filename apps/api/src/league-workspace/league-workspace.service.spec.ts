@@ -90,9 +90,19 @@ describe('LeagueWorkspaceService', () => {
   });
 
   it('does not expose valuation management when the season has no valuation window', async () => {
-    const service = workspaceService(prisma({ valuationWindow: { findFirst: jest.fn(async () => null) } }));
+    const findFirst = jest.fn(async (args?: unknown) => { void args; return null; });
+    const service = workspaceService(prisma({ valuationWindow: { findFirst } }));
     const result = await service.get('user-1', 'league-1', 'season-1');
     expect(result.capabilities.canManageValuations).toBe(false);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        seasonId: 'season-1',
+        startsAt: { lte: expect.any(Date) },
+        endsAt: { gt: expect.any(Date) },
+        closedAt: null
+      },
+      select: { id: true }
+    });
   });
 
   it('selects the earliest planned unfinished match then round and returns the opponent', async () => {

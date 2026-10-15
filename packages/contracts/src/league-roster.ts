@@ -158,6 +158,9 @@ export const RosterEntrySchema = z.object({
   salaryRuleVersionId: ResourceIdSchema,
   salaryMinor: MoneyMinorSchema,
   acquiredAt: TimestampSchema,
+  acquisitionType: z.enum(['NORMAL', 'FORCED_TRANSFER']).optional(),
+  acquisitionSeasonId: ResourceIdSchema.nullable().optional(),
+  forcedTransferBadge: z.boolean().optional(),
   status: RosterEntryStatusSchema,
   version: z.number().int().positive()
 });
@@ -167,6 +170,7 @@ export const RosterTransactionTypeSchema = z.enum([
   'SELL',
   'RELEASE',
   'TRANSFER',
+  'FORCED_TRANSFER',
   'CARD_UPGRADE',
   'SALARY_RECALCULATION',
   'EMERGENCY_CORRECTION'
@@ -188,7 +192,8 @@ export const RosterTransactionSchema = z.object({
   transactionFeeMinor: NonNegativeMoneyMinorSchema.nullable().default(null),
   transactionFeeRuleVersionId: ResourceIdSchema.nullable().default(null),
   reason: z.string().min(1).max(512),
-  createdByAdminId: ResourceIdSchema,
+  createdByAdminId: ResourceIdSchema.nullable(),
+  createdByUserId: ResourceIdSchema.nullable().default(null),
   createdAt: TimestampSchema
 });
 
@@ -202,6 +207,9 @@ export const RosterMutationOwnershipSchema = z.object({
   salaryRuleVersionId: ResourceIdSchema,
   salaryMinor: MoneyMinorSchema,
   acquiredAt: TimestampSchema,
+  acquisitionType: z.enum(['NORMAL', 'FORCED_TRANSFER']).optional(),
+  acquisitionSeasonId: ResourceIdSchema.nullable().optional(),
+  forcedTransferBadge: z.boolean().optional(),
   status: RosterEntryStatusSchema,
   version: z.number().int().positive()
 });
@@ -347,6 +355,7 @@ export const MyLeagueTeamOverviewSchema = z.object({
   leagueName: z.string().min(1),
   roster: z.array(MyLeagueTeamRosterEntrySchema),
   ledger: z.array(FinanceLedgerListItemSchema),
+  canManageValuations: z.boolean(),
   currentWindow: z.object({
     name: z.string().min(1),
     endsAt: TimestampSchema,

@@ -1,4 +1,4 @@
-import type { CompetitionDetail, CupRegistrationResponse, GameAccountResponse, SeasonEntryResponse, StandingsSnapshotResponse } from '@efm/contracts'
+import type { CompetitionDetail, CompetitionMatchResponse, CupBracketView, CupRegistrationResponse, GameAccountResponse, SeasonEntryResponse, StandingsSnapshotResponse } from '@efm/contracts'
 
 export type EligibleAccount = GameAccountResponse & {
   eligible: boolean
@@ -47,4 +47,69 @@ export function standingsEmpty(standings: StandingsSnapshotResponse): boolean {
 export function isCupCompetition(competition: Pick<CompetitionDetail, 'competitionType'>): boolean {
   return competition.competitionType === 'GROUP_KNOCKOUT_CUP'
     || competition.competitionType === 'KNOCKOUT_CUP'
+}
+
+export type CupScheduleSection = {
+  stageId: string
+  stageCode: CompetitionMatchResponse['stageCode']
+  stageDisplayName: string
+  matches: CompetitionMatchResponse[]
+  rounds: Array<{
+    roundNumber: number
+    matches: CompetitionMatchResponse[]
+  }>
+}
+
+export function cupScheduleSections(matches: CompetitionMatchResponse[]): CupScheduleSection[] {
+  const sections = new Map<string, CupScheduleSection>()
+  for (const match of matches) {
+    const section = sections.get(match.stageId) ?? {
+      stageId: match.stageId,
+      stageCode: match.stageCode,
+      stageDisplayName: match.stageDisplayName ?? '杯赛阶段',
+      matches: [],
+      rounds: [],
+    }
+    section.matches.push(match)
+    sections.set(match.stageId, section)
+  }
+  return [...sections.values()].map((section) => {
+    const matches = [...section.matches].sort((left, right) => (
+      left.roundNumber - right.roundNumber || left.matchNumber - right.matchNumber
+    ))
+    const rounds = new Map<number, CompetitionMatchResponse[]>()
+    for (const match of matches) {
+      const roundMatches = rounds.get(match.roundNumber) ?? []
+      roundMatches.push(match)
+      rounds.set(match.roundNumber, roundMatches)
+    }
+    return {
+      ...section,
+      matches,
+      rounds: [...rounds.entries()].map(([roundNumber, roundMatches]) => ({
+        roundNumber,
+        matches: roundMatches,
+      })),
+    }
+  })
+}
+
+export type BracketBoardRound = CupBracketView['rounds'][number] & {
+  topOffset: number
+  pairingGap: number
+}
+
+export function bracketBoardRounds(bracket: CupBracketView | null): BracketBoardRound[] {
+  if (!bracket) return []
+  const pairingHeight = 132
+  const baseGap = 16
+  const unit = pairingHeight + baseGap
+  return bracket.rounds.map((round, index) => {
+    const span = 2 ** index
+    return {
+      ...round,
+      topOffset: unit * (span - 1) / 2,
+      pairingGap: unit * span - pairingHeight,
+    }
+  })
 }

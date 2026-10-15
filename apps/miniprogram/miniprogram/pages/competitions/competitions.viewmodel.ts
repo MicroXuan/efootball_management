@@ -44,7 +44,9 @@ export function competitionListContext(options: {
       emptyTitle: '暂时没有公开赛事', emptyCopy: '新赛事发布后会出现在这里。',
     }
   }
-  const leagueName = options.leagueName?.trim() || '当前联赛'
+  const encodedLeagueName = options.leagueName?.trim() || '当前联赛'
+  let leagueName = encodedLeagueName
+  try { leagueName = decodeURIComponent(encodedLeagueName) } catch { leagueName = encodedLeagueName }
   return {
     seasonId, category: 'CUP', kicker: leagueName, title: '杯赛中心', headMark: '小组赛 · 淘汰赛',
     briefingLabel: '当前赛季', briefingCopy: `仅展示${leagueName}当前赛季的杯赛、报名状态与淘汰赛程。`,
@@ -76,8 +78,14 @@ export function competitionErrorMessage(error: { code?: string; message?: string
 }
 
 export function toCompetitionCard(competition: CompetitionSummary, registrationStatus?: string) {
+  const isCup = competition.competitionType === 'GROUP_KNOCKOUT_CUP'
+    || competition.competitionType === 'KNOCKOUT_CUP'
   return {
     ...competition,
+    isCup,
+    formatName: competition.competitionType === 'GROUP_KNOCKOUT_CUP'
+      ? '小组赛 + 淘汰赛'
+      : competition.competitionType === 'KNOCKOUT_CUP' ? '单场淘汰' : '个人单循环',
     lifecycleName: lifecycleLabel(competition.status),
     deadlineLabel: formatLocalDate(competition.registrationClosesAt),
     capacityLabel: `${competition.participantCount}/${competition.participantLimit}`,

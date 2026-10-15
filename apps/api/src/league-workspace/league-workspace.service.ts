@@ -46,6 +46,7 @@ export class LeagueWorkspaceService {
       ({ competition }) => competition.competitionType === 'DIVISION_LEAGUE'
     );
     const stage = participant?.stageMemberships[0]?.stage ?? null;
+    const now = new Date();
     const [snapshot, matches, valuationWindow] = await Promise.all([
       stage && participant ? this.prisma.standingsSnapshot.findFirst({
         where: { stageId: stage.id },
@@ -61,7 +62,15 @@ export class LeagueWorkspaceService {
         },
         include: { homeParticipant: true, awayParticipant: true }
       }) : Promise.resolve([]),
-      this.prisma.valuationWindow.findFirst({ where: { seasonId }, select: { id: true } })
+      this.prisma.valuationWindow.findFirst({
+        where: {
+          seasonId,
+          startsAt: { lte: now },
+          endsAt: { gt: now },
+          closedAt: null
+        },
+        select: { id: true }
+      })
     ]);
     const rank = snapshot?.rows[0] ?? null;
     matches.sort((left, right) => {

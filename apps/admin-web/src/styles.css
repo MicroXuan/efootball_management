@@ -443,6 +443,12 @@ select { font: inherit; }
 .valuation-review-card { border-radius: 16px; border-color: #dfe6e9; box-shadow: 0 8px 24px rgba(29,42,48,.05); }
 .valuation-filters { margin: 18px 0; }
 .valuation-filters .ant-select { min-width: 170px; }
+.valuation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.valuation-fields .ant-input,
+.valuation-fields .ant-input-number { width: 100%; }
+.valuation-rule-guide { margin-bottom: 16px; }
+.valuation-rule-guide .ant-alert-description { color: #526069; line-height: 1.65; }
+.valuation-version-note { margin: -2px 0 16px; color: var(--admin-text-secondary); font-size: 12px; line-height: 1.6; }
 .valuation-review-card .ant-table-wrapper { overflow-x: auto; }
 
 /* Cup center */
@@ -463,6 +469,17 @@ select { font: inherit; }
 .cup-card__meter { margin: 22px 0; padding-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; border-top: 1px solid var(--admin-border); }
 .cup-card__meter strong { color: var(--admin-text); font-size: 28px; letter-spacing: -.04em; }
 .cup-card__meter span { color: var(--admin-text-weak); font-size: 12px; }
+.cup-participant-list { margin: 0 0 18px; padding: 14px; border: 1px solid var(--admin-border); border-radius: 12px; background: #f8fafb; }
+.cup-participant-list__heading { margin-bottom: 10px; display: flex; justify-content: space-between; color: var(--admin-text-secondary); font-size: 12px; }
+.cup-participant { padding: 9px 0; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--admin-border); }
+.cup-participant img,
+.cup-participant__crest { width: 36px; height: 36px; flex: none; border-radius: 9px; object-fit: contain; background: var(--admin-surface); }
+.cup-participant__crest { display: grid; place-items: center; color: var(--admin-text-weak); font-size: 12px; }
+.cup-participant strong,
+.cup-participant span { display: block; }
+.cup-participant strong { color: var(--admin-text); font-size: 13px; }
+.cup-participant span { margin-top: 2px; color: var(--admin-text-weak); font-size: 11px; }
+.cup-participant-list__empty { margin: 0; color: var(--admin-text-weak); font-size: 12px; }
 .cup-bracket-empty { border: 1px dashed #afbdc2; border-radius: 16px; background: #fbfcfa; }
 .cup-bracket-empty .ant-card-body { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .cup-bracket-empty h3 { margin: 6px 0; color: var(--admin-text); font-size: 22px; }
@@ -507,12 +524,14 @@ select { font: inherit; }
 .cup-group-schedules__heading h3 { margin: 5px 0 0; color: var(--admin-text); font-size: 22px; letter-spacing: -.025em; }
 .cup-group-schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 .cup-group-schedule-card { padding: 18px; border: 1px solid #d5ddda; border-radius: 15px; background: #fff; box-shadow: 0 5px 18px rgba(29,42,48,.04); }
-.cup-group-schedule-card__status, .cup-group-schedule-card p, .cup-group-schedule-card > div:last-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cup-group-schedule-card__status, .cup-group-schedule-card p, .cup-group-schedule-card__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cup-group-schedule-card__status > span { color: var(--admin-text-weak); font-size: 12px; }
 .cup-group-schedule-card h4 { margin: 18px 0 6px; color: var(--admin-text); font-size: 24px; }
 .cup-group-schedule-card p { margin: 0 0 18px; align-items: flex-end; }
 .cup-group-schedule-card p strong { color: var(--admin-text); }
 .cup-group-schedule-card p span { color: var(--admin-text-secondary); font-size: 12px; }
+.cup-group-schedule-card__actions { flex-wrap: wrap; justify-content: flex-start; }
+.cup-schedule-preview { margin-top: 22px; padding: 22px; border: 1px solid #d5ddda; border-radius: 16px; background: #fff; }
 .bracket-stage { overflow: hidden; padding: 26px; border: 1px solid #2c393f; border-radius: 18px; color: #eef3f4; background: radial-gradient(circle at 15% 0%, rgba(182,241,58,.09), transparent 28%), #121a1e; box-shadow: 0 16px 46px rgba(16,23,27,.14); }
 .bracket-stage > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
 .bracket-stage .section-kicker { color: #8f9ca2; }
@@ -684,6 +703,7 @@ select { font: inherit; }
   .admin-identity > span { display: none; }
   .admin-content { padding: 20px 16px; }
   .inline-fields,
+  .valuation-fields,
   .candidate-card-grid { grid-template-columns: 1fr; }
   .current-season-summary__heading { flex-direction: column; }
   .cup-command-bar .ant-card-body { align-items: stretch; flex-direction: column; }
@@ -785,4 +805,45 @@ select { font: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .team-detail-card:target { border-color: #8eb92e; }
+}
+
+.player-market-review-page { --market-ink: #17232a; --market-muted: #6f7c82; --market-line: #d8e0e2; --market-lime: #a8e62f; --market-gold: #cf9b2b; }
+.market-command-card .ant-card-body { padding: 0; overflow: hidden; }
+.market-command-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding: 28px 30px 22px; background: linear-gradient(112deg, #f9fbf7 0%, #f2f7e9 68%, #edf4df 100%); border-bottom: 1px solid var(--market-line); }
+.market-command-heading h2 { margin: 4px 0 2px; color: var(--market-ink); font-size: 30px; letter-spacing: -.04em; }
+.market-command-heading p { margin: 0; color: var(--market-muted); }
+.market-command-count { display: grid; min-width: 104px; padding-left: 22px; border-left: 1px solid #c8d5bd; text-align: right; }
+.market-command-count strong { color: #5e8518; font-size: 36px; line-height: 1; font-variant-numeric: tabular-nums; }
+.market-command-count span { margin-top: 5px; color: var(--market-muted); font-size: 12px; letter-spacing: .12em; }
+.market-command-card > .ant-card-body > .ant-alert { margin: 18px 24px 0; }
+.market-review-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 24px 0; border-bottom: 1px solid var(--market-line); }
+.market-review-toolbar .ant-tabs { flex: 1; margin-bottom: -1px; }
+.market-review-toolbar .ant-tabs-nav { margin-bottom: 0; }
+.market-review-toolbar .ant-select { width: 180px; }
+.market-review-groups { display: grid; gap: 18px; padding: 24px; }
+.market-review-group { overflow: hidden; border: 1px solid var(--market-line); border-radius: 16px; background: #fbfcfc; }
+.market-review-group > header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #f2f5f5; border-bottom: 1px solid var(--market-line); }
+.market-review-group h3 { margin: 2px 0 0; color: var(--market-ink); font-size: 20px; }
+.market-review-eyebrow { color: var(--market-muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; }
+.market-review-applications { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 1px; background: var(--market-line); }
+.market-application-card { display: grid; align-content: start; gap: 14px; padding: 18px; background: #fff; border-top: 3px solid transparent; }
+.market-application-card.is-actionable { border-top-color: var(--market-lime); }
+.market-application-main { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.market-application-main > div:not(.market-application-price) { display: grid; gap: 2px; }
+.market-application-main strong { color: var(--market-ink); font-size: 15px; }
+.market-application-main span { color: var(--market-muted); font-size: 12px; }
+.market-application-price { display: grid; text-align: right; }
+.market-application-price small { color: var(--market-muted); }
+.market-application-price b { color: #6e991b; font-size: 22px; font-variant-numeric: tabular-nums; }
+.market-application-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 14px; color: #536168; font-size: 12px; }
+.market-application-timeline { margin: 2px 0 -4px; padding: 10px 12px 0; border-radius: 10px; background: #f6f8f8; }
+.market-application-timeline .ant-timeline-item-content { color: #66747a; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .market-command-heading, .market-review-toolbar { align-items: stretch; flex-direction: column; }
+  .market-command-count { padding: 0; border-left: 0; text-align: left; }
+  .market-review-toolbar .ant-select { width: 100%; }
+  .market-review-applications { grid-template-columns: 1fr; }
+  .market-application-main { grid-template-columns: 48px minmax(0, 1fr); }
+  .market-application-price { grid-column: 2; text-align: left; }
 }

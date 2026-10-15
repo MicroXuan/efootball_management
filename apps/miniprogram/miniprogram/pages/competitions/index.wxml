@@ -34,7 +34,8 @@
           <text wx:if="{{item.registrationLabel}}" class="registration">{{item.registrationLabel}}</text>
         </view>
         <text class="event-name">{{item.name}}</text>
-        <view class="meta-row"><text>{{item.platform}}</text><text>·</text><text>{{item.serverRegion}}</text></view>
+        <view class="meta-row" wx:if="{{item.isCup}}"><text>{{item.formatName}}</text><text>·</text><text>赛季球队杯赛</text></view>
+        <view class="meta-row" wx:else><text>{{item.platform}}</text><text>·</text><text>{{item.serverRegion}}</text></view>
         <view class="card-footer">
           <view><text class="footer-label">报名截止</text><text class="footer-value">{{item.deadlineLabel}}</text></view>
           <view class="capacity"><text class="footer-label">席位</text><text class="footer-value">{{item.capacityLabel}}</text></view>

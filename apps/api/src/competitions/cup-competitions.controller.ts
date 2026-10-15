@@ -24,7 +24,14 @@ export class CupCompetitionsController {
   getBracket(
     @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
   ) {
-    return this.bracketQueries.getPublished(competitionId);
+    return this.bracketQueries.getPublishedOrNull(competitionId);
+  }
+
+  @Get(':competitionId/participants')
+  participants(
+    @Param('competitionId', new ZodValidationPipe(ResourceIdSchema)) competitionId: string
+  ) {
+    return this.cups.listParticipants(competitionId);
   }
 
   @Post(':competitionId/registration')

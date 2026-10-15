@@ -10,6 +10,7 @@ import {
   type PlatformSyncRunSummary
 } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../../lib/api';
+import { formatDateTime } from '../../lib/date-time';
 
 const DEFAULT_BATCH_STATUSES = ['READY', 'VALIDATED', 'FAILED'];
 const pageSizeOptions = [20, 50];
@@ -208,7 +209,7 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refres
           rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
           onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setBatchPage(1); } })}
           columns={[
-            { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+            { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) },
             { title: '同步方式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
             { title: '任务状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
             { title: '已检查', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
@@ -237,7 +238,7 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refres
 }
 
 function selectedRunDescription(run: PlatformSyncRunSummary) {
-  return `当前显示 ${new Date(run.createdAt).toLocaleString('zh-CN')} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
+  return `当前显示 ${formatDateTime(run.createdAt)} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
 }
 
 function displayValue(value: unknown) {

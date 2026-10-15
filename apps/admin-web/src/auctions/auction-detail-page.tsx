@@ -9,6 +9,7 @@ import {
 } from '@efm/contracts';
 import { z } from 'zod';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 
 type ReviewDecision = 'CONFIRM' | 'ADJUST' | 'VOID';
 
@@ -118,7 +119,7 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
       return <Card id={`lot-${lot.id}`} key={lot.id} className={`auction-review-card ${lot.id === batch.currentLotId ? 'is-current' : ''}`} title={<span><small>第 {lot.displayOrder} 位</small>{lot.playerName}</span>} extra={<Tag>{statusLabel[lot.status] ?? lot.status}</Tag>}>
         <div className="auction-result-summary"><div><span>起拍价</span><strong>⭐{lot.startingPrice}⭐</strong></div><div><span>最低加价</span><strong>⭐{lot.minimumIncrement}⭐</strong></div><div><span>计算成交价</span><strong>{lot.currentPrice ? `⭐${lot.currentPrice}⭐` : '—'}</strong></div><div><span>计算中标球队</span><strong>{lot.bids.find((bid) => bid.id === lot.currentHighestBidId)?.teamName ?? '—'}</strong></div></div>
         <Table className="auction-bid-table" rowKey="id" size="small" pagination={false} dataSource={lot.bids} locale={{ emptyText: '暂无出价记录' }} columns={[
-          { title: batch.bidChannel === 'WECHAT_GROUP' ? '微信群时间' : '小程序提交时间', dataIndex: 'submittedAt', render: (value: string) => new Date(value).toLocaleString('zh-CN') },
+          { title: batch.bidChannel === 'WECHAT_GROUP' ? '微信群时间' : '小程序提交时间', dataIndex: 'submittedAt', render: (value: string) => formatDateTime(value) },
           { title: '来源', dataIndex: 'source', render: (value: string) => value === 'MINIPROGRAM' ? '小程序' : '微信群' },
           { title: '球队', dataIndex: 'teamName', render: (value: string | null) => value ?? '未识别' },
           { title: '出价', dataIndex: 'amount', render: (value: number) => `⭐${value}⭐` },

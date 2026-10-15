@@ -941,7 +941,7 @@ export class RosterTransactionsService {
       leagueId: string;
       seasonId: string;
       type: 'BUY' | 'SELL' | 'RELEASE' | 'TRANSFER' | 'CARD_UPGRADE'
-        | 'SALARY_RECALCULATION' | 'EMERGENCY_CORRECTION';
+        | 'FORCED_TRANSFER' | 'SALARY_RECALCULATION' | 'EMERGENCY_CORRECTION';
       footballPlayerId: string;
       sourceLeagueTeamId: string | null;
       targetLeagueTeamId: string | null;
@@ -954,7 +954,8 @@ export class RosterTransactionsService {
       transactionFeeMinor: number | null;
       transactionFeeRuleVersionId: string | null;
       reason: string;
-      createdByAdminId: string;
+      createdByAdminId: string | null;
+      createdByUserId: string | null;
       createdAt: Date;
     },
     summary: { rosterCount: number; salaryMinor: number; salaryCapMinor: number }
@@ -979,6 +980,7 @@ export class RosterTransactionsService {
         transactionFeeRuleVersionId: transaction.transactionFeeRuleVersionId,
         reason: transaction.reason,
         createdByAdminId: transaction.createdByAdminId,
+        createdByUserId: transaction.createdByUserId,
         createdAt: transaction.createdAt.toISOString()
       },
       summary

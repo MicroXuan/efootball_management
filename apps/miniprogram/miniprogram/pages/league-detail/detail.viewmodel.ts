@@ -102,6 +102,7 @@ export type WorkspaceModuleKey =
   | 'standings'
   | 'assets'
   | 'transactions'
+  | 'playerMarket'
   | 'finance'
   | 'valuations'
   | 'cups'
@@ -142,6 +143,10 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
     standard({
       key: 'transactions', marker: '交', label: '交易记录', description: '买卖双方与手续费', enabled: true,
     }),
+    {
+      key: 'playerMarket', marker: '市', label: '球员市场', description: '查归属、申请购买与强报',
+      stateLabel: '公开透明', enabled: true, tone: 'active', wide: true,
+    },
     standard({
       key: 'finance', marker: '财', label: '球队财务', description: '赛季流水与实时总额',
       enabled: workspace.capabilities.canViewFinance,
@@ -179,7 +184,7 @@ export function workspaceModuleGroups(modules: readonly WorkspaceModule[]): Work
   return [
     group('competition', '比赛', ['standings', 'cups']),
     group('team', '球队', ['assets', 'valuations']),
-    group('transactions', '交易', ['transactions', 'finance']),
+    group('transactions', '交易', ['playerMarket', 'transactions', 'finance']),
     group('personal', '个人', ['favorites']),
   ]
 }
@@ -199,6 +204,7 @@ export function workspaceModuleRoute(
     standings: `/pages/season-standings/index?leagueId=${leagueId}&seasonId=${seasonId}&teamName=${teamName}`,
     assets: `/pages/team-assets/index?teamId=${teamId}`,
     transactions: `/pages/league-transactions/index?leagueId=${leagueId}`,
+    playerMarket: `/pages/player-market/index?leagueId=${leagueId}&seasonId=${seasonId}&teamId=${teamId}`,
     finance: `/pages/team-finance/index?teamId=${teamId}&seasonId=${seasonId}`,
     valuations: `/pages/valuation-manage/index?teamId=${teamId}`,
     cups: `/pages/competitions/index?seasonId=${seasonId}&leagueName=${encodeURIComponent(leagueName || '当前联赛')}`,

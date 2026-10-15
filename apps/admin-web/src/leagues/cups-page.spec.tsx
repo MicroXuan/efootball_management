@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
@@ -68,6 +68,17 @@ const groupStages = [
   { id: 'c1111111-1111-4111-8111-111111111111', stageCode: 'GROUP_A', displayName: 'A 组', participantCount: 2, matchCount: 0, status: 'DRAFT' as const, version: 1 },
   { id: 'c2222222-2222-4222-8222-222222222222', stageCode: 'GROUP_B', displayName: 'B 组', participantCount: 2, matchCount: 0, status: 'DRAFT' as const, version: 1 }
 ];
+const groupSchedulePreview = {
+  id: groupStages[0]!.id, competitionId: cupId, status: 'DRAFT' as const, version: 2, roundCount: 1, matchCount: 1,
+  matches: [{
+    id: 'd1111111-1111-4111-8111-111111111111', competitionId: cupId, stageId: groupStages[0]!.id,
+    stageCode: 'GROUP_A', stageDisplayName: 'A 组', roundNumber: 1, matchNumber: 1,
+    homeParticipant: { id: 'b1111111-1111-4111-8111-111111111111', displayName: '上海海港', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamNumber: 24, teamLogoUrl: 'https://static.example.com/shanghai-port.png', ownerDisplayName: '小宣' },
+    awayParticipant: { id: 'b2222222-2222-4222-8222-222222222222', displayName: '北京国安', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamNumber: 6, teamLogoUrl: 'https://static.example.com/beijing-guoan.png', ownerDisplayName: '国安玩家' },
+    plannedAt: null, status: 'SCHEDULED', version: 1, officialResult: null, resultVersions: [],
+    createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
+  }]
+};
 
 it('shows season cups and opens a readable knockout rail', async () => {
   const request = vi.fn(async (path: string) => {
@@ -105,6 +116,8 @@ it('creates a pure knockout cup with a complete timeline', async () => {
 
   await screen.findByText('当前赛季还没有杯赛');
   await userEvent.click(screen.getByRole('button', { name: '新建杯赛' }));
+  expect(screen.queryByLabelText('游戏平台')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('服务器区域')).not.toBeInTheDocument();
   await userEvent.type(screen.getByLabelText('杯赛名称'), 'S3 足总杯');
   fireEvent.change(screen.getByLabelText('报名开始'), { target: { value: '2026-10-03T09:00' } });
   fireEvent.change(screen.getByLabelText('报名截止'), { target: { value: '2026-10-04T09:00' } });
@@ -128,6 +141,43 @@ it('creates a pure knockout cup with a complete timeline', async () => {
       })
     })
   ));
+  const createCall = request.mock.calls.find(([, options]) => options?.method === 'POST');
+  expect(createCall?.[1]?.body).not.toHaveProperty('platform');
+  expect(createCall?.[1]?.body).not.toHaveProperty('serverRegion');
+});
+
+it('opens registration and shows registered team identity on the cup card', async () => {
+  const draftCup = { ...cup, status: 'DRAFT' as const, participantCount: 0, version: 1 };
+  const openCup = { ...draftCup, status: 'REGISTRATION_OPEN' as const, participantCount: 1, version: 2 };
+  let currentCup: typeof draftCup | typeof openCup = draftCup;
+  const participants = [{
+    id: '77777777-7777-4777-8777-777777777777', displayName: '上海海港', participantType: 'TEAM' as const,
+    teamLifecycleStatus: 'ACTIVE' as const, teamNumber: 24, teamName: '上海海港',
+    teamLogoUrl: 'https://static.example.com/shanghai-port.png', ownerDisplayName: '小宣'
+  }];
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith(`/cups/${cupId}/open-registration`) && options?.method === 'POST') {
+      currentCup = openCup;
+      return openCup;
+    }
+    if (path.endsWith(`/cups/${cupId}/participants`)) return participants;
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [currentCup] };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole('button', { name: '开放报名' }));
+  expect(await screen.findByText('24 · 上海海港')).toBeInTheDocument();
+  expect(screen.getByText('负责人：小宣')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '上海海港队徽' })).toHaveAttribute('src', participants[0]!.teamLogoUrl);
+  expect(screen.getByRole('button', { name: '截止报名' })).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/open-registration`,
+    expect.objectContaining({ method: 'POST', body: { expectedVersion: 1 } })
+  );
 });
 
 it('generates a draft bracket and requires explicit confirmation before publishing it', async () => {
@@ -224,7 +274,12 @@ it('generates and confirms groups, then generates and publishes each group sched
       return { competitionId: cupId, proposalId, version: groupedCup.version + 1, stages: groupStages };
     }
     if (path.includes('/competition-stages/') && path.endsWith('/schedule/generate')) {
-      return { id: path.includes(groupStages[0]!.id) ? groupStages[0]!.id : groupStages[1]!.id, competitionId: cupId, status: 'DRAFT', version: 2, roundCount: 1, matchCount: 1, matches: [] };
+      const stageId = path.includes(groupStages[0]!.id) ? groupStages[0]!.id : groupStages[1]!.id;
+      return {
+        ...groupSchedulePreview,
+        id: stageId,
+        matches: groupSchedulePreview.matches.map((match) => ({ ...match, stageId }))
+      };
     }
     if (path.includes('/competition-stages/') && path.endsWith('/schedule/publish')) {
       currentCup = { ...currentCup, status: 'IN_PROGRESS' as const, version: currentCup.version + 1 };
@@ -254,6 +309,14 @@ it('generates and confirms groups, then generates and publishes each group sched
     `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[0]!.id}/schedule/generate`,
     expect.objectContaining({ body: { expectedStageVersion: 1 } })
   ));
+  expect(await screen.findByText('A 组赛程预览已生成，共 1 场')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'A 组重新生成赛程预览' })).toBeInTheDocument();
+  const preview = screen.getByRole('region', { name: 'A 组赛程预览' });
+  expect(preview).toBeInTheDocument();
+  expect(within(preview).getByText('第 1 轮')).toBeInTheDocument();
+  expect(within(preview).getByText('上海海港')).toBeInTheDocument();
+  expect(within(preview).getByText('北京国安')).toBeInTheDocument();
+  expect(within(preview).getByRole('img', { name: '上海海港队徽' })).toHaveAttribute('src', 'https://static.example.com/shanghai-port.png');
   await userEvent.click(screen.getByRole('button', { name: 'A 组发布赛程' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     `/v1/admin/leagues/${leagueId}/competition-stages/${groupStages[0]!.id}/schedule/publish`,
@@ -273,4 +336,35 @@ it('generates and confirms groups, then generates and publishes each group sched
     `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/cups/${cupId}/bracket-proposals`,
     expect.objectContaining({ body: expect.objectContaining({ expectedCompetitionVersion: currentCup.version }) })
   ));
+});
+
+it('loads a previously generated group schedule when the administrator views its preview', async () => {
+  const readySeason = { ...season, status: 'READY' as const };
+  const persistedStage = { ...groupStages[0]!, matchCount: 1, version: 2 };
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/seasons')) return { items: [readySeason], nextCursor: null };
+    if (path.endsWith(`/seasons/${seasonId}/cups`)) return { items: [groupedCup] };
+    if (path.endsWith(`/cups/${cupId}/groups`)) return {
+      competitionId: cupId,
+      competitionVersion: groupedCup.version,
+      proposal: { ...groupProposal, status: 'CONFIRMED' as const },
+      stages: [persistedStage]
+    };
+    if (path.endsWith(`/competition-stages/${persistedStage.id}/schedule`)) return groupSchedulePreview;
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/cups`]}><Routes>
+    <Route path="/leagues/:leagueId/cups" element={<CupsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole('button', { name: '管理分组' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'A 组查看赛程预览' }));
+
+  const preview = await screen.findByRole('region', { name: 'A 组赛程预览' });
+  expect(preview).toBeInTheDocument();
+  expect(within(preview).getByText('上海海港')).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/competition-stages/${persistedStage.id}/schedule`,
+    expect.any(Object)
+  );
 });

@@ -14,6 +14,8 @@ const TimestampSchema = z.iso.datetime();
 export const ValuationCompletenessSchema = z.enum(['COMPLETE', 'INCOMPLETE']);
 
 export const TeamAssetPlayerSchema = z.object({
+  ownershipId: ResourceIdSchema.optional(),
+  ownershipVersion: z.number().int().positive().optional(),
   playerId: ResourceIdSchema,
   playerName: z.string().min(1),
   cardName: z.string().min(1),
@@ -29,12 +31,17 @@ export const TeamAssetPlayerSchema = z.object({
   salaryMinor: ValuationMoneyMinorSchema,
   rosterStatus: RosterEntryStatusSchema,
   currentValueMinor: ValuationMoneyMinorSchema.nullable(),
-  lastEffectiveAt: TimestampSchema.nullable()
+  lastEffectiveAt: TimestampSchema.nullable(),
+  canRelease: z.boolean().optional(),
+  releaseDisabledReason: z.string().min(1).nullable().optional(),
+  forcedTransferBadge: z.boolean().optional()
 });
 
 export const TeamAssetOverviewSchema = z.object({
   leagueId: ResourceIdSchema,
   teamId: ResourceIdSchema,
+  seasonId: ResourceIdSchema.nullable(),
+  activeTransferWindowId: ResourceIdSchema.nullable(),
   teamName: z.string().min(1),
   teamNumber: z.number().int().nonnegative().nullable(),
   divisionName: z.string().min(1).nullable(),
@@ -82,7 +89,8 @@ export const LeagueTransactionListItemSchema = z.object({
   transactionFeeMinor: ValuationMoneyMinorSchema.nullable(),
   transactionFeeRuleVersionId: ResourceIdSchema.nullable(),
   reason: z.string().min(1).max(512),
-  createdByAdminId: ResourceIdSchema,
+  createdByAdminId: ResourceIdSchema.nullable(),
+  createdByUserId: ResourceIdSchema.nullable().default(null),
   createdAt: TimestampSchema
 });
 

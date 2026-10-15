@@ -22,7 +22,13 @@ export function teamAssetsView(assets: TeamAssetOverview) {
     atCopy: player.atRating === null ? '—' : String(player.atRating),
     salaryCopy: money(player.salaryMinor),
     valueCopy: player.currentValueMinor === null ? '待设置' : money(player.currentValueMinor),
-    valuationCopy: player.lastEffectiveAt === null ? '暂无正式身价' : `更新于 ${date(player.lastEffectiveAt)}`
+    valuationCopy: player.lastEffectiveAt === null ? '暂无正式身价' : `更新于 ${date(player.lastEffectiveAt)}`,
+    releaseEnabled: player.rosterStatus === 'ACTIVE' && player.canRelease === true
+      && Boolean(player.ownershipId && player.ownershipVersion && assets.seasonId && assets.activeTransferWindowId),
+    releaseDisabledCopy: player.rosterStatus !== 'ACTIVE'
+      ? '仅现役球员可下放'
+      : player.releaseDisabledReason === 'TRANSFER_WINDOW_CLOSED' ? '下放窗口未开放' : '',
+    forcedTransferLabel: player.forcedTransferBadge ? '本赛季强报' : ''
   }))
   const group = (status: AssetStatus) => players.filter((player) => player.rosterStatus === status)
   const active = group('ACTIVE')

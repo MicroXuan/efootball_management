@@ -11,6 +11,7 @@ import {
   CompetitionDetailSchema,
   CompetitionFormatSchema,
   CompetitionListQuerySchema,
+  CompetitionMatchResponseSchema,
   CompetitionParticipantSummarySchema,
   CompetitionParticipantTypeSchema,
   CompetitionStageCodeSchema,
@@ -59,6 +60,10 @@ import {
   OverrideSeasonEntryRequestSchema,
   PlayerSearchQuerySchema,
   PlayerCardDetailSchema,
+  PlayerApplicationStatusSchema,
+  PlayerMarketListResponseSchema,
+  SubmitPlayerApplicationRequestSchema,
+  ReleaseOwnedPlayerRequestSchema,
   PlayerFavoriteListQuerySchema,
   PlayerFavoriteStatusQuerySchema,
   PublicUserLookupSchema,
@@ -150,6 +155,95 @@ import {
   ValuationWindowSchema,
   ValuationWorkspaceSchema
 } from './index.js';
+
+describe('player market contracts', () => {
+  const seasonId = '11111111-1111-4111-8111-111111111111';
+  const transferWindowId = '22222222-2222-4222-8222-222222222222';
+  const footballPlayerId = '33333333-3333-4333-8333-333333333333';
+  const playerCardId = '44444444-4444-4444-8444-444444444444';
+  const sourceLeagueTeamId = '55555555-5555-4555-8555-555555555555';
+  const ownershipId = '66666666-6666-4666-8666-666666666666';
+
+  it('parses normal and forced player applications', () => {
+    assert.equal(SubmitPlayerApplicationRequestSchema.parse({
+      seasonId,
+      transferWindowId,
+      footballPlayerId,
+      playerCardId,
+      type: 'NORMAL_PURCHASE',
+      amountMinor: 500
+    }).type, 'NORMAL_PURCHASE');
+
+    assert.equal(SubmitPlayerApplicationRequestSchema.parse({
+      seasonId,
+      transferWindowId,
+      footballPlayerId,
+      playerCardId,
+      type: 'FORCED_TRANSFER',
+      amountMinor: 500,
+      sourceLeagueTeamId,
+      ownershipId,
+      ownershipVersionSnapshot: 3
+    }).type, 'FORCED_TRANSFER');
+  });
+
+  it('requires the current owner and ownership version for a forced transfer', () => {
+    const result = SubmitPlayerApplicationRequestSchema.safeParse({
+      seasonId,
+      transferWindowId,
+      footballPlayerId,
+      playerCardId,
+      type: 'FORCED_TRANSFER',
+      amountMinor: 500
+    });
+    assert.equal(result.success, false);
+  });
+
+  it('rejects invalid player application money boundaries', () => {
+    for (const amountMinor of [0, -1, 1.5, 4_294_967_296]) {
+      assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+        seasonId,
+        transferWindowId,
+        footballPlayerId,
+        playerCardId,
+        type: 'NORMAL_PURCHASE',
+        amountMinor
+      }).success, false);
+    }
+  });
+
+  it('includes every actionable player application state', () => {
+    for (const status of ['REQUOTE_REQUIRED', 'OWNERSHIP_CHANGED', 'INELIGIBLE'] as const) {
+      assert.equal(PlayerApplicationStatusSchema.parse(status), status);
+    }
+  });
+
+  it('requires complete optimistic release context and a reason', () => {
+    assert.equal(ReleaseOwnedPlayerRequestSchema.parse({
+      seasonId,
+      transferWindowId,
+      ownershipId,
+      expectedVersion: 2,
+      reason: '为新球员腾出阵容名额'
+    }).ownershipId, ownershipId);
+    assert.equal(ReleaseOwnedPlayerRequestSchema.safeParse({
+      seasonId,
+      transferWindowId,
+      ownershipId,
+      expectedVersion: 2,
+      reason: ' '
+    }).success, false);
+  });
+
+  it('exposes the active transfer window needed for a new application', () => {
+    const response = PlayerMarketListResponseSchema.parse({
+      items: [],
+      nextCursor: null,
+      activeTransferWindowId: transferWindowId
+    });
+    assert.equal(response.activeTransferWindowId, transferWindowId);
+  });
+});
 
 describe('platform data sync contracts', () => {
   it('derives the salary ability from the PESDATA automatic build total', () => {
@@ -353,6 +447,8 @@ describe('league economy contracts', () => {
     const assets = TeamAssetOverviewSchema.parse({
       leagueId: ids.league,
       teamId: ids.team,
+      seasonId: ids.season,
+      activeTransferWindowId: ids.window,
       teamName: '海港竞技',
       teamNumber: 7,
       divisionName: '冠军 A 组',
@@ -1118,6 +1214,38 @@ describe('shared API contracts', () => {
     });
     assert.equal(resultVersion.submittedByMe, true);
   });
+
+  it('identifies the published stage on every public competition match', () => {
+    const parsed = CompetitionMatchResponseSchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      competitionId: '22222222-2222-4222-8222-222222222222',
+      stageId: '33333333-3333-4333-8333-333333333333',
+      stageCode: 'GROUP_A',
+      stageDisplayName: 'A 组',
+      roundNumber: 1,
+      matchNumber: 1,
+      homeParticipant: {
+        id: '44444444-4444-4444-8444-444444444444', displayName: '阿森纳',
+        participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE'
+      },
+      awayParticipant: {
+        id: '55555555-5555-4555-8555-555555555555', displayName: '利物浦',
+        participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE'
+      },
+      plannedAt: null,
+      status: 'SCHEDULED',
+      version: 1,
+      officialResult: null,
+      resultVersions: [],
+      createdAt: '2026-10-13T12:00:00.000Z',
+      updatedAt: '2026-10-13T12:00:00.000Z'
+    }) as Record<string, unknown>;
+
+    assert.deepEqual(
+      { stageCode: parsed.stageCode, stageDisplayName: parsed.stageDisplayName },
+      { stageCode: 'GROUP_A', stageDisplayName: 'A 组' }
+    );
+  });
 });
 
 describe('league team administration contracts', () => {
@@ -1612,11 +1740,12 @@ describe('league team administration contracts', () => {
       leagueName: '九星联赛',
       roster: [{ ...rosterEntry, position: 'CB', heightCm: 190 }],
       ledger: [],
+      canManageValuations: false,
       currentWindow: null
     });
     assert.deepEqual(
-      { position: overview.roster[0]?.position, heightCm: overview.roster[0]?.heightCm },
-      { position: 'CB', heightCm: 190 }
+      { position: overview.roster[0]?.position, heightCm: overview.roster[0]?.heightCm, canManageValuations: overview.canManageValuations },
+      { position: 'CB', heightCm: 190, canManageValuations: false }
     );
 
     const transaction = RosterTransactionSchema.parse({
@@ -1891,8 +2020,6 @@ describe('cup center contracts', () => {
       description: '当前赛季杯赛',
       competitionType: 'GROUP_KNOCKOUT_CUP',
       format: 'GROUP_KNOCKOUT',
-      platform: 'MOBILE',
-      serverRegion: '国际服',
       registrationOpensAt,
       registrationClosesAt,
       startsAt,
@@ -1904,6 +2031,8 @@ describe('cup center contracts', () => {
 
     assert.equal(parsed.targetGroupSize, 4);
     assert.equal(parsed.qualifiersPerGroup, 2);
+    assert.equal('platform' in parsed, false);
+    assert.equal('serverRegion' in parsed, false);
   });
 
   it('accepts pure knockout cups and rejects mismatched formats or invalid qualification rules', () => {
@@ -1913,8 +2042,6 @@ describe('cup center contracts', () => {
       description: '',
       competitionType: 'KNOCKOUT_CUP',
       format: 'SINGLE_ELIMINATION',
-      platform: 'MOBILE',
-      serverRegion: '国际服',
       registrationOpensAt,
       registrationClosesAt,
       startsAt,

@@ -53,6 +53,7 @@ describe('LeagueTeamsService roster summary', () => {
       leagueId: '11111111-1111-4111-8111-111111111111',
       name: '测试球队'
     };
+    const findActiveValuationWindow = jest.fn(async () => null);
     const prisma = {
       league: { findUniqueOrThrow: async () => ({ name: '测试联赛' }) },
       leaguePlayerOwnership: {
@@ -77,7 +78,8 @@ describe('LeagueTeamsService roster summary', () => {
         }]
       },
       financeLedgerEntry: { findMany: async () => [] },
-      transferWindow: { findFirst: async () => null }
+      transferWindow: { findFirst: async () => null },
+      valuationWindow: { findFirst: findActiveValuationWindow }
     };
     const service = new LeagueTeamsService(prisma as never, {} as never, {} as never, {} as never);
     jest.spyOn(service, 'getDetail').mockResolvedValue(team as never);
@@ -89,6 +91,16 @@ describe('LeagueTeamsService roster summary', () => {
       position: 'CB',
       heightCm: 191,
       salaryMinor: 800
+    });
+    expect(result.canManageValuations).toBe(false);
+    expect(findActiveValuationWindow).toHaveBeenCalledWith({
+      where: {
+        season: { leagueId: team.leagueId },
+        startsAt: { lte: expect.any(Date) },
+        endsAt: { gt: expect.any(Date) },
+        closedAt: null
+      },
+      select: { id: true }
     });
   });
 });

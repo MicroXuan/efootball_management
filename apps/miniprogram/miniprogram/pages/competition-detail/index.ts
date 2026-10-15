@@ -4,6 +4,7 @@ import type {
   CupRegistrationResponse,
   CompetitionMatchResponse,
   CompetitionRegistrationResponse,
+  CompetitionParticipantSummary,
   GameAccountResponse,
   SeasonEntryResponse,
   StandingsSnapshotResponse,
@@ -12,7 +13,7 @@ import { ApiError, api } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
 import { session } from '../../services/session'
 import { competitionErrorMessage, formatLocalDate, lifecycleLabel } from '../competitions/competitions.viewmodel'
-import { cupRegistrationAvailability, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type EligibleAccount } from './detail.viewmodel'
+import { bracketBoardRounds, cupRegistrationAvailability, cupScheduleSections, eligibleAccounts, isCupCompetition, registrationAvailability, standingsEmpty, type BracketBoardRound, type CupScheduleSection, type EligibleAccount } from './detail.viewmodel'
 
 type DetailTab = 'overview' | 'schedule' | 'standings' | 'bracket'
 
@@ -22,8 +23,12 @@ Page({
     detail: null as CompetitionDetail | null,
     lifecycleName: '', registrationWindow: '', startLabel: '',
     matches: [] as CompetitionMatchResponse[],
+    scheduleSections: [] as CupScheduleSection[],
+    selectedStageId: '',
+    activeCupSchedule: null as CupScheduleSection | null,
     standings: null as StandingsSnapshotResponse | null,
     bracket: null as CupBracketView | null,
+    bracketRounds: [] as BracketBoardRound[],
     showBracket: false,
     isCup: false,
     standingsIsEmpty: true,
@@ -31,6 +36,7 @@ Page({
     selectedAccountId: '',
     registration: null as CompetitionRegistrationResponse | null,
     cupRegistration: null as CupRegistrationResponse | null,
+    cupParticipants: [] as CompetitionParticipantSummary[],
     seasonEntry: null as SeasonEntryResponse | null,
     registrationEnabled: false,
     registrationReason: '',
@@ -47,8 +53,26 @@ Page({
   switchTab(event: { currentTarget: { dataset: { tab?: DetailTab } } }) {
     if (event.currentTarget.dataset.tab) this.setData({ activeTab: event.currentTarget.dataset.tab })
   },
+  selectScheduleStage(event: { currentTarget: { dataset: { id?: string } } }) {
+    const stageId = event.currentTarget.dataset.id
+    if (!stageId) return
+    const section = this.data.scheduleSections.find((item) => item.stageId === stageId)
+    if (section) this.setData({ selectedStageId: stageId, activeCupSchedule: section })
+  },
   manage() { wx.navigateTo({ url: `/pages/competition-manage/index?id=${encodeURIComponent(this.data.id)}` }) },
-  openMyMatches() { wx.navigateTo({ url: '/pages/my-matches/index' }) },
+  openBracketPanorama() {
+    const myTeamName = this.data.cupRegistration?.teamName ?? this.data.seasonEntry?.teamNameSnapshot ?? ''
+    const mineQuery = myTeamName ? `&mine=${encodeURIComponent(myTeamName)}` : ''
+    wx.navigateTo({ url: `/pages/cup-bracket-panorama/index?id=${encodeURIComponent(this.data.id)}${mineQuery}` })
+  },
+  openMyMatches() {
+    if (this.data.isCup) {
+      this.setData({ activeTab: 'schedule' })
+      wx.pageScrollTo({ selector: '#competition-tabs', duration: 300 })
+      return
+    }
+    wx.navigateTo({ url: '/pages/my-matches/index' })
+  },
   selectAccount(event: { currentTarget: { dataset: { id?: string; eligible?: boolean } } }) {
     if (event.currentTarget.dataset.eligible && event.currentTarget.dataset.id) {
       this.setData({ selectedAccountId: event.currentTarget.dataset.id })
@@ -61,14 +85,14 @@ Page({
     try {
       const publicDetail = await competitionsApi.detail(this.data.id)
       const showBracket = isCupCompetition(publicDetail)
-      const [matches, standings, bracket] = await Promise.all([
+      const bracketAvailable = showBracket && publicDetail.status !== 'REGISTRATION_OPEN'
+      const [matches, standings, bracket, cupParticipants] = await Promise.all([
         competitionsApi.matches(this.data.id),
         competitionsApi.standings(this.data.id),
-        showBracket ? competitionsApi.bracket(this.data.id).catch(() => null) : Promise.resolve(null),
+        bracketAvailable ? competitionsApi.bracket(this.data.id) : Promise.resolve(null),
+        showBracket ? competitionsApi.cupParticipants(this.data.id).catch(() => []) : Promise.resolve([]),
       ])
-      const detail = session.getAccessToken()
-        ? await competitionsApi.managerDetail(this.data.id).catch(() => publicDetail)
-        : publicDetail
+      const detail = publicDetail
       let accounts: GameAccountResponse[] = []
       let registration: CompetitionRegistrationResponse | null = null
       let cupRegistration: CupRegistrationResponse | null = null
@@ -93,14 +117,22 @@ Page({
       const availability = showBracket
         ? cupRegistrationAvailability(completeDetail, seasonEntry, cupRegistration)
         : registrationAvailability(completeDetail, displayAccounts.filter(({ eligible }) => eligible).length)
+      const scheduleSections = showBracket ? cupScheduleSections(matches) : []
+      const activeCupSchedule = scheduleSections.find(({ stageId }) => stageId === this.data.selectedStageId)
+        ?? scheduleSections[0]
+        ?? null
       this.setData({
         detail: completeDetail,
         lifecycleName: lifecycleLabel(detail.status),
         registrationWindow: `截止 ${formatLocalDate(detail.registrationClosesAt)}`,
         startLabel: formatLocalDate(detail.startsAt),
         matches,
+        scheduleSections,
+        selectedStageId: activeCupSchedule?.stageId ?? '',
+        activeCupSchedule,
         standings,
         bracket,
+        bracketRounds: bracketBoardRounds(bracket),
         showBracket,
         isCup: showBracket,
         standingsIsEmpty: standingsEmpty(standings),
@@ -108,6 +140,7 @@ Page({
         selectedAccountId: displayAccounts.find(({ eligible }) => eligible)?.id ?? '',
         registration,
         cupRegistration,
+        cupParticipants,
         seasonEntry,
         registrationEnabled: availability.enabled,
         registrationReason: availability.reason,

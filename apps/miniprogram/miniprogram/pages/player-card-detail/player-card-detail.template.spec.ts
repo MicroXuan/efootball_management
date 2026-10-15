@@ -10,4 +10,15 @@ describe('player card detail template', () => {
     expect(template).not.toContain('DT 评分')
     expect(template).not.toContain('card.autoBuild.dtRating')
   })
+
+  it('places ability labels around the radar and positions on a football pitch', () => {
+    const template = readFileSync(resolve(process.cwd(), 'miniprogram/pages/player-card-detail/index.wxml'), 'utf8')
+
+    expect(template).toContain('radar-label radar-label--{{index}}')
+    expect(template).toContain('{{item.label}}')
+    expect(template).not.toContain('class="radar-legend"')
+    expect(template).toContain('class="position-pitch"')
+    expect(template).toContain('position-cell--{{item.code}}')
+    expect(template).toContain('tone-{{item.tone}}')
+  })
 })

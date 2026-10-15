@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { z } from 'zod';
 import { AdminAccountSummarySchema, AdminLeagueGrantSchema, LeagueListResponseSchema, type AdminAccountSummary, type AdminLeagueGrant, type LeagueSummary } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 import { useMutationKey } from '../lib/mutation-key';
 
 const AccountsSchema = z.object({ items: z.array(AdminAccountSummarySchema) });
@@ -113,7 +114,7 @@ export function AdminAccountsPage({ api = adminApi }: { api?: AdminApi }) {
         { title: '账号', dataIndex: 'username' }, { title: '显示名称', dataIndex: 'displayName' },
         { title: '状态', dataIndex: 'status', render: (value) => <Tag color={value === 'ACTIVE' ? 'success' : 'error'}>{value === 'ACTIVE' ? '启用' : '停用'}</Tag> },
         { title: '联赛权限', render: (_, row) => <Space wrap>{(grantsByAdmin[row.id] ?? []).length ? (grantsByAdmin[row.id] ?? []).map((grant) => <Tag key={grant.id} closable={!pending} onClose={(event) => { event.preventDefault(); void revoke(grant); }} closeIcon={<span aria-label={`撤销 ${grant.leagueName}`}>×</span>}>{grant.leagueName}</Tag>) : '暂无授权'}</Space> },
-        { title: '上次登录', dataIndex: 'lastLoginAt', render: (value) => value ? new Date(value).toLocaleString() : '尚未登录' },
+        { title: '上次登录', dataIndex: 'lastLoginAt', render: (value) => value ? formatDateTime(value) : '尚未登录' },
         { title: '操作', render: (_, row) => <Space><Button size="small" loading={pending === `status:${row.id}`} disabled={Boolean(pending)} onClick={() => void toggleStatus(row)}>{row.status === 'ACTIVE' ? '停用' : '启用'}</Button><Button size="small" disabled={Boolean(pending)} onClick={() => { passwordKey.reset(); setResetPasswordValue(''); setResetTarget(row); }}>重置密码</Button></Space> }
       ]} /> : <Empty description="暂无管理员" />}
     </Card>

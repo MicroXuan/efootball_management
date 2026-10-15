@@ -1,0 +1,125 @@
+import type { PlayerPosition } from '@efm/contracts'
+import { ApiError } from '../../services/api'
+import {
+  listPlayerApplications,
+  listPlayerMarket,
+  listPlayerMarketAnnouncements,
+} from '../../services/player-market'
+import { announcementCard, applicationCard, marketPlayerCard } from './player-market.viewmodel'
+
+type MarketView = 'players' | 'public' | 'announcements' | 'mine'
+type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string }
+type DatasetEvent = { currentTarget: { dataset: { view?: MarketView; playerId?: string } } }
+type InputEvent = { detail: { value: string } }
+type PickerEvent = { detail: { value: string } }
+
+const viewLabels = [
+  { key: 'players', label: '找球员' },
+  { key: 'public', label: '公开申请' },
+  { key: 'announcements', label: '成交公告' },
+  { key: 'mine', label: '我的申请' },
+] as const
+const positions = [
+  { value: '', label: '全部位置' }, { value: 'GK', label: '门将' }, { value: 'CB', label: '中卫' },
+  { value: 'LB', label: '左后卫' }, { value: 'RB', label: '右后卫' }, { value: 'DMF', label: '后腰' },
+  { value: 'CMF', label: '中场' }, { value: 'AMF', label: '前腰' }, { value: 'LWF', label: '左边锋' },
+  { value: 'RWF', label: '右边锋' }, { value: 'SS', label: '影锋' }, { value: 'CF', label: '中锋' },
+] as const
+const ownerships = [
+  { value: 'ALL', label: '全部归属' }, { value: 'FREE', label: '自由球员' }, { value: 'OWNED', label: '已有球队' },
+] as const
+
+Page({
+  data: {
+    state: 'loading' as 'loading' | 'loaded' | 'empty' | 'error',
+    errorMessage: '', leagueId: '', seasonId: '', teamId: '',
+    view: 'players' as MarketView, viewLabels,
+    keyword: '', positions, positionIndex: 0, ownerships, ownershipIndex: 0,
+    players: [] as ReturnType<typeof marketPlayerCard>[],
+    applications: [] as ReturnType<typeof applicationCard>[],
+    announcements: [] as ReturnType<typeof announcementCard>[],
+  },
+
+  onLoad(options: LoadOptions) {
+    if (!options.leagueId || !options.seasonId || !options.teamId) {
+      this.setData({ state: 'error', errorMessage: '球员市场参数缺失' })
+      return
+    }
+    this.setData({ leagueId: options.leagueId, seasonId: options.seasonId, teamId: options.teamId })
+  },
+
+  onShow() {
+    if (this.data.leagueId) void this.loadView()
+  },
+
+  onPullDownRefresh() {
+    void this.loadView(false).finally(() => wx.stopPullDownRefresh())
+  },
+
+  switchView(event: DatasetEvent) {
+    const view = event.currentTarget.dataset.view
+    if (!view || view === this.data.view) return
+    this.setData({ view })
+    void this.loadView()
+  },
+
+  onKeywordInput(event: InputEvent) {
+    this.setData({ keyword: event.detail.value })
+  },
+
+  searchPlayers() {
+    void this.loadView()
+  },
+
+  onPositionChange(event: PickerEvent) {
+    this.setData({ positionIndex: Number(event.detail.value) })
+    void this.loadView()
+  },
+
+  onOwnershipChange(event: PickerEvent) {
+    this.setData({ ownershipIndex: Number(event.detail.value) })
+    void this.loadView()
+  },
+
+  async loadView(showLoading = true) {
+    if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
+    try {
+      let count = 0
+      if (this.data.view === 'players') {
+        const position = this.data.positions[this.data.positionIndex]?.value as PlayerPosition | ''
+        const ownership = this.data.ownerships[this.data.ownershipIndex]?.value ?? 'ALL'
+        const result = await listPlayerMarket(this.data.leagueId, {
+          seasonId: this.data.seasonId,
+          keyword: this.data.keyword.trim() || undefined,
+          position: position || undefined,
+          ownership,
+          limit: 60,
+        })
+        const players = result.items.map(marketPlayerCard)
+        count = players.length
+        this.setData({ players })
+      } else if (this.data.view === 'announcements') {
+        const result = await listPlayerMarketAnnouncements(this.data.leagueId, { seasonId: this.data.seasonId, limit: 60 })
+        const announcements = result.items.map(announcementCard)
+        count = announcements.length
+        this.setData({ announcements })
+      } else {
+        const result = await listPlayerApplications(this.data.leagueId, {
+          seasonId: this.data.seasonId, scope: this.data.view === 'mine' ? 'MINE' : 'PUBLIC', limit: 60,
+        })
+        const applications = result.items.map(applicationCard)
+        count = applications.length
+        this.setData({ applications })
+      }
+      this.setData({ state: count ? 'loaded' : 'empty', errorMessage: '' })
+    } catch (error) {
+      this.setData({ state: 'error', errorMessage: error instanceof ApiError ? error.message : '球员市场加载失败，请稍后重试' })
+    }
+  },
+
+  openPlayer(event: DatasetEvent) {
+    const playerId = event.currentTarget.dataset.playerId
+    if (!playerId) return
+    wx.navigateTo({ url: `/pages/player-market-detail/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(this.data.seasonId)}&teamId=${encodeURIComponent(this.data.teamId)}&playerId=${encodeURIComponent(playerId)}` })
+  },
+})

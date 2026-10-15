@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Drawer, Empty, Form, Input, InputNumber, Select, Spin, Tag } from 'antd';
+import { Alert, Button, Card, Drawer, Empty, Form, Input, InputNumber, Select, Space, Spin, Tag } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -6,12 +6,16 @@ import {
   CupBracketProposalSchema,
   CupGroupProposalSchema,
   CupGroupViewSchema,
+  CompetitionMatchResponseSchema,
+  CompetitionParticipantSummarySchema,
   CreateSeasonCupRequestSchema,
   LeagueSeasonSummarySchema,
   SeasonCupSummarySchema,
   SeasonCupListResponseSchema,
   type CupBracketView,
   type CupGroupView,
+  type CompetitionMatchResponse,
+  type CompetitionParticipantSummary,
   type LeagueSeasonSummary,
   type SeasonCupSummary
 } from '@efm/contracts';
@@ -28,8 +32,9 @@ const CupGroupDecisionSchema = z.object({
 });
 const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
-  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(z.unknown())
+  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(CompetitionMatchResponseSchema)
 });
+type SchedulePreview = z.infer<typeof SchedulePreviewSchema>;
 const statusLabel: Record<SeasonCupSummary['status'], string> = {
   DRAFT: '筹备中',
   REGISTRATION_OPEN: '报名中',
@@ -44,8 +49,6 @@ type CupFormFields = {
   name: string;
   description?: string;
   competitionType: 'GROUP_KNOCKOUT_CUP' | 'KNOCKOUT_CUP';
-  platform: 'MOBILE' | 'PLAYSTATION' | 'XBOX' | 'STEAM';
-  serverRegion: string;
   registrationOpensAt: string;
   registrationClosesAt: string;
   startsAt: string;
@@ -58,11 +61,46 @@ type CupFormFields = {
 const asIso = (value: string) => new Date(value).toISOString();
 const randomSeed = () => Math.max(1, Math.floor(Date.now() % 2_147_483_647));
 
+function ScheduleTeamCrest({ participant }: { participant: CompetitionMatchResponse['homeParticipant'] }) {
+  return participant.teamLogoUrl
+    ? <span className="fixture-team__crest"><img src={participant.teamLogoUrl} alt={`${participant.displayName}队徽`} /></span>
+    : <span className="fixture-team__crest fixture-team__crest--fallback" aria-label={`${participant.displayName}队徽占位`}>{participant.displayName.trim().slice(0, 2)}</span>;
+}
+
+function CupSchedulePreview({ displayName, preview }: { displayName: string; preview: SchedulePreview }) {
+  const rounds = [...new Set(preview.matches.map(({ roundNumber }) => roundNumber))].sort((left, right) => left - right);
+  return <section className="cup-schedule-preview allocation-schedule-preview" aria-label={`${displayName}赛程预览`}>
+    <div className="allocation-schedule-preview__heading">
+      <div><span>MATCHDAY</span><strong>{displayName}赛程预览</strong></div>
+      <span>{preview.roundCount} 轮 · {preview.matchCount} 场</span>
+    </div>
+    <div className="fixture-round-list">{rounds.map((roundNumber) => {
+      const matches = preview.matches.filter((match) => match.roundNumber === roundNumber)
+        .sort((left, right) => left.matchNumber - right.matchNumber);
+      return <section key={roundNumber} className="fixture-round">
+        <header><span>ROUND {String(roundNumber).padStart(2, '0')}</span><strong>第 {roundNumber} 轮</strong><small>{matches.length} 场</small></header>
+        <div className="fixture-round__matches">{matches.map((match) => <div key={match.id} className="fixture-match">
+          <div className="fixture-team fixture-team--home">
+            <span className="fixture-team__identity"><strong>{match.homeParticipant.displayName}</strong><small>#{match.homeParticipant.teamNumber ?? '—'}{match.homeParticipant.ownerDisplayName ? ` · ${match.homeParticipant.ownerDisplayName}` : ''}</small></span>
+            <ScheduleTeamCrest participant={match.homeParticipant} />
+          </div>
+          <div className="fixture-match__versus"><span>{match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</span><small>第 {match.matchNumber} 场</small></div>
+          <div className="fixture-team fixture-team--away">
+            <ScheduleTeamCrest participant={match.awayParticipant} />
+            <span className="fixture-team__identity"><strong>{match.awayParticipant.displayName}</strong><small>#{match.awayParticipant.teamNumber ?? '—'}{match.awayParticipant.ownerDisplayName ? ` · ${match.awayParticipant.ownerDisplayName}` : ''}</small></span>
+          </div>
+        </div>)}</div>
+      </section>;
+    })}</div>
+  </section>;
+}
+
 export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
   const [seasons, setSeasons] = useState<LeagueSeasonSummary[]>([]);
   const [seasonId, setSeasonId] = useState('');
   const [cups, setCups] = useState<SeasonCupSummary[]>([]);
+  const [participantsByCup, setParticipantsByCup] = useState<Record<string, CompetitionParticipantSummary[]>>({});
   const [selectedCup, setSelectedCup] = useState<SeasonCupSummary | null>(null);
   const [bracket, setBracket] = useState<CupBracketView | null>(null);
   const [groupView, setGroupView] = useState<CupGroupView | null>(null);
@@ -75,11 +113,19 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const [cupType, setCupType] = useState<CupFormFields['competitionType']>('KNOCKOUT_CUP');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleFeedback, setScheduleFeedback] = useState<{
+    stageId: string;
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [schedulePreviews, setSchedulePreviews] = useState<Record<string, SchedulePreview>>({});
+  const [activeScheduleStageId, setActiveScheduleStageId] = useState<string | null>(null);
   const [form] = Form.useForm<CupFormFields>();
   const createKey = useMutationKey();
   const bracketKey = useMutationKey();
   const groupKey = useMutationKey();
   const scheduleKey = useMutationKey();
+  const lifecycleKey = useMutationKey();
   const selectedSeason = seasons.find(({ id }) => id === seasonId) ?? null;
 
   const loadCups = useCallback(async (targetSeasonId: string, preserveCupId?: string) => {
@@ -89,6 +135,19 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       { schema: SeasonCupListResponseSchema }
     );
     setCups(result.items);
+    const participantEntries = await Promise.all(result.items
+      .filter(({ status }) => status !== 'DRAFT' && status !== 'CANCELLED')
+      .map(async (cup) => {
+        try {
+          const participants = await api.request(`/v1/cups/${cup.id}/participants`, {
+            schema: z.array(CompetitionParticipantSummarySchema)
+          });
+          return [cup.id, participants] as const;
+        } catch {
+          return [cup.id, []] as const;
+        }
+      }));
+    setParticipantsByCup(Object.fromEntries(participantEntries));
     const preserved = preserveCupId ? result.items.find(({ id }) => id === preserveCupId) ?? null : null;
     setSelectedCup(preserved);
     if (!preserved) {
@@ -150,6 +209,8 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
   const loadGroups = async (cup: SeasonCupSummary) => {
     setSelectedCup(cup);
     setBracket(null);
+    setSchedulePreviews({});
+    setActiveScheduleStageId(null);
     setGroupLoading(true);
     setError(null);
     try {
@@ -244,6 +305,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
     if (!stage || submitting) return;
     setSubmitting(true);
     setError(null);
+    setScheduleFeedback(null);
     try {
       const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/generate`, {
         method: 'POST', headers: { 'Idempotency-Key': scheduleKey.current() }, schema: SchedulePreviewSchema,
@@ -256,8 +318,45 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           ? { ...item, version: preview.version, matchCount: preview.matchCount }
           : item)
       } : current);
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setActiveScheduleStageId(stageId);
+      setScheduleFeedback({
+        stageId,
+        type: 'success',
+        message: `${stage.displayName}赛程预览已生成，共 ${preview.matchCount} 场`
+      });
     } catch {
-      setError('小组赛程生成失败，请刷新后重试');
+      setScheduleFeedback({
+        stageId,
+        type: 'error',
+        message: `${stage.displayName}赛程生成失败，请刷新后重试`
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const viewGroupSchedule = async (stageId: string) => {
+    const stage = groupView?.stages.find(({ id }) => id === stageId);
+    if (!stage || submitting) return;
+    if (activeScheduleStageId === stageId) {
+      setActiveScheduleStageId(null);
+      return;
+    }
+    if (schedulePreviews[stageId]) {
+      setActiveScheduleStageId(stageId);
+      return;
+    }
+    setSubmitting(true);
+    setScheduleFeedback(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule`, {
+        schema: SchedulePreviewSchema
+      });
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setActiveScheduleStageId(stageId);
+    } catch {
+      setScheduleFeedback({ stageId, type: 'error', message: `${stage.displayName}赛程预览加载失败，请刷新后重试` });
     } finally {
       setSubmitting(false);
     }
@@ -285,6 +384,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           ? { ...item, version: preview.version, matchCount: preview.matchCount, status: 'PUBLISHED' }
           : item)
       } : current);
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
       await loadCups(selectedCup.seasonId, selectedCup.id);
     } catch {
       setError('小组赛程发布失败，请确认预览已生成且版本未变更');
@@ -305,8 +405,6 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         description: values.description ?? '',
         competitionType: values.competitionType,
         format: isGrouped ? 'GROUP_KNOCKOUT' : 'SINGLE_ELIMINATION',
-        platform: values.platform,
-        serverRegion: values.serverRegion,
         registrationOpensAt: asIso(values.registrationOpensAt),
         registrationClosesAt: asIso(values.registrationClosesAt),
         startsAt: asIso(values.startsAt),
@@ -328,6 +426,34 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       await loadCups(seasonId);
     } catch {
       setError('杯赛创建失败，请检查时间、人数与赛制设置');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const transitionRegistration = async (
+    cup: SeasonCupSummary,
+    action: 'open-registration' | 'close-registration'
+  ) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.request(
+        `/v1/admin/leagues/${leagueId}/seasons/${cup.seasonId}/cups/${cup.id}/${action}`,
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': lifecycleKey.current() },
+          schema: SeasonCupSummarySchema,
+          body: { expectedVersion: cup.version }
+        }
+      );
+      lifecycleKey.reset();
+      await loadCups(cup.seasonId, cup.id);
+    } catch {
+      setError(action === 'open-registration'
+        ? '开放报名失败，杯赛状态可能已更新'
+        : '截止报名失败，杯赛状态可能已更新');
     } finally {
       setSubmitting(false);
     }
@@ -422,11 +548,24 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         <h3>{cup.name}</h3>
         <p>{cup.description || '暂无杯赛说明'}</p>
         <div className="cup-card__meter"><strong>{cup.participantCount} / {cup.participantLimit}</strong><span>已报名 / 上限</span></div>
-        <Button type="primary" onClick={() => void (cup.competitionType === 'GROUP_KNOCKOUT_CUP'
-          ? loadGroups(cup)
-          : openBracket(cup))}>
-          {cup.competitionType === 'GROUP_KNOCKOUT_CUP' ? '管理分组' : '查看签表'}
-        </Button>
+        {cup.status !== 'DRAFT' && cup.status !== 'CANCELLED' ? <div className="cup-participant-list">
+          <div className="cup-participant-list__heading"><strong>已报名球队</strong><span>{participantsByCup[cup.id]?.length ?? 0} 支</span></div>
+          {(participantsByCup[cup.id] ?? []).length ? (participantsByCup[cup.id] ?? []).map((participant) => <div className="cup-participant" key={participant.id}>
+            {participant.teamLogoUrl
+              ? <img src={participant.teamLogoUrl} alt={`${participant.teamName ?? participant.displayName}队徽`} />
+              : <span className="cup-participant__crest" aria-hidden="true">队</span>}
+            <div><strong>{participant.teamNumber ?? '—'} · {participant.teamName ?? participant.displayName}</strong><span>负责人：{participant.ownerDisplayName ?? '未记录'}</span></div>
+          </div>) : <p className="cup-participant-list__empty">尚无球队报名</p>}
+        </div> : null}
+        <Space wrap>
+          {cup.status === 'DRAFT' ? <Button type="primary" loading={submitting} onClick={() => void transitionRegistration(cup, 'open-registration')}>开放报名</Button> : null}
+          {cup.status === 'REGISTRATION_OPEN' ? <Button type="primary" loading={submitting} onClick={() => void transitionRegistration(cup, 'close-registration')}>截止报名</Button> : null}
+          <Button onClick={() => void (cup.competitionType === 'GROUP_KNOCKOUT_CUP'
+            ? loadGroups(cup)
+            : openBracket(cup))}>
+            {cup.competitionType === 'GROUP_KNOCKOUT_CUP' ? '管理分组' : '查看签表'}
+          </Button>
+        </Space>
       </Card>)}
     </div>}
 
@@ -437,12 +576,16 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
       view={groupView}
       targets={groupTargets}
       reasons={groupReasons}
+      scheduleFeedback={scheduleFeedback}
+      schedulePreviews={schedulePreviews}
+      activeScheduleStageId={activeScheduleStageId}
       submitting={submitting}
       onTargetChange={(participantId, value) => setGroupTargets((current) => ({ ...current, [participantId]: value }))}
       onReasonChange={(participantId, value) => setGroupReasons((current) => ({ ...current, [participantId]: value }))}
       onGenerate={() => void generateGroups()}
       onConfirm={() => void confirmGroups()}
       onGenerateSchedule={(stageId) => void generateGroupSchedule(stageId)}
+      onViewSchedule={(stageId) => void viewGroupSchedule(stageId)}
       onPublishSchedule={(stageId) => void publishGroupSchedule(stageId)}
       onOpenBracket={() => void openBracket(selectedCup)}
     /> : null}
@@ -474,7 +617,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         onValuesChange={() => createKey.reset()}
         onFinish={createCup}
         initialValues={{
-          competitionType: 'KNOCKOUT_CUP', platform: 'MOBILE', serverRegion: '国服', participantLimit: 16,
+          competitionType: 'KNOCKOUT_CUP', participantLimit: 16,
           targetGroupSize: 4, qualifiersPerGroup: 2
         }}
       >
@@ -488,11 +631,6 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           onChange={(value) => setCupType(value)}
         /></Form.Item>
         <div className="inline-fields">
-          <Form.Item label="游戏平台" name="platform" rules={[{ required: true }]}><Select options={[
-            { label: '移动端', value: 'MOBILE' }, { label: 'PlayStation', value: 'PLAYSTATION' },
-            { label: 'Xbox', value: 'XBOX' }, { label: 'Steam', value: 'STEAM' }
-          ]} /></Form.Item>
-          <Form.Item label="服务器区域" name="serverRegion" rules={[{ required: true }]}><Input maxLength={32} /></Form.Item>
           <Form.Item label="参赛上限" name="participantLimit" rules={[{ required: true }]}><InputNumber min={2} max={128} /></Form.Item>
         </div>
         {cupType === 'GROUP_KNOCKOUT_CUP' ? <div className="inline-fields">
@@ -518,12 +656,16 @@ function GroupWorkspace({
   view,
   targets,
   reasons,
+  scheduleFeedback,
+  schedulePreviews,
+  activeScheduleStageId,
   submitting,
   onTargetChange,
   onReasonChange,
   onGenerate,
   onConfirm,
   onGenerateSchedule,
+  onViewSchedule,
   onPublishSchedule,
   onOpenBracket
 }: {
@@ -531,12 +673,16 @@ function GroupWorkspace({
   view: CupGroupView;
   targets: Record<string, string>;
   reasons: Record<string, string>;
+  scheduleFeedback: { stageId: string; type: 'success' | 'error'; message: string } | null;
+  schedulePreviews: Record<string, SchedulePreview>;
+  activeScheduleStageId: string | null;
   submitting: boolean;
   onTargetChange: (participantId: string, value: string) => void;
   onReasonChange: (participantId: string, value: string) => void;
   onGenerate: () => void;
   onConfirm: () => void;
   onGenerateSchedule: (stageId: string) => void;
+  onViewSchedule: (stageId: string) => void;
   onPublishSchedule: (stageId: string) => void;
   onOpenBracket: () => void;
 }) {
@@ -611,16 +757,26 @@ function GroupWorkspace({
         <Button onClick={onOpenBracket}>查看淘汰签表</Button>
       </div>
       <div className="cup-group-schedule-grid">
-        {view.stages.map((stage) => <article key={stage.id} className="cup-group-schedule-card">
+        {view.stages.map((stage) => {
+          const hasPreview = stage.matchCount > 0;
+          const feedback = scheduleFeedback?.stageId === stage.id ? scheduleFeedback : null;
+          return <article key={stage.id} className="cup-group-schedule-card">
           <div className="cup-group-schedule-card__status"><Tag color={stage.status === 'PUBLISHED' ? 'green' : 'gold'}>{stage.status === 'PUBLISHED' ? '已发布' : '待发布'}</Tag><span>{stage.matchCount ? `${stage.matchCount} 场` : '尚无赛程'}</span></div>
           <h4>{stage.displayName}</h4>
           <p><strong>{stage.participantCount} 支球队</strong><span>{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? '预览已生成' : '等待生成对阵'}</span></p>
-          <div>
-            <Button aria-label={`${stage.displayName}生成赛程`} disabled={stage.status === 'PUBLISHED'} loading={submitting} onClick={() => onGenerateSchedule(stage.id)}>生成预览</Button>
+          {feedback ? <Alert showIcon type={feedback.type} title={feedback.message} /> : null}
+          <div className="cup-group-schedule-card__actions">
+            {hasPreview ? <Button aria-label={`${stage.displayName}${activeScheduleStageId === stage.id ? '收起赛程预览' : '查看赛程预览'}`} onClick={() => onViewSchedule(stage.id)}>{activeScheduleStageId === stage.id ? '收起预览' : '查看预览'}</Button> : null}
+            <Button aria-label={`${stage.displayName}${hasPreview ? '重新生成赛程预览' : '生成赛程'}`} disabled={stage.status === 'PUBLISHED'} loading={submitting} onClick={() => onGenerateSchedule(stage.id)}>{hasPreview ? '重新生成预览' : '生成预览'}</Button>
             <Button aria-label={`${stage.displayName}发布赛程`} type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} loading={submitting} onClick={() => onPublishSchedule(stage.id)}>发布赛程</Button>
           </div>
-        </article>)}
+        </article>;
+        })}
       </div>
+      {activeScheduleStageId && schedulePreviews[activeScheduleStageId] ? <CupSchedulePreview
+        displayName={view.stages.find(({ id }) => id === activeScheduleStageId)?.displayName ?? '小组'}
+        preview={schedulePreviews[activeScheduleStageId]}
+      /> : null}
     </div> : null}
   </section>;
 }
