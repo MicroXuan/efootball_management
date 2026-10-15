@@ -60,10 +60,16 @@ describe('native player market pages', () => {
 
   it('renders explicit normal/forced confirmation and amend/withdraw controls', () => {
     const markup = readFileSync(resolve(miniRoot, 'pages/player-market-detail/index.wxml'), 'utf8')
+    const styles = readFileSync(resolve(miniRoot, 'pages/player-market-detail/index.wxss'), 'utf8')
     expect(markup).toContain('最高报价不代表必然获批')
     expect(markup).toContain('原球队无需同意')
     expect(markup).toContain('修改报价')
     expect(markup).toContain('撤回申请')
     expect(markup).toContain('disabled="{{submitting}}"')
+    expect(markup.match(/class="button-grid efm-equal-tabs"/g)).toHaveLength(2)
+    expect(styles).toContain('grid-template-columns:repeat(2,minmax(0,1fr));width:100%;')
+    expect(styles).toContain('margin-top:22rpx;overflow:hidden}.button-grid>button{width:100%;min-width:0;max-width:100%')
+    expect(styles).toContain('.amount-field input{min-width:0;flex:1;')
+    expect(styles).toContain('.player-name{min-width:0;flex:1;')
   })
 })

@@ -12,7 +12,7 @@
     <view wx:if="{{myApplication}}" class="application-panel">
       <view class="section-head"><view><text class="eyebrow">我的申请</text><text class="section-title">{{myApplication.statusLabel}}</text></view><text class="amount">{{myApplication.amountLabel}}</text></view>
       <text class="muted">{{myApplication.typeLabel}} · 公开队列 {{myApplication.queuePosition || '—'}}</text>
-      <view class="button-grid"><button class="primary-button" bindtap="editApplication" disabled="{{submitting || !myApplication.canEdit}}">修改报价</button><button class="danger-button" bindtap="withdrawApplication" loading="{{submitting}}" disabled="{{submitting || !myApplication.canEdit}}">撤回申请</button></view>
+      <view class="button-grid efm-equal-tabs"><button class="primary-button" bindtap="editApplication" disabled="{{submitting || !myApplication.canEdit}}">修改报价</button><button class="danger-button" bindtap="withdrawApplication" loading="{{submitting}}" disabled="{{submitting || !myApplication.canEdit}}">撤回申请</button></view>
     </view>
 
     <view wx:else class="action-panel">
@@ -26,7 +26,7 @@
       <text class="eyebrow">{{myApplication ? '修改申请' : player.label}}</text><text class="section-title">确认交易金额</text>
       <view wx:if="{{player.action === 'FORCE_SIGN'}}" class="forced-confirm"><text>原球队</text><text>{{player.owner.numberLabel}} · {{player.owner.name}}</text><text>官方身价</text><text>{{player.officialValueLabel}}</text><text class="warning">原球队无需同意</text></view>
       <view class="amount-field"><text>金额</text><input type="number" value="{{amount}}" bindinput="onAmountInput" placeholder="输入整数金额" /></view><text class="muted">{{amountHint}}</text>
-      <view class="button-grid"><button class="outline-button" bindtap="closeComposer" disabled="{{submitting}}">取消</button><button class="primary-button" bindtap="confirmComposer" loading="{{submitting}}" disabled="{{submitting}}">确认提交</button></view>
+      <view class="button-grid efm-equal-tabs"><button class="outline-button" bindtap="closeComposer" disabled="{{submitting}}">取消</button><button class="primary-button" bindtap="confirmComposer" loading="{{submitting}}" disabled="{{submitting}}">确认提交</button></view>
     </view>
 
     <view wx:if="{{errorMessage}}" class="error-panel"><text>{{errorMessage}}</text><button wx:if="{{recoveryLabel}}" bindtap="runRecovery">{{recoveryLabel}}</button></view>
