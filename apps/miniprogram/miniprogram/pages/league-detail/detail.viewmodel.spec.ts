@@ -112,7 +112,7 @@ describe('league detail view model', () => {
       expect.objectContaining({ key: 'standings', label: '积分榜', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'assets', label: '球队资产', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'transactions', label: '交易记录', stateLabel: '可查看', enabled: true }),
-      expect.objectContaining({ key: 'playerMarket', label: '球员市场', stateLabel: '公开透明', enabled: true }),
+      expect.objectContaining({ key: 'playerMarket', label: '球员市场', stateLabel: '公开透明', enabled: true, wide: false }),
       expect.objectContaining({ key: 'finance', label: '球队财务', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'valuations', label: '身价管理', stateLabel: '窗口未开放', enabled: false }),
       expect.objectContaining({ key: 'cups', label: '杯赛中心', stateLabel: '可查看', enabled: true }),

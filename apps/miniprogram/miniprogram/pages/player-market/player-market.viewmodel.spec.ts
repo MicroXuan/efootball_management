@@ -40,6 +40,21 @@ describe('player market list view model', () => {
     expect(card.owner).toMatchObject({ numberLabel: '18', logoUrl: null, fallback: '一', name: '一支名称非常非常长的测试球队', ownerAlias: '公开联赛称呼' })
   })
 
+  it('exposes the best-card portrait with a compact player-name fallback', () => {
+    expect(marketPlayerCard(player({
+      playerName: 'Michele Di Gregorio',
+      card: { ...player().card!, imageUrl: 'https://cdn.example.test/player.png' },
+    }))).toMatchObject({
+      portraitUrl: 'https://cdn.example.test/player.png',
+      portraitFallback: 'M',
+    })
+
+    expect(marketPlayerCard(player({ playerName: '米凯莱', card: null }))).toMatchObject({
+      portraitUrl: '',
+      portraitFallback: '米',
+    })
+  })
+
   it('shows every public application event, including review reasons', () => {
     const card = applicationCard(application({
       status: 'REJECTED', reviewReason: '阵容不合规', events: [

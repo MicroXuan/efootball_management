@@ -53,37 +53,40 @@
         <view wx:for="{{workspaceModuleGroups}}" wx:key="key" wx:for-item="group" class="workspace-group">
           <view class="workspace-group__head"><text>{{group.label}}</text></view>
           <view class="module-grid">
-            <view
+            <block
               wx:for="{{group.modules}}"
               wx:key="key"
               wx:for-item="module"
-              class="module-tile {{module.enabled ? '' : 'is-locked'}} {{module.wide ? 'is-wide' : ''}} {{module.tone === 'personal' ? 'is-personal' : ''}}"
-              data-key="{{module.key}}"
-              bindtap="onWorkspaceModuleTap"
-              role="button"
-              aria-disabled="{{!module.enabled}}"
             >
-              <view class="module-topline">
-                <text class="module-marker">{{module.marker}}</text>
-                <text class="module-state">{{module.stateLabel}}</text>
+              <view
+                class="module-tile {{module.enabled ? '' : 'is-locked'}} {{module.wide ? 'is-wide' : ''}} {{module.tone === 'personal' ? 'is-personal' : ''}}"
+                data-key="{{module.key}}"
+                bindtap="onWorkspaceModuleTap"
+                role="button"
+                aria-disabled="{{!module.enabled}}"
+              >
+                <view class="module-topline">
+                  <text class="module-marker">{{module.marker}}</text>
+                  <text class="module-state">{{module.stateLabel}}</text>
+                </view>
+                <text class="module-title">{{module.label}}</text>
+                <view class="module-footer">
+                  <text class="module-description">{{module.description}}</text>
+                  <text class="module-arrow">{{module.enabled ? '→' : '锁定'}}</text>
+                </view>
               </view>
-              <text class="module-title">{{module.label}}</text>
-              <view class="module-footer">
-                <text class="module-description">{{module.description}}</text>
-                <text class="module-arrow">{{module.enabled ? '→' : '锁定'}}</text>
+              <view wx:if="{{group.key === 'transactions' && module.key === 'playerMarket' && playerAuctionEnabled}}" class="module-tile is-auction" bindtap="openPlayerAuctions" role="button">
+                <view class="module-topline">
+                  <text class="module-marker">拍</text>
+                  <text class="module-state">实时开放</text>
+                </view>
+                <text class="module-title">球员拍卖</text>
+                <view class="module-footer">
+                  <text class="module-description">进入小程序拍卖大厅</text>
+                  <text class="module-arrow">→</text>
+                </view>
               </view>
-            </view>
-            <view wx:if="{{group.key === 'transactions' && playerAuctionEnabled}}" class="module-tile is-auction is-wide" bindtap="openPlayerAuctions" role="button">
-              <view class="module-topline">
-                <text class="module-marker">拍</text>
-                <text class="module-state">实时开放</text>
-              </view>
-              <text class="module-title">球员拍卖</text>
-              <view class="module-footer">
-                <text class="module-description">进入小程序拍卖大厅</text>
-                <text class="module-arrow">→</text>
-              </view>
-            </view>
+            </block>
           </view>
         </view>
       </view>

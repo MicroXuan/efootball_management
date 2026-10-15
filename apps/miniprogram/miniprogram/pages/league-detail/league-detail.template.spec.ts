@@ -24,6 +24,12 @@ describe('league detail module cards', () => {
     expect(markup).not.toContain('class="auction-entry"')
   })
 
+  it('places the player market and player auction beside each other as compact transaction entries', () => {
+    expect(markup).toContain("group.key === 'transactions' && module.key === 'playerMarket' && playerAuctionEnabled")
+    expect(markup).toContain('class="module-tile is-auction"')
+    expect(markup).not.toContain('class="module-tile is-auction is-wide"')
+  })
+
   it('prioritizes member actions and removes duplicated season navigation', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
     const qualificationPosition = markup.indexOf('class="entry-card entry-card--priority"')

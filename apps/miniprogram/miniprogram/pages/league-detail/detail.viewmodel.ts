@@ -145,7 +145,7 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
     }),
     {
       key: 'playerMarket', marker: '市', label: '球员市场', description: '查归属、申请购买与强报',
-      stateLabel: '公开透明', enabled: true, tone: 'active', wide: true,
+      stateLabel: '公开透明', enabled: true, tone: 'active', wide: false,
     },
     standard({
       key: 'finance', marker: '财', label: '球队财务', description: '赛季流水与实时总额',

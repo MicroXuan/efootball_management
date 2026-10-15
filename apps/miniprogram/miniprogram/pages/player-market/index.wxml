@@ -12,7 +12,7 @@
   </view>
 
   <view wx:if="{{view === 'players'}}" class="filters">
-    <view class="search-row"><input value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="searchPlayers" placeholder="搜索球员、俱乐部" /><button bindtap="searchPlayers">搜索</button></view>
+    <view class="search-row"><input value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="searchPlayers" placeholder="搜索球员、俱乐部" placeholder-class="search-placeholder" /><button bindtap="searchPlayers">搜索</button></view>
     <view class="picker-row">
       <picker range="{{positions}}" range-key="label" value="{{positionIndex}}" bindchange="onPositionChange"><view class="filter-picker"><text>位置</text><text>{{positions[positionIndex].label}}⌄</text></view></picker>
       <picker range="{{ownerships}}" range-key="label" value="{{ownershipIndex}}" bindchange="onOwnershipChange"><view class="filter-picker"><text>归属</text><text>{{ownerships[ownershipIndex].label}}⌄</text></view></picker>
@@ -25,7 +25,10 @@
 
   <view wx:elif="{{view === 'players'}}" class="card-list">
     <view wx:for="{{players}}" wx:key="playerId" class="player-card" data-player-id="{{item.playerId}}" bindtap="openPlayer">
-      <view class="rating-tile"><text class="rating">{{item.overallLabel}}</text><text>{{item.position}}</text></view>
+      <view class="player-artwork">
+        <entity-artwork src="{{item.portraitUrl}}" fallback="{{item.portraitFallback}}" shape="portrait" />
+        <view class="artwork-rating"><text class="rating">{{item.overallLabel}}</text><text>{{item.position}}</text></view>
+      </view>
       <view class="player-main"><view class="name-row"><text class="player-name">{{item.playerName}}</text><text wx:if="{{item.forcedTransferBadge}}" class="forced-badge">强报</text></view><text class="player-meta">{{item.nationality || '国籍未知'}} · {{item.club || '俱乐部未知'}}</text><text class="price">官方身价 {{item.officialValueLabel}}</text></view>
       <view class="action-block"><text class="action-label {{item.actionEnabled ? 'is-ready' : ''}}">{{item.actionLabel}}</text><text class="arrow">›</text></view>
       <view wx:if="{{item.owner}}" class="owner-row"><view class="crest"><image wx:if="{{item.owner.logoUrl}}" src="{{item.owner.logoUrl}}" mode="aspectFit" /><text wx:else>{{item.owner.fallback}}</text></view><view class="owner-copy"><text>{{item.owner.numberLabel}} · {{item.owner.name}}</text><text>{{item.owner.ownerAlias}}</text></view></view>
