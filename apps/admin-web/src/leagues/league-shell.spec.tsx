@@ -71,7 +71,7 @@ describe('role-aware administration navigation', () => {
     expect(screen.getByRole('link', { name: '财务与交易' })).toBeInTheDocument();
     for (const name of [
       '用户与球队', '赛季管理', '分组与赛程', '杯赛中心', '工资规则',
-      '转会窗口', '身价窗口', '身价审核', '财务与交易',
+      '转会窗口', '身价窗口', '身价审核', '球员申请', '财务与交易',
     ]) {
       expect(screen.getByRole('link', { name }).querySelector('.admin-icon')).toBeInTheDocument();
     }
