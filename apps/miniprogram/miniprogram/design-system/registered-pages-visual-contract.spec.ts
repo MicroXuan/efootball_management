@@ -117,7 +117,7 @@ describe('registered browsing pages visual boundary', () => {
     expect(styles).toMatch(/\.efm-equal-tabs\s*>\s*button\s*\{[^}]*height:\s*72rpx/s)
     expect(styles).toMatch(/\.efm-equal-tabs\s*>\s*button\s*\{[^}]*box-sizing:\s*border-box/s)
 
-    for (const page of ['leagues', 'competition-detail', 'league-transactions', 'team-assets']) {
+    for (const page of ['leagues', 'competition-detail', 'league-transactions', 'team-assets', 'player-market-detail', 'valuation-manage']) {
       const markup = readFileSync(resolve(miniRoot, `pages/${page}/index.wxml`), 'utf8')
       expect(markup, page).toContain('efm-equal-tabs')
     }
