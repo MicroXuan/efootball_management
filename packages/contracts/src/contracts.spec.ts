@@ -131,11 +131,14 @@ describe('match result dispute contracts', () => {
     const record = { id, matchId: id, triggerResultVersionId: id, trigger: 'REJECTED', status: 'READY_FOR_REVIEW',
       openedByUserId: id, evidenceDeadlineAt: time, decidedByAdminId: null, decisionType: null, finalHomeScore: null, finalAwayScore: null,
       decisionReason: null, decidedAt: null, version: 2, createdAt: time, updatedAt: time, objectKey: 'private',
-      competitionName: '冠军联赛', stageName: 'A 组', homeParticipantName: '海港', awayParticipantName: '申花', submitterSide: 'HOME' };
+      competitionName: '冠军联赛', stageName: 'A 组', homeParticipantName: '海港', awayParticipantName: '申花', submitterSide: 'HOME',
+      triggerHomeScore: 2, triggerAwayScore: 1 };
     assert.equal(AdminMatchResultDisputeResponseSchema.safeParse(record).success, false);
     assert.equal(AdminMatchResultDisputeResponseSchema.safeParse({ ...record, matchVersion: 0 }).success, false);
     const parsed = AdminMatchResultDisputeResponseSchema.parse({ ...record, matchVersion: 7 });
     assert.equal(parsed.matchVersion, 7);
+    assert.equal(parsed.triggerHomeScore, 2);
+    assert.equal(parsed.triggerAwayScore, 1);
     assert.equal('objectKey' in parsed, false);
   });
   it('exposes only participant dispute state and role presence, never administrator evidence detail', () => {

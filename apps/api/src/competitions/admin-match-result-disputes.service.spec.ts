@@ -214,6 +214,25 @@ describe('administrator arbitration', () => {
     await expect(service.resolve(adminId, b.leagueId, a.dispute!.id, useScore)).rejects.toMatchObject({ response: { code: 'DISPUTE_NOT_FOUND' } });
   });
 
+  it('returns authoritative trigger scores and attributes historical evidence by its own uploader side', async () => {
+    const a = await setup();
+    await prisma.matchResultEvent.deleteMany({ where: { matchId: a.match.id, type: 'RESULT_SUBMITTED' } });
+    const historicalAwayProposal = await prisma.matchResultVersion.create({ data: { matchId: a.match.id, version: 2,
+      homeScore: 0, awayScore: 2, submittedById: users[1]!, submissionSide: 'AWAY', status: 'REJECTED' } });
+    await prisma.matchResultEvidence.createMany({ data: [
+      { matchId: a.match.id, disputeId: a.dispute!.id, resultVersionId: a.proposal.id, role: 'SUBMITTER',
+        uploadedByUserId: users[0]!, objectKey: `history-home-${randomUUID()}`, mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64) },
+      { matchId: a.match.id, disputeId: a.dispute!.id, resultVersionId: historicalAwayProposal.id, role: 'SUBMITTER',
+        uploadedByUserId: users[0]!, objectKey: `history-away-${randomUUID()}`, mimeType: 'image/png', byteSize: 8, checksumSha256: 'b'.repeat(64), status: 'PENDING_DELETE' }
+    ] });
+    const detail = await service.detail(adminId, a.leagueId, a.dispute!.id);
+    expect(detail).toMatchObject({ triggerHomeScore: 2, triggerAwayScore: 1 });
+    expect(detail.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ uploadedByUserId: users[0], uploaderSide: 'HOME' }),
+      expect.objectContaining({ resultVersionId: historicalAwayProposal.id, uploaderSide: 'AWAY' })
+    ]));
+  });
+
   it('supports private local administrator upload/read without a dispute and rejects other roles, owners and leagues', async () => {
     const a = await setup(false); const b = await setup(false);
     const directory = await mkdtemp(join(tmpdir(), 'efm-admin-evidence-'));

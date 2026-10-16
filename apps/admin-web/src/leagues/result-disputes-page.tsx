@@ -29,10 +29,7 @@ function missingRoles(item: AdminMatchResultDisputeResponse) {
     .filter((role) => !item.evidence.some((evidence) => evidence.role === role && evidence.status === 'ACTIVE'));
 }
 function score(detail: AdminMatchResultDisputeResponse) {
-  const event = detail.timeline.find((item) => item.type === 'RESULT_SUBMITTED' && item.resultVersionId === detail.triggerResultVersionId);
-  const home = event?.metadata?.homeScore;
-  const away = event?.metadata?.awayScore;
-  return typeof home === 'number' && typeof away === 'number' ? `${home} : ${away}` : '比分记录不可用';
+  return `${detail.triggerHomeScore} : ${detail.triggerAwayScore}`;
 }
 function rejectedReason(detail: AdminMatchResultDisputeResponse) {
   const event = detail.timeline.find((item) => item.type === 'RESULT_REJECTED' && item.resultVersionId === detail.triggerResultVersionId);
@@ -46,6 +43,12 @@ function participantRoleLabel(item: AdminMatchResultDisputeResponse, role: 'SUBM
   const submitterIsHome = item.submitterSide === 'HOME';
   const isHome = role === 'SUBMITTER' ? submitterIsHome : !submitterIsHome;
   return `${roleLabels[role]}（${isHome ? '主队' : '客队'}：${isHome ? item.homeParticipantName : item.awayParticipantName}）`;
+}
+function evidenceUploaderLabel(item: AdminMatchResultDisputeResponse, side: 'HOME' | 'AWAY' | 'ADMIN' | null) {
+  if (side === 'ADMIN') return roleLabels.ADMIN;
+  if (side === 'HOME') return `主队：${item.homeParticipantName}`;
+  if (side === 'AWAY') return `客队：${item.awayParticipantName}`;
+  return '历史上传方未知';
 }
 
 export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
@@ -275,7 +278,7 @@ function LeagueResultDisputesWorkspace({ leagueId, api }: { leagueId: string; ap
             })}</div>
             {missingRoles(detail).length ? <Alert type="warning" showIcon title={`缺少${missingRoles(detail).map((role) => roleLabels[role]).join('、')}证据，请在裁决前核对时间线。`} /> : null}
             <section><h3>证据</h3>{detail.evidence.length ? detail.evidence.map((item) => <div key={item.id} className="dispute-evidence-row">
-              <div><strong>{item.role === 'ADMIN' ? roleLabels.ADMIN : participantRoleLabel(detail, item.role)} · {item.status === 'ACTIVE' ? '有效' : item.status === 'PENDING_DELETE' ? '待清理' : '已清理'}</strong>
+              <div><strong>{evidenceUploaderLabel(detail, item.uploaderSide)} · {item.status === 'ACTIVE' ? '有效' : item.status === 'PENDING_DELETE' ? '待清理' : '已清理'}</strong>
                 <small>{item.mimeType} · {Math.ceil(item.byteSize / 1024)} KiB · {date(item.createdAt)}</small></div>
               {item.status !== 'DELETED' ? <Button size="small" loading={previewBusy === item.id} onClick={() => void previewEvidence(item.id)}>预览证据</Button> : null}
             </div>) : <p className="dispute-muted">暂无证据。</p>}

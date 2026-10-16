@@ -106,17 +106,26 @@ describe('TeamFinanceService', () => {
     }));
     expect(result).toMatchObject({ totalMinor: 414 });
     expect(result.items).toHaveLength(9);
-    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.financeLedgerEntry.findMany.mock.invocationCallOrder[0]!);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(String((tx.$queryRaw.mock.calls as unknown[][])[0]![0])).toContain('league_seasons');
+    expect(String((tx.$queryRaw.mock.calls as unknown[][])[1]![0])).toContain('league_teams');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.$queryRaw.mock.invocationCallOrder[1]!);
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(tx.financeLedgerEntry.findMany.mock.invocationCallOrder[0]!);
   });
 
   it('serializes concurrent settlement saves so the same target is charged once', async () => {
     const entries: Array<Record<string, unknown>> = [];
     let releaseLock: (() => void) | null = null;
     let held = false;
-    const transactions = Array.from({ length: 2 }, () => ({
+    const transactions = Array.from({ length: 2 }, () => {
+      let lockNumber = 0;
+      return {
       $queryRaw: jest.fn(async () => {
-        if (held) await new Promise<void>((resolve) => { releaseLock = resolve; });
-        held = true;
+        lockNumber += 1;
+        if (lockNumber === 2) {
+          if (held) await new Promise<void>((resolve) => { releaseLock = resolve; });
+          held = true;
+        }
         return [];
       }),
       financeLedgerEntry: {
@@ -126,7 +135,7 @@ describe('TeamFinanceService', () => {
           return { id: `entry-${entries.length}`, createdAt: at, ...data };
         })
       }
-    }));
+    }; });
     let next = 0;
     const receipts = { execute: jest.fn(async (_admin: string, _op: string, _key: string, work: (tx: typeof transactions[number]) => Promise<unknown>) => {
       const tx = transactions[next++]!;

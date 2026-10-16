@@ -30,12 +30,30 @@ describe('evidence retention', () => {
       { ...sessionData(randomUUID()), expiresAt: new Date(now.getTime() + 600000) }
     ] });
     await worker.cleanup(now);
+    expect(storage.delete.mock.calls.length).toBeLessThanOrEqual(200);
+    while (storage.delete.mock.calls.length < 202) await worker.cleanup(now);
     expect(storage.delete).toHaveBeenCalledTimes(202);
     for (const id of ids) {
       expect(storage.delete).toHaveBeenCalledWith(`cloud://env/match-result-evidence-temp--${id}.png`);
       expect(storage.delete).toHaveBeenCalledWith(`cloud://env/match-result-evidence--${id}.png`);
       expect(storage.delete).not.toHaveBeenCalledWith(`cloud://env/match-result-evidence-retained--${id}.png`);
     }
+  });
+  it('coalesces overlapping cleanup invocations into one active pass', async () => {
+    const { match, proposal } = await fixture();
+    await prisma.matchResultVersion.update({ where: { id: proposal.id }, data: { status: 'OFFICIAL' } });
+    await prisma.competitionMatch.update({ where: { id: match.id }, data: { status: 'CONFIRMED', officialResultVersionId: proposal.id } });
+    await prisma.matchResultEvidence.create({ data: { matchId: match.id, resultVersionId: proposal.id,
+      role: 'SUBMITTER', uploadedByUserId: users[0]!, objectKey: `single-flight-${randomUUID()}`,
+      mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64), expiresAt: new Date(0) } });
+    let release!: () => void;
+    storage.delete.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const first = worker.cleanup();
+    while (!storage.delete.mock.calls.length) await new Promise((resolve) => setImmediate(resolve));
+    const second = worker.cleanup();
+    release();
+    await Promise.all([first, second]);
+    expect(storage.delete).toHaveBeenCalledTimes(1);
   });
   it.each(['PENDING', 'UPLOADED', 'EXPIRED'] as const)('cleans both temporary and deterministic retained orphan copies for %s', async (status) => {
     const { match } = await fixture();

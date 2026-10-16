@@ -8,6 +8,7 @@ describe('administrator dispute routes', () => {
     const id = randomUUID(); const time = new Date().toISOString();
     const record = { id, matchId: id, triggerResultVersionId: id, trigger: 'REJECTED', status: 'READY_FOR_REVIEW',
       competitionName: '测试联赛', stageName: '小组赛', homeParticipantName: '主队', awayParticipantName: '客队', submitterSide: 'HOME',
+      triggerHomeScore: 2, triggerAwayScore: 1,
       openedByUserId: id, evidenceDeadlineAt: time, decidedByAdminId: null, decisionType: null, finalHomeScore: null, finalAwayScore: null,
       decisionReason: null, decidedAt: null, version: 2, matchVersion: 7, createdAt: time, updatedAt: time,
       objectKey: 'private-key', evidence: [], timeline: [] };

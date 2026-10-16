@@ -195,13 +195,27 @@ describe('ResultEvidenceStorageService', () => {
       status: 'READY_FOR_REVIEW', evidenceDeadlineAt: new Date(Date.now() + 60_000)
     } });
     await expect(reviewStarted.service.createUserUpload(userId, matchId, input))
-      .rejects.toMatchObject({ response: { code: 'MATCH_RESULT_NOT_ALLOWED' } });
+      .resolves.toMatchObject({ id: uploadId });
 
     const expired = fixture({ matchStatus: 'DISPUTED', dispute: {
       status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: new Date(Date.now() - 1)
     } });
     await expect(expired.service.createUserUpload(userId, matchId, input))
       .rejects.toMatchObject({ response: { code: 'EVIDENCE_DEADLINE_EXPIRED' } });
+  });
+
+  it('revalidates a participant grant under the match lock after cancellation wins the race', async () => {
+    const raced = fixture();
+    let reads = 0;
+    raced.prisma.competitionMatch.findUnique.mockImplementation(async () => {
+      reads += 1;
+      return reads === 1 ? raced.match : { ...raced.match, stage: { ...raced.match.stage,
+        competition: { ...raced.match.stage.competition, status: 'CANCELLED' } } };
+    });
+    await expect(raced.service.createUserUpload(userId, matchId, input))
+      .rejects.toMatchObject({ response: { code: 'MATCH_RESULT_NOT_ALLOWED' } });
+    expect(raced.prisma.$queryRaw).toHaveBeenCalled();
+    expect(raced.prisma.matchResultEvidenceUpload.create).not.toHaveBeenCalled();
   });
 
   it.each([

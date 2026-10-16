@@ -7,9 +7,14 @@ import { EVIDENCE_RETAINED_PREFIX, evidenceOrphanKeys, evidenceSourceKeys } from
 
 @Injectable()
 export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, OnModuleDestroy {
+  private static readonly RUN_BUDGET = 100;
   private readonly logger = new Logger(ResultEvidenceRetentionWorker.name);
   private readonly events = new MatchResultEventsService();
   private timer?: NodeJS.Timeout;
+  private activeCleanup: Promise<void> | undefined;
+  private evidenceCursor = '';
+  private orphanCursor = '';
+  private sourceCursor = '';
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage) {}
   onApplicationBootstrap() {
@@ -18,15 +23,25 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
   }
   onModuleDestroy() { if (this.timer) clearInterval(this.timer); }
 
-  async cleanup(now = new Date()): Promise<void> {
-    let after = '';
-    for (;;) {
+  cleanup(now = new Date()): Promise<void> {
+    if (this.activeCleanup) return this.activeCleanup;
+    const run = this.cleanupPass(now).finally(() => {
+      if (this.activeCleanup === run) this.activeCleanup = undefined;
+    });
+    this.activeCleanup = run;
+    return run;
+  }
+
+  private async cleanupPass(now: Date): Promise<void> {
+    let remaining = ResultEvidenceRetentionWorker.RUN_BUDGET;
+    while (remaining > 0) {
       const batch = await this.prisma.matchResultEvidence.findMany({ where: {
-        id: { gt: after }, status: { in: ['ACTIVE', 'PENDING_DELETE'] }, expiresAt: { lte: now }
-      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: 100 });
-      if (!batch.length) break;
+        id: { gt: this.evidenceCursor }, status: { in: ['ACTIVE', 'PENDING_DELETE'] }, expiresAt: { lte: now }
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: Math.min(100, remaining) });
+      if (!batch.length) { this.evidenceCursor = ''; break; }
       for (const candidate of batch) {
-        after = candidate.id;
+        this.evidenceCursor = candidate.id;
+        remaining -= 1;
         try {
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
@@ -45,18 +60,20 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
           });
         } catch (error) { this.logger.warn(`Evidence ${candidate.id} cleanup will retry: ${String(error)}`); }
       }
+      if (batch.length < Math.min(100, remaining + batch.length)) { this.evidenceCursor = ''; break; }
     }
-    after = '';
     const cutoff = new Date(now.getTime() - 86_400_000);
-    for (;;) {
+    while (remaining > 0) {
       const batch = await this.prisma.matchResultEvidenceUpload.findMany({ where: {
         // Revisit expired sessions: an in-flight provider write can finish after a DB timeout.
-        id: { gt: after }, status: { in: ['PENDING', 'UPLOADED', 'EXPIRED'] }, createdAt: { lt: cutoff },
+        id: { gt: this.orphanCursor }, status: { in: ['PENDING', 'UPLOADED', 'EXPIRED'] }, createdAt: { lt: cutoff },
         resultVersionId: null, disputeId: null, evidence: null
-      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: 100 });
-      if (!batch.length) break;
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: Math.min(100, remaining) });
+      if (!batch.length) { this.orphanCursor = ''; break; }
+      const requested = Math.min(100, remaining);
       for (const candidate of batch) {
-        after = candidate.id;
+        this.orphanCursor = candidate.id;
+        remaining -= 1;
         try {
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
@@ -73,19 +90,21 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
           });
         } catch (error) { this.logger.warn(`Upload ${candidate.id} cleanup will retry: ${String(error)}`); }
       }
+      if (batch.length < requested) { this.orphanCursor = ''; break; }
     }
     // Completion can persist the retained key before source deletion fails. Consumption
     // removes these sessions from orphan cleanup, so revisit their source siblings daily.
-    after = '';
-    for (;;) {
+    while (remaining > 0) {
       const batch = await this.prisma.matchResultEvidenceUpload.findMany({ where: {
-        id: { gt: after }, objectKey: { contains: EVIDENCE_RETAINED_PREFIX }, createdAt: { lt: cutoff },
+        id: { gt: this.sourceCursor }, objectKey: { contains: EVIDENCE_RETAINED_PREFIX }, createdAt: { lt: cutoff },
         OR: [{ status: 'CONSUMED' }, { evidence: { isNot: null } },
           { resultVersionId: { not: null } }, { disputeId: { not: null } }]
-      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: 100 });
-      if (!batch.length) break;
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: Math.min(100, remaining) });
+      if (!batch.length) { this.sourceCursor = ''; break; }
+      const requested = Math.min(100, remaining);
       for (const candidate of batch) {
-        after = candidate.id;
+        this.sourceCursor = candidate.id;
+        remaining -= 1;
         try {
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
@@ -105,6 +124,7 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
           });
         } catch (error) { this.logger.warn(`Upload ${candidate.id} source cleanup will retry: ${String(error)}`); }
       }
+      if (batch.length < requested) { this.sourceCursor = ''; break; }
     }
   }
 }

@@ -32,13 +32,17 @@ export class ResultEvidenceStorageService {
     await this.requireAdminMatch(adminId, leagueId, matchId, input.expectedVersion);
     if (input.role !== 'ADMIN' || !this.validMetadata(input.mimeType, input.byteSize)) throw this.invalid('Administrator image upload metadata is invalid');
     if (!this.storage.createDirectUpload) throw new Error('Direct storage uploads are unavailable');
-    const grant = await this.storage.createDirectUpload('match-result-evidence', randomUUID(), input.mimeType);
-    const expiresAt = new Date(Date.now() + UPLOAD_LIFETIME_MS);
-    const upload = await this.prisma.matchResultEvidenceUpload.create({ data: {
-      matchId, role: 'ADMIN', uploadedByAdminId: adminId, objectKey: grant.key, mimeType: input.mimeType,
-      byteSize: input.byteSize, checksumSha256: input.checksumSha256.toLowerCase(), expiresAt
-    } });
-    return { id: upload.id, objectKey: grant.key, uploadUrl: this.adminUrl(grant.uploadUrl, leagueId), headers: grant.headers, expiresAt: expiresAt.toISOString() };
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competition_matches WHERE id = ${matchId} FOR UPDATE`;
+      await this.adminMatch(transaction, leagueId, matchId, input.expectedVersion);
+      const grant = await this.storage.createDirectUpload!('match-result-evidence', randomUUID(), input.mimeType);
+      const expiresAt = new Date(Date.now() + UPLOAD_LIFETIME_MS);
+      const upload = await transaction.matchResultEvidenceUpload.create({ data: {
+        matchId, role: 'ADMIN', uploadedByAdminId: adminId, objectKey: grant.key, mimeType: input.mimeType,
+        byteSize: input.byteSize, checksumSha256: input.checksumSha256.toLowerCase(), expiresAt
+      } });
+      return { id: upload.id, objectKey: grant.key, uploadUrl: this.adminUrl(grant.uploadUrl, leagueId), headers: grant.headers, expiresAt: expiresAt.toISOString() };
+    });
   }
 
   async completeAdminUpload(adminId: string, leagueId: string, matchId: string, uploadId: string, input: CompleteEvidenceUploadRequest) {
@@ -83,7 +87,11 @@ export class ResultEvidenceStorageService {
 
   private async requireAdminMatch(adminId: string, leagueId: string, matchId: string, expectedVersion?: number) {
     await (this.authorization ?? new AdminAuthorizationService(this.prisma)).requireLeagueAccess(adminId, leagueId);
-    const match = await this.prisma.competitionMatch.findUnique({ where: { id: matchId }, include: {
+    return this.adminMatch(this.prisma, leagueId, matchId, expectedVersion);
+  }
+
+  private async adminMatch(client: PrismaService | Prisma.TransactionClient, leagueId: string, matchId: string, expectedVersion?: number) {
+    const match = await client.competitionMatch.findUnique({ where: { id: matchId }, include: {
       stage: { include: { competition: { include: { season: { include: { league: true } } } } } },
       homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
       awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } }
@@ -96,32 +104,27 @@ export class ResultEvidenceStorageService {
   }
 
   async createUserUpload(userId: string, matchId: string, input: CreateEvidenceUploadRequest) {
-    const match = await this.requireParticipant(userId, matchId, input.expectedVersion);
+    await this.requireParticipant(this.prisma, userId, matchId, input.expectedVersion);
     if (input.role === 'ADMIN') throw this.invalid('Players cannot upload administrator evidence');
+    const role = input.role;
     if (!this.validMetadata(input.mimeType, input.byteSize)) throw this.invalid('Evidence must be a JPEG, PNG, or WebP image of at most 1 MiB');
-    await this.assertUserUploadAction(match, userId, input.role);
     if (!this.storage.createDirectUpload) throw new Error('Direct storage uploads are unavailable');
-
-    const grant = await this.storage.createDirectUpload('match-result-evidence', randomUUID(), input.mimeType);
-    const expiresAt = new Date(Date.now() + UPLOAD_LIFETIME_MS);
-    const upload = await this.prisma.matchResultEvidenceUpload.create({
-      data: {
-        matchId,
-        role: input.role,
-        uploadedByUserId: userId,
-        objectKey: grant.key,
-        mimeType: input.mimeType,
-        byteSize: input.byteSize,
-        checksumSha256: input.checksumSha256.toLowerCase(),
-        status: 'PENDING',
-        expiresAt
-      }
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competition_matches WHERE id = ${matchId} FOR UPDATE`;
+      const match = await this.requireParticipant(transaction, userId, matchId, input.expectedVersion);
+      await this.assertUserUploadAction(transaction, match, userId, role);
+      const grant = await this.storage.createDirectUpload!('match-result-evidence', randomUUID(), input.mimeType);
+      const expiresAt = new Date(Date.now() + UPLOAD_LIFETIME_MS);
+      const upload = await transaction.matchResultEvidenceUpload.create({ data: {
+        matchId, role, uploadedByUserId: userId, objectKey: grant.key, mimeType: input.mimeType,
+        byteSize: input.byteSize, checksumSha256: input.checksumSha256.toLowerCase(), status: 'PENDING', expiresAt
+      } });
+      return { id: upload.id, objectKey: grant.key, uploadUrl: grant.uploadUrl, headers: grant.headers, expiresAt: expiresAt.toISOString() };
     });
-    return { id: upload.id, objectKey: grant.key, uploadUrl: grant.uploadUrl, headers: grant.headers, expiresAt: expiresAt.toISOString() };
   }
 
   async completeUserUpload(userId: string, matchId: string, uploadId: string, input: CompleteEvidenceUploadRequest) {
-    await this.requireParticipant(userId, matchId, input.expectedVersion);
+    await this.requireParticipant(this.prisma, userId, matchId, input.expectedVersion);
     const upload = await this.prisma.matchResultEvidenceUpload.findUnique({ where: { id: uploadId } });
     if (!upload || upload.matchId !== matchId || upload.uploadedByUserId !== userId) throw this.notFound();
     return this.completeUpload(upload);
@@ -160,7 +163,7 @@ export class ResultEvidenceStorageService {
   }
 
   async userReadUrl(userId: string, matchId: string, evidenceId: string): Promise<{ url: string; expiresAt: string }> {
-    await this.requireParticipant(userId, matchId);
+    await this.requireParticipant(this.prisma, userId, matchId);
     const evidence = await this.prisma.matchResultEvidence.findUnique({ where: { id: evidenceId } });
     if (!evidence || evidence.matchId !== matchId || evidence.uploadedByUserId !== userId || evidence.status !== 'ACTIVE') {
       throw this.notFound();
@@ -177,7 +180,7 @@ export class ResultEvidenceStorageService {
     if (!upload || upload.uploadedByUserId !== userId || upload.status !== 'PENDING' || upload.expiresAt <= new Date()) {
       throw this.notFound();
     }
-    await this.requireParticipant(userId, upload.matchId);
+    await this.requireParticipant(this.prisma, userId, upload.matchId);
     if (mimeType !== upload.mimeType) throw this.invalid('Evidence MIME type does not match the session');
     validateResultEvidenceImage({ buffer: body, size: body.length, originalname: key, mimetype: mimeType });
     if (!this.storage.writePrivate) throw this.notFound();
@@ -195,15 +198,15 @@ export class ResultEvidenceStorageService {
     if (!this.storage.verifyPrivateRead?.(key, expires, signature)) throw this.notFound();
     const evidence = await this.prisma.matchResultEvidence.findUnique({ where: { objectKey: key } });
     if (!evidence || evidence.uploadedByUserId !== userId || evidence.status !== 'ACTIVE') throw this.notFound();
-    await this.requireParticipant(userId, evidence.matchId);
+    await this.requireParticipant(this.prisma, userId, evidence.matchId);
     if (!this.storage.readPrivate) throw this.notFound();
     const object = await this.storage.readPrivate(key);
     if (!object) throw this.notFound();
     return new StreamableFile(object.buffer, { type: object.mimeType, length: object.size, disposition: 'inline' });
   }
 
-  private async requireParticipant(userId: string, matchId: string, expectedVersion?: number): Promise<Match> {
-    const match = await this.prisma.competitionMatch.findUnique({
+  private async requireParticipant(client: PrismaService | Prisma.TransactionClient, userId: string, matchId: string, expectedVersion?: number): Promise<Match> {
+    const match = await client.competitionMatch.findUnique({
       where: { id: matchId },
       include: {
         stage: { include: { competition: { include: { season: { include: { league: true } } } } } },
@@ -231,14 +234,14 @@ export class ResultEvidenceStorageService {
       && Number.isInteger(size) && size > 0 && size <= MAX_RESULT_EVIDENCE_BYTES;
   }
 
-  private async assertUserUploadAction(match: Match, userId: string, requestedRole: 'SUBMITTER' | 'OPPONENT') {
+  private async assertUserUploadAction(client: PrismaService | Prisma.TransactionClient, match: Match, userId: string, requestedRole: 'SUBMITTER' | 'OPPONENT') {
     const now = new Date();
     if (match.status === 'AWAITING_RESULT') {
       if (requestedRole !== 'SUBMITTER') throw new CompetitionError('EVIDENCE_ROLE_INVALID', 'Evidence role does not match the available result action', 409);
       return;
     }
     if (match.status === 'PENDING_CONFIRMATION') {
-      const proposal = await this.prisma.matchResultVersion.findFirst({
+      const proposal = await client.matchResultVersion.findFirst({
         where: { matchId: match.id, status: 'PROPOSED' }, orderBy: { version: 'desc' }, select: { submittedById: true }
       });
       if (!match.resultConfirmationDeadlineAt || match.resultConfirmationDeadlineAt > now) {
@@ -250,10 +253,10 @@ export class ResultEvidenceStorageService {
       return;
     }
     if (match.status === 'DISPUTED') {
-      const dispute = await this.prisma.matchResultDispute.findUnique({
+      const dispute = await client.matchResultDispute.findUnique({
         where: { activeKey: match.id }, include: { triggerResultVersion: { select: { submittedById: true } } }
       });
-      if (!dispute || dispute.status !== 'EVIDENCE_COLLECTION') {
+      if (!dispute || !['EVIDENCE_COLLECTION', 'READY_FOR_REVIEW'].includes(dispute.status)) {
         throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Evidence collection is not active', 409);
       }
       if (dispute.evidenceDeadlineAt <= now) {

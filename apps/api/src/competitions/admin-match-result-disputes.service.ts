@@ -28,16 +28,16 @@ export class AdminMatchResultDisputesService {
   private readonly identityInclude = {
     match: { include: {
       stage: { select: { displayName: true, stageCode: true, competition: { select: { name: true } } } },
-      homeParticipant: { select: { displayNameSnapshot: true } },
-      awayParticipant: { select: { displayNameSnapshot: true } }
+      homeParticipant: { select: { displayNameSnapshot: true, individualUserId: true, seasonEntry: { select: { ownerUserId: true } } } },
+      awayParticipant: { select: { displayNameSnapshot: true, individualUserId: true, seasonEntry: { select: { ownerUserId: true } } } }
     } },
-    triggerResultVersion: { select: { submissionSide: true } }
+    triggerResultVersion: { select: { submissionSide: true, homeScore: true, awayScore: true } }
   } satisfies Prisma.MatchResultDisputeInclude;
 
   private identity(row: {
     match: { version: number; stage: { displayName: string | null; stageCode: string | null; competition: { name: string } };
       homeParticipant: { displayNameSnapshot: string }; awayParticipant: { displayNameSnapshot: string } };
-    triggerResultVersion: { submissionSide: string };
+    triggerResultVersion: { submissionSide: string; homeScore: number; awayScore: number };
   }) {
     if (row.triggerResultVersion.submissionSide !== 'HOME' && row.triggerResultVersion.submissionSide !== 'AWAY') {
       throw new CompetitionError('DISPUTE_CONTEXT_INVALID', 'Dispute submitter side is unavailable', 500);
@@ -48,7 +48,9 @@ export class AdminMatchResultDisputesService {
       stageName: row.match.stage.displayName ?? row.match.stage.stageCode ?? '未命名阶段',
       homeParticipantName: row.match.homeParticipant.displayNameSnapshot,
       awayParticipantName: row.match.awayParticipant.displayNameSnapshot,
-      submitterSide: row.triggerResultVersion.submissionSide
+      submitterSide: row.triggerResultVersion.submissionSide,
+      triggerHomeScore: row.triggerResultVersion.homeScore,
+      triggerAwayScore: row.triggerResultVersion.awayScore
     };
   }
 
@@ -80,11 +82,28 @@ export class AdminMatchResultDisputesService {
     await this.authorization.requireLeagueAccess(adminId, leagueId);
     const dispute = await this.requireDispute(this.prisma, leagueId, disputeId);
     const [evidence, timeline] = await Promise.all([
-      this.prisma.matchResultEvidence.findMany({ where: { matchId: dispute.matchId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
+      this.prisma.matchResultEvidence.findMany({ where: { matchId: dispute.matchId },
+        include: { resultVersion: { select: { submissionSide: true } } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
       this.prisma.matchResultEvent.findMany({ where: { matchId: dispute.matchId }, orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] })
     ]);
     // The response schema deliberately excludes object keys and internal upload identifiers.
-    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...dispute, ...this.identity(dispute), evidence, timeline })));
+    const side = (userId: string | null) => {
+      if (!userId) return null;
+      const home = dispute.match.homeParticipant;
+      const away = dispute.match.awayParticipant;
+      if (home.individualUserId === userId || home.seasonEntry?.ownerUserId === userId) return 'HOME';
+      if (away.individualUserId === userId || away.seasonEntry?.ownerUserId === userId) return 'AWAY';
+      return null;
+    };
+    const attributed = evidence.map((item) => {
+      const proposalSide = item.resultVersion?.submissionSide;
+      const evidenceSide = proposalSide === 'HOME' || proposalSide === 'AWAY'
+        ? item.role === 'OPPONENT' ? (proposalSide === 'HOME' ? 'AWAY' : 'HOME') : proposalSide
+        : null;
+      return { ...item, uploaderSide: item.uploadedByAdminId ? 'ADMIN' : evidenceSide ?? side(item.uploadedByUserId) };
+    });
+    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...dispute, ...this.identity(dispute), evidence: attributed, timeline })));
   }
 
   async readUrl(adminId: string, leagueId: string, disputeId: string, evidenceId: string) {

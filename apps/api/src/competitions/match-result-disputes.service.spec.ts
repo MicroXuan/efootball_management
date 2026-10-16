@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { jest } from '@jest/globals';
+import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
 import { disputeFixture } from '../../test/helpers/match-result-disputes.js';
 import { MatchResultDisputesService } from './match-result-disputes.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
@@ -100,6 +102,31 @@ describe('MatchResultDisputesService', () => {
     expect(await prisma.matchResultEvidence.count({ where: { matchId: match.id, status: 'ACTIVE', role: 'SUBMITTER' } })).toBe(1);
     expect(await prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: a.id } })).toMatchObject({ status: 'PENDING_DELETE', expiresAt: expect.any(Date) });
     expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'EVIDENCE_REPLACED' } })).toBe(1);
+  });
+
+  it('grants, completes, and attaches replacement evidence after becoming ready but before the deadline', async () => {
+    const { match } = await rejected();
+    const first = await upload(match.id);
+    await disputes.attachEvidence(users[0]!, match.id, { expectedVersion: 3, evidenceUploadId: first.id }, randomUUID());
+    const opponent = await upload(match.id, 'OPPONENT');
+    await disputes.attachEvidence(users[1]!, match.id, { expectedVersion: 4, evidenceUploadId: opponent.id }, randomUUID());
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const key = `match-result-evidence-temp--${randomUUID()}.png`;
+    const storage = { createDirectUpload: jest.fn(async () => ({ key, uploadUrl: 'https://private.test/put', headers: {} })),
+      inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64), buffer: bytes })),
+      promoteEvidence: jest.fn(async () => key.replace('temp--', 'retained--')), delete: jest.fn(async () => undefined) };
+    const evidenceStorage = new ResultEvidenceStorageService(prisma, storage as never);
+    const grant = await evidenceStorage.createUserUpload(users[0]!, match.id, {
+      role: 'SUBMITTER', mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64), expectedVersion: 5
+    });
+    await evidenceStorage.completeUserUpload(users[0]!, match.id, grant.id, { expectedVersion: 5 });
+    const response = await disputes.attachEvidence(users[0]!, match.id,
+      { expectedVersion: 5, evidenceUploadId: grant.id }, randomUUID());
+    expect(response.status).toBe('READY_FOR_REVIEW');
+    expect(await prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: first.id } }))
+      .toMatchObject({ status: 'PENDING_DELETE' });
+    expect(await prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: grant.id } }))
+      .toMatchObject({ status: 'ACTIVE', role: 'SUBMITTER' });
   });
 
   it.each([false, true])('corrects overdue evidence on reads and rejected writes with one role present=%s', async (present) => {

@@ -29,6 +29,7 @@ export const MatchResultEvidenceResponseSchema = z.object({
   status: MatchResultEvidenceStatusSchema,
   uploadedByUserId: ResourceIdSchema.nullable(),
   uploadedByAdminId: ResourceIdSchema.nullable(),
+  uploaderSide: z.enum(['HOME', 'AWAY', 'ADMIN']).nullable().default(null),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   byteSize: z.number().int().positive().max(1_048_576),
   checksumSha256: ChecksumSchema,
@@ -79,6 +80,8 @@ export const AdminMatchResultDisputeResponseSchema = MatchResultDisputeResponseS
   homeParticipantName: z.string().min(1),
   awayParticipantName: z.string().min(1),
   submitterSide: z.enum(['HOME', 'AWAY']),
+  triggerHomeScore: ScoreSchema,
+  triggerAwayScore: ScoreSchema,
   missingRoles: z.array(z.enum(['SUBMITTER', 'OPPONENT'])).optional()
 });
 export const AdminMatchResultDisputeListResponseSchema = z.array(AdminMatchResultDisputeResponseSchema);

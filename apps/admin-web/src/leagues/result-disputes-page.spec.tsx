@@ -14,7 +14,8 @@ const row = {
   evidenceDeadlineAt: at, decidedByAdminId: null, decisionType: null, finalHomeScore: null,
   finalAwayScore: null, decisionReason: null, decidedAt: null, version: 2, matchVersion: 7,
   competitionName: '冠军联赛', stageName: 'A 组', homeParticipantName: '海港', awayParticipantName: '申花',
-  submitterSide: 'HOME', createdAt: at, updatedAt: at, missingRoles: ['OPPONENT'], evidence: [], timeline: []
+  submitterSide: 'HOME', triggerHomeScore: 2, triggerAwayScore: 1,
+  createdAt: at, updatedAt: at, missingRoles: ['OPPONENT'], evidence: [], timeline: []
 };
 const detail = { ...row, evidence: [], timeline: [
   { id: '66666666-6666-4666-8666-666666666666', matchId, disputeId: null,
@@ -65,7 +66,7 @@ it.each(['visible', 'pending'] as const)('clears %s private evidence and ignores
       : { id: leagueId, resultEvidenceRequired: false, version: 3 };
     if (path.endsWith('/result-disputes')) return [row];
     if (path.endsWith('/read-url')) return { url: 'https://private.test/evidence', expiresAt: at };
-    return { ...detail, evidence: [{ id: 'proof-a', role: 'SUBMITTER', status: 'ACTIVE',
+    return { ...detail, evidence: [{ id: 'proof-a', role: 'SUBMITTER', uploaderSide: 'AWAY', status: 'ACTIVE',
       mimeType: 'image/png', byteSize: 10, createdAt: at }] };
   }) as unknown as AdminApi['request'];
   const create = vi.fn(() => 'blob:league-a');
@@ -78,6 +79,7 @@ it.each(['visible', 'pending'] as const)('clears %s private evidence and ignores
   try {
     renderPage(request, { transferEvidence });
     await userEvent.click(await screen.findByRole('button', { name: /查看争议/ }));
+    expect(await screen.findByText(/客队：申花.*有效/)).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: '预览证据' }));
     await waitFor(() => expect(transferEvidence).toHaveBeenCalled());
     if (previewState === 'visible') {
@@ -137,7 +139,7 @@ it.each(['detail', 'resolution-success', 'resolution-conflict'] as const)('ignor
 it.each(['success', 'conflict'] as const)('keeps dispute B and its draft intact after a pending A resolution %s', async (outcome) => {
   const pending = deferred<unknown>();
   const secondId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-  const second = { ...detail, id: secondId, matchVersion: 9,
+  const second = { ...detail, id: secondId, matchVersion: 9, triggerHomeScore: 4, triggerAwayScore: 3,
     timeline: detail.timeline.map((event) => ({ ...event, metadata: event.type === 'RESULT_SUBMITTED'
       ? { homeScore: 4, awayScore: 3 } : { reason: 'B拒绝原因' } })) };
   const request = vi.fn(async (path: string) => {
@@ -222,6 +224,19 @@ it('loads only the league queue, then fetches detail and uses matchVersion to re
   ));
   await waitFor(() => expect(paths.filter((path) => path.endsWith(`/${disputeId}`))).toHaveLength(2));
   expect(paths.filter((path) => path.endsWith('/result-disputes'))).toHaveLength(2);
+});
+
+it('shows the authoritative trigger score when a legacy proposal has no submission event', async () => {
+  const legacy = { ...detail, timeline: detail.timeline.filter((event) => event.type !== 'RESULT_SUBMITTED') };
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/workspace')) return { id: leagueId, resultEvidenceRequired: false, version: 3 };
+    if (path.endsWith('/result-disputes')) return [row];
+    return legacy;
+  }) as unknown as AdminApi['request'];
+  renderPage(request);
+  await userEvent.click(await screen.findByRole('button', { name: /查看争议/ }));
+  expect(await screen.findByText('2 : 1')).toBeInTheDocument();
+  expect(screen.queryByText('比分记录不可用')).not.toBeInTheDocument();
 });
 
 it('uploads optional administrator evidence before resolving the dispute', async () => {
