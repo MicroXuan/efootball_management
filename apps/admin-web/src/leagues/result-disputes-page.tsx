@@ -4,7 +4,7 @@ import {
   type AdminMatchResultDisputeResponse, type LeagueDetail
 } from '@efm/contracts';
 import { Alert, Button, Card, Drawer, Empty, Input, InputNumber, Radio, Spin, Switch, Tag, Upload } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
@@ -45,6 +45,11 @@ function rank(item: AdminMatchResultDisputeResponse) {
 
 export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
+  // Each route gets a fresh generation of all scoped state, including drawer drafts.
+  return <LeagueResultDisputesWorkspace key={leagueId} leagueId={leagueId} api={api} />;
+}
+
+function LeagueResultDisputesWorkspace({ leagueId, api }: { leagueId: string; api: AdminApi }) {
   const [league, setLeague] = useState<LeagueDetail | null>(null);
   const [queue, setQueue] = useState<AdminMatchResultDisputeResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +71,10 @@ export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
   const requestSerial = useRef(0);
   const previewSerial = useRef(0);
   const previewRef = useRef<typeof preview>(null);
+  const leagueGeneration = useRef(0);
+  const active = useRef(false);
+  const selectionGeneration = useRef(0);
+  const currentLeague = (generation: number) => active.current && generation === leagueGeneration.current;
 
   const clearPreview = useCallback(() => {
     previewSerial.current += 1;
@@ -74,89 +83,124 @@ export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
     setPreview(null);
     setPreviewBusy(null);
   }, []);
-  useEffect(() => () => {
-    previewSerial.current += 1;
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current.url);
-    previewRef.current = null;
+  useLayoutEffect(() => {
+    active.current = true;
+    leagueGeneration.current += 1;
+    return () => {
+      active.current = false;
+      leagueGeneration.current += 1;
+      selectionGeneration.current += 1;
+      requestSerial.current += 1;
+      previewSerial.current += 1;
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current.url);
+      previewRef.current = null;
+    };
   }, []);
 
   const load = useCallback(async () => {
+    const generation = leagueGeneration.current;
+    if (!active.current) return;
+    const current = () => active.current && generation === leagueGeneration.current;
     setLoading(true); setError(null);
     try {
       const [nextLeague, nextQueue] = await Promise.all([
         api.request(`/v1/admin/leagues/${leagueId}/workspace`, { schema: LeagueDetailSchema }),
         api.request(`/v1/admin/leagues/${leagueId}/result-disputes`, { schema: AdminMatchResultDisputeListResponseSchema })
       ]);
+      if (!current()) return;
       setLeague(nextLeague);
       setQueue([...nextQueue].sort((a, b) => rank(a) - rank(b) || a.evidenceDeadlineAt.localeCompare(b.evidenceDeadlineAt)));
-    } catch { setError('争议队列加载失败，请重试。'); }
-    finally { setLoading(false); }
+    } catch { if (current()) setError('争议队列加载失败，请重试。'); }
+    finally { if (current()) setLoading(false); }
   }, [api, leagueId]);
   useEffect(() => { void load(); }, [load]);
 
   const loadDetail = useCallback(async (id: string) => {
+    if (!active.current) return;
+    const generation = leagueGeneration.current;
+    const selection = selectionGeneration.current;
     const serial = ++requestSerial.current;
+    const current = () => active.current && generation === leagueGeneration.current
+      && selection === selectionGeneration.current && serial === requestSerial.current;
     setDetailBusy(true); setDetailError(null);
     try {
       const next = await api.request(`/v1/admin/leagues/${leagueId}/result-disputes/${id}`, { schema: AdminMatchResultDisputeResponseSchema });
-      if (serial === requestSerial.current) setDetail(next);
+      if (current()) setDetail(next);
     } catch {
-      if (serial === requestSerial.current) setDetailError('争议详情加载失败，请重试。');
-    } finally { if (serial === requestSerial.current) setDetailBusy(false); }
+      if (current()) setDetailError('争议详情加载失败，请重试。');
+    } finally { if (current()) setDetailBusy(false); }
   }, [api, leagueId]);
   const open = (id: string) => {
+    selectionGeneration.current += 1; setSubmitting(false);
     clearPreview(); setSelectedId(id); setDetail(null); setDecision('USE_SUBMITTED_SCORE');
     setHomeScore(null); setAwayScore(null); setReason(''); setFile(null); void loadDetail(id);
   };
-  const close = () => { requestSerial.current += 1; clearPreview(); setSelectedId(null); setDetail(null); setDetailError(null); setFile(null); };
+  const close = () => { selectionGeneration.current += 1; requestSerial.current += 1; clearPreview(); setSelectedId(null); setDetail(null); setDetailError(null); setFile(null); setSubmitting(false); };
 
   const toggleEvidence = async (checked: boolean) => {
-    if (!league || settingBusy) return;
+    if (!league || league.id !== leagueId || settingBusy || !active.current) return;
+    const generation = leagueGeneration.current;
     setSettingBusy(true); setError(null); setNotice(null);
     try {
       const updated = await api.request(`/v1/admin/leagues/${leagueId}/workspace`, {
         method: 'PATCH', headers: { 'Idempotency-Key': crypto.randomUUID() },
         schema: LeagueDetailSchema, body: { resultEvidenceRequired: checked, expectedVersion: league.version }
       });
+      if (!currentLeague(generation)) return;
       setLeague(updated); setNotice(checked ? '已开启每场比分截图要求。' : '已关闭每场比分截图要求。');
     } catch (caught) {
+      if (!currentLeague(generation)) return;
       if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') {
-        try { setLeague(await api.request(`/v1/admin/leagues/${leagueId}/workspace`, { schema: LeagueDetailSchema })); }
+        try {
+          const updated = await api.request(`/v1/admin/leagues/${leagueId}/workspace`, { schema: LeagueDetailSchema });
+          if (currentLeague(generation)) setLeague(updated);
+        }
         catch { /* Keep the current value and ask for reload. */ }
+        if (!currentLeague(generation)) return;
         setError('联赛设置已被其他管理员更新，请确认最新状态后重试。');
       } else setError('截图要求保存失败，请重试。');
-    } finally { setSettingBusy(false); }
+    } finally { if (currentLeague(generation)) setSettingBusy(false); }
   };
 
   const previewEvidence = async (evidenceId: string) => {
     if (!detail || !api.transferEvidence) { setDetailError('此浏览器暂时无法预览证据，请重试。'); return; }
     clearPreview(); const serial = ++previewSerial.current; setPreviewBusy(evidenceId); setDetailError(null);
+    const generation = leagueGeneration.current;
+    const current = () => currentLeague(generation) && serial === previewSerial.current;
     try {
       const grant = await api.request(`/v1/admin/leagues/${leagueId}/result-disputes/${detail.id}/evidence/${evidenceId}/read-url`, { schema: readUrlSchema });
+      if (!current()) return;
       const blob = await api.transferEvidence(grant.url);
       if (!blob) throw new Error('Empty image');
       const url = URL.createObjectURL(blob);
-      if (serial !== previewSerial.current) { URL.revokeObjectURL(url); return; }
+      if (!current()) { URL.revokeObjectURL(url); return; }
       previewRef.current = { id: evidenceId, url }; setPreview(previewRef.current);
-    } catch { if (serial === previewSerial.current) setDetailError('证据预览失败，请重新打开。'); }
-    finally { if (serial === previewSerial.current) setPreviewBusy(null); }
+    } catch { if (current()) setDetailError('证据预览失败，请重新打开。'); }
+    finally { if (current()) setPreviewBusy(null); }
   };
 
-  const uploadEvidence = async (current: AdminMatchResultDisputeResponse, chosen: File) => {
+  const uploadEvidence = async (current: AdminMatchResultDisputeResponse, chosen: File, isCurrent: () => boolean) => {
     if (!api.transferEvidence) throw new Error('Upload unavailable');
+    const requireCurrent = () => { if (!isCurrent()) throw new Error('Dispute selection changed'); };
     const checksum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await chosen.arrayBuffer())))
       .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    requireCurrent();
     const base = `/v1/admin/leagues/${leagueId}/matches/${current.matchId}/result-evidence/uploads`;
     const grant = await api.request(base, { method: 'POST', schema: CreateEvidenceUploadResponseSchema, body: {
       role: 'ADMIN', mimeType: chosen.type, byteSize: chosen.size, checksumSha256: checksum, expectedVersion: current.matchVersion
     } });
+    requireCurrent();
     await api.transferEvidence(grant.uploadUrl, chosen, grant.headers);
+    requireCurrent();
     await api.request(`${base}/${grant.id}/complete`, { method: 'POST', schema: completedSchema, body: { expectedVersion: current.matchVersion } });
     return grant.id;
   };
 
   const resolve = async () => {
-    if (!detail || submitting) return;
+    if (!detail || submitting || !active.current) return;
+    const generation = leagueGeneration.current;
+    const selection = selectionGeneration.current;
+    const current = () => currentLeague(generation) && selection === selectionGeneration.current;
     const trimmed = reason.trim();
     if (!trimmed) { setDetailError('请填写裁决原因。'); return; }
     if (trimmed.length > 512) { setDetailError('裁决原因不能超过 512 字。'); return; }
@@ -166,21 +210,28 @@ export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
     }
     setSubmitting(true); setDetailError(null); setNotice(null);
     try {
-      const evidenceUploadId = file ? await uploadEvidence(detail, file) : undefined;
+      const evidenceUploadId = file ? await uploadEvidence(detail, file, current) : undefined;
+      if (!current()) return;
       await api.request(`/v1/admin/leagues/${leagueId}/result-disputes/${detail.id}/resolve`, {
         method: 'POST', schema: resultSchema,
         body: { decisionType: decision, reason: trimmed,
           ...(decision === 'REPLACE_SCORE' ? { homeScore, awayScore } : {}),
           ...(evidenceUploadId ? { evidenceUploadId } : {}), expectedVersion: detail.matchVersion }
       });
-      setNotice('裁决已记录。'); setFile(null); clearPreview();
-      await Promise.all([load(), loadDetail(detail.id)]);
+      if (!currentLeague(generation)) return;
+      const refreshQueue = load();
+      if (current()) {
+        setNotice('裁决已记录。'); setFile(null); clearPreview();
+        await loadDetail(detail.id);
+      }
+      await refreshQueue;
     } catch (caught) {
+      if (!current()) return;
       if (caught instanceof ApiError && (caught.code === 'VERSION_CONFLICT' || caught.code === 'MATCH_VERSION_CONFLICT')) {
         await loadDetail(detail.id);
-        setDetailError('比赛已更新，已重新读取详情。请核对裁决内容后重试。');
+        if (current()) setDetailError('比赛已更新，已重新读取详情。请核对裁决内容后重试。');
       } else setDetailError('裁决未提交，请检查证据与网络后重试。');
-    } finally { setSubmitting(false); }
+    } finally { if (current()) setSubmitting(false); }
   };
 
   return <section className="result-disputes-page">
@@ -190,7 +241,7 @@ export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
     <Card className="data-card dispute-setting" title="比分截图要求">
       <div><p>默认关闭，开启后每场由比分提交方上传 1 张截图</p><span>适用于本联赛所有赛事。</span></div>
       <Switch aria-label="强制比分截图" checked={league?.resultEvidenceRequired ?? false} loading={settingBusy}
-        disabled={!league || settingBusy} onChange={(checked) => void toggleEvidence(checked)} />
+        disabled={!league || league.id !== leagueId || settingBusy} onChange={(checked) => void toggleEvidence(checked)} />
     </Card>
     <Card className="data-card dispute-queue" title="争议队列" extra={<Button onClick={() => void load()} disabled={loading}>刷新队列</Button>}>
       {loading ? <div className="loading-block"><Spin /><span>正在读取争议队列…</span></div>

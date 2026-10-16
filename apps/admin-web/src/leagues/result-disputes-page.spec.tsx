@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ApiError, type AdminApi } from '../lib/api';
 import { ResultDisputesPage } from './result-disputes-page';
 
@@ -25,10 +25,147 @@ const detail = { ...row, evidence: [], timeline: [
 ] };
 
 function renderPage(request: AdminApi['request'], extra: Partial<AdminApi> = {}) {
-  return render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/result-disputes`]}><Routes>
+  return render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/result-disputes`]}>
+    <Link to="/leagues/league-b/result-disputes">League B</Link><Routes>
     <Route path="/leagues/:leagueId/result-disputes" element={<ResultDisputesPage api={{ request, ...extra } as AdminApi} />} />
   </Routes></MemoryRouter>);
 }
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+it('ignores a previous league queue response after navigation', async () => {
+  const pending = deferred<unknown>();
+  const request = vi.fn(async (path: string) => {
+    if (path.includes('/league-b/')) return path.endsWith('/workspace')
+      ? { id: 'league-b', resultEvidenceRequired: false, version: 4 } : [];
+    if (path.endsWith('/workspace')) return pending.promise;
+    return [row];
+  }) as unknown as AdminApi['request'];
+  renderPage(request);
+  await userEvent.click(screen.getByRole('link', { name: 'League B' }));
+  await screen.findByText('当前没有争议。新争议会出现在这里。');
+  await act(async () => { pending.resolve({ id: leagueId, resultEvidenceRequired: true, version: 3 }); });
+  expect(screen.queryByRole('button', { name: /查看争议/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('switch', { name: '强制比分截图' })).not.toBeChecked();
+});
+
+it.each(['visible', 'pending'] as const)('clears %s private evidence and ignores a pending toggle on league navigation', async (previewState) => {
+  const toggle = deferred<unknown>();
+  const transfer = deferred<Blob>();
+  const nextLeague = deferred<unknown>();
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.includes('/league-b/')) return path.endsWith('/workspace') ? nextLeague.promise : [];
+    if (path.endsWith('/workspace')) return options?.method === 'PATCH' ? toggle.promise
+      : { id: leagueId, resultEvidenceRequired: false, version: 3 };
+    if (path.endsWith('/result-disputes')) return [row];
+    if (path.endsWith('/read-url')) return { url: 'https://private.test/evidence', expiresAt: at };
+    return { ...detail, evidence: [{ id: 'proof-a', role: 'SUBMITTER', status: 'ACTIVE',
+      mimeType: 'image/png', byteSize: 10, createdAt: at }] };
+  }) as unknown as AdminApi['request'];
+  const create = vi.fn(() => 'blob:league-a');
+  const revoke = vi.fn();
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = create;
+  URL.revokeObjectURL = revoke;
+  const transferEvidence = vi.fn(() => transfer.promise);
+  try {
+    renderPage(request, { transferEvidence });
+    await userEvent.click(await screen.findByRole('button', { name: /查看争议/ }));
+    await userEvent.click(await screen.findByRole('button', { name: '预览证据' }));
+    await waitFor(() => expect(transferEvidence).toHaveBeenCalled());
+    if (previewState === 'visible') {
+      await act(async () => { transfer.resolve(new Blob(['private'])); });
+      await screen.findByRole('img', { name: '争议证据预览' });
+    }
+    await userEvent.click(screen.getByRole('switch', { name: '强制比分截图' }));
+    await userEvent.click(screen.getByRole('link', { name: 'League B' }));
+    expect(screen.getByRole('switch', { name: '强制比分截图' })).toBeDisabled();
+    await act(async () => {
+      toggle.resolve({ id: leagueId, resultEvidenceRequired: true, version: 4 });
+      transfer.resolve(new Blob(['private']));
+      nextLeague.resolve({ id: 'league-b', resultEvidenceRequired: false, version: 8 });
+    });
+    expect(screen.queryByRole('img', { name: '争议证据预览' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '裁决原因' })).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '强制比分截图' })).not.toBeChecked();
+    expect(screen.queryByText('已开启每场比分截图要求。')).not.toBeInTheDocument();
+    expect(revoke).toHaveBeenCalledWith('blob:league-a');
+  } finally {
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  }
+});
+
+it.each(['detail', 'resolution-success', 'resolution-conflict'] as const)('ignores a pending %s after changing leagues', async (operation) => {
+  const pending = deferred<unknown>();
+  const request = vi.fn(async (path: string) => {
+    if (path.includes('/league-b/')) return path.endsWith('/workspace')
+      ? { id: 'league-b', resultEvidenceRequired: false, version: 4 } : [];
+    if (path.endsWith('/workspace')) return { id: leagueId, resultEvidenceRequired: false, version: 3 };
+    if (path.endsWith('/result-disputes')) return [row];
+    if (path.endsWith('/resolve') || operation === 'detail') return pending.promise;
+    return detail;
+  }) as unknown as AdminApi['request'];
+  renderPage(request);
+  await userEvent.click(await screen.findByRole('button', { name: /查看争议/ }));
+  if (operation !== 'detail') {
+    await userEvent.type(await screen.findByRole('textbox', { name: '裁决原因' }), 'A裁决');
+    await userEvent.click(screen.getByRole('button', { name: '确认裁决' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('/resolve'), expect.anything()));
+  }
+  await userEvent.click(screen.getByRole('link', { name: 'League B' }));
+  await screen.findByText('当前没有争议。新争议会出现在这里。');
+  const callsBeforeCompletion = vi.mocked(request).mock.calls.length;
+  await act(async () => {
+    if (operation === 'resolution-conflict') pending.reject(new ApiError({ status: 409, code: 'VERSION_CONFLICT' }));
+    else pending.resolve(operation === 'detail' ? detail : { id: 'official-a' });
+  });
+  expect(request).toHaveBeenCalledTimes(callsBeforeCompletion);
+  expect(screen.queryByRole('textbox', { name: '裁决原因' })).not.toBeInTheDocument();
+  expect(screen.queryByText('2 : 1')).not.toBeInTheDocument();
+  expect(screen.queryByText('裁决已记录。')).not.toBeInTheDocument();
+  expect(screen.queryByText(/比赛已更新/)).not.toBeInTheDocument();
+});
+
+it.each(['success', 'conflict'] as const)('keeps dispute B and its draft intact after a pending A resolution %s', async (outcome) => {
+  const pending = deferred<unknown>();
+  const secondId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const second = { ...detail, id: secondId, matchVersion: 9,
+    timeline: detail.timeline.map((event) => ({ ...event, metadata: event.type === 'RESULT_SUBMITTED'
+      ? { homeScore: 4, awayScore: 3 } : { reason: 'B拒绝原因' } })) };
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/workspace')) return { id: leagueId, resultEvidenceRequired: false, version: 3 };
+    if (path.endsWith('/result-disputes')) return [row, { ...row, id: secondId }];
+    if (path.endsWith(`/${disputeId}/resolve`)) return pending.promise;
+    if (path.endsWith(`/${secondId}/resolve`)) return { id: 'official-b' };
+    return path.endsWith(`/${secondId}`) ? second : detail;
+  }) as unknown as AdminApi['request'];
+  renderPage(request);
+  await userEvent.click(await screen.findByRole('button', { name: '查看争议 22222222' }));
+  await userEvent.type(await screen.findByRole('textbox', { name: '裁决原因' }), 'A裁决');
+  await userEvent.click(screen.getByRole('button', { name: '确认裁决' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining(`/${disputeId}/resolve`), expect.anything()));
+  await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+  await userEvent.click(screen.getByRole('button', { name: '查看争议 bbbbbbbb' }));
+  await screen.findByText('4 : 3');
+  await userEvent.type(screen.getByRole('textbox', { name: '裁决原因' }), 'B裁决');
+  await act(async () => {
+    if (outcome === 'success') pending.resolve({ id: 'official-a' });
+    else pending.reject(new ApiError({ status: 409, code: 'VERSION_CONFLICT' }));
+  });
+  expect(screen.getByText('4 : 3')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: '裁决原因' })).toHaveValue('B裁决');
+  expect(screen.queryByText(/比赛已更新/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '确认裁决' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining(`/${secondId}/resolve`),
+    expect.objectContaining({ body: { decisionType: 'USE_SUBMITTED_SCORE', reason: 'B裁决', expectedVersion: 9 } })));
+});
 
 it('prioritizes overdue evidence collection ahead of future collection and closed disputes', async () => {
   const overdueId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
