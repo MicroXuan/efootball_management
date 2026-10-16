@@ -16,6 +16,27 @@ describe('evidence retention', () => {
   } });
   const worker = new ResultEvidenceRetentionWorker(scopedPrisma as never, storage as never);
   beforeEach(() => storage.delete.mockClear());
+  it('pages consumed CloudBase sessions by stable IDs and cleans only expired source namespaces', async () => {
+    const { match } = await fixture();
+    const ids = Array.from({ length: 101 }, () => randomUUID());
+    const now = new Date();
+    const sessionData = (id: string) => ({ id, matchId: match.id, role: 'SUBMITTER' as const,
+      uploadedByUserId: users[0]!, objectKey: `cloud://env/match-result-evidence-retained--${id}.png`,
+      mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64), status: 'CONSUMED' as const,
+      createdAt: new Date(0), expiresAt: new Date(0) });
+    await prisma.matchResultEvidenceUpload.createMany({ data: [
+      ...ids.map(sessionData),
+      { ...sessionData(randomUUID()), createdAt: now },
+      { ...sessionData(randomUUID()), expiresAt: new Date(now.getTime() + 600000) }
+    ] });
+    await worker.cleanup(now);
+    expect(storage.delete).toHaveBeenCalledTimes(202);
+    for (const id of ids) {
+      expect(storage.delete).toHaveBeenCalledWith(`cloud://env/match-result-evidence-temp--${id}.png`);
+      expect(storage.delete).toHaveBeenCalledWith(`cloud://env/match-result-evidence--${id}.png`);
+      expect(storage.delete).not.toHaveBeenCalledWith(`cloud://env/match-result-evidence-retained--${id}.png`);
+    }
+  });
   it.each(['PENDING', 'UPLOADED', 'EXPIRED'] as const)('cleans both temporary and deterministic retained orphan copies for %s', async (status) => {
     const { match } = await fixture();
     const session = await upload(match.id);

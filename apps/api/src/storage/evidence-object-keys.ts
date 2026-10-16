@@ -17,3 +17,10 @@ export function evidenceOrphanKeys(key: string): string[] {
   return [...new Set([key, `${prefix}${EVIDENCE_TEMP_PREFIX}${match[3]}`,
     `${prefix}${EVIDENCE_RETAINED_PREFIX}${match[3]}`, `${prefix}match-result-evidence--${match[3]}`])];
 }
+
+/** Only a retained session can authorize cleanup of its former source namespaces. */
+export function evidenceSourceKeys(key: string): string[] {
+  const match = EVIDENCE_KEY.exec(key);
+  if (match?.[2] !== 'retained') return [];
+  return evidenceOrphanKeys(key).filter((candidate) => candidate !== key);
+}

@@ -8,6 +8,7 @@ import type { ObjectStorage, StoredObjectMetadata } from '../storage/object-stor
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
 import { disputeFixture } from '../../test/helpers/match-result-disputes.js';
 import { randomUUID } from 'node:crypto';
+import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worker.js';
 
 const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const checksumSha256 = '4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6';
@@ -126,6 +127,84 @@ describe('retained evidence promotion', () => {
 
 describe('participant retained evidence integration', () => {
   const { prisma, users, rejected, disputes } = disputeFixture();
+  // Restrict cleanup scans to this fixture's records in the shared test database.
+  const ownedMatches = { match: { stage: { competition: { createdById: { in: users } } } } };
+  const scopedPrisma = prisma.$extends({ query: {
+    matchResultEvidence: { findMany: ({ args, query }) => query({ ...args,
+      where: { AND: [args.where ?? {}, ownedMatches] } }) },
+    matchResultEvidenceUpload: { findMany: ({ args, query }) => query({ ...args,
+      where: { AND: [args.where ?? {}, ownedMatches] } }) }
+  } });
+
+  async function consumedWithSource(provider: LocalObjectStorage, legacy: boolean) {
+    const { match } = await rejected();
+    const service = new ResultEvidenceStorageService(prisma, provider);
+    const grant = await service.createUserUpload(users[0]!, match.id, {
+      role: 'SUBMITTER', mimeType: 'image/png', byteSize: 8, checksumSha256, expectedVersion: 3
+    });
+    const source = legacy ? grant.objectKey.replace('-temp--', '--') : grant.objectKey;
+    if (legacy) await prisma.matchResultEvidenceUpload.update({ where: { id: grant.id }, data: { objectKey: source } });
+    await service.writeLocalObject(users[0]!, source, bytes, 'image/png');
+    const deletion = jest.spyOn(provider, 'delete').mockRejectedValueOnce(new Error('source delete down'));
+    await service.completeUserUpload(users[0]!, match.id, grant.id, { expectedVersion: 3 });
+    await disputes.attachEvidence(users[0]!, match.id, { expectedVersion: 3, evidenceUploadId: grant.id }, randomUUID());
+    await prisma.matchResultEvidenceUpload.update({ where: { id: grant.id }, data: { createdAt: new Date(0), expiresAt: new Date(0) } });
+    const evidence = await prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: grant.id } });
+    expect((await provider.readPrivate(source))?.buffer).toEqual(bytes);
+    expect(evidence).toMatchObject({ status: 'ACTIVE', deletedAt: null });
+    return { match, grant, source, evidence, deletion };
+  }
+
+  it.each([false, true])('retries failed source deletion after formal consumption (legacy=%s) without touching retained evidence', async (legacy) => {
+    const directory = await mkdtemp(join(tmpdir(), 'efm-consumed-source-'));
+    try {
+      const provider = new LocalObjectStorage(directory, 'http://localhost:3000');
+      const { source, evidence, deletion } = await consumedWithSource(provider, legacy);
+      const worker = new ResultEvidenceRetentionWorker(scopedPrisma as never, provider);
+      // A worker failure must also remain retryable on a later run.
+      deletion.mockImplementationOnce(async (key) => {
+        if (key === source) throw new Error('source still unavailable');
+        return LocalObjectStorage.prototype.delete.call(provider, key);
+      });
+      if (legacy) deletion.mockRejectedValueOnce(new Error('legacy source still unavailable'));
+      await worker.cleanup();
+      expect((await provider.readPrivate(source))?.buffer).toEqual(bytes);
+      await worker.cleanup();
+      expect(await provider.readPrivate(source)).toBeNull();
+      await worker.cleanup();
+      expect(await provider.readPrivate(source)).toBeNull();
+      expect((await provider.readPrivate(evidence.objectKey))?.buffer).toEqual(bytes);
+      expect(deletion).not.toHaveBeenCalledWith(evidence.objectKey);
+      expect(await prisma.matchResultEvidence.findUnique({ where: { id: evidence.id } }))
+        .toMatchObject({ status: 'ACTIVE', deletedAt: null });
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+
+  it.each(['evidence', 'upload'] as const)('preserves a source sibling referenced by another %s', async (reference) => {
+    const directory = await mkdtemp(join(tmpdir(), 'efm-source-reference-'));
+    try {
+      const provider = new LocalObjectStorage(directory, 'http://localhost:3000');
+      const { source, evidence, deletion } = await consumedWithSource(provider, false);
+      const other = await rejected();
+      const data = { matchId: other.match.id, role: 'SUBMITTER' as const, uploadedByUserId: users[0]!,
+        objectKey: source, mimeType: 'image/png', byteSize: 8, checksumSha256 };
+      const collision = reference === 'evidence'
+        ? await prisma.matchResultEvidence.create({ data })
+        : await prisma.matchResultEvidenceUpload.create({ data: { ...data, expiresAt: new Date(Date.now() + 600000) } });
+      const worker = new ResultEvidenceRetentionWorker(scopedPrisma as never, provider);
+      deletion.mockClear();
+      await worker.cleanup();
+      expect((await provider.readPrivate(source))?.buffer).toEqual(bytes);
+      expect(deletion).not.toHaveBeenCalledWith(source);
+      expect(deletion).not.toHaveBeenCalledWith(evidence.objectKey);
+      // Removing only this test-owned reference makes the next daily pass eligible.
+      if (reference === 'evidence') await prisma.matchResultEvidence.delete({ where: { id: collision.id } });
+      else await prisma.matchResultEvidenceUpload.delete({ where: { id: collision.id } });
+      await worker.cleanup();
+      expect(await provider.readPrivate(source)).toBeNull();
+      expect((await provider.readPrivate(evidence.objectKey))?.buffer).toEqual(bytes);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
 
   it('attaches only the retained private object and survives removal of the temporary namespace', async () => {
     const { match } = await rejected();

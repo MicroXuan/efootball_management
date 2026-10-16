@@ -3,7 +3,7 @@ import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 import { MatchResultEventsService } from './match-result-events.service.js';
-import { evidenceOrphanKeys } from '../storage/evidence-object-keys.js';
+import { EVIDENCE_RETAINED_PREFIX, evidenceOrphanKeys, evidenceSourceKeys } from '../storage/evidence-object-keys.js';
 
 @Injectable()
 export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, OnModuleDestroy {
@@ -72,6 +72,38 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
             if (upload.status !== 'EXPIRED') await tx.matchResultEvidenceUpload.update({ where: { id: upload.id }, data: { status: 'EXPIRED' } });
           });
         } catch (error) { this.logger.warn(`Upload ${candidate.id} cleanup will retry: ${String(error)}`); }
+      }
+    }
+    // Completion can persist the retained key before source deletion fails. Consumption
+    // removes these sessions from orphan cleanup, so revisit their source siblings daily.
+    after = '';
+    for (;;) {
+      const batch = await this.prisma.matchResultEvidenceUpload.findMany({ where: {
+        id: { gt: after }, objectKey: { contains: EVIDENCE_RETAINED_PREFIX }, createdAt: { lt: cutoff },
+        OR: [{ status: 'CONSUMED' }, { evidence: { isNot: null } },
+          { resultVersionId: { not: null } }, { disputeId: { not: null } }]
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: 100 });
+      if (!batch.length) break;
+      for (const candidate of batch) {
+        after = candidate.id;
+        try {
+          await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
+            const upload = await tx.matchResultEvidenceUpload.findUnique({ where: { id: candidate.id }, include: { evidence: true } });
+            if (!upload || upload.createdAt >= cutoff || upload.expiresAt > now
+              || (upload.status !== 'CONSUMED' && !upload.evidence && !upload.resultVersionId && !upload.disputeId)) return;
+            const keys = evidenceSourceKeys(upload.objectKey);
+            if (!keys.length) return;
+            // Exact-key checks across both tables protect legacy/cross-match collisions.
+            // Batch the sibling lookups, rather than issuing one query per source key.
+            const evidenceReferences = await tx.matchResultEvidence.findMany({ where: { objectKey: { in: keys } }, select: { objectKey: true } });
+            const uploadReferences = await tx.matchResultEvidenceUpload.findMany({ where: { objectKey: { in: keys } }, select: { objectKey: true } });
+            const referenced = new Set([...evidenceReferences, ...uploadReferences].map((row) => row.objectKey));
+            // Never remove the retained object. Not-found is provider-idempotent; errors
+            // leave the durable session eligible for the next daily retry (no migration).
+            for (const objectKey of keys) if (!referenced.has(objectKey)) await this.storage.delete(objectKey);
+          });
+        } catch (error) { this.logger.warn(`Upload ${candidate.id} source cleanup will retry: ${String(error)}`); }
       }
     }
   }

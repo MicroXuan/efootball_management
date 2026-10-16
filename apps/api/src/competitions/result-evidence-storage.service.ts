@@ -152,7 +152,8 @@ export class ResultEvidenceStorageService {
       if (claimed.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Evidence upload is no longer pending', 409);
       return upload.objectKey === retainedKey ? null : upload.objectKey;
     }, { timeout: 30_000 });
-    // Failure here is harmless: the temporary-only lifecycle is the fallback.
+    // Daily source cleanup retries failures even after consumption, including legacy/Local
+    // objects without a lifecycle rule. The temporary-only provider lifecycle is a fallback.
     if (sourceKey) await this.storage.delete(sourceKey).catch(() => undefined);
     return { id: authorized.id, status: 'UPLOADED' as const };
   }
