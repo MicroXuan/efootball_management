@@ -74,6 +74,60 @@ describe('PlayerMarketQueryService', () => {
     }));
   });
 
+  it('applies ownership filtering before cursor pagination', async () => {
+    const prisma = {
+      footballPlayer: { findMany: jest.fn(async () => []) },
+      leaguePlayerOwnership: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
+      leaguePlayerValuation: { findMany: jest.fn(async () => []) },
+      leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
+      transferWindow: { findFirst: jest.fn(async () => null) }
+    };
+    const access = { requireParticipant: jest.fn(async () => ({
+      leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT'
+    })) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
+
+    await service.listMarket('user-1', 'league-1', {
+      seasonId: 'season-1', ownership: 'FREE', limit: 30
+    });
+
+    expect(prisma.footballPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { AND: expect.arrayContaining([
+        { leagueOwnerships: { none: { leagueId: 'league-1', status: 'ACTIVE' } } }
+      ]) }
+    }));
+  });
+
+  it('loads a published player detail directly instead of searching only the first market page', async () => {
+    const player = {
+      id: 'player-101', nameZh: '第 101 名球员', nameEn: null, shortName: null,
+      nationality: '中国', club: '测试队', createdAt: now,
+      bestCard: { playerCardId: 'card-101', playerCard: { id: 'card-101', cardName: '精选', imageUrl: null, position: 'CF', overallRating: 90 }, autoBuild: { maxOverall: 95 } }
+    };
+    const prisma = {
+      footballPlayer: {
+        findFirst: jest.fn(async () => player),
+        findMany: jest.fn(async () => { throw new Error('detail must not scan a limited market page'); })
+      },
+      leaguePlayerOwnership: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
+      leaguePlayerValuation: { findMany: jest.fn(async () => []) },
+      leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
+      transferWindow: { findFirst: jest.fn(async () => null) },
+      playerAcquisitionApplication: { findMany: jest.fn(async () => []) }
+    };
+    const access = { requireParticipant: jest.fn(async () => ({
+      seasonEntryId: 'entry-1', leagueId: 'league-1', seasonId: 'season-1', leagueTeamId: 'team-1',
+      teamNumber: 1, teamName: '我的队', teamLogoUrl: null, ownerAlias: '我', rosterStatus: 'COMPLIANT'
+    })) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
+
+    await expect(service.detail('user-1', 'league-1', 'player-101', 'season-1'))
+      .resolves.toMatchObject({ playerId: 'player-101', playerName: '第 101 名球员' });
+    expect(prisma.footballPlayer.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'player-101', publishedAt: { not: null } }
+    }));
+  });
+
   it('returns explicit disabled reasons for capacity, window, compliance, and release restrictions', () => {
     expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 25, rosterStatus: 'COMPLIANT', windowOpen: true, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'ROSTER_CAPACITY_REACHED' });
     expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'COMPLIANT', windowOpen: false, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' });

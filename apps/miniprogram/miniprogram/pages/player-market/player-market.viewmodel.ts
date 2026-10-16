@@ -9,6 +9,20 @@ import type {
 const amount = (value: number | null): string => value === null ? '待定' : String(value)
 const date = (value: string): string => value.slice(5, 16).replace('T', ' ')
 
+export function mergeMarketPlayerPages<T extends { playerId: string }>(
+  current: T[],
+  incoming: T[],
+  mode: 'replace' | 'append',
+): T[] {
+  if (mode === 'replace') return incoming
+  const seen = new Set<string>()
+  return [...current, ...incoming].filter(({ playerId }) => !seen.has(playerId) && Boolean(seen.add(playerId)))
+}
+
+export function shouldShowMarketBackToTop(scrollTop: number): boolean {
+  return scrollTop >= 700
+}
+
 export function teamIdentity(team: PlayerMarketTeamSummary | null) {
   if (!team) return null
   return {

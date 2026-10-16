@@ -7,13 +7,14 @@ import type {
   PlayerMarketAnnouncementQuery,
   PlayerMarketListResponse,
   PlayerMarketPlayerDetail,
+  PlayerMarketPlayerSummary,
   PlayerMarketQuery,
   PlayerMarketTeamSummary
 } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { playerMarketError } from './player-market.errors.js';
-import { PlayerMarketAccessService } from './player-market-access.service.js';
+import { PlayerMarketAccessService, type ParticipantScope } from './player-market-access.service.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 
 export type MarketActionContext = {
@@ -45,6 +46,10 @@ type ApplicationRow = Prisma.PlayerAcquisitionApplicationGetPayload<{
     playerCard: { include: { autoBuilds: true } };
     events: { include: { actorUser: true; actorAdmin: true } };
   };
+}>;
+
+type MarketPlayerRow = Prisma.FootballPlayerGetPayload<{
+  include: { bestCard: { include: { playerCard: true; autoBuild: true } } };
 }>;
 
 @Injectable()
@@ -88,6 +93,12 @@ export class PlayerMarketQueryService {
         { club: { contains: keyword } }
       ] } as Prisma.FootballPlayerWhereInput] : []),
       ...(query.position ? [{ cards: { some: { position: query.position, status: 'ACTIVE' } } } as Prisma.FootballPlayerWhereInput] : []),
+      ...(query.ownership === 'FREE' ? [{
+        leagueOwnerships: { none: { leagueId, status: 'ACTIVE' } }
+      } as Prisma.FootballPlayerWhereInput] : []),
+      ...(query.ownership === 'OWNED' ? [{
+        leagueOwnerships: { some: { leagueId, status: 'ACTIVE' } }
+      } as Prisma.FootballPlayerWhereInput] : []),
       ...(cursor ? [{ OR: [
         { AND: [{ createdAt: { equals: cursor.createdAt } }, { id: { gt: cursor.id } }] },
         { createdAt: { gt: cursor.createdAt } }
@@ -101,6 +112,40 @@ export class PlayerMarketQueryService {
       take: query.limit + 1
     });
     const page = players.slice(0, query.limit);
+    const result = await this.marketPlayers(scope, leagueId, query.seasonId, page, now);
+    const last = page.at(-1);
+    return {
+      ...result,
+      nextCursor: players.length > query.limit && last ? PlayerMarketQueryService.encodeCursor(last.createdAt, last.id) : null
+    };
+  }
+
+  async detail(userId: string, leagueId: string, playerId: string, seasonId: string): Promise<PlayerMarketPlayerDetail> {
+    const scope = await this.access.requireParticipant(userId, leagueId, seasonId);
+    const player = await this.prisma.footballPlayer.findFirst({
+      where: { id: playerId, publishedAt: { not: null } },
+      include: { bestCard: { include: { playerCard: true, autoBuild: true } } }
+    });
+    if (!player) throw playerMarketError('FOOTBALL_PLAYER_NOT_FOUND', '球员不存在', 404);
+    const result = await this.marketPlayers(scope, leagueId, seasonId, [player], this.clock());
+    const summary = result.items[0];
+    if (!summary) throw playerMarketError('FOOTBALL_PLAYER_NOT_FOUND', '球员不存在', 404);
+    const applications = await this.listApplications(userId, leagueId, { seasonId, playerId, scope: 'PUBLIC', limit: 100 });
+    return {
+      ...summary,
+      activeTransferWindowId: result.activeTransferWindowId,
+      myApplication: applications.items.find((item) => item.applicantTeam.teamId === scope.leagueTeamId) ?? null,
+      publicApplications: applications.items
+    };
+  }
+
+  private async marketPlayers(
+    scope: ParticipantScope,
+    leagueId: string,
+    seasonId: string,
+    page: MarketPlayerRow[],
+    now: Date
+  ): Promise<{ items: PlayerMarketPlayerSummary[]; activeTransferWindowId: string | null }> {
     const playerIds = page.map(({ id }) => id);
     const [ownerships, valuations, window, rosterCount, salaryRule] = await Promise.all([
       this.prisma.leaguePlayerOwnership.findMany({
@@ -109,7 +154,7 @@ export class PlayerMarketQueryService {
       }),
       this.prisma.leaguePlayerValuation.findMany({ where: { leagueId, footballPlayerId: { in: playerIds } } }),
       this.prisma.transferWindow.findFirst({
-        where: { seasonId: query.seasonId, allowBuy: true, startsAt: { lte: now }, endsAt: { gt: now } },
+        where: { seasonId, allowBuy: true, startsAt: { lte: now }, endsAt: { gt: now } },
         orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
       }),
       this.prisma.leaguePlayerOwnership.count({ where: { leagueTeamId: scope.leagueTeamId, status: 'ACTIVE' } }),
@@ -155,30 +200,13 @@ export class PlayerMarketQueryService {
           maxOverall,
           salaryMinor
         } : null,
-        forcedTransferBadge: ownership?.acquisitionType === 'FORCED_TRANSFER' && ownership.acquisitionSeasonId === query.seasonId,
+        forcedTransferBadge: ownership?.acquisitionType === 'FORCED_TRANSFER' && ownership.acquisitionSeasonId === seasonId,
         ...action
       };
-    }).filter((item) => query.ownership === 'ALL'
-      || (query.ownership === 'FREE' ? item.currentOwner === null : item.currentOwner !== null));
-    const last = page.at(-1);
+    });
     return {
       items,
-      nextCursor: players.length > query.limit && last ? PlayerMarketQueryService.encodeCursor(last.createdAt, last.id) : null,
       activeTransferWindowId: window?.id ?? null
-    };
-  }
-
-  async detail(userId: string, leagueId: string, playerId: string, seasonId: string): Promise<PlayerMarketPlayerDetail> {
-    const result = await this.listMarket(userId, leagueId, { seasonId, ownership: 'ALL', limit: 100 });
-    const player = result.items.find((item) => item.playerId === playerId);
-    if (!player) throw playerMarketError('FOOTBALL_PLAYER_NOT_FOUND', '球员不存在', 404);
-    const applications = await this.listApplications(userId, leagueId, { seasonId, playerId, scope: 'PUBLIC', limit: 100 });
-    const scope = await this.access.requireParticipant(userId, leagueId, seasonId);
-    return {
-      ...player,
-      activeTransferWindowId: result.activeTransferWindowId,
-      myApplication: applications.items.find((item) => item.applicantTeam.teamId === scope.leagueTeamId) ?? null,
-      publicApplications: applications.items
     };
   }
 
