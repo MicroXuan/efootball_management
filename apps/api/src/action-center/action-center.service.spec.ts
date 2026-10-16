@@ -17,10 +17,22 @@ function application(input: Partial<any>) {
   };
 }
 
-function harness(options: { teams?: any[]; applications?: any[]; auctions?: any[] } = {}) {
+function harness(options: {
+  teams?: any[];
+  applications?: any[];
+  currentApplications?: any[];
+  recentApplications?: any[];
+  auctions?: any[];
+} = {}) {
+  const applicationFindMany = jest.fn(async (args: any) => {
+    if (options.currentApplications || options.recentApplications) {
+      return args.where.status?.in ? options.currentApplications ?? [] : options.recentApplications ?? [];
+    }
+    return options.applications ?? [];
+  });
   const prisma: any = {
     leagueTeam: { findMany: jest.fn(async () => options.teams ?? [mine]) },
-    playerAcquisitionApplication: { findMany: jest.fn(async () => options.applications ?? []) },
+    playerAcquisitionApplication: { findMany: applicationFindMany },
     playerAuctionBatch: { findMany: jest.fn(async () => options.auctions ?? []) },
   };
   return { service: new ActionCenterService(prisma), prisma };
@@ -71,5 +83,56 @@ describe('ActionCenterService', () => {
 
     expect(result.actionRequiredCount).toBe(0);
     expect(result.items[0]).toMatchObject({ section: 'RECENT', statusLabel: '已通过' });
+  });
+
+  it('never asks the forced-transfer recipient to requote and preserves terminal result labels', async () => {
+    const incoming = (status: string, id: string) => application({
+      id,
+      applicantLeagueTeamId: rival.id,
+      applicantLeagueTeam: rival,
+      sourceLeagueTeamId: mine.id,
+      sourceLeagueTeam: mine,
+      type: 'FORCED_TRANSFER',
+      status,
+    });
+    const { service } = harness({
+      applications: [incoming('REQUOTE_REQUIRED', 'forced-requote'), incoming('APPROVED', 'forced-approved')],
+    });
+
+    const result = await service.get('user-1');
+
+    expect(result.actionRequiredCount).toBe(0);
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'forced:forced-requote', section: 'STATUS_UPDATE', statusLabel: '对方需重新报价' }),
+      expect.objectContaining({ id: 'forced:forced-approved', section: 'RECENT', statusLabel: '强报已通过' }),
+    ]));
+  });
+
+  it('queries all current applications separately from the capped recent history', async () => {
+    const required = application({ id: 'required-old', status: 'REQUOTE_REQUIRED', updatedAt: new Date('2026-08-01T00:00:00.000Z') });
+    const recent = Array.from({ length: 100 }, (_, index) => application({
+      id: `recent-${index}`,
+      status: 'APPROVED',
+      updatedAt: new Date(at.getTime() - index * 1000),
+    }));
+    const { service, prisma } = harness({ currentApplications: [required], recentApplications: recent });
+
+    const result = await service.get('user-1');
+
+    expect(result.actionRequiredCount).toBe(1);
+    expect(result.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'application:required-old' })]));
+    expect(prisma.playerAcquisitionApplication.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.playerAcquisitionApplication.findMany.mock.calls[0][0]).not.toHaveProperty('take');
+    expect(prisma.playerAcquisitionApplication.findMany.mock.calls[1][0]).toMatchObject({ take: 100 });
+  });
+
+  it('excludes active teams that belong to soft-deleted leagues', async () => {
+    const { service, prisma } = harness({ teams: [] });
+
+    await service.get('user-1');
+
+    expect(prisma.leagueTeam.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { ownerUserId: 'user-1', status: 'ACTIVE', league: { isDeleted: false } },
+    }));
   });
 });

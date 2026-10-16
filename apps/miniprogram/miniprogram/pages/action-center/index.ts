@@ -37,12 +37,13 @@ Page({
     try {
       const response = await loadActionCenter()
       const readVersions = readActionCenterVersions()
+      const visibleItems = response.items.filter((item) => !this.data.leagueId || item.league.id === this.data.leagueId)
       this.setData({
         state: 'loaded',
         errorMessage: '',
         view: actionCenterView(response, readVersions, this.data.leagueId),
       })
-      markActionCenterRead(response.items)
+      markActionCenterRead(visibleItems)
     } catch (error) {
       this.setData({
         state: 'error',

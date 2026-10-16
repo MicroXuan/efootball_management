@@ -43,7 +43,7 @@ export class ActionCenterService {
 
   async get(userId: string): Promise<ActionCenterResponse> {
     const teams = await this.prisma.leagueTeam.findMany({
-      where: { ownerUserId: userId, status: 'ACTIVE' },
+      where: { ownerUserId: userId, status: 'ACTIVE', league: { isDeleted: false } },
       select: {
         id: true,
         name: true,
@@ -57,19 +57,33 @@ export class ActionCenterService {
     const seasonIds = teams.flatMap(({ league }) => league.currentSeasonId ? [league.currentSeasonId] : []);
     const leagueIds = [...new Set(teams.map(({ leagueId }) => leagueId))];
     const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [applications, auctions] = await Promise.all([
+    const [currentApplications, recentApplications, auctions] = await Promise.all([
       seasonIds.length === 0
         ? Promise.resolve([] as ApplicationRow[])
         : this.prisma.playerAcquisitionApplication.findMany({
           where: {
             seasonId: { in: seasonIds },
-            status: { not: 'WITHDRAWN' },
-            AND: [{
-              OR: [
-                { status: { in: CURRENT_APPLICATION_STATUSES } },
-                { updatedAt: { gte: recentCutoff } }
-              ]
-            }],
+            status: { in: CURRENT_APPLICATION_STATUSES },
+            OR: [
+              { applicantLeagueTeamId: { in: teamIds } },
+              { sourceLeagueTeamId: { in: teamIds }, type: 'FORCED_TRANSFER' }
+            ]
+          },
+          include: {
+            league: { select: { id: true, name: true } },
+            applicantLeagueTeam: { select: { id: true, name: true } },
+            sourceLeagueTeam: { select: { id: true, name: true } },
+            footballPlayer: { select: { nameZh: true, nameEn: true, shortName: true } }
+          },
+          orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }]
+        }) as Promise<ApplicationRow[]>,
+      seasonIds.length === 0
+        ? Promise.resolve([] as ApplicationRow[])
+        : this.prisma.playerAcquisitionApplication.findMany({
+          where: {
+            seasonId: { in: seasonIds },
+            status: { notIn: [...CURRENT_APPLICATION_STATUSES, 'WITHDRAWN'] },
+            updatedAt: { gte: recentCutoff },
             OR: [
               { applicantLeagueTeamId: { in: teamIds } },
               { sourceLeagueTeamId: { in: teamIds }, type: 'FORCED_TRANSFER' }
@@ -98,6 +112,9 @@ export class ActionCenterService {
       }) as Promise<AuctionRow[]>
     ]);
 
+    const applications = [...new Map(
+      [...currentApplications, ...recentApplications].map((application) => [application.id, application])
+    ).values()];
     const teamByLeague = new Map(teams.map((team) => [team.leagueId, team]));
     const items = [
       ...applications.flatMap((application) => {
@@ -130,15 +147,22 @@ export class ActionCenterService {
       ?? application.footballPlayer.shortName
       ?? '未命名球员';
     const source = application.type === 'FORCED_TRANSFER' ? 'FORCED_TRANSFER' as const : 'TRANSACTION' as const;
-    const section = application.status === 'REQUOTE_REQUIRED'
-      ? 'ACTION_REQUIRED' as const
-      : CURRENT_APPLICATION_STATUSES.includes(application.status)
+    const section = incomingForced
+      ? CURRENT_APPLICATION_STATUSES.includes(application.status)
         ? 'STATUS_UPDATE' as const
-        : 'RECENT' as const;
+        : 'RECENT' as const
+      : application.status === 'REQUOTE_REQUIRED'
+        ? 'ACTION_REQUIRED' as const
+        : CURRENT_APPLICATION_STATUSES.includes(application.status)
+          ? 'STATUS_UPDATE' as const
+          : 'RECENT' as const;
     const statusLabel = this.applicationStatus(application.status);
+    const incomingStatusLabel = this.incomingForcedStatus(application.status);
     const view = incomingForced ? 'public' : 'mine';
     const title = incomingForced
-      ? '收到强报申请'
+      ? CURRENT_APPLICATION_STATUSES.includes(application.status)
+        ? '收到强报申请'
+        : `收到的${incomingStatusLabel}`
       : application.status === 'REQUOTE_REQUIRED'
         ? `${application.type === 'FORCED_TRANSFER' ? '强报' : '购买申请'}需要重新报价`
         : `${application.type === 'FORCED_TRANSFER' ? '强报' : '购买申请'}${statusLabel}`;
@@ -155,7 +179,7 @@ export class ActionCenterService {
       teamId: team.id,
       title,
       detail,
-      statusLabel: incomingForced ? '等待管理员处理' : statusLabel,
+      statusLabel: incomingForced ? incomingStatusLabel : statusLabel,
       occurredAt: application.updatedAt.toISOString(),
       route: `/pages/player-market/index?leagueId=${encodeURIComponent(application.leagueId)}&seasonId=${encodeURIComponent(application.seasonId)}&teamId=${encodeURIComponent(team.id)}&view=${view}`
     };
@@ -189,6 +213,15 @@ export class ActionCenterService {
     const labels: Record<PlayerApplicationStatus, string> = {
       PENDING: '审核中', APPROVED: '已通过', NOT_SELECTED: '未选中', REJECTED: '已驳回',
       WITHDRAWN: '已撤回', EXPIRED: '已过期', INELIGIBLE: '资格失效', REQUOTE_REQUIRED: '需重新报价',
+      OWNERSHIP_CHANGED: '归属已变化'
+    };
+    return labels[status];
+  }
+
+  private incomingForcedStatus(status: PlayerApplicationStatus): string {
+    const labels: Record<PlayerApplicationStatus, string> = {
+      PENDING: '等待管理员处理', APPROVED: '强报已通过', NOT_SELECTED: '未被选中', REJECTED: '强报已驳回',
+      WITHDRAWN: '已撤回', EXPIRED: '强报已过期', INELIGIBLE: '资格失效', REQUOTE_REQUIRED: '对方需重新报价',
       OWNERSHIP_CHANGED: '归属已变化'
     };
     return labels[status];
