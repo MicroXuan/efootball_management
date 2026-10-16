@@ -11,6 +11,7 @@ function harness(settlementEntries: Array<Record<string, unknown>> = []) {
     { id: 'debit-1', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: 'season-1', rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', amountMinor: 600, note: '奢侈税', createdAt: at }
   ];
   const tx = {
+    $queryRaw: jest.fn(async () => []),
     leagueTeam: { findFirst: jest.fn(async () => team) },
     leagueSeason: { findFirst: jest.fn(async () => season) },
     financeLedgerEntry: {
@@ -105,6 +106,47 @@ describe('TeamFinanceService', () => {
     }));
     expect(result).toMatchObject({ totalMinor: 414 });
     expect(result.items).toHaveLength(9);
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.financeLedgerEntry.findMany.mock.invocationCallOrder[0]!);
+  });
+
+  it('serializes concurrent settlement saves so the same target is charged once', async () => {
+    const entries: Array<Record<string, unknown>> = [];
+    let releaseLock: (() => void) | null = null;
+    let held = false;
+    const transactions = Array.from({ length: 2 }, () => ({
+      $queryRaw: jest.fn(async () => {
+        if (held) await new Promise<void>((resolve) => { releaseLock = resolve; });
+        held = true;
+        return [];
+      }),
+      financeLedgerEntry: {
+        findMany: jest.fn(async () => entries.map((entry) => ({ ...entry }))),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          entries.push(data);
+          return { id: `entry-${entries.length}`, createdAt: at, ...data };
+        })
+      }
+    }));
+    let next = 0;
+    const receipts = { execute: jest.fn(async (_admin: string, _op: string, _key: string, work: (tx: typeof transactions[number]) => Promise<unknown>) => {
+      const tx = transactions[next++]!;
+      try { return await work(tx); } finally { held = false; releaseLock?.(); releaseLock = null; }
+    }) };
+    const scope = harness();
+    const service = new TeamFinanceService(scope.prisma as never, scope.authorization as never, receipts as never,
+      scope.audit as never, scope.visibility as never);
+    const request = {
+      leagueTeamId: 'team-1', seasonId: 'season-1',
+      amounts: { transactionAmountMinor: 0, luxuryTaxMinor: 500, offseasonFeeMinor: 0,
+        unfinishedMatchPenaltyMinor: 0, playerAuctionMinor: 0, teamAuctionMinor: 0,
+        rookieSelectionMinor: 0, installmentPaymentMinor: 0, otherAdjustmentMinor: 0 },
+      note: '并发结算', reason: '并发复核'
+    };
+    await Promise.all([
+      service.upsertSettlement('admin-1', 'league-1', request, 'concurrent-a'),
+      service.upsertSettlement('admin-1', 'league-1', request, 'concurrent-b')
+    ]);
+    expect(entries).toEqual([expect.objectContaining({ settlementCategory: 'LUXURY_TAX', amountMinor: 500 })]);
   });
 
   it('creates no rows for unchanged targets and credits a reduced target', async () => {

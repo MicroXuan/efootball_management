@@ -451,7 +451,7 @@ export const RejectMatchResultRequestSchema = VersionedMutationRequestSchema.ext
 });
 
 export const ManagerMatchResultRequestSchema = SubmitMatchResultRequestSchema.extend({
-  reason: z.string().trim().min(1).max(512).nullable().optional()
+  reason: z.string().trim().min(1).max(512)
 });
 
 export const CompetitionListQuerySchema = z.object({

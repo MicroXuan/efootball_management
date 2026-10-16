@@ -76,4 +76,10 @@ describe('match result view model', () => {
       state: 'READY_FOR_REVIEW', canUploadEvidence: false, canReplaceEvidence: false
     })
   })
+
+  it('keeps evidence deletion visible in the participant audit timeline', () => {
+    const resolved = { ...item('DONE'), timeline: [{ type: 'EVIDENCE_DELETED', occurredAt: '2026-10-18T12:00:00.000Z', metadata: {} }] } as unknown as MyMatchResponse
+    expect(resultView(resolved, dispute('RESOLVED')).timeline)
+      .toContainEqual({ label: '证据已按保留规则清理', at: resultTime('2026-10-18T12:00:00.000Z'), reason: '' })
+  })
 })

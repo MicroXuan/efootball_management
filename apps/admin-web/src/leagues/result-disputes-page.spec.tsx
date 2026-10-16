@@ -13,7 +13,8 @@ const row = {
   trigger: 'REJECTED', status: 'READY_FOR_REVIEW', openedByUserId: '55555555-5555-4555-8555-555555555555',
   evidenceDeadlineAt: at, decidedByAdminId: null, decisionType: null, finalHomeScore: null,
   finalAwayScore: null, decisionReason: null, decidedAt: null, version: 2, matchVersion: 7,
-  createdAt: at, updatedAt: at, missingRoles: ['OPPONENT'], evidence: [], timeline: []
+  competitionName: '冠军联赛', stageName: 'A 组', homeParticipantName: '海港', awayParticipantName: '申花',
+  submitterSide: 'HOME', createdAt: at, updatedAt: at, missingRoles: ['OPPONENT'], evidence: [], timeline: []
 };
 const detail = { ...row, evidence: [], timeline: [
   { id: '66666666-6666-4666-8666-666666666666', matchId, disputeId: null,
@@ -199,9 +200,13 @@ it('loads only the league queue, then fetches detail and uses matchVersion to re
   }) as unknown as AdminApi['request'];
   renderPage(request);
   expect(await screen.findByText('待裁决')).toBeInTheDocument();
+  expect(screen.getByText('冠军联赛 · A 组')).toBeInTheDocument();
+  expect(screen.getByText('海港 vs 申花')).toBeInTheDocument();
   expect(request).not.toHaveBeenCalledWith(expect.stringContaining('/read-url'), expect.anything());
   await userEvent.click(screen.getByRole('button', { name: /查看争议/ }));
   expect(await screen.findByText('2 : 1')).toBeInTheDocument();
+  expect(screen.getByText('比分提交方（主队：海港）')).toBeInTheDocument();
+  expect(screen.getByText('对方（客队：申花）')).toBeInTheDocument();
   expect(screen.getAllByText('比分有误').length).toBeGreaterThan(0);
   expect(screen.getByText(/缺少.*对方/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '确认裁决' }));
@@ -312,12 +317,14 @@ it('requires both replacement scores and preserves the reason in the request', a
   await userEvent.click(await screen.findByRole('button', { name: /查看争议/ }));
   await screen.findByText('2 : 1');
   await userEvent.click(screen.getByRole('radio', { name: '替换比分' }));
+  expect(screen.getByRole('spinbutton', { name: '海港比分' })).toBeInTheDocument();
+  expect(screen.getByRole('spinbutton', { name: '申花比分' })).toBeInTheDocument();
   await userEvent.type(screen.getByRole('textbox', { name: '裁决原因' }), '核对录像后改判');
   await userEvent.click(screen.getByRole('button', { name: '确认裁决' }));
   expect(screen.getByText('请填写 0–99 的双方整数比分。')).toBeInTheDocument();
   expect(request).not.toHaveBeenCalledWith(expect.stringContaining('/resolve'), expect.anything());
-  await userEvent.type(screen.getByRole('spinbutton', { name: '主队比分' }), '3');
-  await userEvent.type(screen.getByRole('spinbutton', { name: '客队比分' }), '0');
+  await userEvent.type(screen.getByRole('spinbutton', { name: '海港比分' }), '3');
+  await userEvent.type(screen.getByRole('spinbutton', { name: '申花比分' }), '0');
   await userEvent.click(screen.getByRole('button', { name: '确认裁决' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     `/v1/admin/leagues/${leagueId}/result-disputes/${disputeId}/resolve`,

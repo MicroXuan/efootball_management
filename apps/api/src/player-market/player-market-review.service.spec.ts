@@ -69,6 +69,18 @@ describe('PlayerMarketReviewService', () => {
     expect(tx.playerAcquisitionApplication.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'NOT_SELECTED' }) }));
   });
 
+  it('reactivates the existing released ownership row for a normal purchase', async () => {
+    const { service, tx, ownership } = harness();
+    tx.leaguePlayerOwnership.findUnique.mockResolvedValueOnce({ ...ownership, status: 'RELEASED' } as never);
+    const result = await service.approve('admin-1', 'app-1', { expectedVersion: 1, reason: '重新签入' }, 'released', at);
+    expect(tx.leaguePlayerOwnership.create).not.toHaveBeenCalled();
+    expect(tx.leaguePlayerOwnership.update).toHaveBeenCalledWith({
+      where: { id: ownership.id },
+      data: expect.objectContaining({ leagueTeamId: 'buyer', status: 'ACTIVE', acquisitionType: 'NORMAL', version: { increment: 1 } })
+    });
+    expect(result).toMatchObject({ status: 'APPROVED', ownershipId: ownership.id });
+  });
+
   it('settles a forced transfer with equal debit and credit while preserving player build and salary', async () => {
     const { service, tx, ownership } = harness('FORCED_TRANSFER');
     const result = await service.approve('admin-1', 'app-1', { expectedVersion: 1, reason: '队列首位' }, 'forced', at);

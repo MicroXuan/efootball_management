@@ -16,7 +16,7 @@ export const MatchResultEvidenceUploadStatusSchema = z.enum(['PENDING', 'UPLOADE
 export const MatchResultEventTypeSchema = z.enum([
   'RESULT_SUBMITTED', 'RESULT_CONFIRMED', 'RESULT_REJECTED', 'CONFIRMATION_EXPIRED',
   'DISPUTE_OPENED', 'EVIDENCE_UPLOADED', 'EVIDENCE_REPLACED',
-  'EVIDENCE_DEADLINE_EXPIRED', 'ADMIN_DECIDED', 'EVIDENCE_DELETED'
+  'EVIDENCE_DEADLINE_EXPIRED', 'ADMIN_DECIDED', 'DISPUTE_CANCELLED', 'EVIDENCE_DELETED'
 ]);
 export const MatchResultEventActorTypeSchema = z.enum(['USER', 'ADMIN', 'SYSTEM']);
 
@@ -74,6 +74,11 @@ export const MatchResultDisputeResponseSchema = z.object({
 // Administrator mutations use the match token, independently of the dispute's own version.
 export const AdminMatchResultDisputeResponseSchema = MatchResultDisputeResponseSchema.extend({
   matchVersion: ExpectedVersionSchema,
+  competitionName: z.string().min(1),
+  stageName: z.string().min(1),
+  homeParticipantName: z.string().min(1),
+  awayParticipantName: z.string().min(1),
+  submitterSide: z.enum(['HOME', 'AWAY']),
   missingRoles: z.array(z.enum(['SUBMITTER', 'OPPONENT'])).optional()
 });
 export const AdminMatchResultDisputeListResponseSchema = z.array(AdminMatchResultDisputeResponseSchema);

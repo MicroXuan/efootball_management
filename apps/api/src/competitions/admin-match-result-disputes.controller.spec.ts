@@ -7,6 +7,7 @@ describe('administrator dispute routes', () => {
   it('parses admin list and detail with the match token while excluding private storage keys', async () => {
     const id = randomUUID(); const time = new Date().toISOString();
     const record = { id, matchId: id, triggerResultVersionId: id, trigger: 'REJECTED', status: 'READY_FOR_REVIEW',
+      competitionName: '测试联赛', stageName: '小组赛', homeParticipantName: '主队', awayParticipantName: '客队', submitterSide: 'HOME',
       openedByUserId: id, evidenceDeadlineAt: time, decidedByAdminId: null, decisionType: null, finalHomeScore: null, finalAwayScore: null,
       decisionReason: null, decidedAt: null, version: 2, matchVersion: 7, createdAt: time, updatedAt: time,
       objectKey: 'private-key', evidence: [], timeline: [] };

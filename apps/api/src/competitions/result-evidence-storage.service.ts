@@ -96,9 +96,10 @@ export class ResultEvidenceStorageService {
   }
 
   async createUserUpload(userId: string, matchId: string, input: CreateEvidenceUploadRequest) {
-    await this.requireParticipant(userId, matchId, input.expectedVersion);
+    const match = await this.requireParticipant(userId, matchId, input.expectedVersion);
     if (input.role === 'ADMIN') throw this.invalid('Players cannot upload administrator evidence');
     if (!this.validMetadata(input.mimeType, input.byteSize)) throw this.invalid('Evidence must be a JPEG, PNG, or WebP image of at most 1 MiB');
+    await this.assertUserUploadAction(match, userId, input.role);
     if (!this.storage.createDirectUpload) throw new Error('Direct storage uploads are unavailable');
 
     const grant = await this.storage.createDirectUpload('match-result-evidence', randomUUID(), input.mimeType);
@@ -228,6 +229,43 @@ export class ResultEvidenceStorageService {
   private validMetadata(mimeType: string, size: number): boolean {
     return ['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)
       && Number.isInteger(size) && size > 0 && size <= MAX_RESULT_EVIDENCE_BYTES;
+  }
+
+  private async assertUserUploadAction(match: Match, userId: string, requestedRole: 'SUBMITTER' | 'OPPONENT') {
+    const now = new Date();
+    if (match.status === 'AWAITING_RESULT') {
+      if (requestedRole !== 'SUBMITTER') throw new CompetitionError('EVIDENCE_ROLE_INVALID', 'Evidence role does not match the available result action', 409);
+      return;
+    }
+    if (match.status === 'PENDING_CONFIRMATION') {
+      const proposal = await this.prisma.matchResultVersion.findFirst({
+        where: { matchId: match.id, status: 'PROPOSED' }, orderBy: { version: 'desc' }, select: { submittedById: true }
+      });
+      if (!match.resultConfirmationDeadlineAt || match.resultConfirmationDeadlineAt > now) {
+        throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Evidence upload is not available before confirmation expires', 409);
+      }
+      if (!proposal || proposal.submittedById !== userId || requestedRole !== 'SUBMITTER') {
+        throw new CompetitionError('EVIDENCE_ROLE_INVALID', 'Evidence role does not match the available result action', 409);
+      }
+      return;
+    }
+    if (match.status === 'DISPUTED') {
+      const dispute = await this.prisma.matchResultDispute.findUnique({
+        where: { activeKey: match.id }, include: { triggerResultVersion: { select: { submittedById: true } } }
+      });
+      if (!dispute || dispute.status !== 'EVIDENCE_COLLECTION') {
+        throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Evidence collection is not active', 409);
+      }
+      if (dispute.evidenceDeadlineAt <= now) {
+        throw new CompetitionError('EVIDENCE_DEADLINE_EXPIRED', 'Evidence collection has ended', 409);
+      }
+      const expectedRole = dispute.triggerResultVersion.submittedById === userId ? 'SUBMITTER' : 'OPPONENT';
+      if (requestedRole !== expectedRole) {
+        throw new CompetitionError('EVIDENCE_ROLE_INVALID', 'Evidence role does not match the participant side', 409);
+      }
+      return;
+    }
+    throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Evidence upload is not available for this match', 409);
   }
 
   private invalid(message: string): CompetitionError {

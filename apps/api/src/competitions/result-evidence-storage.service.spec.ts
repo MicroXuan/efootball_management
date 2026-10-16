@@ -14,9 +14,12 @@ const uploadId = '44444444-4444-4444-8444-444444444444';
 const pngChecksum = '4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6';
 const input = { role: 'SUBMITTER' as const, mimeType: 'image/png' as const, byteSize: 8, checksumSha256: 'a'.repeat(64), expectedVersion: 1 };
 
-function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?: string; competitionStatus?: string } = {}) {
+function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?: string; competitionStatus?: string;
+  matchStatus?: string; deadline?: Date | null; dispute?: { status: string; evidenceDeadlineAt: Date } | null;
+  proposalSubmitterId?: string } = {}) {
   const match = {
-    id: matchId, version: 1,
+    id: matchId, version: 1, status: options.matchStatus ?? 'AWAITING_RESULT',
+    resultConfirmationDeadlineAt: options.deadline ?? null,
     stage: {
       status: options.stageStatus ?? 'PUBLISHED',
       competition: {
@@ -36,7 +39,11 @@ function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?:
       findUnique: jest.fn(async () => upload),
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
-    matchResultEvidence: { create: jest.fn(async () => undefined), findUnique: jest.fn(async () => null) }
+    matchResultEvidence: { create: jest.fn(async () => undefined), findUnique: jest.fn(async () => null) },
+    matchResultDispute: { findUnique: jest.fn(async () => options.dispute ? {
+      ...options.dispute, triggerResultVersion: { submittedById: options.proposalSubmitterId ?? userId }
+    } : null) },
+    matchResultVersion: { findFirst: jest.fn(async () => ({ submittedById: options.proposalSubmitterId ?? userId })) }
   };
   const storage: ObjectStorage = {
     put: jest.fn(async () => { throw new Error('unexpected'); }),
@@ -169,6 +176,32 @@ describe('ResultEvidenceStorageService', () => {
       const { service } = fixture(options);
       await expect(service.createUserUpload(userId, matchId, input)).rejects.toMatchObject({ response: { code: expect.any(String) } });
     }
+  });
+
+  it('issues participant grants only for the role and deadline of a live result action', async () => {
+    const pending = fixture({ matchStatus: 'PENDING_CONFIRMATION', deadline: new Date(Date.now() + 60_000) });
+    await expect(pending.service.createUserUpload(userId, matchId, input))
+      .rejects.toMatchObject({ response: { code: 'MATCH_RESULT_NOT_ALLOWED' } });
+
+    const disputed = fixture({ matchStatus: 'DISPUTED', proposalSubmitterId: 'someone-else', dispute: {
+      status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: new Date(Date.now() + 60_000)
+    } });
+    await expect(disputed.service.createUserUpload(userId, matchId, input))
+      .rejects.toMatchObject({ response: { code: 'EVIDENCE_ROLE_INVALID' } });
+    await expect(disputed.service.createUserUpload(userId, matchId, { ...input, role: 'OPPONENT' }))
+      .resolves.toMatchObject({ id: uploadId });
+
+    const reviewStarted = fixture({ matchStatus: 'DISPUTED', proposalSubmitterId: userId, dispute: {
+      status: 'READY_FOR_REVIEW', evidenceDeadlineAt: new Date(Date.now() + 60_000)
+    } });
+    await expect(reviewStarted.service.createUserUpload(userId, matchId, input))
+      .rejects.toMatchObject({ response: { code: 'MATCH_RESULT_NOT_ALLOWED' } });
+
+    const expired = fixture({ matchStatus: 'DISPUTED', dispute: {
+      status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: new Date(Date.now() - 1)
+    } });
+    await expect(expired.service.createUserUpload(userId, matchId, input))
+      .rejects.toMatchObject({ response: { code: 'EVIDENCE_DEADLINE_EXPIRED' } });
   });
 
   it.each([

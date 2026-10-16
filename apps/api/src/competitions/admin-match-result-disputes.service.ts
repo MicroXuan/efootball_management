@@ -25,9 +25,36 @@ export class AdminMatchResultDisputesService {
       homeParticipant: participant, awayParticipant: participant } };
   }
 
+  private readonly identityInclude = {
+    match: { include: {
+      stage: { select: { displayName: true, stageCode: true, competition: { select: { name: true } } } },
+      homeParticipant: { select: { displayNameSnapshot: true } },
+      awayParticipant: { select: { displayNameSnapshot: true } }
+    } },
+    triggerResultVersion: { select: { submissionSide: true } }
+  } satisfies Prisma.MatchResultDisputeInclude;
+
+  private identity(row: {
+    match: { version: number; stage: { displayName: string | null; stageCode: string | null; competition: { name: string } };
+      homeParticipant: { displayNameSnapshot: string }; awayParticipant: { displayNameSnapshot: string } };
+    triggerResultVersion: { submissionSide: string };
+  }) {
+    if (row.triggerResultVersion.submissionSide !== 'HOME' && row.triggerResultVersion.submissionSide !== 'AWAY') {
+      throw new CompetitionError('DISPUTE_CONTEXT_INVALID', 'Dispute submitter side is unavailable', 500);
+    }
+    return {
+      matchVersion: row.match.version,
+      competitionName: row.match.stage.competition.name,
+      stageName: row.match.stage.displayName ?? row.match.stage.stageCode ?? '未命名阶段',
+      homeParticipantName: row.match.homeParticipant.displayNameSnapshot,
+      awayParticipantName: row.match.awayParticipant.displayNameSnapshot,
+      submitterSide: row.triggerResultVersion.submissionSide
+    };
+  }
+
   async list(adminId: string, leagueId: string) {
     await this.authorization.requireLeagueAccess(adminId, leagueId);
-    const rows = await this.prisma.matchResultDispute.findMany({ where: this.scope(leagueId), include: { match: { select: { version: true } } }, orderBy: [{ evidenceDeadlineAt: 'asc' }, { id: 'asc' }] });
+    const rows = await this.prisma.matchResultDispute.findMany({ where: this.scope(leagueId), include: this.identityInclude, orderBy: [{ evidenceDeadlineAt: 'asc' }, { id: 'asc' }] });
     const activeEvidence = rows.length ? await this.prisma.matchResultEvidence.findMany({
       where: { disputeId: { in: rows.map((row) => row.id) }, status: 'ACTIVE' },
       select: { disputeId: true, role: true }
@@ -45,7 +72,7 @@ export class AdminMatchResultDisputesService {
     return rows.sort((a, b) => priority(a) - priority(b)).map((row) => {
       const present = rolesByDispute.get(row.id);
       const missingRoles = (['SUBMITTER', 'OPPONENT'] as const).filter((role) => !present?.has(role));
-      return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...row, matchVersion: row.match.version, missingRoles })));
+      return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...row, ...this.identity(row), missingRoles })));
     });
   }
 
@@ -57,7 +84,7 @@ export class AdminMatchResultDisputesService {
       this.prisma.matchResultEvent.findMany({ where: { matchId: dispute.matchId }, orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] })
     ]);
     // The response schema deliberately excludes object keys and internal upload identifiers.
-    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...dispute, matchVersion: dispute.match.version, evidence, timeline })));
+    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...dispute, ...this.identity(dispute), evidence, timeline })));
   }
 
   async readUrl(adminId: string, leagueId: string, disputeId: string, evidenceId: string) {
@@ -87,7 +114,7 @@ export class AdminMatchResultDisputesService {
   }
 
   private async requireDispute(client: CompetitionTransaction | PrismaService, leagueId: string, id: string) {
-    const dispute = await client.matchResultDispute.findFirst({ where: { id, ...this.scope(leagueId) }, include: { match: { select: { version: true } } } });
+    const dispute = await client.matchResultDispute.findFirst({ where: { id, ...this.scope(leagueId) }, include: this.identityInclude });
     if (!dispute) throw new CompetitionError('DISPUTE_NOT_FOUND', 'Dispute was not found', 404);
     return dispute;
   }

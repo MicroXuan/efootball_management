@@ -188,6 +188,29 @@ describe('ResultsService', () => {
     expect(evidence.expiresAt?.getTime()).toBe(confirmed.occurredAt.getTime() + 90 * 24 * 60 * 60 * 1000);
   });
 
+  it('replaces the previous active submitter evidence and records both evidence events on a newer proposal', async () => {
+    const { competition, match } = await fixture();
+    await requireEvidence(competition.id);
+    const firstUpload = await uploadedEvidence(match.id, users[0]);
+    await service.submit(users[0], match.id, {
+      homeScore: 2, awayScore: 1, evidenceUploadId: firstUpload.id, expectedVersion: 1
+    }, randomUUID());
+    const secondUpload = await uploadedEvidence(match.id, users[1]);
+    await service.submit(users[1], match.id, {
+      homeScore: 1, awayScore: 2, evidenceUploadId: secondUpload.id, expectedVersion: 2
+    }, randomUUID());
+
+    expect(await prisma.matchResultEvidence.findMany({ where: { matchId: match.id }, orderBy: { createdAt: 'asc' } }))
+      .toMatchObject([
+        { uploadId: firstUpload.id, role: 'SUBMITTER', status: 'PENDING_DELETE' },
+        { uploadId: secondUpload.id, role: 'SUBMITTER', status: 'ACTIVE' }
+      ]);
+    expect((await prisma.matchResultEvent.findMany({
+      where: { matchId: match.id, type: { in: ['EVIDENCE_UPLOADED', 'EVIDENCE_REPLACED'] } },
+      orderBy: { occurredAt: 'asc' }
+    })).map(({ type }) => type)).toEqual(['EVIDENCE_UPLOADED', 'EVIDENCE_REPLACED']);
+  });
+
   it('enforces participant ownership, rejection reason, confirmation separation, and history', async () => {
     const { match } = await fixture();
     await expect(service.submit(users[2], match.id, { homeScore: 2, awayScore: 1, expectedVersion: 1 }, randomUUID()))
@@ -238,7 +261,7 @@ describe('ResultsService', () => {
     const first = await service.recordByManager(users[3], competition.id, match.id,
       { homeScore: 1, awayScore: 0, expectedVersion: 1, reason: '管理员录入' }, randomUUID());
     await expect(service.recordByManager(users[3], competition.id, match.id,
-      { homeScore: 0, awayScore: 2, expectedVersion: 2 }, randomUUID()))
+      { homeScore: 0, awayScore: 2, expectedVersion: 2, reason: '' }, randomUUID()))
       .rejects.toMatchObject({ response: { code: 'RESULT_CORRECTION_REASON_REQUIRED' } });
     await service.recordByManager(users[3], competition.id, match.id,
       { homeScore: 0, awayScore: 2, expectedVersion: 2, reason: '赛后复核' }, randomUUID());

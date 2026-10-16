@@ -131,6 +131,7 @@ export class TeamFinanceService {
       `finance-settlement.upsert:${leagueId}:${input.leagueTeamId}:${input.seasonId}`,
       key,
       async (tx) => {
+        await tx.$queryRaw`SELECT id FROM league_teams WHERE id = ${input.leagueTeamId} FOR UPDATE`;
         const entries = await tx.financeLedgerEntry.findMany({
           where: {
             leagueTeamId: input.leagueTeamId,

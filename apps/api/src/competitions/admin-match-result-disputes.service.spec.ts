@@ -14,6 +14,7 @@ import { CupProgressionService } from './cup-progression.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
+import { CompetitionsService } from './competitions.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 describe('administrator arbitration', () => {
@@ -301,6 +302,7 @@ describe('administrator arbitration', () => {
     await expect(results.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, { ...input, reason: '' }, randomUUID())).rejects.toThrow();
     const grant = await evidence.createAdminUpload(adminId, a.leagueId, a.match.id, { role: 'ADMIN', expectedVersion: 3, mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64) });
     await evidence.completeAdminUpload(adminId, a.leagueId, a.match.id, grant.id, { expectedVersion: 3 });
+    await prisma.matchResultDispute.update({ where: { id: a.dispute!.id }, data: { status: 'READY_FOR_REVIEW' } });
     const first = await results.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, { ...input, evidenceUploadId: grant.id }, randomUUID());
     expect(await prisma.matchResultDispute.findUnique({ where: { id: a.dispute!.id } })).toMatchObject({ status: 'RESOLVED', activeKey: null });
     expect(await prisma.matchResultEvidence.findUnique({ where: { uploadId: grant.id } })).toMatchObject({ role: 'ADMIN', uploadedByAdminId: adminId });
@@ -313,5 +315,39 @@ describe('administrator arbitration', () => {
     expect(await prisma.matchResultEvidence.count({ where: { matchId: a.match.id, role: 'ADMIN', status: 'ACTIVE' } })).toBe(1);
     expect(await prisma.matchResultEvidence.findUnique({ where: { uploadId: grant.id } })).toMatchObject({ status: 'PENDING_DELETE' });
     expect(await prisma.matchResultEvent.count({ where: { matchId: a.match.id, type: 'EVIDENCE_REPLACED' } })).toBe(1);
+  });
+
+  it('does not let direct result entry bypass an active dispute evidence deadline', async () => {
+    const a = await setup();
+    await expect(results.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, {
+      homeScore: 0, awayScore: 3, expectedVersion: 3, reason: '提前裁决'
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'DISPUTE_NOT_READY' } });
+    expect(await prisma.matchResultDispute.findUniqueOrThrow({ where: { id: a.dispute!.id } }))
+      .toMatchObject({ status: 'EVIDENCE_COLLECTION', activeKey: a.match.id });
+    expect(await prisma.matchResultVersion.count({ where: { matchId: a.match.id, status: 'OFFICIAL' } })).toBe(0);
+  });
+
+  it('closes active disputes and schedules their evidence for cleanup when the competition is cancelled', async () => {
+    const a = await setup();
+    const grant = await upload(a.match.id, 'SUBMITTER', users[0]!);
+    await disputes.attachEvidence(users[0]!, a.match.id, { evidenceUploadId: grant.id, expectedVersion: 3 }, randomUUID());
+    const nonDisputeEvidence = await prisma.matchResultEvidence.create({ data: {
+      matchId: a.match.id, resultVersionId: a.proposal.id, role: 'ADMIN', uploadedByAdminId: adminId,
+      objectKey: `match-result-evidence-retained--${randomUUID()}.png`, mimeType: 'image/png', byteSize: 8,
+      checksumSha256: 'c'.repeat(64)
+    } });
+    const lifecycle = new CompetitionsService(prisma, new MutationReceiptService(prisma));
+    const current = await prisma.competition.findUniqueOrThrow({ where: { id: a.competition.id } });
+    await lifecycle.transition(users[0]!, a.competition.id, 'CANCELLED', {
+      expectedVersion: current.version, reason: '赛事终止'
+    }, randomUUID());
+    expect(await prisma.matchResultDispute.findUniqueOrThrow({ where: { id: a.dispute!.id } }))
+      .toMatchObject({ status: 'CANCELLED', activeKey: null });
+    expect(await prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: grant.id } }))
+      .toMatchObject({ status: 'PENDING_DELETE', expiresAt: expect.any(Date) });
+    expect(await prisma.matchResultEvidence.findUniqueOrThrow({ where: { id: nonDisputeEvidence.id } }))
+      .toMatchObject({ status: 'PENDING_DELETE', expiresAt: expect.any(Date) });
+    expect(await prisma.matchResultEvent.findFirst({ where: { disputeId: a.dispute!.id, type: 'DISPUTE_CANCELLED' as never } }))
+      .toMatchObject({ actorType: 'USER', actorUserId: users[0], metadata: { reason: '赛事终止' } });
   });
 });

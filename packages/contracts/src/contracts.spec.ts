@@ -60,6 +60,7 @@ import {
   GameAccountInputSchema,
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
+  ManagerMatchResultRequestSchema,
   MatchResultDisputeStatusSchema,
   MatchResultDisputeTriggerSchema,
   ParticipantMatchResultDisputeResponseSchema,
@@ -129,7 +130,8 @@ describe('match result dispute contracts', () => {
     const id = randomUUID(); const time = new Date().toISOString();
     const record = { id, matchId: id, triggerResultVersionId: id, trigger: 'REJECTED', status: 'READY_FOR_REVIEW',
       openedByUserId: id, evidenceDeadlineAt: time, decidedByAdminId: null, decisionType: null, finalHomeScore: null, finalAwayScore: null,
-      decisionReason: null, decidedAt: null, version: 2, createdAt: time, updatedAt: time, objectKey: 'private' };
+      decisionReason: null, decidedAt: null, version: 2, createdAt: time, updatedAt: time, objectKey: 'private',
+      competitionName: '冠军联赛', stageName: 'A 组', homeParticipantName: '海港', awayParticipantName: '申花', submitterSide: 'HOME' };
     assert.equal(AdminMatchResultDisputeResponseSchema.safeParse(record).success, false);
     assert.equal(AdminMatchResultDisputeResponseSchema.safeParse({ ...record, matchVersion: 0 }).success, false);
     const parsed = AdminMatchResultDisputeResponseSchema.parse({ ...record, matchVersion: 7 });
@@ -159,7 +161,7 @@ describe('match result dispute contracts', () => {
     }
     for (const event of ['RESULT_SUBMITTED', 'RESULT_CONFIRMED', 'RESULT_REJECTED',
       'CONFIRMATION_EXPIRED', 'DISPUTE_OPENED', 'EVIDENCE_UPLOADED', 'EVIDENCE_REPLACED',
-      'EVIDENCE_DEADLINE_EXPIRED', 'ADMIN_DECIDED', 'EVIDENCE_DELETED']) {
+      'EVIDENCE_DEADLINE_EXPIRED', 'ADMIN_DECIDED', 'DISPUTE_CANCELLED', 'EVIDENCE_DELETED']) {
       assert.equal(MatchResultEventTypeSchema.safeParse(event).success, true);
     }
   });
@@ -177,6 +179,13 @@ describe('match result dispute contracts', () => {
     assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse(base).success, false);
     assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1 }).success, true);
     assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1, reason: '   ' }).success, false);
+  });
+
+  it('requires a reason for every direct administrator result entry', () => {
+    const entry = { homeScore: 2, awayScore: 1, expectedVersion: 1 };
+    assert.equal(ManagerMatchResultRequestSchema.safeParse(entry).success, false);
+    assert.equal(ManagerMatchResultRequestSchema.safeParse({ ...entry, reason: null }).success, false);
+    assert.equal(ManagerMatchResultRequestSchema.safeParse({ ...entry, reason: '管理员核对' }).success, true);
   });
 
   it('rejects replacement scores when adopting the submitted score', () => {

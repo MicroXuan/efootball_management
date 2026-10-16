@@ -16,7 +16,7 @@ const eventLabels: Record<string, string> = {
   RESULT_SUBMITTED: '提交比分', RESULT_CONFIRMED: '确认比分', RESULT_REJECTED: '拒绝比分',
   CONFIRMATION_EXPIRED: '确认期限届满', DISPUTE_OPENED: '发起争议', EVIDENCE_UPLOADED: '上传证据',
   EVIDENCE_REPLACED: '更换证据', EVIDENCE_DEADLINE_EXPIRED: '补证期限届满',
-  ADMIN_DECIDED: '管理员裁决', EVIDENCE_DELETED: '证据清理'
+  ADMIN_DECIDED: '管理员裁决', DISPUTE_CANCELLED: '赛事取消并关闭争议', EVIDENCE_DELETED: '证据清理'
 };
 const imageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const readUrlSchema = z.object({ url: z.url(), expiresAt: z.iso.datetime() });
@@ -41,6 +41,11 @@ function rejectedReason(detail: AdminMatchResultDisputeResponse) {
 function rank(item: AdminMatchResultDisputeResponse) {
   if (item.status === 'READY_FOR_REVIEW' || (item.status === 'EVIDENCE_COLLECTION' && new Date(item.evidenceDeadlineAt) <= new Date())) return 0;
   return item.status === 'EVIDENCE_COLLECTION' ? 1 : 2;
+}
+function participantRoleLabel(item: AdminMatchResultDisputeResponse, role: 'SUBMITTER' | 'OPPONENT') {
+  const submitterIsHome = item.submitterSide === 'HOME';
+  const isHome = role === 'SUBMITTER' ? submitterIsHome : !submitterIsHome;
+  return `${roleLabels[role]}（${isHome ? '主队' : '客队'}：${isHome ? item.homeParticipantName : item.awayParticipantName}）`;
 }
 
 export function ResultDisputesPage({ api = adminApi }: { api?: AdminApi }) {
@@ -249,7 +254,8 @@ function LeagueResultDisputesWorkspace({ leagueId, api }: { leagueId: string; ap
           : <div className="dispute-queue-list" role="list">{queue.map((item) => <article key={item.id} role="listitem" className="dispute-queue-row">
             <div className="dispute-queue-row__main"><div className="dispute-queue-row__labels">
               <Tag color={item.status === 'READY_FOR_REVIEW' ? 'processing' : item.status === 'EVIDENCE_COLLECTION' ? 'warning' : 'default'}>{statusLabels[item.status]}</Tag>
-              <span>{typeLabels[item.trigger]}</span></div><strong>比赛 {item.matchId.slice(0, 8)}</strong><small>争议 {item.id.slice(0, 8)}</small></div>
+              <span>{typeLabels[item.trigger]}</span></div><strong>{item.homeParticipantName} vs {item.awayParticipantName}</strong>
+              <small>{item.competitionName} · {item.stageName}</small></div>
             <div className="dispute-queue-row__signal"><span>补证截止</span><strong>{date(item.evidenceDeadlineAt)}</strong></div>
             <div className="dispute-queue-row__signal"><span>缺证方</span><strong>{missingRoles(item).length ? missingRoles(item).map((role) => roleLabels[role]).join('、') : '双方已齐'}</strong></div>
             <Button aria-label={`查看争议 ${item.id.slice(0, 8)}`} onClick={() => open(item.id)}>查看争议</Button>
@@ -260,16 +266,16 @@ function LeagueResultDisputesWorkspace({ leagueId, api }: { leagueId: string; ap
       {detailBusy ? <div className="loading-block"><Spin /><span>正在读取争议详情…</span></div>
         : !detail ? <Empty description="详情不可用，请重试。" ><Button onClick={() => selectedId && void loadDetail(selectedId)}>重试读取详情</Button></Empty>
           : <div className="dispute-detail">
-            <div className="dispute-detail__summary"><Tag>{statusLabels[detail.status]}</Tag><Tag>{typeLabels[detail.trigger]}</Tag><span>比赛 {detail.matchId.slice(0, 8)}</span></div>
+            <div className="dispute-detail__summary"><Tag>{statusLabels[detail.status]}</Tag><Tag>{typeLabels[detail.trigger]}</Tag><span>{detail.competitionName} · {detail.stageName}</span><strong>{detail.homeParticipantName} vs {detail.awayParticipantName}</strong></div>
             <div className="dispute-detail__score"><span>提交比分</span><strong>{score(detail)}</strong></div>
             {rejectedReason(detail) ? <div className="dispute-detail__reason"><span>拒绝原因</span><p>{rejectedReason(detail)}</p></div> : null}
             <div className="dispute-evidence-rail" aria-label="双方证据状态">{(['SUBMITTER', 'OPPONENT'] as const).map((role) => {
               const present = detail.evidence.some((item) => item.role === role && item.status === 'ACTIVE');
-              return <div key={role} className={present ? 'is-present' : 'is-missing'}><span>{roleLabels[role]}</span><strong>{present ? '已提交' : '未提交'}</strong></div>;
+              return <div key={role} className={present ? 'is-present' : 'is-missing'}><span>{participantRoleLabel(detail, role)}</span><strong>{present ? '已提交' : '未提交'}</strong></div>;
             })}</div>
             {missingRoles(detail).length ? <Alert type="warning" showIcon title={`缺少${missingRoles(detail).map((role) => roleLabels[role]).join('、')}证据，请在裁决前核对时间线。`} /> : null}
             <section><h3>证据</h3>{detail.evidence.length ? detail.evidence.map((item) => <div key={item.id} className="dispute-evidence-row">
-              <div><strong>{roleLabels[item.role]} · {item.status === 'ACTIVE' ? '有效' : item.status === 'PENDING_DELETE' ? '待清理' : '已清理'}</strong>
+              <div><strong>{item.role === 'ADMIN' ? roleLabels.ADMIN : participantRoleLabel(detail, item.role)} · {item.status === 'ACTIVE' ? '有效' : item.status === 'PENDING_DELETE' ? '待清理' : '已清理'}</strong>
                 <small>{item.mimeType} · {Math.ceil(item.byteSize / 1024)} KiB · {date(item.createdAt)}</small></div>
               {item.status !== 'DELETED' ? <Button size="small" loading={previewBusy === item.id} onClick={() => void previewEvidence(item.id)}>预览证据</Button> : null}
             </div>) : <p className="dispute-muted">暂无证据。</p>}
@@ -284,8 +290,8 @@ function LeagueResultDisputesWorkspace({ leagueId, api }: { leagueId: string; ap
               <Radio.Group aria-label="裁决类型" value={decision} onChange={(event) => setDecision(event.target.value)}>
                 <Radio value="USE_SUBMITTED_SCORE">采用提交比分</Radio><Radio value="REPLACE_SCORE">替换比分</Radio>
               </Radio.Group>
-              {decision === 'REPLACE_SCORE' ? <div className="dispute-score-fields"><label>主队比分<InputNumber aria-label="主队比分" min={0} max={99} precision={0} value={homeScore} onChange={setHomeScore} /></label>
-                <label>客队比分<InputNumber aria-label="客队比分" min={0} max={99} precision={0} value={awayScore} onChange={setAwayScore} /></label></div> : null}
+              {decision === 'REPLACE_SCORE' ? <div className="dispute-score-fields"><label>{detail.homeParticipantName}（主队）<InputNumber aria-label={`${detail.homeParticipantName}比分`} min={0} max={99} precision={0} value={homeScore} onChange={setHomeScore} /></label>
+                <label>{detail.awayParticipantName}（客队）<InputNumber aria-label={`${detail.awayParticipantName}比分`} min={0} max={99} precision={0} value={awayScore} onChange={setAwayScore} /></label></div> : null}
               <label>裁决原因<Input.TextArea aria-label="裁决原因" value={reason} maxLength={512} rows={3} onChange={(event) => setReason(event.target.value)} /></label>
               <div><span>管理员补充证据（可选，JPG / PNG / WebP，≤ 1 MiB）</span><Upload accept="image/jpeg,image/png,image/webp" maxCount={1}
                 fileList={file ? [{ uid: 'admin-evidence', name: file.name, status: 'done' }] : []}

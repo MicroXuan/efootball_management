@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   LeagueDetail,
   LeagueListQuery,
@@ -13,6 +13,7 @@ import { MutationReceiptService } from '../competitions/mutation-receipt.service
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 
 type SeasonWithCount = LeagueSeason & {
   _count: { entries: number };
@@ -36,7 +37,8 @@ export class LeaguesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
-    @Inject(AuthorizationService) private readonly authorization: AuthorizationService
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Optional() @Inject(AuditLogService) private readonly audit: AuditLogService = new AuditLogService(prisma)
   ) {}
 
   create(
@@ -122,6 +124,16 @@ export class LeaguesService {
       });
       if (updated.count !== 1) {
         throw new LeagueError('VERSION_CONFLICT', 'League has changed', 409);
+      }
+      if (input.resultEvidenceRequired !== undefined) {
+        await this.audit.record(transaction, {
+          actorUserId: actorId, leagueId, action: 'league.result-evidence-rule.update',
+          resourceType: 'League', resourceId: leagueId,
+          metadata: {
+            previousResultEvidenceRequired: existing.resultEvidenceRequired,
+            resultEvidenceRequired: input.resultEvidenceRequired
+          }
+        });
       }
       return this.getRecord(transaction, leagueId).then((record) => this.detail(record, true));
     });

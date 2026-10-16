@@ -55,6 +55,17 @@ describe('MatchResultDisputesService', () => {
     }
   });
 
+  it('repairs a legacy pending confirmation with no deadline from its latest proposal time', async () => {
+    const { match, proposal } = await fixture();
+    const storedProposal = await prisma.matchResultVersion.findUniqueOrThrow({ where: { id: proposal.id } });
+    await prisma.competitionMatch.update({ where: { id: match.id }, data: { resultConfirmationDeadlineAt: null } });
+    const expectedDeadline = new Date(storedProposal.createdAt.getTime() + 86_400_000);
+    await disputes.advanceDue(expectedDeadline);
+    expect(await prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } }))
+      .toMatchObject({ status: 'PENDING_CONFIRMATION', resultConfirmationDeadlineAt: expectedDeadline });
+    expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'CONFIRMATION_EXPIRED' } })).toBe(1);
+  });
+
   it('rejects wrong owner/role and foreign uploads, then becomes ready early with two evidence roles', async () => {
     const { match } = await rejected();
     const other = await fixture();

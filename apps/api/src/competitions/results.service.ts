@@ -101,12 +101,24 @@ export class ResultsService {
         const upload = await transaction.matchResultEvidenceUpload.findUniqueOrThrow({
           where: { id: input.evidenceUploadId }
         });
-        await transaction.matchResultEvidence.create({
+        const replaced = await transaction.matchResultEvidence.findMany({
+          where: { matchId, role: 'SUBMITTER', status: 'ACTIVE' }, select: { id: true }
+        });
+        if (replaced.length) await transaction.matchResultEvidence.updateMany({
+          where: { id: { in: replaced.map(({ id }) => id) } }, data: { status: 'PENDING_DELETE', expiresAt: now }
+        });
+        const evidence = await transaction.matchResultEvidence.create({
           data: {
             matchId, resultVersionId: created.id, uploadId: upload.id, role: 'SUBMITTER',
             uploadedByUserId: userId, objectKey: upload.objectKey, mimeType: upload.mimeType,
             byteSize: upload.byteSize, checksumSha256: upload.checksumSha256
           }
+        });
+        await this.events.append(transaction, {
+          matchId, resultVersionId: created.id,
+          type: replaced.length ? 'EVIDENCE_REPLACED' : 'EVIDENCE_UPLOADED',
+          eventKey: `evidence:${evidence.id}:attached`, actorType: 'USER', actorUserId: userId,
+          occurredAt: now, metadata: { role: 'SUBMITTER', evidenceId: evidence.id, replacedEvidenceIds: replaced.map(({ id }) => id) }
         });
       }
       await this.events.append(transaction, {
@@ -278,7 +290,11 @@ export class ResultsService {
       throw new CompetitionError('INVALID_RESULT_SCORE', 'Scores must be integers between 0 and 99', 400);
     }
     this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
+    await this.disputes.advanceMatch(transaction, matchId, now);
     const dispute = await transaction.matchResultDispute.findUnique({ where: { activeKey: matchId } });
+    if (dispute && dispute.status !== 'READY_FOR_REVIEW') {
+      throw new CompetitionError('DISPUTE_NOT_READY', 'Dispute is not ready for administrator review', 409);
+    }
     const official = await transaction.matchResultVersion.create({ data: {
       matchId, version: await this.nextVersion(transaction, matchId), homeScore: input.homeScore, awayScore: input.awayScore,
       submittedById: userId ?? null, submittedByAdminId: adminId ?? null, submissionSide: 'MANAGER', status: 'OFFICIAL', reason

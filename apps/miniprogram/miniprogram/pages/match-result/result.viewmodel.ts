@@ -16,7 +16,8 @@ const eventLabels: Record<string, string> = {
   RESULT_SUBMITTED: '比分已提交', RESULT_CONFIRMED: '比分已确认', RESULT_REJECTED: '比分被拒绝',
   CONFIRMATION_EXPIRED: '确认期限已结束', DISPUTE_OPENED: '争议已开启',
   EVIDENCE_UPLOADED: '证据已提交', EVIDENCE_REPLACED: '证据已替换',
-  EVIDENCE_DEADLINE_EXPIRED: '证据收集结束', ADMIN_DECIDED: '管理员已裁决'
+  EVIDENCE_DEADLINE_EXPIRED: '证据收集结束', ADMIN_DECIDED: '管理员已裁决',
+  EVIDENCE_DELETED: '证据已按保留规则清理', DISPUTE_CANCELLED: '争议已随赛事取消'
 }
 
 export function resultView(item: MyMatchResponse, dispute: ParticipantMatchResultDisputeResponse | null, now = Date.now()) {

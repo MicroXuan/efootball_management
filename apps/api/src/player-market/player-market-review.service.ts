@@ -106,8 +106,7 @@ export class PlayerMarketReviewService {
       if ((salary._sum.salaryMinor ?? 0) + quote.salaryMinor > quote.salaryCapMinor) {
         return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'SALARY_CAP_EXCEEDED');
       }
-      const settledOwnership = await tx.leaguePlayerOwnership.create({
-        data: {
+      const ownershipData: Prisma.LeaguePlayerOwnershipUncheckedCreateInput = {
           leagueId: application.leagueId,
           leagueTeamId: application.applicantLeagueTeamId,
           footballPlayerId: application.footballPlayerId,
@@ -118,9 +117,14 @@ export class PlayerMarketReviewService {
           salaryMinor: quote.salaryMinor,
           acquisitionType: 'NORMAL',
           acquisitionSeasonId: application.seasonId,
-          acquiredAt: at
-        }
-      });
+          acquiredAt: at,
+          status: 'ACTIVE' as const
+      };
+      const settledOwnership = ownership?.status === 'RELEASED'
+        ? await tx.leaguePlayerOwnership.update({
+          where: { id: ownership.id }, data: { ...ownershipData, version: { increment: 1 } }
+        })
+        : await tx.leaguePlayerOwnership.create({ data: ownershipData });
       const transaction = await tx.rosterTransaction.create({
         data: {
           leagueId: application.leagueId,

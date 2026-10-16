@@ -89,6 +89,25 @@ export class MatchResultDisputesService {
   }
 
   async advanceDue(now: Date = new Date()): Promise<void> {
+    const legacy = await this.prisma.competitionMatch.findMany({
+      where: { status: 'PENDING_CONFIRMATION', resultConfirmationDeadlineAt: null },
+      select: { id: true }, orderBy: { id: 'asc' }
+    });
+    for (const { id } of legacy) {
+      await this.prisma.$transaction(async (transaction) => {
+        await this.lockMatch(transaction, id);
+        const match = await transaction.competitionMatch.findUnique({ where: { id }, select: { status: true, resultConfirmationDeadlineAt: true } });
+        if (!match || match.status !== 'PENDING_CONFIRMATION' || match.resultConfirmationDeadlineAt) return;
+        const proposal = await transaction.matchResultVersion.findFirst({
+          where: { matchId: id, status: 'PROPOSED' }, orderBy: [{ version: 'desc' }], select: { createdAt: true }
+        });
+        if (!proposal) return;
+        await transaction.competitionMatch.update({
+          where: { id }, data: { resultConfirmationDeadlineAt: new Date(proposal.createdAt.getTime() + EVIDENCE_WINDOW_MS) }
+        });
+        await this.advanceMatch(transaction, id, now);
+      });
+    }
     const due = await this.prisma.competitionMatch.findMany({ where: { OR: [
       { status: 'PENDING_CONFIRMATION', resultConfirmationDeadlineAt: { lte: now } },
       { resultDisputes: { some: { status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: { lte: now } } } }
