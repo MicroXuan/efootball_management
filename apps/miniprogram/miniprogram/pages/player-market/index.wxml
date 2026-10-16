@@ -20,7 +20,7 @@
   </view>
 
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员市场" />
-  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">暂时无法读取</text><text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadView">重新加载</button></view>
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">暂时无法读取</text><text class="state-copy">{{errorMessage}}</text><button class="outline-button efm-retry-button" bindtap="loadView">重新加载</button></view>
   <view wx:elif="{{state === 'empty'}}" class="state-card"><text class="state-title">这里还没有内容</text><text class="state-copy">筛选结果、申请进度或成交公告产生后会显示在这里。</text></view>
 
   <view wx:elif="{{view === 'players'}}" class="card-list">

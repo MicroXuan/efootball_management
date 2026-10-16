@@ -2,7 +2,7 @@
   <loading-state wx:if="{{loading && !detail}}" label="正在打开赛事档案" />
   <view wx:elif="{{errorMessage && !detail}}" class="state-panel">
     <text class="state-code">数据不可用</text><text class="state-title">无法打开赛事</text>
-    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="retry">重新加载</button>
+    <text class="state-copy">{{errorMessage}}</text><button class="outline-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
   <block wx:elif="{{detail}}">
     <view class="hero">

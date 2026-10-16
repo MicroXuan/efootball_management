@@ -5,7 +5,6 @@ import { auth } from '../../services/auth'
 import { leaguesApi } from '../../services/leagues'
 import { session } from '../../services/session'
 import { actionCenterAttentionCount, loadActionCenter, readActionCenterVersions } from '../../services/action-center'
-import { attentionBadgeLabel } from '../../custom-tab-bar/tabbar.viewmodel'
 import { actionCenterSourceAttention } from '../action-center/action-center.viewmodel'
 import { profileView, type ProfileView } from './profile.viewmodel'
 import { completeProfileLogin } from './profile-login'
@@ -41,7 +40,6 @@ Page({
     const loggedIn = Boolean(session.getAccessToken())
     if (!loggedIn) {
       this.setData({ state: 'loaded', errorMessage: '', loggedIn: false, profile: profileView(null, []), actionCenter: { attentionCount: 0, actionRequiredCount: 0, auctionCount: 0 } })
-      this.getTabBar?.()?.setData({ attentionBadge: '' })
       return
     }
     try {
@@ -60,7 +58,6 @@ Page({
         profile: profileView(user, teams.items),
         actionCenter: { attentionCount, actionRequiredCount: actionCenter.actionRequiredCount, auctionCount: sourceCounts.AUCTION },
       })
-      this.getTabBar?.()?.setData({ attentionBadge: attentionBadgeLabel(attentionCount) })
     } catch (error) {
       this.setData({ state: 'error', errorMessage: errorCopy(error), loggedIn: true })
     }

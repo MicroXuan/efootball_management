@@ -23,7 +23,7 @@
     <text class="state-code">连接中断</text>
     <text class="state-title">暂时无法读取联赛</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="outline-button" bindtap="loadLeagues">重新加载</button>
+    <button class="outline-button efm-retry-button" bindtap="loadLeagues">重新加载</button>
   </view>
   <view wx:elif="{{!hasLeagues}}" class="state-card">
     <text class="state-code">{{activeTab === 'mine' ? '暂无绑定球队' : '暂无公开联赛'}}</text>

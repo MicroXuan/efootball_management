@@ -17,6 +17,23 @@ const browsingPages = [
 ]
 
 describe('registered browsing pages visual boundary', () => {
+  it('vertically centers every error recovery button through the shared contract', () => {
+    const app = JSON.parse(readFileSync(resolve(miniRoot, 'app.json'), 'utf8')) as { pages: string[] }
+    const styles = readFileSync(resolve(miniRoot, 'app.wxss'), 'utf8')
+    const recoveryButton = /<button\b([^>]*)>\s*(?:重新加载|重试)\s*<\/button>/g
+
+    expect(styles).toMatch(/\.efm-retry-button\s*\{[^}]*display:\s*flex/s)
+    expect(styles).toMatch(/\.efm-retry-button\s*\{[^}]*align-items:\s*center/s)
+    expect(styles).toMatch(/\.efm-retry-button\s*\{[^}]*justify-content:\s*center/s)
+
+    for (const page of app.pages) {
+      const markup = readFileSync(resolve(miniRoot, `${page}.wxml`), 'utf8')
+      for (const match of markup.matchAll(recoveryButton)) {
+        expect(match[1], `${page}: ${match[0]}`).toMatch(/class="[^"]*\befm-retry-button\b[^"]*"/)
+      }
+    }
+  })
+
   it('keeps every registered page free from deprecated neon-era colors', () => {
     const app = JSON.parse(readFileSync(resolve(miniRoot, 'app.json'), 'utf8')) as { pages: string[] }
 

@@ -15,7 +15,7 @@
     <text class="state-code">收藏读取失败</text>
     <text class="state-title">{{errorCopy.title}}</text>
     <text class="state-copy">{{errorMessage || errorCopy.detail}}</text>
-    <button class="outline-button" bindtap="retry">重新加载</button>
+    <button class="outline-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
 
   <view wx:elif="{{cards.length === 0}}" class="state-card">

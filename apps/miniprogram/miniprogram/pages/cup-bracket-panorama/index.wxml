@@ -4,7 +4,7 @@
     <text class="panorama-state__code">BRACKET VIEW</text>
     <text class="panorama-state__title">暂时无法查看淘汰签表</text>
     <text class="panorama-state__copy">{{errorMessage}}</text>
-    <button class="panorama-state__button" bindtap="retry">重新加载</button>
+    <button class="panorama-state__button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
   <block wx:else>
     <view class="panorama-toolbar">

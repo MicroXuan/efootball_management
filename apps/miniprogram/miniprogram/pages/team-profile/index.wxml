@@ -13,7 +13,7 @@
     <text class="state-code">加载失败</text>
     <text class="state-title">暂时无法读取球队档案</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="secondary-button" bindtap="loadPage">重新加载</button>
+    <button class="secondary-button efm-retry-button" bindtap="loadPage">重新加载</button>
   </view>
 
   <block wx:else>

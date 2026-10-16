@@ -7,7 +7,7 @@
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛规则" />
   <view wx:elif="{{state === 'error'}}" class="state-card">
     <text class="state-title">无法读取管理资料</text><text class="error">{{errorMessage}}</text>
-    <button class="secondary" bindtap="loadLeague">重新加载</button>
+    <button class="secondary efm-retry-button" bindtap="loadLeague">重新加载</button>
   </view>
   <view wx:else class="form-card">
     <view class="serial-strip"><text>章程</text><text>{{id ? '修订版本' : '新建档案'}}</text></view>

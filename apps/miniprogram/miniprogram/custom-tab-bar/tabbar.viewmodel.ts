@@ -13,8 +13,3 @@ export function tabIndexForRoute(route: string): number {
 export function tabRouteForIndex(index: number): typeof tabRoutes[number] | null {
   return tabRoutes[index] ?? null
 }
-
-export function attentionBadgeLabel(count: number): string {
-  if (!Number.isFinite(count) || count <= 0) return ''
-  return count > 99 ? '99+' : String(Math.floor(count))
-}

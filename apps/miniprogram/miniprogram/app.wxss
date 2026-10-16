@@ -49,6 +49,17 @@ button::after {
   border: 0;
 }
 
+.efm-retry-button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .efm-equal-tabs {
   width: 100%;
   box-sizing: border-box;

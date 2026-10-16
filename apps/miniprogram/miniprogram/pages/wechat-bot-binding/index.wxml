@@ -9,7 +9,7 @@
     <text class="state-code">状态读取失败</text>
     <text class="state-title">暂时无法加载</text>
     <text class="state-copy">{{view.errorMessage}}</text>
-    <button class="outline-button" bindtap="loadStatus">重新加载</button>
+    <button class="outline-button efm-retry-button" bindtap="loadStatus">重新加载</button>
   </view>
 
   <block wx:else>
