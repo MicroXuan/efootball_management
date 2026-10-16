@@ -28,10 +28,25 @@ export class AdminMatchResultDisputesService {
   async list(adminId: string, leagueId: string) {
     await this.authorization.requireLeagueAccess(adminId, leagueId);
     const rows = await this.prisma.matchResultDispute.findMany({ where: this.scope(leagueId), include: { match: { select: { version: true } } }, orderBy: [{ evidenceDeadlineAt: 'asc' }, { id: 'asc' }] });
+    const activeEvidence = rows.length ? await this.prisma.matchResultEvidence.findMany({
+      where: { disputeId: { in: rows.map((row) => row.id) }, status: 'ACTIVE' },
+      select: { disputeId: true, role: true }
+    }) : [];
+    const rolesByDispute = new Map<string, Set<string>>();
+    for (const item of activeEvidence) {
+      if (!item.disputeId) continue;
+      const roles = rolesByDispute.get(item.disputeId) ?? new Set<string>();
+      roles.add(item.role);
+      rolesByDispute.set(item.disputeId, roles);
+    }
     const now = new Date();
     const priority = (row: typeof rows[number]) => row.status === 'READY_FOR_REVIEW'
       || (row.status === 'EVIDENCE_COLLECTION' && row.evidenceDeadlineAt <= now) ? 0 : row.status === 'EVIDENCE_COLLECTION' ? 1 : 2;
-    return rows.sort((a, b) => priority(a) - priority(b)).map((row) => AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...row, matchVersion: row.match.version }))));
+    return rows.sort((a, b) => priority(a) - priority(b)).map((row) => {
+      const present = rolesByDispute.get(row.id);
+      const missingRoles = (['SUBMITTER', 'OPPONENT'] as const).filter((role) => !present?.has(role));
+      return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...row, matchVersion: row.match.version, missingRoles })));
+    });
   }
 
   async detail(adminId: string, leagueId: string, disputeId: string) {

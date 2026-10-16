@@ -62,6 +62,7 @@ describe('LeaguesService', () => {
 
     expect(created).toMatchObject({
       name: input.name,
+      resultEvidenceRequired: false,
       defaultSuperCapacity: 23,
       defaultChampionCapacity: 18,
       defaultPromotionCount: 4,

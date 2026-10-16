@@ -65,6 +65,17 @@ export class AdminLeagueWorkspaceController {
   ) {
     return this.leagues.get(leagueId);
   }
+
+  @Patch()
+  update(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(UpdateLeagueRequestSchema)) body: UpdateLeagueRequest
+  ) {
+    if (!key?.trim()) throw new AdminError('IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key header is required', 400);
+    return this.leagues.update(admin.id, leagueId, body, key);
+  }
 }
 
 @Controller('admin/leagues/:leagueId/users')

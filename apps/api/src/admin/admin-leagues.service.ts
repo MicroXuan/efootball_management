@@ -81,6 +81,9 @@ export class AdminLeaguesService {
     });
     if (!visible) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
     return this.receipts.execute(actorAdminId, `admin.league.update:${leagueId}`, key, async (transaction) => {
+      const before = input.resultEvidenceRequired !== undefined
+        ? await transaction.league.findFirst({ where: { id: leagueId, isDeleted: false }, select: { resultEvidenceRequired: true } })
+        : null;
       const result = await transaction.league.updateMany({
         where: { id: leagueId, version: input.expectedVersion, isDeleted: false },
         data: {
@@ -111,9 +114,12 @@ export class AdminLeaguesService {
         action: 'admin.league.update',
         resourceType: 'League',
         resourceId: leagueId,
-        metadata: Object.fromEntries(
-          Object.entries(input).filter(([keyName]) => keyName !== 'expectedVersion')
-        )
+        metadata: {
+          ...Object.fromEntries(Object.entries(input).filter(([keyName]) => keyName !== 'expectedVersion')),
+          ...(input.resultEvidenceRequired !== undefined
+            ? { previousResultEvidenceRequired: before?.resultEvidenceRequired ?? null }
+            : {})
+        }
       });
       return this.detail(league);
     });

@@ -73,7 +73,8 @@ export const MatchResultDisputeResponseSchema = z.object({
 
 // Administrator mutations use the match token, independently of the dispute's own version.
 export const AdminMatchResultDisputeResponseSchema = MatchResultDisputeResponseSchema.extend({
-  matchVersion: ExpectedVersionSchema
+  matchVersion: ExpectedVersionSchema,
+  missingRoles: z.array(z.enum(['SUBMITTER', 'OPPONENT'])).optional()
 });
 export const AdminMatchResultDisputeListResponseSchema = z.array(AdminMatchResultDisputeResponseSchema);
 

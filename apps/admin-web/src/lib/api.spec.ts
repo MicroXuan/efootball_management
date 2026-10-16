@@ -70,6 +70,22 @@ describe('AdminApiClient', () => {
     expect(init.headers).not.toEqual(expect.objectContaining({ 'Content-Type': expect.any(String) }));
   });
 
+  it('authenticates local evidence objects without sending tokens to external signed URLs', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(new Blob(['image'], { type: 'image/png' })));
+    const client = new AdminApiClient({ fetcher });
+    client.accept(auth('admin-access-token', 'r'.repeat(32)));
+    const file = new File(['image'], 'evidence.png', { type: 'image/png' });
+    await client.transferEvidence('/v1/admin/leagues/league-1/result-evidence/objects/key-1', file);
+    await client.transferEvidence('http://localhost:3000/v1/admin/leagues/league-1/result-evidence/objects/key-2', file);
+    await client.transferEvidence('https://storage.example/signed-upload', file);
+    expect(fetcher).toHaveBeenNthCalledWith(1, '/v1/admin/leagues/league-1/result-evidence/objects/key-1',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer admin-access-token' }) }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, '/v1/admin/leagues/league-1/result-evidence/objects/key-2',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer admin-access-token' }) }));
+    expect(fetcher).toHaveBeenNthCalledWith(3, 'https://storage.example/signed-upload',
+      expect.objectContaining({ headers: expect.not.objectContaining({ Authorization: expect.any(String) }) }));
+  });
+
   it('omits the admin token when a public request explicitly skips authentication', async () => {
     const fetcher = vi.fn().mockResolvedValue(ok({ ok: true }));
     const client = new AdminApiClient({ fetcher });

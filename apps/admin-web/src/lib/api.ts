@@ -42,6 +42,7 @@ export interface AdminApi {
   onSessionExpired(listener: () => void): () => void;
   request<T>(path: string, options: RequestOptions<T>): Promise<T>;
   upload?<T>(path: string, file: File, schema: z.ZodType<T>): Promise<T>;
+  transferEvidence?(url: string, file?: File, headers?: Record<string, string>): Promise<Blob | void>;
 }
 
 export class AdminApiClient implements AdminApi {
@@ -119,6 +120,28 @@ export class AdminApiClient implements AdminApi {
     const formData = new FormData();
     formData.append('file', file);
     return this.send(path, { method: 'POST', body: formData, schema }, true);
+  }
+
+  async transferEvidence(url: string, file?: File, headers: Record<string, string> = {}): Promise<Blob | void> {
+    const target = new URL(url, typeof window === 'undefined' ? 'http://localhost' : window.location.href);
+    const privateAdminRoute = target.pathname.includes('/v1/admin/leagues/')
+      && target.pathname.includes('/result-evidence/objects/');
+    const requestUrl = privateAdminRoute ? `${this.baseUrl}${target.pathname}${target.search}` : url;
+    const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
+    const run = () => this.fetcher(requestUrl, {
+      method: file ? 'PUT' : 'GET',
+      headers: { ...headers, ...(file && !hasContentType ? { 'Content-Type': file.type } : {}),
+        ...(privateAdminRoute && this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}) },
+      ...(file ? { body: file } : {}),
+      cache: 'no-store'
+    });
+    let response = await run();
+    if (response.status === 401 && privateAdminRoute && this.readRefreshToken()) {
+      await this.refresh();
+      response = await run();
+    }
+    if (!response.ok) throw new ApiError({ status: response.status, code: 'EVIDENCE_TRANSFER_FAILED' });
+    return file ? undefined : response.blob();
   }
 
   private me(): Promise<AdminMeResponse> {

@@ -14,7 +14,7 @@ import { CupProgressionService } from './cup-progression.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
-import { Prisma } from '../generated/prisma/client.js';
+import type { Prisma } from '../generated/prisma/client.js';
 
 describe('administrator arbitration', () => {
   const { prisma, users, disputes, rejected, fixture, upload } = disputeFixture();
@@ -202,7 +202,9 @@ describe('administrator arbitration', () => {
     await prisma.competition.updateMany({ where: { id: { in: [b.competition.id, c.competition.id] } }, data: { seasonId } });
     await prisma.matchResultDispute.update({ where: { id: b.dispute!.id }, data: { evidenceDeadlineAt: new Date(0) } });
     await prisma.matchResultDispute.update({ where: { id: c.dispute!.id }, data: { status: 'READY_FOR_REVIEW' } });
-    expect((await service.list(adminId, a.leagueId)).map((row) => row.id)).toEqual([b.dispute!.id, c.dispute!.id, a.dispute!.id]);
+    const queue = await service.list(adminId, a.leagueId);
+    expect(queue.map((row) => row.id)).toEqual([b.dispute!.id, c.dispute!.id, a.dispute!.id]);
+    expect(queue[0]).toMatchObject({ missingRoles: expect.arrayContaining(['SUBMITTER', 'OPPONENT']), evidence: [], timeline: [] });
     await prisma.competitionStage.update({ where: { id: b.stage.id }, data: { status: 'DRAFT' } });
     expect((await service.list(adminId, a.leagueId)).map((row) => row.id)).toEqual([c.dispute!.id, a.dispute!.id]);
     await expect(service.resolve(adminId, b.leagueId, a.dispute!.id, useScore)).rejects.toMatchObject({ response: { code: 'DISPUTE_NOT_FOUND' } });
