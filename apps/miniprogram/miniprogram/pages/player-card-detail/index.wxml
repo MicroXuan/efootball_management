@@ -12,7 +12,7 @@
     <text class="state-code">连接中断</text>
     <text class="state-title">详情加载失败</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="back-button" bindtap="retry">重新加载</button>
+    <button class="back-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
 
   <block wx:else>

@@ -115,6 +115,6 @@
   <loading-state wx:if="{{state === 'loading'}}" label="正在加载身份资料" />
   <view wx:else class="state-card">
     <text class="state-code">身份读取失败</text><text class="state-title">暂时无法加载</text>
-    <text class="state-copy">{{errorMessage}}</text><button class="outline-button" bindtap="loadPage">重新加载</button>
+    <text class="state-copy">{{errorMessage}}</text><button class="outline-button efm-retry-button" bindtap="loadPage">重新加载</button>
   </view>
 </view>

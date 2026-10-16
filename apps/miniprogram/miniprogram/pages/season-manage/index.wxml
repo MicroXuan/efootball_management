@@ -4,7 +4,7 @@
     <button wx:if="{{league.capabilities.canManage}}" class="text-button" bindtap="editLeague">联赛规则</button>
   </view>
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取报名工作台" />
-  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">工作台暂时不可用</text><text class="error">{{errorMessage}}</text><button class="outline" bindtap="loadPage">重新加载</button></view>
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="state-title">工作台暂时不可用</text><text class="error">{{errorMessage}}</text><button class="outline efm-retry-button" bindtap="loadPage">重新加载</button></view>
   <block wx:else>
     <view class="league-line"><text>{{league.shortName}}</text><text>{{league.name}}</text><text class="authority">管理员</text></view>
 

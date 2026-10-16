@@ -29,7 +29,7 @@
     <text class="state-code">离线 · 可重试</text>
     <text class="state-title">暂时无法读取球员库</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="retry-button" bindtap="retry">重新加载</button>
+    <button class="retry-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
 
   <view wx:elif="{{!loading && cards.length === 0}}" class="catalog-state">
@@ -51,7 +51,7 @@
       </view>
     </view>
     <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}} · 点击重试</text>
-    <button wx:if="{{errorMessage}}" class="retry-link" bindtap="retry">重新加载</button>
+    <button wx:if="{{errorMessage}}" class="retry-link efm-retry-button" bindtap="retry">重新加载</button>
     <loading-state wx:if="{{loadingMore}}" label="继续加载" />
     <text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部球员卡 —</text>
   </view>

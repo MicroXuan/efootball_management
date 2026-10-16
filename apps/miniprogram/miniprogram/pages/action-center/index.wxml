@@ -9,7 +9,7 @@
   <view wx:elif="{{state === 'error'}}" class="state-card">
     <text class="state-title">暂时无法加载待办</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="retry-button" bindtap="retry">重新加载</button>
+    <button class="retry-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
   <view wx:elif="{{view.empty}}" class="state-card state-card--empty">
     <text class="state-title">当前没有待办</text>

@@ -3,7 +3,7 @@
 
   <view wx:elif="{{state === 'error'}}" class="panel error-panel">
     <text>{{errorMessage}}</text>
-    <button bindtap="loadPage">重新加载</button>
+    <button class="efm-retry-button" bindtap="loadPage">重新加载</button>
   </view>
 
   <block wx:else>

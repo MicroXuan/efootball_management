@@ -17,7 +17,7 @@
     <text class="state-code">连接中断</text>
     <text class="state-title">赛事数据暂时不可用</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="outline-button" bindtap="retry">重新加载</button>
+    <button class="outline-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
   <view wx:elif="{{!loading && items.length === 0}}" class="state-panel">
     <text class="state-code">{{emptyCode}}</text>

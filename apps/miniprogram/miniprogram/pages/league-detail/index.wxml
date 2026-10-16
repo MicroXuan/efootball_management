@@ -4,7 +4,7 @@
     <text class="state-code">赛季读取失败</text>
     <text class="state-title">暂时无法读取联赛</text>
     <text class="state-copy">{{errorMessage}}</text>
-    <button class="outline-button" bindtap="loadPage">重新加载</button>
+    <button class="outline-button efm-retry-button" bindtap="loadPage">重新加载</button>
   </view>
   <block wx:else>
     <view class="league-hero league-hero--compact">

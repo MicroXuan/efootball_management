@@ -1,6 +1,6 @@
 <view class="page-shell">
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员详情" />
-  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="section-title">暂时无法读取</text><text class="muted">{{errorMessage}}</text><button class="outline-button" bindtap="loadDetail">重新加载</button></view>
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text class="section-title">暂时无法读取</text><text class="muted">{{errorMessage}}</text><button class="outline-button efm-retry-button" bindtap="loadDetail">重新加载</button></view>
   <block wx:else>
     <view class="player-hero">
       <view class="hero-top"><view class="rating-tile"><text>{{player.overallLabel}}</text><text>{{player.position}}</text></view><view class="hero-copy"><view class="name-row"><text class="player-name">{{player.playerName}}</text><text wx:if="{{player.showForcedTransferBadge}}" class="forced-badge">本赛季强报</text></view><text class="muted">{{player.nationality || '国籍未知'}} · {{player.club || '俱乐部未知'}}</text><text class="card-name">{{player.card.cardName}}</text></view></view>

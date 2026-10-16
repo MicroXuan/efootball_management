@@ -7,7 +7,7 @@
   <loading-state wx:if="{{loading}}" label="正在读取积分榜" />
   <view wx:elif="{{errorMessage}}" class="state-card">
     <text class="state-kicker">读取失败</text><text class="state-title">暂时无法打开积分榜</text>
-    <text class="state-copy">{{errorMessage}}</text><button class="retry" bindtap="retry">重新加载</button>
+    <text class="state-copy">{{errorMessage}}</text><button class="retry efm-retry-button" bindtap="retry">重新加载</button>
   </view>
   <block wx:else>
     <scroll-view class="stage-tabs" scroll-x enhanced show-scrollbar="{{false}}">
