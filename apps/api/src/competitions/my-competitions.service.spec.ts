@@ -28,6 +28,9 @@ describe('MyCompetitionsService', () => {
   afterEach(async () => {
     await prisma.standingsRow.deleteMany({ where: { snapshot: { competitionId: { in: competitionIds } } } });
     await prisma.standingsSnapshot.deleteMany({ where: { competitionId: { in: competitionIds } } });
+    await prisma.matchResultEvent.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
+    await prisma.matchResultEvidence.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
+    await prisma.matchResultEvidenceUpload.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.competitionMatch.updateMany({ where: { stage: { competitionId: { in: competitionIds } } }, data: { officialResultVersionId: null } });
     await prisma.matchResultVersion.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: competitionIds } } } });
@@ -130,12 +133,25 @@ describe('MyCompetitionsService', () => {
     await prisma.matchResultVersion.create({ data: {
       matchId: confirm.id, version: 1, homeScore: 0, awayScore: 2, submittedById: opponentId, submissionSide: 'AWAY'
     } });
+    const deadline = new Date('2026-10-16T12:00:00.000Z');
+    await prisma.competitionMatch.update({ where: { id: confirm.id }, data: { resultConfirmationDeadlineAt: deadline } });
+    await prisma.matchResultEvent.create({ data: {
+      matchId: confirm.id, type: 'RESULT_SUBMITTED', eventKey: `submit:${confirm.id}:1`,
+      actorType: 'USER', actorUserId: opponentId, occurredAt: new Date('2026-10-15T12:00:00.000Z'),
+      metadata: { homeScore: 0, awayScore: 2, uploadUrl: 'https://private.example/evidence', objectKey: 'private/evidence.png' }
+    } });
 
     const page = await service.listMatches(userId, { limit: 10 });
     expect(page.items.map(({ match }) => match.id)).toEqual([submit.id, wait.id, confirm.id, done.id]);
     expect(page.items.map(({ action }) => action)).toEqual(['SUBMIT', 'WAIT', 'CONFIRM', 'DONE']);
     expect(page.items.find(({ action }) => action === 'WAIT')?.actionableResultVersion).toBeNull();
     expect(page.items.find(({ action }) => action === 'CONFIRM')?.actionableResultVersion?.submittedByMe).toBe(false);
+    expect(page.items.find(({ action }) => action === 'CONFIRM')).toMatchObject({
+      confirmationDeadlineAt: deadline.toISOString(), evidenceRequired: false, disputeSummary: null,
+      timeline: [{ type: 'RESULT_SUBMITTED', actorUserId: opponentId, metadata: { homeScore: 0, awayScore: 2 } }]
+    });
+    expect(JSON.stringify(page.items)).not.toContain('objectKey');
+    expect(JSON.stringify(page.items)).not.toContain('private.example');
 
     await prisma.competition.update({ where: { id: competition.id }, data: { status: 'SCHEDULED' } });
     const scheduled = await service.listMatches(userId, { limit: 10 });
@@ -148,7 +164,7 @@ describe('MyCompetitionsService', () => {
   it('shows a season-team cup registration and its next match in my dashboard', async () => {
     const league = await prisma.league.create({ data: {
       name: '测试杯赛联赛', shortName: '杯赛', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL',
-      createdById: managerId
+      createdById: managerId, resultEvidenceRequired: true
     } });
     leagueIds.push(league.id);
     const season = await prisma.leagueSeason.create({ data: {
@@ -238,6 +254,7 @@ describe('MyCompetitionsService', () => {
     });
     const matches = await service.listMatches(userId, { limit: 10 });
     expect(matches.items).toHaveLength(2);
+    expect(matches.items[0]?.evidenceRequired).toBe(true);
     expect(matches.items[0]).toMatchObject({
       myParticipantId: mine.id,
       action: 'SUBMIT',

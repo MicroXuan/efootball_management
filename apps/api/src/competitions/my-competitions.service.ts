@@ -15,15 +15,29 @@ import { PrismaService } from '../database/prisma.service.js';
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
-    stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } };
+    stage: { include: { competition: { include: { _count: { select: { participants: true } }; season: { include: { league: true } } } } } };
     homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true; teamNameSnapshot: true; teamNumberSnapshot: true; teamLogoUrlSnapshot: true; leagueTeam: { select: { status: true; ownerAlias: true; teamNumber: true; name: true; logoUrl: true } } } } } };
     awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true; teamNameSnapshot: true; teamNumberSnapshot: true; teamLogoUrlSnapshot: true; leagueTeam: { select: { status: true; ownerAlias: true; teamNumber: true; name: true; logoUrl: true } } } } } };
     officialResultVersion: true;
     resultVersions: true;
+    resultDisputes: true;
+    resultEvents: true;
   };
 }>;
 
 type MyMatchAction = 'SUBMIT' | 'CONFIRM' | 'WAIT' | 'DONE';
+
+function publicAuditValue(value: unknown): unknown {
+  if (typeof value === 'string' && /(?:https?|s3|cos|cloudbase):\/\//i.test(value)) return undefined;
+  if (Array.isArray(value)) return value.map(publicAuditValue).filter((item) => item !== undefined);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !/(?:url|object.?key|storage.?key|token|signature)/i.test(key))
+      .map(([key, item]) => [key, publicAuditValue(item)])
+      .filter(([, item]) => item !== undefined));
+  }
+  return value;
+}
 
 @Injectable()
 export class MyCompetitionsService {
@@ -86,11 +100,13 @@ export class MyCompetitionsService {
         ]
       },
       include: {
-        stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
+        stage: { include: { competition: { include: { _count: { select: { participants: true } }, season: { include: { league: true } } } } } },
         homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, logoUrl: true } } } } } },
         awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, logoUrl: true } } } } } },
         officialResultVersion: true,
-        resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
+        resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } },
+        resultDisputes: { orderBy: { createdAt: 'desc' }, take: 1 },
+        resultEvents: { orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] }
       }
     });
     records.sort((left, right) => this.compareMatches(left, right));
@@ -118,7 +134,23 @@ export class MyCompetitionsService {
           competition: this.summary(record.stage.competition, record.stage.competition._count.participants),
           myParticipantId,
           action,
-          actionableResultVersion: actionable
+          actionableResultVersion: actionable,
+          confirmationDeadlineAt: record.resultConfirmationDeadlineAt?.toISOString() ?? null,
+          evidenceRequired: record.stage.competition.season?.league.resultEvidenceRequired ?? false,
+          disputeSummary: record.resultDisputes[0] ? {
+            id: record.resultDisputes[0].id,
+            status: record.resultDisputes[0].status,
+            trigger: record.resultDisputes[0].trigger,
+            evidenceDeadlineAt: record.resultDisputes[0].evidenceDeadlineAt.toISOString()
+          } : null,
+          timeline: record.resultEvents.map((event) => ({
+            id: event.id, matchId: event.matchId, disputeId: event.disputeId,
+            resultVersionId: event.resultVersionId, type: event.type,
+            actorType: event.actorType, actorUserId: event.actorUserId, actorAdminId: event.actorAdminId,
+            metadata: event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata)
+              ? publicAuditValue(event.metadata) as Record<string, unknown> : null,
+            occurredAt: event.occurredAt.toISOString()
+          }))
         };
       }),
       nextCursor
@@ -135,11 +167,13 @@ export class MyCompetitionsService {
         OR: [{ homeParticipantId: participantId }, { awayParticipantId: participantId }]
       },
       include: {
-        stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
+        stage: { include: { competition: { include: { _count: { select: { participants: true } }, season: { include: { league: true } } } } } },
         homeParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, logoUrl: true } } } } } },
         awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, logoUrl: true } } } } } },
         officialResultVersion: true,
-        resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } }
+        resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } },
+        resultDisputes: { orderBy: { createdAt: 'desc' }, take: 1 },
+        resultEvents: { orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] }
       }
     });
     return records.sort((left, right) => this.compareMatches(left, right));

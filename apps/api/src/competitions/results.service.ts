@@ -17,10 +17,14 @@ import { LeagueVisibilityService } from '../league-visibility/league-visibility.
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
+import { MatchResultEventsService } from './match-result-events.service.js';
+
+const CONFIRMATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   include: {
-    stage: { include: { competition: true } };
+    stage: { include: { competition: { include: { season: { include: { league: true } } } } } };
     homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
     awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } };
     officialResultVersion: true;
@@ -30,6 +34,7 @@ type MatchRecord = Prisma.CompetitionMatchGetPayload<{
 @Injectable()
 export class ResultsService {
   private readonly visibility: LeagueVisibilityService;
+  private readonly events: MatchResultEventsService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -39,9 +44,11 @@ export class ResultsService {
     @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
     @Optional() @Inject(AdminMutationReceiptService) private readonly adminReceipts?: AdminMutationReceiptService,
     @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService,
-    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService,
+    @Optional() @Inject(MatchResultEventsService) events?: MatchResultEventsService
   ) {
     this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+    this.events = events ?? new MatchResultEventsService();
   }
 
   async submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
@@ -52,6 +59,10 @@ export class ResultsService {
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
       this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
+      if (match.stage.competition.season?.league.resultEvidenceRequired && !input.evidenceUploadId) {
+        throw new CompetitionError('RESULT_EVIDENCE_REQUIRED', 'Result evidence is required by this league', 400);
+      }
+      const now = new Date();
       const submissionSide = this.side(match, userId);
       const created = await transaction.matchResultVersion.create({
         data: {
@@ -65,9 +76,39 @@ export class ResultsService {
       });
       const updated = await transaction.competitionMatch.updateMany({
         where: { id: matchId, version: input.expectedVersion },
-        data: { status: 'PENDING_CONFIRMATION', version: { increment: 1 } }
+        data: {
+          status: 'PENDING_CONFIRMATION', version: { increment: 1 },
+          resultConfirmationDeadlineAt: new Date(now.getTime() + CONFIRMATION_WINDOW_MS)
+        }
       });
       if (updated.count !== 1) throw this.versionConflict();
+      if (input.evidenceUploadId) {
+        const claimed = await transaction.matchResultEvidenceUpload.updateMany({
+          where: {
+            id: input.evidenceUploadId, matchId, uploadedByUserId: userId,
+            role: 'SUBMITTER', status: 'UPLOADED', resultVersionId: null, disputeId: null
+          },
+          data: { status: 'CONSUMED', resultVersionId: created.id, consumedAt: now }
+        });
+        if (claimed.count !== 1) {
+          throw new CompetitionError('EVIDENCE_UPLOAD_INVALID', 'Submitter evidence upload is unavailable', 409);
+        }
+        const upload = await transaction.matchResultEvidenceUpload.findUniqueOrThrow({
+          where: { id: input.evidenceUploadId }
+        });
+        await transaction.matchResultEvidence.create({
+          data: {
+            matchId, resultVersionId: created.id, uploadId: upload.id, role: 'SUBMITTER',
+            uploadedByUserId: userId, objectKey: upload.objectKey, mimeType: upload.mimeType,
+            byteSize: upload.byteSize, checksumSha256: upload.checksumSha256
+          }
+        });
+      }
+      await this.events.append(transaction, {
+        matchId, resultVersionId: created.id, type: 'RESULT_SUBMITTED',
+        eventKey: `result:${created.id}:submitted`, actorType: 'USER', actorUserId: userId,
+        occurredAt: now, metadata: { homeScore: created.homeScore, awayScore: created.awayScore }
+      });
       return this.response(created, userId);
     });
   }
@@ -87,14 +128,27 @@ export class ResultsService {
       if (proposal.submittedById === userId) {
         throw new CompetitionError('RESULT_SELF_CONFIRMATION_FORBIDDEN', 'Submitter cannot confirm their own result', 409);
       }
+      const now = new Date();
       const official = await transaction.matchResultVersion.update({
         where: { id: proposal.id }, data: { status: 'OFFICIAL' }
       });
       const updated = await transaction.competitionMatch.updateMany({
         where: { id: matchId, version: input.expectedVersion, officialResultVersionId: null },
-        data: { officialResultVersionId: official.id, status: 'CONFIRMED', version: { increment: 1 } }
+        data: {
+          officialResultVersionId: official.id, status: 'CONFIRMED', version: { increment: 1 },
+          resultConfirmationDeadlineAt: null
+        }
       });
       if (updated.count !== 1) throw this.versionConflict();
+      await transaction.matchResultEvidence.updateMany({
+        where: { matchId, status: 'ACTIVE' },
+        data: { expiresAt: new Date(now.getTime() + EVIDENCE_RETENTION_MS) }
+      });
+      await this.events.append(transaction, {
+        matchId, resultVersionId: official.id, type: 'RESULT_CONFIRMED',
+        eventKey: `result:${official.id}:confirmed`, actorType: 'USER', actorUserId: userId,
+        occurredAt: now
+      });
       await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore);
       return this.response(official, userId);
     });
@@ -117,14 +171,20 @@ export class ResultsService {
       if (proposal.submittedById === userId) {
         throw new CompetitionError('RESULT_SELF_REJECTION_FORBIDDEN', 'Submitter cannot reject their own result', 409);
       }
+      const now = new Date();
       const rejected = await transaction.matchResultVersion.update({
         where: { id: proposal.id }, data: { status: 'REJECTED', reason: input.reason.trim() }
       });
       const updated = await transaction.competitionMatch.updateMany({
         where: { id: matchId, version: input.expectedVersion },
-        data: { status: 'AWAITING_RESULT', version: { increment: 1 } }
+        data: { status: 'AWAITING_RESULT', version: { increment: 1 }, resultConfirmationDeadlineAt: null }
       });
       if (updated.count !== 1) throw this.versionConflict();
+      await this.events.append(transaction, {
+        matchId, resultVersionId: rejected.id, type: 'RESULT_REJECTED',
+        eventKey: `result:${rejected.id}:rejected`, actorType: 'USER', actorUserId: userId,
+        occurredAt: now, metadata: { reason: input.reason.trim() }
+      });
       return this.response(rejected, userId);
     });
   }
@@ -273,7 +333,7 @@ export class ResultsService {
     const match = await transaction.competitionMatch.findUnique({
       where: { id: matchId },
       include: {
-        stage: { include: { competition: true } },
+        stage: { include: { competition: { include: { season: { include: { league: true } } } } } },
         homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
         awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
         officialResultVersion: true

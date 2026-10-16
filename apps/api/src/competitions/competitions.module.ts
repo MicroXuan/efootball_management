@@ -27,6 +27,7 @@ import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
 import { StorageModule } from '../storage/storage.module.js';
 import { ResultEvidenceController } from './result-evidence.controller.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
+import { MatchResultEventsService } from './match-result-events.service.js';
 
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({}), StorageModule],
@@ -56,6 +57,7 @@ import { ResultEvidenceStorageService } from './result-evidence-storage.service.
     CupProgressionService,
     CupBracketQueriesService,
     ResultEvidenceStorageService,
+    MatchResultEventsService,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],
@@ -72,7 +74,8 @@ import { ResultEvidenceStorageService } from './result-evidence-storage.service.
     CupBracketsService,
     CupProgressionService,
     CupBracketQueriesService,
-    ResultEvidenceStorageService
+    ResultEvidenceStorageService,
+    MatchResultEventsService
   ]
 })
 export class CompetitionsModule {}

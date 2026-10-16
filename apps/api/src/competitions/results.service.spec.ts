@@ -15,6 +15,7 @@ describe('ResultsService', () => {
   const service = new ResultsService(prisma, new MutationReceiptService(prisma), standings, new CupProgressionService());
   const users = [randomUUID(), randomUUID(), randomUUID(), randomUUID()] as const;
   const competitionIds: string[] = [];
+  const leagueIds: string[] = [];
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -31,6 +32,9 @@ describe('ResultsService', () => {
     await prisma.competitionMatch.updateMany({
       where: { stage: { competitionId: { in: competitionIds } } }, data: { officialResultVersionId: null }
     });
+    await prisma.matchResultEvent.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
+    await prisma.matchResultEvidence.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
+    await prisma.matchResultEvidenceUpload.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.matchResultVersion.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: competitionIds } } } });
     await prisma.competitionStage.deleteMany({ where: { competitionId: { in: competitionIds } } });
@@ -39,7 +43,10 @@ describe('ResultsService', () => {
     await prisma.gameAccount.deleteMany({ where: { userId: { in: [users[0], users[1]] } } });
     await prisma.competitionRuleVersion.deleteMany({ where: { competitionId: { in: competitionIds } } });
     await prisma.competition.deleteMany({ where: { id: { in: competitionIds } } });
+    await prisma.leagueSeason.deleteMany({ where: { leagueId: { in: leagueIds } } });
+    await prisma.league.deleteMany({ where: { id: { in: leagueIds } } });
     competitionIds.splice(0);
+    leagueIds.splice(0);
   });
 
   afterAll(async () => {
@@ -88,6 +95,95 @@ describe('ResultsService', () => {
     return { competition, match, participants };
   }
 
+  async function requireEvidence(competitionId: string) {
+    const league = await prisma.league.create({ data: {
+      name: '截图联赛', shortName: '截图', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL',
+      createdById: users[3], resultEvidenceRequired: true
+    } });
+    leagueIds.push(league.id);
+    const season = await prisma.leagueSeason.create({ data: {
+      leagueId: league.id, seasonNumber: 1, displayName: 'S1', isFirstSeason: true,
+      registrationOpensAt: new Date('2026-08-01'), registrationClosesAt: new Date('2026-08-10'),
+      startsAt: new Date('2026-08-11'), endsAt: new Date('2026-12-01'),
+      superCapacity: 2, championCapacity: 2, promotionCount: 1, status: 'IN_PROGRESS', createdById: users[3]
+    } });
+    await prisma.competition.update({ where: { id: competitionId }, data: { seasonId: season.id } });
+  }
+
+  async function uploadedEvidence(matchId: string, uploadedByUserId = users[0]) {
+    return prisma.matchResultEvidenceUpload.create({ data: {
+      matchId, role: 'SUBMITTER', uploadedByUserId,
+      objectKey: `match-result-evidence/${randomUUID()}.png`, mimeType: 'image/png', byteSize: 8,
+      checksumSha256: 'a'.repeat(64), status: 'UPLOADED', completedAt: new Date('2026-10-15T10:00:00.000Z'),
+      expiresAt: new Date('2026-10-15T10:10:00.000Z')
+    } });
+  }
+
+  it('submits without an image and records one pending result with an exact 24-hour deadline', async () => {
+    const { match } = await fixture();
+    const key = randomUUID();
+    const proposal = await service.submit(users[0], match.id, { homeScore: 2, awayScore: 1, expectedVersion: 1 }, key);
+    const retry = await service.submit(users[0], match.id, { homeScore: 2, awayScore: 1, expectedVersion: 1 }, key);
+    const [stored, events] = await Promise.all([
+      prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } }),
+      prisma.matchResultEvent.findMany({ where: { matchId: match.id } })
+    ]);
+    expect(retry).toEqual(proposal);
+    expect(stored.status).toBe('PENDING_CONFIRMATION');
+    expect(stored.officialResultVersionId).toBeNull();
+    expect(events).toMatchObject([{ type: 'RESULT_SUBMITTED', actorType: 'USER', actorUserId: users[0], resultVersionId: proposal.id }]);
+    expect(stored.resultConfirmationDeadlineAt?.getTime()).toBe(events[0]!.occurredAt.getTime() + 24 * 60 * 60 * 1000);
+    expect(await prisma.matchResultEvent.count({ where: { matchId: match.id } })).toBe(1);
+  });
+
+  it('requires and atomically consumes one submitter upload when the league requires evidence', async () => {
+    const { competition, match } = await fixture();
+    await requireEvidence(competition.id);
+    await expect(service.submit(users[0], match.id, { homeScore: 2, awayScore: 1, expectedVersion: 1 }, randomUUID()))
+      .rejects.toMatchObject({ response: { code: 'RESULT_EVIDENCE_REQUIRED' } });
+    const invalid = await uploadedEvidence(match.id, users[1]);
+    await expect(service.submit(users[0], match.id, {
+      homeScore: 2, awayScore: 1, evidenceUploadId: invalid.id, expectedVersion: 1
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'EVIDENCE_UPLOAD_INVALID' } });
+    const upload = await uploadedEvidence(match.id);
+    const input = { homeScore: 2, awayScore: 1, evidenceUploadId: upload.id, expectedVersion: 1 };
+    const key = randomUUID();
+    const proposal = await service.submit(users[0], match.id, input, key);
+    expect(await service.submit(users[0], match.id, input, key)).toEqual(proposal);
+    const evidence = await prisma.matchResultEvidence.findMany({ where: { matchId: match.id } });
+    expect(evidence).toMatchObject([{ uploadId: upload.id, resultVersionId: proposal.id, role: 'SUBMITTER', uploadedByUserId: users[0] }]);
+    expect(await prisma.matchResultEvidenceUpload.findUniqueOrThrow({ where: { id: upload.id } }))
+      .toMatchObject({ status: 'CONSUMED', resultVersionId: proposal.id });
+    expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'RESULT_SUBMITTED' } })).toBe(1);
+
+    const other = await uploadedEvidence(match.id);
+    await expect(service.submit(users[0], match.id, {
+      homeScore: 3, awayScore: 1, evidenceUploadId: other.id, expectedVersion: 1
+    }, randomUUID())).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(await prisma.matchResultEvidenceUpload.findUniqueOrThrow({ where: { id: other.id } })).toMatchObject({ status: 'UPLOADED' });
+    expect(await prisma.matchResultEvidence.count({ where: { matchId: match.id } })).toBe(1);
+    expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'RESULT_SUBMITTED' } })).toBe(1);
+  });
+
+  it('confirms with the opponent actor, clears the deadline, and retains evidence for exactly 90 days', async () => {
+    const { match } = await fixture();
+    const upload = await uploadedEvidence(match.id);
+    const proposal = await service.submit(users[0], match.id, {
+      homeScore: 2, awayScore: 1, evidenceUploadId: upload.id, expectedVersion: 1
+    }, randomUUID());
+    await service.confirm(users[1], match.id, proposal.version, { expectedVersion: 2 }, randomUUID());
+    const [stored, evidence, confirmed] = await Promise.all([
+      prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } }),
+      prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: upload.id } }),
+      prisma.matchResultEvent.findFirstOrThrow({ where: { matchId: match.id, type: 'RESULT_CONFIRMED' } })
+    ]);
+    expect(stored.status).toBe('CONFIRMED');
+    expect(stored.officialResultVersionId).toBe(proposal.id);
+    expect(stored.resultConfirmationDeadlineAt).toBeNull();
+    expect(confirmed).toMatchObject({ actorType: 'USER', actorUserId: users[1], resultVersionId: proposal.id });
+    expect(evidence.expiresAt?.getTime()).toBe(confirmed.occurredAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+  });
+
   it('enforces participant ownership, rejection reason, confirmation separation, and history', async () => {
     const { match } = await fixture();
     await expect(service.submit(users[2], match.id, { homeScore: 2, awayScore: 1, expectedVersion: 1 }, randomUUID()))
@@ -98,6 +194,10 @@ describe('ResultsService', () => {
     await expect(service.reject(users[1], match.id, proposal.version, { expectedVersion: 2, reason: '' }, randomUUID()))
       .rejects.toMatchObject({ response: { code: 'RESULT_REJECTION_REASON_REQUIRED' } });
     await service.reject(users[1], match.id, proposal.version, { expectedVersion: 2, reason: '比分不符' }, randomUUID());
+    expect(await prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } }))
+      .toMatchObject({ resultConfirmationDeadlineAt: null, status: 'AWAITING_RESULT' });
+    expect(await prisma.matchResultEvent.findFirstOrThrow({ where: { matchId: match.id, type: 'RESULT_REJECTED' } }))
+      .toMatchObject({ actorType: 'USER', actorUserId: users[1], resultVersionId: proposal.id, metadata: { reason: '比分不符' } });
     const second = await service.submit(users[0], match.id, { homeScore: 3, awayScore: 1, expectedVersion: 3 }, randomUUID());
     const official = await service.confirm(users[1], match.id, second.version, { expectedVersion: 4 }, randomUUID());
     expect(official.status).toBe('OFFICIAL');
@@ -178,7 +278,8 @@ describe('team match ownership', () => {
     ) => work(transaction)) };
     const service = new ResultsService(
       transaction as never, receipts as never, {} as never, {} as never,
-      { requireVisible: jest.fn(async () => null), notFound: jest.fn() } as never
+      { requireVisible: jest.fn(async () => null), notFound: jest.fn() } as never,
+      undefined, undefined, undefined, { append: jest.fn(async () => undefined) } as never
     );
     return { service };
   }
