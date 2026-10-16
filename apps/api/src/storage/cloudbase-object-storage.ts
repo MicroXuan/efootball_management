@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { ObjectStorage, StorageScope, StoredObject, StoredUploadInput } from './object-storage.js';
+import type { DirectUploadGrant, EvidenceMimeType, ObjectStorage, StorageScope, StoredObject, StoredObjectMetadata, StoredUploadInput } from './object-storage.js';
 
 export interface CloudBaseStorageClient {
   uploadFile(input: { cloudPath: string; fileContent: Buffer }): Promise<{ fileID: string }>;
   deleteFile(input: { fileList: string[] }): Promise<unknown>;
   downloadFile(input: { fileID: string }): Promise<{ fileContent: string | Buffer | undefined }>;
+  getUploadMetadata?(input: { cloudPath: string }): Promise<{ data: { url: string; token: string; authorization: string; fileId: string; cosFileId: string; download_url: string } }>;
+  getTempFileURL?(input: { fileList: Array<{ fileID: string; maxAge: number }> }): Promise<{ fileList: Array<{ code: string; fileID: string; tempFileURL: string }> }>;
+  getFileInfo?(input: { fileList: string[] }): Promise<{ fileList: Array<{ code: string; fileID: string; contentType?: string; mime?: string; size?: number }> }>;
 }
 
 export class CloudBaseObjectStorage implements ObjectStorage {
@@ -33,6 +36,44 @@ export class CloudBaseObjectStorage implements ObjectStorage {
 
   async delete(key: string): Promise<void> {
     await this.client.deleteFile({ fileList: [key] });
+  }
+
+  async createDirectUpload(scope: StorageScope, name: string, mimeType: EvidenceMimeType): Promise<DirectUploadGrant> {
+    if (scope !== 'match-result-evidence' || !/^[a-z0-9][a-z0-9-]{0,127}$/.test(name)) {
+      throw new Error('Invalid private storage object');
+    }
+    if (!this.client.getUploadMetadata) throw new Error('CloudBase direct upload is unavailable');
+    const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/png' ? 'png' : 'webp';
+    const cloudPath = `${scope}--${name}.${extension}`;
+    const { data } = await this.client.getUploadMetadata({ cloudPath });
+    return {
+      key: data.fileId,
+      uploadUrl: data.url,
+      headers: {
+        authorization: data.authorization,
+        Signature: data.authorization,
+        'x-cos-security-token': data.token,
+        'x-cos-meta-fileid': data.cosFileId,
+        key: encodeURIComponent(cloudPath),
+        'content-type': mimeType
+      }
+    };
+  }
+
+  async temporaryReadUrl(key: string, maxAgeSeconds: number): Promise<string> {
+    if (!this.client.getTempFileURL) throw new Error('CloudBase temporary reads are unavailable');
+    const result = await this.client.getTempFileURL({ fileList: [{ fileID: key, maxAge: maxAgeSeconds }] });
+    const file = result.fileList.find((entry) => entry.fileID === key && entry.code === 'SUCCESS');
+    if (!file?.tempFileURL) throw new Error('CloudBase object is unavailable');
+    return file.tempFileURL;
+  }
+
+  async inspect(key: string): Promise<StoredObjectMetadata | null> {
+    if (!this.client.getFileInfo) throw new Error('CloudBase object inspection is unavailable');
+    const result = await this.client.getFileInfo({ fileList: [key] });
+    const file = result.fileList.find((entry) => entry.fileID === key && entry.code === 'SUCCESS');
+    if (!file || !Number.isFinite(file.size)) return null;
+    return { mimeType: file.mime ?? file.contentType?.split(';')[0]?.trim() ?? '', size: file.size! };
   }
 
   publicUrlFor(key: string): string {

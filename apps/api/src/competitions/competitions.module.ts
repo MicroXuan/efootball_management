@@ -24,9 +24,12 @@ import { CupGroupsService } from './cup-groups.service.js';
 import { CupBracketsService } from './cup-brackets.service.js';
 import { CupProgressionService } from './cup-progression.service.js';
 import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
+import { StorageModule } from '../storage/storage.module.js';
+import { ResultEvidenceController } from './result-evidence.controller.js';
+import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
 
 @Module({
-  imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({})],
+  imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({}), StorageModule],
   controllers: [
     PublicCompetitionsController,
     MyDivisionStandingsController,
@@ -36,7 +39,8 @@ import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
     ResultsController,
     MyCompetitionsController,
     AdminCupCompetitionsController,
-    CupCompetitionsController
+    CupCompetitionsController,
+    ResultEvidenceController
   ],
   providers: [
     CompetitionsService,
@@ -51,6 +55,7 @@ import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
     CupBracketsService,
     CupProgressionService,
     CupBracketQueriesService,
+    ResultEvidenceStorageService,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],
@@ -66,7 +71,8 @@ import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
     CupGroupsService,
     CupBracketsService,
     CupProgressionService,
-    CupBracketQueriesService
+    CupBracketQueriesService,
+    ResultEvidenceStorageService
   ]
 })
 export class CompetitionsModule {}

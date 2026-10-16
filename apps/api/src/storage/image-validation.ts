@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { StoredUploadInput } from './object-storage.js';
 
 export const MAX_LEAGUE_IMAGE_BYTES = 2 * 1024 * 1024;
+export const MAX_RESULT_EVIDENCE_BYTES = 1_048_576;
 
 export interface BufferedUpload {
   buffer: Buffer;
@@ -18,6 +19,17 @@ export function validateLeagueImage(file: BufferedUpload | undefined): StoredUpl
 
 export function validateTeamCrest(file: BufferedUpload | undefined): StoredUploadInput {
   return validateImage(file, 'INVALID_TEAM_CREST', true);
+}
+
+export function validateResultEvidenceImage(file: BufferedUpload | undefined): StoredUploadInput {
+  if (!file?.buffer?.length || file.size !== file.buffer.length || file.size > MAX_RESULT_EVIDENCE_BYTES) {
+    throw new BadRequestException({ code: 'INVALID_RESULT_EVIDENCE', message: 'Evidence must be an image of at most 1 MiB' });
+  }
+  const detected = detectImage(file.buffer);
+  if (!detected || detected.mimeType !== file.mimetype) {
+    throw new BadRequestException({ code: 'INVALID_RESULT_EVIDENCE', message: 'Only valid JPEG, PNG, or WebP evidence is supported' });
+  }
+  return { buffer: file.buffer, size: file.size, ...detected };
 }
 
 function validateImage(
