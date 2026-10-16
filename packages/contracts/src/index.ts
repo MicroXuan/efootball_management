@@ -1,5 +1,6 @@
 export * from './admin-auth.js';
 export * from './admin.js';
+export * from './action-center.js';
 export * from './auth.js';
 export * from './common.js';
 export * from './competition.js';

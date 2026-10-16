@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
+  ActionCenterResponseSchema,
   AdminAccountSummarySchema,
   AcquirePlayerRequestSchema,
   AdminAuthResponseSchema,
@@ -113,6 +114,50 @@ import {
   StartPlatformSyncRequestSchema,
   derivePesdataPositionAutoBuild
 } from './index.js';
+
+describe('action center contracts', () => {
+  it('parses actionable transaction, forced-transfer, and auction projections', () => {
+    const response = ActionCenterResponseSchema.parse({
+      actionRequiredCount: 2,
+      items: [{
+        id: 'application:application-1', version: '2026-10-15T12:00:00.000Z',
+        source: 'TRANSACTION', section: 'ACTION_REQUIRED',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+        title: '购买申请需要重新报价', detail: '球员：劳塔罗', statusLabel: '需重新报价',
+        occurredAt: '2026-10-15T12:00:00.000Z',
+        route: '/pages/player-market/index?leagueId=league-1&view=mine'
+      }, {
+        id: 'forced:application-2', version: '2026-10-15T12:01:00.000Z',
+        source: 'FORCED_TRANSFER', section: 'STATUS_UPDATE',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+        title: '收到强报申请', detail: '对方球队强报球员', statusLabel: '等待管理员处理',
+        occurredAt: '2026-10-15T12:01:00.000Z',
+        route: '/pages/player-market/index?leagueId=league-1&view=public'
+      }, {
+        id: 'auction:batch-1', version: '2026-10-15T12:02:00.000Z',
+        source: 'AUCTION', section: 'ACTION_REQUIRED',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: null, teamId: randomUUID(),
+        title: '球员拍卖进行中', detail: '当前：劳塔罗', statusLabel: '拍卖中',
+        occurredAt: '2026-10-15T12:02:00.000Z', route: '/pages/auction-room/index?batchId=batch-1'
+      }]
+    });
+
+    assert.equal(response.items.length, 3);
+    assert.equal(response.actionRequiredCount, 2);
+  });
+
+  it('rejects non-miniprogram deep links', () => {
+    assert.throws(() => ActionCenterResponseSchema.parse({
+      actionRequiredCount: 0,
+      items: [{
+        id: 'bad', version: '2026-10-15T12:00:00.000Z', source: 'TRANSACTION', section: 'STATUS_UPDATE',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: null, teamId: null,
+        title: '状态更新', detail: '详情', statusLabel: '已更新',
+        occurredAt: '2026-10-15T12:00:00.000Z', route: 'https://example.com'
+      }]
+    }));
+  });
+});
 import {
   CreatePlayerAuctionBatchRequestSchema,
   PlaceMiniprogramAuctionBidRequestSchema,
