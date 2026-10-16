@@ -3,6 +3,18 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('profile template', () => {
+  it('places one cross-league action-center summary above the quick actions', () => {
+    const template = readFileSync(resolve(process.cwd(), 'miniprogram/pages/profile/index.wxml'), 'utf8')
+    const center = template.indexOf('class="action-center-entry"')
+    const quickActions = template.indexOf('class="quick-actions"')
+
+    expect(center).toBeGreaterThan(-1)
+    expect(quickActions).toBeGreaterThan(center)
+    expect(template).toContain('bindtap="openActionCenter"')
+    expect(template).toContain('{{actionCenter.attentionCount}}')
+    expect(template).toContain('wx:if="{{actionCenter.auctionCount}}"')
+  })
+
   it('presents the three high-frequency destinations as one compact action hub', () => {
     const template = readFileSync(resolve(process.cwd(), 'miniprogram/pages/profile/index.wxml'), 'utf8')
 

@@ -16,6 +16,8 @@ export type ActionCenterView = {
   empty: boolean
 }
 
+export type ActionCenterSourceAttention = Record<ActionCenterItem['source'], number>
+
 function taskView(item: ActionCenterItem, readVersions: ActionCenterReadVersions): ActionCenterTaskView {
   const source = {
     TRANSACTION: { marker: '交', label: '球员交易' },
@@ -49,4 +51,18 @@ export function actionCenterView(
     attentionCount: actionCenterAttentionCount(scoped, readVersions),
     empty: views.length === 0,
   }
+}
+
+export function actionCenterSourceAttention(
+  response: ActionCenterResponse,
+  readVersions: ActionCenterReadVersions,
+  leagueId = '',
+): ActionCenterSourceAttention {
+  const counts: ActionCenterSourceAttention = { TRANSACTION: 0, FORCED_TRANSFER: 0, AUCTION: 0 }
+  for (const item of response.items) {
+    if (leagueId && item.league.id !== leagueId) continue
+    const deservesAttention = item.section === 'ACTION_REQUIRED' || readVersions[item.id] !== item.version
+    if (deservesAttention) counts[item.source] += 1
+  }
+  return counts
 }

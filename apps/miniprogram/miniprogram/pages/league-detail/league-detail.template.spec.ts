@@ -5,6 +5,17 @@ import { describe, expect, it } from 'vitest'
 const markup = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.wxml'), 'utf8')
 
 describe('league detail module cards', () => {
+  it('surfaces current-league attention without duplicating business forms', () => {
+    const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
+
+    expect(markup).toContain('class="workspace-todo"')
+    expect(markup).toContain('bindtap="openActionCenter"')
+    expect(markup).toContain('{{leagueAttentionCount}} 项待关注')
+    expect(markup).toContain("marketAttentionCount ? marketAttentionCount + ' 项提醒' : module.stateLabel")
+    expect(markup).toContain("auctionAttentionCount ? auctionAttentionCount + ' 项提醒' : '实时开放'")
+    expect(page).toContain('/pages/action-center/index?leagueId=')
+  })
+
   it('keeps the compact hero below the runtime status bar', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
 

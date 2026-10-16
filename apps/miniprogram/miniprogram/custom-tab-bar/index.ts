@@ -1,4 +1,6 @@
-import { tabIndexForRoute, tabRouteForIndex } from './tabbar.viewmodel'
+import { actionCenterAttentionCount, loadActionCenter, readActionCenterVersions } from '../services/action-center'
+import { session } from '../services/session'
+import { attentionBadgeLabel, tabIndexForRoute, tabRouteForIndex } from './tabbar.viewmodel'
 
 type TabEvent = { currentTarget: { dataset: { index?: number } } }
 type TabLeaveAwarePage = {
@@ -8,6 +10,7 @@ type TabLeaveAwarePage = {
 Component({
   data: {
     selected: 0,
+    attentionBadge: '',
     items: [
       { text: '球员', icon: '/assets/icons/player.png', activeIcon: '/assets/icons/player-active.png' },
       { text: '联赛', icon: '/assets/icons/competition.png', activeIcon: '/assets/icons/competition-active.png' },
@@ -23,7 +26,25 @@ Component({
     },
   },
 
+  pageLifetimes: {
+    show() {
+      void this.refreshActionCenterBadge()
+    },
+  },
+
   methods: {
+    refreshActionCenterBadge() {
+      if (!session.getAccessToken()) {
+        this.setData({ attentionBadge: '' })
+        return Promise.resolve()
+      }
+      return loadActionCenter()
+        .then((response) => this.setData({
+          attentionBadge: attentionBadgeLabel(actionCenterAttentionCount(response, readActionCenterVersions())),
+        }))
+        .catch(() => this.setData({ attentionBadge: '' }))
+    },
+
     switchTab(event: TabEvent) {
       const index = Number(event.currentTarget.dataset.index)
       const url = tabRouteForIndex(index)

@@ -1,6 +1,6 @@
 import type { ActionCenterItem, ActionCenterResponse } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { actionCenterView } from './action-center.viewmodel'
+import { actionCenterSourceAttention, actionCenterView } from './action-center.viewmodel'
 
 const task = (id: string, section: ActionCenterItem['section'], leagueId = 'league-1'): ActionCenterItem => ({
   id, version: `2026-10-15T12:0${id.length}:00.000Z`, source: id.startsWith('auction') ? 'AUCTION' : 'TRANSACTION', section,
@@ -30,5 +30,18 @@ describe('action center view model', () => {
     expect(view.required).toEqual([])
     expect(view.updates.map(({ id }) => id)).toEqual(['other'])
     expect(view.attentionCount).toBe(1)
+  })
+
+  it('counts unread or actionable tasks per business source and league', () => {
+    expect(actionCenterSourceAttention(response, { auction: response.items[1]!.version })).toEqual({
+      TRANSACTION: 3,
+      FORCED_TRANSFER: 0,
+      AUCTION: 0,
+    })
+    expect(actionCenterSourceAttention(response, {}, 'league-1')).toEqual({
+      TRANSACTION: 2,
+      FORCED_TRANSFER: 0,
+      AUCTION: 1,
+    })
   })
 })
