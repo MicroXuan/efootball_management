@@ -365,7 +365,7 @@ describe('cup match results', () => {
       work: (client: typeof transaction) => Promise<unknown>
     ) => work(transaction)) };
     const standings = { recalculate: jest.fn(async () => ({})) };
-    const progression = { recordWinner: jest.fn(async () => undefined) };
+    const progression = { lockCompetition: jest.fn(async () => undefined), recordWinner: jest.fn(async () => undefined) };
     return {
       service: new ResultsService(
         transaction as never, receipts as never, standings as never, progression as never,
@@ -444,7 +444,7 @@ describe('league administrator match results', () => {
     const authorization = { requireLeagueAccess: jest.fn(async () => ({ id: 'admin-1' })) };
     const audit = { record: jest.fn(async () => ({})) };
     const service = new ResultsService(
-      transaction as never, {} as never, standings as never, {} as never,
+      transaction as never, {} as never, standings as never, new CupProgressionService(),
       { requireVisible: jest.fn(async () => 'league-1'), notFound: jest.fn(() => new Error('not found')) } as never,
       receipts as never,
       authorization as never,

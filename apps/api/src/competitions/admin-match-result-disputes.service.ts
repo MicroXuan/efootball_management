@@ -7,7 +7,7 @@ import { MatchResultDisputesService } from './match-result-disputes.service.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
 import { CompetitionError } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
-import type { Prisma } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 
 @Injectable()
 export class AdminMatchResultDisputesService {
@@ -56,7 +56,7 @@ export class AdminMatchResultDisputesService {
     const parsed = AdminResolveMatchResultDisputeRequestSchema.parse(input);
     const initial = await this.requireDispute(this.prisma, leagueId, disputeId);
     return this.prisma.$transaction(async (transaction) => {
-      await transaction.$queryRaw`SELECT id FROM competition_matches WHERE id = ${initial.matchId} FOR UPDATE`;
+      await this.results.lockForOfficialResult(transaction, initial.matchId);
       const now = new Date();
       await this.disputes.advanceMatch(transaction, initial.matchId, now);
       const dispute = await this.requireDispute(transaction, leagueId, disputeId);
@@ -68,7 +68,7 @@ export class AdminMatchResultDisputesService {
       return this.results.applyAdministratorResult(transaction, dispute.matchId, {
         ...parsed, homeScore: scores.homeScore, awayScore: scores.awayScore
       }, { adminId, leagueId }, now, parsed.decisionType);
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
 
   private async requireDispute(client: CompetitionTransaction | PrismaService, leagueId: string, id: string) {

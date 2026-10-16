@@ -14,6 +14,7 @@ import { CupProgressionService } from './cup-progression.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
+import { Prisma } from '../generated/prisma/client.js';
 
 describe('administrator arbitration', () => {
   const { prisma, users, disputes, rejected, fixture, upload } = disputeFixture();
@@ -53,6 +54,136 @@ describe('administrator arbitration', () => {
     return { ...data, leagueId: league.id, dispute };
   }
   const useScore = { decisionType: 'USE_SUBMITTED_SCORE' as const, reason: '  核验证据  ', expectedVersion: 3 };
+
+  function gate() {
+    let release!: () => void;
+    const promise = new Promise<void>((resolve) => { release = resolve; });
+    return { promise, release };
+  }
+  function observingPrisma(wrap: (tx: Prisma.TransactionClient) => Prisma.TransactionClient) {
+    return new Proxy(prisma, { get(target, key, receiver) {
+      if (key === '$transaction') return (work: (tx: Prisma.TransactionClient) => Promise<unknown>, options?: { isolationLevel?: Prisma.TransactionIsolationLevel }) =>
+        target.$transaction((tx) => work(wrap(tx)), options);
+      return Reflect.get(target, key, receiver);
+    } });
+  }
+  async function cupFixture(published: boolean) {
+    const a = await setup();
+    await prisma.competitionStage.update({ where: { id: a.stage.id }, data: { format: 'SINGLE_ELIMINATION', stageCode: 'SEMI_FINAL' } });
+    await prisma.matchResultDispute.update({ where: { id: a.dispute!.id }, data: { status: 'READY_FOR_REVIEW' } });
+    const previous = await prisma.matchResultVersion.create({ data: { matchId: a.match.id, version: 2, homeScore: 2, awayScore: 0,
+      submittedByAdminId: adminId, submissionSide: 'MANAGER', status: 'OFFICIAL', reason: '初始记录' } });
+    await prisma.competitionMatch.update({ where: { id: a.match.id }, data: { officialResultVersionId: previous.id } });
+    const third = await prisma.competitionParticipant.create({ data: { competitionId: a.competition.id, admissionSequence: 3, displayNameSnapshot: '第三队' } });
+    const fourth = await prisma.competitionParticipant.create({ data: { competitionId: a.competition.id, admissionSequence: 4, displayNameSnapshot: '第四队', individualUserId: users[2]! } });
+    const sibling = await prisma.competitionMatch.create({ data: { stageId: a.stage.id, roundNumber: 1, matchNumber: 2, pairingKey: randomUUID(),
+      homeParticipantId: third.id, awayParticipantId: fourth.id, status: 'PENDING_CONFIRMATION', version: 2 } });
+    await prisma.matchResultVersion.create({ data: { matchId: sibling.id, version: 1, homeScore: 3, awayScore: 1, submittedById: users[0]!, submissionSide: 'HOME' } });
+    const stage = await prisma.competitionStage.create({ data: { competitionId: a.competition.id, sequence: 2, stageCode: 'FINAL',
+      format: 'SINGLE_ELIMINATION', status: published ? 'PUBLISHED' : 'DRAFT' } });
+    const proposal = await prisma.cupBracketProposal.create({ data: { competitionId: a.competition.id, version: 1, status: 'CONFIRMED',
+      algorithmVersion: 'test', randomSeed: 1, bracketSize: 4, createdByAdminId: adminId } });
+    const round = await prisma.cupBracketRound.create({ data: { proposalId: proposal.id, roundNumber: 1, stageCode: 'SEMI_FINAL', displayName: '半决赛' } });
+    const finalRound = await prisma.cupBracketRound.create({ data: { proposalId: proposal.id, roundNumber: 2, stageCode: 'FINAL', displayName: '决赛' } });
+    const source = await prisma.cupBracketPairing.create({ data: { roundId: round.id, pairingNumber: 1, matchId: a.match.id,
+      homeParticipantId: a.match.homeParticipantId, awayParticipantId: a.match.awayParticipantId, winnerParticipantId: a.match.homeParticipantId } });
+    const other = await prisma.cupBracketPairing.create({ data: { roundId: round.id, pairingNumber: 2, matchId: sibling.id,
+      homeParticipantId: third.id, awayParticipantId: fourth.id, winnerParticipantId: published ? third.id : null } });
+    const nextMatch = published ? await prisma.competitionMatch.create({ data: { stageId: stage.id, roundNumber: 2, matchNumber: 1,
+      pairingKey: randomUUID(), homeParticipantId: a.match.homeParticipantId, awayParticipantId: third.id, status: 'AWAITING_RESULT' } }) : null;
+    if (published) await prisma.stageParticipant.createMany({ data: [a.match.homeParticipantId, third.id].map((participantId, index) => ({ stageId: stage.id, participantId, seed: index + 1 })) });
+    const target = await prisma.cupBracketPairing.create({ data: { roundId: finalRound.id, pairingNumber: 1,
+      homeSourcePairingId: source.id, awaySourcePairingId: other.id, matchId: nextMatch?.id ?? null,
+      homeParticipantId: published ? a.match.homeParticipantId : null, awayParticipantId: published ? third.id : null } });
+    return { ...a, source, target, sibling, nextMatch, previous };
+  }
+
+  it('serializes correction of a draft successor with concurrent sibling confirmation/publication', async () => {
+    const a = await cupFixture(false);
+    const readDraft = gate(); const resumeCorrection = gate(); const publicationLockAttempt = gate();
+    const correctionPrisma = observingPrisma((tx) => new Proxy(tx, { get(target, key, receiver) {
+      if (key === 'cupBracketPairing') return new Proxy(tx.cupBracketPairing, { get(delegate, method, proxy) {
+        if (method === 'findMany') return async (args: Prisma.CupBracketPairingFindManyArgs) => {
+          const rows = await delegate.findMany(args);
+          if (args.where?.OR) { readDraft.release(); await resumeCorrection.promise; }
+          return rows;
+        };
+        return Reflect.get(delegate, method, proxy);
+      } });
+      return Reflect.get(target, key, receiver);
+    } }));
+    let publicationRequestedCompetitionLock = false;
+    const publicationPrisma = observingPrisma((tx) => new Proxy(tx, { get(target, key, receiver) {
+      if (key === '$queryRaw') return (sql: TemplateStringsArray, ...values: unknown[]) => {
+        if (sql.join('').includes('FROM competitions')) {
+          publicationRequestedCompetitionLock = true;
+          publicationLockAttempt.release();
+        }
+        if (sql.join('').includes('competition_matches') && values.includes(a.sibling.id)) {
+          expect(publicationRequestedCompetitionLock).toBe(true);
+        }
+        return tx.$queryRaw(sql, ...values);
+      };
+      return Reflect.get(target, key, receiver);
+    } }));
+    const correctionService = new AdminMatchResultDisputesService(correctionPrisma, authorization, results, disputes, evidence);
+    const publisher = new ResultsService(publicationPrisma, new MutationReceiptService(publicationPrisma), standings, new CupProgressionService());
+    const correction = correctionService.resolve(adminId, a.leagueId, a.dispute!.id,
+      { decisionType: 'REPLACE_SCORE', homeScore: 0, awayScore: 2, reason: '改判', expectedVersion: 3 });
+    await readDraft.promise;
+    const publication = publisher.confirm(users[2]!, a.sibling.id, 1, { expectedVersion: 2 }, randomUUID());
+    try {
+      // Before the fix publication finishes while correction holds a stale empty successor.
+      // With the fix publication reaches its competition lock and waits, before taking any match lock.
+      await Promise.race([publication.then(() => undefined), publicationLockAttempt.promise]);
+    } finally { resumeCorrection.release(); }
+    await Promise.all([correction, publication]);
+    const source = await prisma.cupBracketPairing.findUniqueOrThrow({ where: { id: a.source.id } });
+    const target = await prisma.cupBracketPairing.findUniqueOrThrow({ where: { id: a.target.id } });
+    expect(source.winnerParticipantId).toBe(a.match.awayParticipantId);
+    expect(target.homeParticipantId).toBe(source.winnerParticipantId);
+    expect(await prisma.competitionMatch.findUniqueOrThrow({ where: { id: target.matchId! } })).toMatchObject({ homeParticipantId: source.winnerParticipantId });
+  });
+
+  it.each(['arbitration', 'league-admin', 'manager'] as const)('rejects %s correction after a downstream submission commits while it waits for that match lock', async (mode) => {
+    const a = await cupFixture(true); const next = a.nextMatch!;
+    const submitLocked = gate(); const commitSubmission = gate(); const correctionWaits = gate();
+    const submitPrisma = observingPrisma((tx) => new Proxy(tx, { get(target, key, receiver) {
+      if (key === '$queryRaw') return async (sql: TemplateStringsArray, ...values: unknown[]) => {
+        const rows = await tx.$queryRaw(sql, ...values);
+        if (sql.join('').includes('competition_matches') && values.includes(next.id)) { submitLocked.release(); await commitSubmission.promise; }
+        return rows;
+      };
+      return Reflect.get(target, key, receiver);
+    } }));
+    const correctionPrisma = observingPrisma((tx) => new Proxy(tx, { get(target, key, receiver) {
+      if (key === '$queryRaw') return (sql: TemplateStringsArray, ...values: unknown[]) => {
+        if (sql.join('').includes('competition_matches') && values.includes(next.id)) correctionWaits.release();
+        return tx.$queryRaw(sql, ...values);
+      };
+      return Reflect.get(target, key, receiver);
+    } }));
+    const submitter = new ResultsService(submitPrisma, new MutationReceiptService(submitPrisma), standings, new CupProgressionService());
+    const corrector = new ResultsService(correctionPrisma, new MutationReceiptService(correctionPrisma), standings, new CupProgressionService(),
+      undefined, new AdminMutationReceiptService(correctionPrisma), authorization, new AuditLogService(prisma));
+    const arbitrator = new AdminMatchResultDisputesService(correctionPrisma, authorization, corrector, disputes, evidence);
+    const submission = submitter.submit(users[0]!, next.id, { homeScore: 3, awayScore: 2, expectedVersion: 1 }, randomUUID());
+    await submitLocked.promise;
+    const input = { homeScore: 0, awayScore: 2, reason: '改判', expectedVersion: 3 };
+    const correction = mode === 'arbitration' ? arbitrator.resolve(adminId, a.leagueId, a.dispute!.id, { ...input, decisionType: 'REPLACE_SCORE' })
+      : mode === 'league-admin' ? corrector.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, input, randomUUID())
+      : corrector.recordByManager(users[0]!, a.competition.id, a.match.id, input, randomUUID());
+    const outcome = correction.then(() => null, (error: unknown) => error);
+    await correctionWaits.promise;
+    commitSubmission.release();
+    await submission;
+    expect(await outcome).toMatchObject({ response: { code: 'CUP_RESULT_LOCKED' } });
+    expect(await prisma.competitionMatch.findUnique({ where: { id: next.id } })).toMatchObject({ homeParticipantId: a.match.homeParticipantId, status: 'PENDING_CONFIRMATION' });
+    expect(await prisma.competitionMatch.findUnique({ where: { id: a.match.id } })).toMatchObject({ officialResultVersionId: a.previous.id, status: 'DISPUTED', version: 3 });
+    expect(await prisma.matchResultDispute.findUnique({ where: { id: a.dispute!.id } })).toMatchObject({ status: 'READY_FOR_REVIEW', activeKey: a.match.id });
+    expect(await prisma.matchResultVersion.count({ where: { matchId: a.match.id } })).toBe(2);
+    expect(await prisma.matchResultEvent.count({ where: { matchId: a.match.id, type: 'ADMIN_DECIDED' } })).toBe(0);
+  });
 
   it('replaces submitted scores exactly once under concurrent decisions and rejects invalid scores', async () => {
     const a = await setup();

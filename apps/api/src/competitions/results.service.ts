@@ -121,7 +121,7 @@ export class ResultsService {
   async confirm(userId: string, matchId: string, resultVersion: number, input: VersionedMutationRequest, key: string) {
     await this.visibility.requireVisible({ type: 'MATCH', id: matchId });
     return this.receipts.execute(userId, `match.result.confirm:${matchId}:${resultVersion}`, key, async (transaction) => {
-      await this.lockMatch(transaction, matchId);
+      await this.lockForOfficialResult(transaction, matchId);
       const match = await this.playerMatch(transaction, userId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
@@ -210,7 +210,7 @@ export class ResultsService {
     const competitionLeagueId = await this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId });
     if (matchLeagueId !== competitionLeagueId) throw this.visibility.notFound();
     return this.receipts.execute(actorId, `match.result.manager:${matchId}`, key, async (transaction) => {
-      await this.lockMatch(transaction, matchId);
+      await this.lockForOfficialResult(transaction, matchId);
       const match = await this.managerMatch(transaction, competitionId, matchId);
       const official = await this.applyAdministratorResult(transaction, match.id, input, { userId: actorId }, new Date());
       return this.response(official, actorId);
@@ -241,7 +241,7 @@ export class ResultsService {
       `admin.competition-result.record:${matchId}`,
       key,
       async (transaction) => {
-        await this.lockMatch(transaction, matchId);
+        await this.lockForOfficialResult(transaction, matchId);
         const match = await this.managerMatch(transaction, competitionId, matchId);
         const official = await this.applyAdministratorResult(transaction, match.id, input, { adminId: actorAdminId, leagueId }, new Date());
         return { ...this.response(official, ''), submittedByMe: true };
@@ -250,7 +250,15 @@ export class ResultsService {
     );
   }
 
-  // Internal transaction boundary: callers authorize and hold the match row lock.
+  // All official writers share this ordering, including ordinary participant confirmation.
+  // User submissions/rejections take only their match lock and never request progression locks.
+  async lockForOfficialResult(transaction: CompetitionTransaction, matchId: string): Promise<void> {
+    await this.cupProgression.lockCompetition(transaction, matchId);
+    await this.lockMatch(transaction, matchId);
+  }
+
+  // Internal boundary: callers authorize, use ReadCommitted, and hold competition + match locks.
+  // Both receipt services used by direct admin/user-manager entry already use ReadCommitted.
   async applyAdministratorResult(transaction: CompetitionTransaction, matchId: string, input: ManagerMatchResultRequest,
     actor: { adminId: string; leagueId: string } | { userId: string }, now: Date,
     decisionType: MatchResultDecisionType = 'REPLACE_SCORE') {

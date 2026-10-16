@@ -1,6 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { CupProgressionService } from './cup-progression.service.js';
 
+const competitionLookup = () => ({ stage: { competitionId: 'cup-1' } });
+
 describe('CupProgressionService', () => {
   it.each(['AWAITING_RESULT', 'PENDING_CONFIRMATION'])('repairs an unplayed successor but refuses a successor already reporting results: %s', async (status) => {
     const pairing = { id: 'semi-1', matchId: 'match-1', homeParticipantId: 'p1', awayParticipantId: 'p2', winnerParticipantId: 'p1',
@@ -9,7 +11,7 @@ describe('CupProgressionService', () => {
     const tx = {
       $queryRaw: jest.fn(async () => []),
       cupBracketPairing: { findUnique: jest.fn(async () => pairing), findMany: jest.fn(async () => [next]), update: jest.fn(async ({ data }: { data: object }) => Object.assign(pairing, data)) },
-      competitionMatch: { findUniqueOrThrow: jest.fn(async () => ({ id: 'next', stageId: 'final-stage', status, officialResultVersionId: null })), update: jest.fn(async (_input: unknown) => ({})) },
+      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()), findUniqueOrThrow: jest.fn(async () => ({ id: 'next', stageId: 'final-stage', status, officialResultVersionId: null })), update: jest.fn(async (_input: unknown) => ({})) },
       stageParticipant: { updateMany: jest.fn(async (_input: unknown) => ({ count: 1 })) }
     };
     const service = new CupProgressionService();
@@ -30,6 +32,7 @@ describe('CupProgressionService', () => {
       round: { id: 'round-1', roundNumber: 1, proposal: { competitionId: 'cup-1', status: 'CONFIRMED' } }
     };
     const transaction = {
+      $queryRaw: jest.fn(async () => []),
       cupBracketPairing: {
         findUnique: jest.fn(async () => currentPairing),
         update: jest.fn(async (input: unknown) => {
@@ -54,7 +57,7 @@ describe('CupProgressionService', () => {
         })
       },
       stageParticipant: { createMany: jest.fn(async () => ({ count: 2 })) },
-      competitionMatch: { create: jest.fn(async () => ({ id: 'match-final' })) },
+      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()), create: jest.fn(async () => ({ id: 'match-final' })) },
       competition: { update: jest.fn() }
     };
     const service = new CupProgressionService();
@@ -73,6 +76,8 @@ describe('CupProgressionService', () => {
 
   it('does not create the next round until every current-round winner is known', async () => {
     const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()) },
       cupBracketPairing: {
         findUnique: jest.fn(async () => ({
           id: 'semi-1', matchId: 'match-1', homeParticipantId: 'p1', awayParticipantId: 'p2', winnerParticipantId: null,
@@ -95,6 +100,8 @@ describe('CupProgressionService', () => {
 
   it('marks the cup complete when the final winner is official', async () => {
     const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()) },
       cupBracketPairing: {
         findUnique: jest.fn(async () => ({
           id: 'final-1', matchId: 'match-final', homeParticipantId: 'p1', awayParticipantId: 'p2', winnerParticipantId: null,
@@ -121,6 +128,8 @@ describe('CupProgressionService', () => {
 
   it('allows a score correction that keeps the already-advanced winner unchanged', async () => {
     const transaction = {
+      $queryRaw: jest.fn(async () => []),
+      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()) },
       cupBracketPairing: {
         findUnique: jest.fn(async () => ({
           id: 'semi-1', matchId: 'match-1', homeParticipantId: 'p1', awayParticipantId: 'p2',
