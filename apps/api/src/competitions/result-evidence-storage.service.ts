@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable, StreamableFile } from '@nestjs/common';
+import { Inject, Injectable, Optional, StreamableFile } from '@nestjs/common';
 import type { CompleteEvidenceUploadRequest, CreateEvidenceUploadRequest } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from '../storage/image-validation.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 
 const UPLOAD_LIFETIME_MS = 10 * 60 * 1000;
 const READ_LIFETIME_SECONDS = 10 * 60;
@@ -22,8 +23,83 @@ type Match = Prisma.CompetitionMatchGetPayload<{
 export class ResultEvidenceStorageService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Optional() @Inject(AdminAuthorizationService) private readonly authorization?: AdminAuthorizationService
   ) {}
+
+  async createAdminUpload(adminId: string, leagueId: string, matchId: string, input: CreateEvidenceUploadRequest) {
+    await this.requireAdminMatch(adminId, leagueId, matchId, input.expectedVersion);
+    if (input.role !== 'ADMIN' || !this.validMetadata(input.mimeType, input.byteSize)) throw this.invalid('Administrator image upload metadata is invalid');
+    if (!this.storage.createDirectUpload) throw new Error('Direct storage uploads are unavailable');
+    const grant = await this.storage.createDirectUpload('match-result-evidence', randomUUID(), input.mimeType);
+    const expiresAt = new Date(Date.now() + UPLOAD_LIFETIME_MS);
+    const upload = await this.prisma.matchResultEvidenceUpload.create({ data: {
+      matchId, role: 'ADMIN', uploadedByAdminId: adminId, objectKey: grant.key, mimeType: input.mimeType,
+      byteSize: input.byteSize, checksumSha256: input.checksumSha256.toLowerCase(), expiresAt
+    } });
+    return { id: upload.id, objectKey: grant.key, uploadUrl: this.adminUrl(grant.uploadUrl, leagueId), headers: grant.headers, expiresAt: expiresAt.toISOString() };
+  }
+
+  async completeAdminUpload(adminId: string, leagueId: string, matchId: string, uploadId: string, input: CompleteEvidenceUploadRequest) {
+    await this.requireAdminMatch(adminId, leagueId, matchId, input.expectedVersion);
+    const upload = await this.prisma.matchResultEvidenceUpload.findUnique({ where: { id: uploadId } });
+    if (!upload || upload.matchId !== matchId || upload.uploadedByAdminId !== adminId || upload.role !== 'ADMIN') throw this.notFound();
+    if (upload.status !== 'PENDING' || upload.expiresAt <= new Date()) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Upload expired', 409);
+    const object = await this.storage.inspect?.(upload.objectKey);
+    if (!object || !this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize) {
+      throw this.invalid('Uploaded image does not match its session');
+    }
+    const claimed = await this.prisma.matchResultEvidenceUpload.updateMany({ where: { id: upload.id, status: 'PENDING', expiresAt: { gt: new Date() } }, data: { status: 'UPLOADED', completedAt: new Date() } });
+    if (claimed.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Upload expired', 409);
+    return { id: upload.id, status: 'UPLOADED' as const };
+  }
+
+  async adminReadUrl(adminId: string, leagueId: string, matchId: string, evidenceId: string) {
+    await this.requireAdminMatch(adminId, leagueId, matchId);
+    const evidence = await this.prisma.matchResultEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidence || evidence.matchId !== matchId || evidence.status === 'DELETED') throw this.notFound();
+    if (!this.storage.temporaryReadUrl) throw new Error('Temporary storage reads are unavailable');
+    return { url: this.adminUrl(await this.storage.temporaryReadUrl(evidence.objectKey, READ_LIFETIME_SECONDS), leagueId),
+      expiresAt: new Date(Date.now() + READ_LIFETIME_SECONDS * 1000).toISOString() };
+  }
+
+  async writeAdminLocalObject(adminId: string, leagueId: string, key: string, body: Buffer, mimeType: string) {
+    const upload = await this.prisma.matchResultEvidenceUpload.findUnique({ where: { objectKey: key } });
+    if (!upload || upload.uploadedByAdminId !== adminId || upload.role !== 'ADMIN' || upload.status !== 'PENDING' || upload.expiresAt <= new Date()) throw this.notFound();
+    await this.requireAdminMatch(adminId, leagueId, upload.matchId);
+    if (mimeType !== upload.mimeType) throw this.invalid('Evidence MIME type does not match the session');
+    validateResultEvidenceImage({ buffer: body, size: body.length, originalname: key, mimetype: mimeType });
+    if (!this.storage.writePrivate) throw this.notFound();
+    await this.storage.writePrivate(key, body, mimeType);
+  }
+
+  async readAdminLocalObject(adminId: string, leagueId: string, key: string, expires: string, signature: string) {
+    if (!this.storage.verifyPrivateRead?.(key, expires, signature)) throw this.notFound();
+    const evidence = await this.prisma.matchResultEvidence.findUnique({ where: { objectKey: key } });
+    if (!evidence || evidence.status === 'DELETED') throw this.notFound();
+    await this.requireAdminMatch(adminId, leagueId, evidence.matchId);
+    const object = await this.storage.readPrivate?.(key);
+    if (!object) throw this.notFound();
+    return new StreamableFile(object.buffer, { type: object.mimeType, length: object.size, disposition: 'inline' });
+  }
+
+  private adminUrl(url: string, leagueId: string) {
+    return this.storage.verifyPrivateRead ? url.replace('/v1/result-evidence/objects/', `/v1/admin/leagues/${leagueId}/result-evidence/objects/`) : url;
+  }
+
+  private async requireAdminMatch(adminId: string, leagueId: string, matchId: string, expectedVersion?: number) {
+    await (this.authorization ?? new AdminAuthorizationService(this.prisma)).requireLeagueAccess(adminId, leagueId);
+    const match = await this.prisma.competitionMatch.findUnique({ where: { id: matchId }, include: {
+      stage: { include: { competition: { include: { season: { include: { league: true } } } } } },
+      homeParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } },
+      awayParticipant: { include: { seasonEntry: { include: { leagueTeam: true } } } }
+    } });
+    if (!match || match.stage.competition.season?.leagueId !== leagueId || match.stage.competition.season.league.isDeleted) throw this.notFound();
+    if (match.stage.status !== 'PUBLISHED' || !['IN_PROGRESS', 'COMPLETED'].includes(match.stage.competition.status)) throw this.notFound();
+    if ([match.homeParticipant, match.awayParticipant].some((p) => p.seasonEntry && p.seasonEntry.leagueTeam.status !== 'ACTIVE')) throw this.notFound();
+    if (expectedVersion !== undefined) assertExpectedVersion(match.version, expectedVersion, 'Match');
+    return match;
+  }
 
   async createUserUpload(userId: string, matchId: string, input: CreateEvidenceUploadRequest) {
     await this.requireParticipant(userId, matchId, input.expectedVersion);

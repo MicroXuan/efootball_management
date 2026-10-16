@@ -28,6 +28,7 @@ describe('ResultsService', () => {
   });
 
   afterEach(async () => {
+    await prisma.auditLog.deleteMany({ where: { actorUserId: { in: [...users] } } });
     await prisma.mutationReceipt.deleteMany({ where: { actorId: { in: [...users] } } });
     await prisma.standingsRow.deleteMany({ where: { snapshot: { competitionId: { in: competitionIds } } } });
     await prisma.standingsSnapshot.deleteMany({ where: { competitionId: { in: competitionIds } } });
@@ -235,7 +236,7 @@ describe('ResultsService', () => {
   it('requires a reason for manager correction and preserves immutable standings snapshots', async () => {
     const { competition, match, participants } = await fixture();
     const first = await service.recordByManager(users[3], competition.id, match.id,
-      { homeScore: 1, awayScore: 0, expectedVersion: 1 }, randomUUID());
+      { homeScore: 1, awayScore: 0, expectedVersion: 1, reason: '管理员录入' }, randomUUID());
     await expect(service.recordByManager(users[3], competition.id, match.id,
       { homeScore: 0, awayScore: 2, expectedVersion: 2 }, randomUUID()))
       .rejects.toMatchObject({ response: { code: 'RESULT_CORRECTION_REASON_REQUIRED' } });
@@ -345,8 +346,13 @@ describe('cup match results', () => {
       $queryRaw: jest.fn(async () => []),
       competitionMatch: {
         findUnique: jest.fn(async () => match),
+        update: jest.fn(async () => ({})),
         updateMany: jest.fn(async () => ({ count: 1 }))
       },
+      matchResultDispute: { findUnique: jest.fn(async () => null) },
+      matchResultEvidence: { updateMany: jest.fn(async () => ({ count: 0 })) },
+      matchResultEvent: { createMany: jest.fn(async () => ({ count: 1 })) },
+      auditLog: { create: jest.fn(async () => ({})) },
       matchResultVersion: {
         aggregate: jest.fn(async () => ({ _max: { version: null } })),
         create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -375,7 +381,7 @@ describe('cup match results', () => {
     const { service, transaction } = managerHarness('SINGLE_ELIMINATION');
 
     await expect(service.recordByManager('admin-1', 'cup-1', 'match-1', {
-      homeScore: 2, awayScore: 2, expectedVersion: 1
+      homeScore: 2, awayScore: 2, expectedVersion: 1, reason: '管理员录入'
     }, 'draw')).rejects.toMatchObject({ response: { code: 'KNOCKOUT_DRAW_NOT_ALLOWED' } });
     expect(transaction.matchResultVersion.create).not.toHaveBeenCalled();
   });
@@ -383,7 +389,7 @@ describe('cup match results', () => {
   it('recalculates group standings by stage and advances an official knockout winner', async () => {
     const group = managerHarness('ROUND_ROBIN');
     await group.service.recordByManager('admin-1', 'cup-1', 'match-1', {
-      homeScore: 1, awayScore: 1, expectedVersion: 1
+      homeScore: 1, awayScore: 1, expectedVersion: 1, reason: '管理员录入'
     }, 'group-result');
     expect(group.standings.recalculate).toHaveBeenCalledWith(
       group.transaction, 'cup-1', 'result-1', 'stage-1'
@@ -392,11 +398,11 @@ describe('cup match results', () => {
 
     const knockout = managerHarness('SINGLE_ELIMINATION');
     await knockout.service.recordByManager('admin-1', 'cup-1', 'match-1', {
-      homeScore: 3, awayScore: 1, expectedVersion: 1
+      homeScore: 3, awayScore: 1, expectedVersion: 1, reason: '管理员录入'
     }, 'knockout-result');
     expect(knockout.standings.recalculate).not.toHaveBeenCalled();
     expect(knockout.progression.recordWinner).toHaveBeenCalledWith(
-      knockout.transaction, 'match-1', 3, 1
+      knockout.transaction, 'match-1', 3, 1, true
     );
   });
 });
@@ -408,7 +414,7 @@ describe('league administrator match results', () => {
       officialResultVersion: null,
       stage: {
         id: 'stage-1', status: 'PUBLISHED', format: 'ROUND_ROBIN', competitionId: 'competition-1',
-        competition: { id: 'competition-1', seasonId: 'season-1', status: 'IN_PROGRESS', competitionType: 'DIVISION_LEAGUE', season: { leagueId: 'league-1' } }
+        competition: { id: 'competition-1', seasonId: 'season-1', status: 'IN_PROGRESS', competitionType: 'DIVISION_LEAGUE', season: { leagueId: 'league-1', league: { id: 'league-1', isDeleted: false } } }
       },
       homeParticipant: { id: 'home', individualUserId: null, seasonEntry: { ownerUserId: 'home-owner', leagueTeam: { status: 'ACTIVE' } } },
       awayParticipant: { id: 'away', individualUserId: null, seasonEntry: { ownerUserId: 'away-owner', leagueTeam: { status: 'ACTIVE' } } }
@@ -417,8 +423,12 @@ describe('league administrator match results', () => {
       $queryRaw: jest.fn(async () => []),
       competitionMatch: {
         findUnique: jest.fn(async () => match),
+        update: jest.fn(async () => ({})),
         updateMany: jest.fn(async () => ({ count: 1 }))
       },
+      matchResultDispute: { findUnique: jest.fn(async () => null) },
+      matchResultEvidence: { updateMany: jest.fn(async () => ({ count: 0 })) },
+      matchResultEvent: { createMany: jest.fn(async () => ({ count: 1 })) },
       matchResultVersion: {
         aggregate: jest.fn(async () => ({ _max: { version: null } })),
         create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -443,12 +453,12 @@ describe('league administrator match results', () => {
     const record = (service as unknown as {
       recordByLeagueAdmin: (
         adminId: string, leagueId: string, competitionId: string, matchId: string,
-        input: { homeScore: number; awayScore: number; expectedVersion: number }, key: string
+        input: { homeScore: number; awayScore: number; expectedVersion: number; reason: string }, key: string
       ) => Promise<{ status: string; submittedByMe: boolean }>
     }).recordByLeagueAdmin;
 
     await expect(record.call(service, 'admin-1', 'league-1', 'competition-1', 'match-1', {
-      homeScore: 2, awayScore: 1, expectedVersion: 1
+      homeScore: 2, awayScore: 1, expectedVersion: 1, reason: '管理员录入'
     }, 'admin-result')).resolves.toMatchObject({ status: 'OFFICIAL', submittedByMe: true });
     expect(transaction.matchResultVersion.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       submittedById: null, submittedByAdminId: 'admin-1', homeScore: 2, awayScore: 1

@@ -71,6 +71,12 @@ export const MatchResultDisputeResponseSchema = z.object({
   timeline: z.array(MatchResultTimelineEventSchema).default([])
 });
 
+// Administrator mutations use the match token, independently of the dispute's own version.
+export const AdminMatchResultDisputeResponseSchema = MatchResultDisputeResponseSchema.extend({
+  matchVersion: ExpectedVersionSchema
+});
+export const AdminMatchResultDisputeListResponseSchema = z.array(AdminMatchResultDisputeResponseSchema);
+
 // Participant-facing projection: no evidence metadata or administrator timeline.
 export const ParticipantMatchResultDisputeResponseSchema = z.object({
   id: ResourceIdSchema,
@@ -135,6 +141,8 @@ export type MatchResultEventActorType = z.infer<typeof MatchResultEventActorType
 export type MatchResultEvidenceResponse = z.infer<typeof MatchResultEvidenceResponseSchema>;
 export type MatchResultTimelineEvent = z.infer<typeof MatchResultTimelineEventSchema>;
 export type MatchResultDisputeResponse = z.infer<typeof MatchResultDisputeResponseSchema>;
+export type AdminMatchResultDisputeResponse = z.infer<typeof AdminMatchResultDisputeResponseSchema>;
+export type AdminMatchResultDisputeListResponse = z.infer<typeof AdminMatchResultDisputeListResponseSchema>;
 export type ParticipantMatchResultDisputeResponse = z.infer<typeof ParticipantMatchResultDisputeResponseSchema>;
 export type CreateEvidenceUploadRequest = z.input<typeof CreateEvidenceUploadRequestSchema>;
 export type CreateEvidenceUploadResponse = z.infer<typeof CreateEvidenceUploadResponseSchema>;

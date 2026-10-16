@@ -5,6 +5,7 @@ import {
   ActionCenterResponseSchema,
   AdminAccountSummarySchema,
   AdminResolveMatchResultDisputeRequestSchema,
+  AdminMatchResultDisputeResponseSchema,
   AcquirePlayerRequestSchema,
   AdminAuthResponseSchema,
   AdminLeagueGrantSchema,
@@ -124,6 +125,17 @@ import {
 } from './index.js';
 
 describe('match result dispute contracts', () => {
+  it('requires a separate match version for administrator decisions and strips private storage fields', () => {
+    const id = randomUUID(); const time = new Date().toISOString();
+    const record = { id, matchId: id, triggerResultVersionId: id, trigger: 'REJECTED', status: 'READY_FOR_REVIEW',
+      openedByUserId: id, evidenceDeadlineAt: time, decidedByAdminId: null, decisionType: null, finalHomeScore: null, finalAwayScore: null,
+      decisionReason: null, decidedAt: null, version: 2, createdAt: time, updatedAt: time, objectKey: 'private' };
+    assert.equal(AdminMatchResultDisputeResponseSchema.safeParse(record).success, false);
+    assert.equal(AdminMatchResultDisputeResponseSchema.safeParse({ ...record, matchVersion: 0 }).success, false);
+    const parsed = AdminMatchResultDisputeResponseSchema.parse({ ...record, matchVersion: 7 });
+    assert.equal(parsed.matchVersion, 7);
+    assert.equal('objectKey' in parsed, false);
+  });
   it('exposes only participant dispute state and role presence, never administrator evidence detail', () => {
     const response = { id: randomUUID(), matchId: randomUUID(), trigger: 'REJECTED',
       status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: '2026-10-16T00:00:00.000Z',

@@ -5,6 +5,16 @@ const key = 'cloud://env/match-result-evidence--proof.png';
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 describe('CloudBase private evidence inspection', () => {
+  it('rejects failed or unacknowledged deletes instead of allowing retention to erase its metadata', async () => {
+    const deleteFile = jest.fn<CloudBaseStorageClient['deleteFile']>();
+    const provider = new CloudBaseObjectStorage({ deleteFile } as never);
+    for (const response of [{ code: 'ACCESS_DENIED' }, { fileList: [{ fileID: key, code: 'FAILED' }] }, undefined]) {
+      deleteFile.mockResolvedValueOnce(response);
+      await expect(provider.delete(key)).rejects.toThrow();
+    }
+    deleteFile.mockResolvedValueOnce({ fileList: [{ fileID: key, code: 'SUCCESS' }] });
+    await expect(provider.delete(key)).resolves.toBeUndefined();
+  });
   const downloadFile = jest.fn(async () => ({ fileContent: png }));
   const client: CloudBaseStorageClient = {
     uploadFile: jest.fn(async () => ({ fileID: key })),

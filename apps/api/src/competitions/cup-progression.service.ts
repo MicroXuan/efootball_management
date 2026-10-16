@@ -13,7 +13,8 @@ export class CupProgressionService {
     transaction: CompetitionTransaction,
     matchId: string,
     homeScore: number,
-    awayScore: number
+    awayScore: number,
+    allowCorrection = false
   ): Promise<void> {
     await this.visibility?.requireVisible({ type: 'MATCH', id: matchId }, transaction);
     const pairing = await transaction.cupBracketPairing.findUnique({
@@ -31,6 +32,29 @@ export class CupProgressionService {
       throw new CompetitionError('CUP_BRACKET_PAIRING_INVALID', '淘汰赛对阵缺少参赛队伍', 409);
     }
     if (pairing.winnerParticipantId && pairing.winnerParticipantId !== winnerParticipantId) {
+      if (allowCorrection) {
+        const targets = await transaction.cupBracketPairing.findMany({ where: {
+          OR: [{ homeSourcePairingId: pairing.id }, { awaySourcePairingId: pairing.id }],
+          round: { proposalId: pairing.round.proposalId }
+        }, orderBy: { id: 'asc' } });
+        for (const target of targets) {
+          const side = target.homeSourcePairingId === pairing.id ? 'homeParticipantId' : 'awayParticipantId';
+          if (target.winnerParticipantId) throw new CompetitionError('CUP_RESULT_LOCKED', '下一轮已有结果，不能改变晋级队伍', 409);
+          if (target.matchId) {
+            await transaction.$queryRaw`SELECT id FROM competition_matches WHERE id = ${target.matchId} FOR UPDATE`;
+            const next = await transaction.competitionMatch.findUniqueOrThrow({ where: { id: target.matchId } });
+            if (next.status !== 'AWAITING_RESULT' || next.officialResultVersionId) {
+              throw new CompetitionError('CUP_RESULT_LOCKED', '下一轮已提交结果，不能改变晋级队伍', 409);
+            }
+            await transaction.competitionMatch.update({ where: { id: next.id }, data: { [side]: winnerParticipantId, version: { increment: 1 } } });
+            await transaction.stageParticipant.updateMany({ where: { stageId: next.stageId, participantId: pairing.winnerParticipantId }, data: { participantId: winnerParticipantId } });
+          }
+          // A draft successor is populated only when the whole source round completes.
+          if (target[side]) await transaction.cupBracketPairing.update({ where: { id: target.id }, data: { [side]: winnerParticipantId } });
+        }
+        await transaction.cupBracketPairing.update({ where: { id: pairing.id }, data: { winnerParticipantId } });
+        return;
+      }
       throw new CompetitionError('CUP_RESULT_LOCKED', '下一轮签表已锁定，不能改变晋级队伍', 409);
     }
     if (pairing.winnerParticipantId === winnerParticipantId) return;

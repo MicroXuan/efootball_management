@@ -30,6 +30,9 @@ import { ResultEvidenceStorageService } from './result-evidence-storage.service.
 import { MatchResultEventsService } from './match-result-events.service.js';
 import { MatchResultDisputesService } from './match-result-disputes.service.js';
 import { MatchResultDeadlineWorker } from './match-result-deadline.worker.js';
+import { AdminMatchResultDisputesController } from './admin-match-result-disputes.controller.js';
+import { AdminMatchResultDisputesService } from './admin-match-result-disputes.service.js';
+import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worker.js';
 
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({}), StorageModule],
@@ -43,7 +46,8 @@ import { MatchResultDeadlineWorker } from './match-result-deadline.worker.js';
     MyCompetitionsController,
     AdminCupCompetitionsController,
     CupCompetitionsController,
-    ResultEvidenceController
+    ResultEvidenceController,
+    AdminMatchResultDisputesController
   ],
   providers: [
     CompetitionsService,
@@ -62,6 +66,8 @@ import { MatchResultDeadlineWorker } from './match-result-deadline.worker.js';
     MatchResultEventsService,
     MatchResultDisputesService,
     MatchResultDeadlineWorker,
+    AdminMatchResultDisputesService,
+    ResultEvidenceRetentionWorker,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],

@@ -1,0 +1,79 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { AdminResolveMatchResultDisputeRequestSchema, AdminMatchResultDisputeResponseSchema, type AdminResolveMatchResultDisputeRequest } from '@efm/contracts';
+import { PrismaService } from '../database/prisma.service.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { ResultsService } from './results.service.js';
+import { MatchResultDisputesService } from './match-result-disputes.service.js';
+import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
+import { CompetitionError } from './competition.errors.js';
+import type { CompetitionTransaction } from './competition.types.js';
+import type { Prisma } from '../generated/prisma/client.js';
+
+@Injectable()
+export class AdminMatchResultDisputesService {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
+    @Inject(ResultsService) private readonly results: ResultsService,
+    @Inject(MatchResultDisputesService) private readonly disputes: MatchResultDisputesService,
+    @Inject(ResultEvidenceStorageService) private readonly evidence: ResultEvidenceStorageService
+  ) {}
+
+  private scope(leagueId: string): Prisma.MatchResultDisputeWhereInput {
+    const participant = { OR: [{ seasonEntryId: null }, { seasonEntry: { leagueTeam: { status: 'ACTIVE' as const } } }] };
+    return { match: { stage: { status: 'PUBLISHED', competition: { status: { in: ['IN_PROGRESS', 'COMPLETED'] }, season: { leagueId, league: { isDeleted: false } } } },
+      homeParticipant: participant, awayParticipant: participant } };
+  }
+
+  async list(adminId: string, leagueId: string) {
+    await this.authorization.requireLeagueAccess(adminId, leagueId);
+    const rows = await this.prisma.matchResultDispute.findMany({ where: this.scope(leagueId), include: { match: { select: { version: true } } }, orderBy: [{ evidenceDeadlineAt: 'asc' }, { id: 'asc' }] });
+    const now = new Date();
+    const priority = (row: typeof rows[number]) => row.status === 'READY_FOR_REVIEW'
+      || (row.status === 'EVIDENCE_COLLECTION' && row.evidenceDeadlineAt <= now) ? 0 : row.status === 'EVIDENCE_COLLECTION' ? 1 : 2;
+    return rows.sort((a, b) => priority(a) - priority(b)).map((row) => AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...row, matchVersion: row.match.version }))));
+  }
+
+  async detail(adminId: string, leagueId: string, disputeId: string) {
+    await this.authorization.requireLeagueAccess(adminId, leagueId);
+    const dispute = await this.requireDispute(this.prisma, leagueId, disputeId);
+    const [evidence, timeline] = await Promise.all([
+      this.prisma.matchResultEvidence.findMany({ where: { matchId: dispute.matchId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
+      this.prisma.matchResultEvent.findMany({ where: { matchId: dispute.matchId }, orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] })
+    ]);
+    // The response schema deliberately excludes object keys and internal upload identifiers.
+    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...dispute, matchVersion: dispute.match.version, evidence, timeline })));
+  }
+
+  async readUrl(adminId: string, leagueId: string, disputeId: string, evidenceId: string) {
+    await this.authorization.requireLeagueAccess(adminId, leagueId);
+    const dispute = await this.requireDispute(this.prisma, leagueId, disputeId);
+    return this.evidence.adminReadUrl(adminId, leagueId, dispute.matchId, evidenceId);
+  }
+
+  async resolve(adminId: string, leagueId: string, disputeId: string, input: AdminResolveMatchResultDisputeRequest) {
+    await this.authorization.requireLeagueAccess(adminId, leagueId);
+    const parsed = AdminResolveMatchResultDisputeRequestSchema.parse(input);
+    const initial = await this.requireDispute(this.prisma, leagueId, disputeId);
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competition_matches WHERE id = ${initial.matchId} FOR UPDATE`;
+      const now = new Date();
+      await this.disputes.advanceMatch(transaction, initial.matchId, now);
+      const dispute = await this.requireDispute(transaction, leagueId, disputeId);
+      if (dispute.status !== 'READY_FOR_REVIEW' || dispute.activeKey !== dispute.matchId) {
+        throw new CompetitionError('DISPUTE_NOT_READY', 'Dispute is not ready for administrator review', 409);
+      }
+      const proposal = await transaction.matchResultVersion.findUniqueOrThrow({ where: { id: dispute.triggerResultVersionId } });
+      const scores = parsed.decisionType === 'USE_SUBMITTED_SCORE' ? proposal : parsed;
+      return this.results.applyAdministratorResult(transaction, dispute.matchId, {
+        ...parsed, homeScore: scores.homeScore, awayScore: scores.awayScore
+      }, { adminId, leagueId }, now, parsed.decisionType);
+    });
+  }
+
+  private async requireDispute(client: CompetitionTransaction | PrismaService, leagueId: string, id: string) {
+    const dispute = await client.matchResultDispute.findFirst({ where: { id, ...this.scope(leagueId) }, include: { match: { select: { version: true } } } });
+    if (!dispute) throw new CompetitionError('DISPUTE_NOT_FOUND', 'Dispute was not found', 404);
+    return dispute;
+  }
+}

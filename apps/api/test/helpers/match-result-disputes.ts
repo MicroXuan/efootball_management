@@ -22,6 +22,9 @@ export function disputeFixture() {
   });
   afterEach(async () => {
     const matches = { match: { stage: { competitionId: { in: ids } } } };
+    await prisma.standingsRow.deleteMany({ where: { snapshot: { competitionId: { in: ids } } } });
+    await prisma.standingsSnapshot.deleteMany({ where: { competitionId: { in: ids } } });
+    await prisma.competitionMatch.updateMany({ where: { stage: { competitionId: { in: ids } } }, data: { officialResultVersionId: null } });
     await prisma.mutationReceipt.deleteMany({ where: { actorId: { in: users } } });
     await prisma.matchResultEvent.deleteMany({ where: matches });
     await prisma.matchResultEvidence.deleteMany({ where: matches });
@@ -33,6 +36,7 @@ export function disputeFixture() {
     await prisma.competitionParticipant.deleteMany({ where: { competitionId: { in: ids } } });
     await prisma.competitionRegistration.deleteMany({ where: { competitionId: { in: ids } } });
     await prisma.gameAccount.deleteMany({ where: { userId: { in: users } } });
+    await prisma.competitionRuleVersion.deleteMany({ where: { competitionId: { in: ids } } });
     await prisma.competition.deleteMany({ where: { id: { in: ids } } });
     ids.splice(0);
   });

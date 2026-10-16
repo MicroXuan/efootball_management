@@ -37,7 +37,12 @@ export class CloudBaseObjectStorage implements ObjectStorage {
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.deleteFile({ fileList: [key] });
+    const result = await this.client.deleteFile({ fileList: [key] }) as {
+      code?: string; fileList?: Array<{ fileID: string; code: string }>;
+    } | undefined;
+    if (result?.code || !result?.fileList?.some((file) => file.fileID === key && file.code === 'SUCCESS')) {
+      throw new Error('CloudBase object deletion was not acknowledged');
+    }
   }
 
   async createDirectUpload(scope: StorageScope, name: string, mimeType: EvidenceMimeType): Promise<DirectUploadGrant> {

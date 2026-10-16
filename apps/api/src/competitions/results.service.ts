@@ -6,7 +6,7 @@ import type {
   SubmitMatchResultRequest,
   VersionedMutationRequest
 } from '@efm/contracts';
-import type { MatchResultSubmissionSide, MatchResultVersion, Prisma } from '../generated/prisma/client.js';
+import type { MatchResultSubmissionSide, MatchResultVersion, MatchResultDecisionType, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
@@ -212,35 +212,7 @@ export class ResultsService {
     return this.receipts.execute(actorId, `match.result.manager:${matchId}`, key, async (transaction) => {
       await this.lockMatch(transaction, matchId);
       const match = await this.managerMatch(transaction, competitionId, matchId);
-      this.assertInProgress(match);
-      assertExpectedVersion(match.version, input.expectedVersion, 'Match');
-      this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
-      if (match.officialResultVersion && !input.reason?.trim()) {
-        throw new CompetitionError('RESULT_CORRECTION_REASON_REQUIRED', 'Correction reason is required', 400);
-      }
-      const official = await transaction.matchResultVersion.create({
-        data: {
-          matchId,
-          version: await this.nextVersion(transaction, matchId),
-          homeScore: input.homeScore,
-          awayScore: input.awayScore,
-          submittedById: actorId,
-          submissionSide: 'MANAGER',
-          status: 'OFFICIAL',
-          reason: input.reason?.trim() || null
-        }
-      });
-      if (match.officialResultVersion) {
-        await transaction.matchResultVersion.update({
-          where: { id: match.officialResultVersion.id }, data: { status: 'SUPERSEDED' }
-        });
-      }
-      const updated = await transaction.competitionMatch.updateMany({
-        where: { id: matchId, version: input.expectedVersion },
-        data: { officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 } }
-      });
-      if (updated.count !== 1) throw this.versionConflict();
-      await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore);
+      const official = await this.applyAdministratorResult(transaction, match.id, input, { userId: actorId }, new Date());
       return this.response(official, actorId);
     });
   }
@@ -271,56 +243,75 @@ export class ResultsService {
       async (transaction) => {
         await this.lockMatch(transaction, matchId);
         const match = await this.managerMatch(transaction, competitionId, matchId);
-        this.assertInProgress(match);
-        assertExpectedVersion(match.version, input.expectedVersion, 'Match');
-        this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
-        if (match.officialResultVersion && !input.reason?.trim()) {
-          throw new CompetitionError('RESULT_CORRECTION_REASON_REQUIRED', '修改已有官方比分时必须填写修正原因', 400);
-        }
-        const official = await transaction.matchResultVersion.create({
-          data: {
-            matchId,
-            version: await this.nextVersion(transaction, matchId),
-            homeScore: input.homeScore,
-            awayScore: input.awayScore,
-            submittedById: null,
-            submittedByAdminId: actorAdminId,
-            submissionSide: 'MANAGER',
-            status: 'OFFICIAL',
-            reason: input.reason?.trim() || null
-          }
-        });
-        if (match.officialResultVersion) {
-          await transaction.matchResultVersion.update({
-            where: { id: match.officialResultVersion.id }, data: { status: 'SUPERSEDED' }
-          });
-        }
-        const updated = await transaction.competitionMatch.updateMany({
-          where: { id: matchId, version: input.expectedVersion },
-          data: { officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 } }
-        });
-        if (updated.count !== 1) throw this.versionConflict();
-        await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore);
-        await this.audit!.record(transaction, {
-          actorAdminId,
-          leagueId,
-          action: 'admin.competition-result.record',
-          resourceType: 'CompetitionMatch',
-          resourceId: matchId,
-          reason: input.reason?.trim() || null,
-          metadata: {
-            competitionId,
-            stageId: match.stageId,
-            homeScore: input.homeScore,
-            awayScore: input.awayScore,
-            corrected: Boolean(match.officialResultVersion),
-            previousResultVersionId: match.officialResultVersion?.id ?? null
-          }
-        });
+        const official = await this.applyAdministratorResult(transaction, match.id, input, { adminId: actorAdminId, leagueId }, new Date());
         return { ...this.response(official, ''), submittedByMe: true };
       },
       input
     );
+  }
+
+  // Internal transaction boundary: callers authorize and hold the match row lock.
+  async applyAdministratorResult(transaction: CompetitionTransaction, matchId: string, input: ManagerMatchResultRequest,
+    actor: { adminId: string; leagueId: string } | { userId: string }, now: Date,
+    decisionType: MatchResultDecisionType = 'REPLACE_SCORE') {
+    const match = await this.match(transaction, matchId);
+    const adminId = 'adminId' in actor ? actor.adminId : undefined;
+    const userId = 'userId' in actor ? actor.userId : undefined;
+    const leagueId = match.stage.competition.season?.league.id;
+    if ('leagueId' in actor && actor.leagueId !== leagueId) throw this.visibility.notFound();
+    if (match.stage.competition.season?.league.isDeleted || match.stage.status !== 'PUBLISHED'
+      || !['IN_PROGRESS', 'COMPLETED'].includes(match.stage.competition.status)) {
+      throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Administrator result is unavailable', 409);
+    }
+    assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+    const reason = input.reason?.trim();
+    if (!reason) throw new CompetitionError('RESULT_CORRECTION_REASON_REQUIRED', 'Administrator decision reason is required', 400);
+    if (![input.homeScore, input.awayScore].every((score) => Number.isInteger(score) && score >= 0 && score <= 99)) {
+      throw new CompetitionError('INVALID_RESULT_SCORE', 'Scores must be integers between 0 and 99', 400);
+    }
+    this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
+    const dispute = await transaction.matchResultDispute.findUnique({ where: { activeKey: matchId } });
+    const official = await transaction.matchResultVersion.create({ data: {
+      matchId, version: await this.nextVersion(transaction, matchId), homeScore: input.homeScore, awayScore: input.awayScore,
+      submittedById: userId ?? null, submittedByAdminId: adminId ?? null, submissionSide: 'MANAGER', status: 'OFFICIAL', reason
+    } });
+    if (match.officialResultVersion) await transaction.matchResultVersion.update({ where: { id: match.officialResultVersion.id }, data: { status: 'SUPERSEDED' } });
+    if (input.evidenceUploadId) {
+      if (!adminId) throw new CompetitionError('EVIDENCE_UPLOAD_INVALID', 'Administrator evidence requires an administrator account', 409);
+      const claimed = await transaction.matchResultEvidenceUpload.updateMany({ where: {
+        id: input.evidenceUploadId, matchId, uploadedByAdminId: adminId, uploadedByUserId: null, role: 'ADMIN',
+        status: 'UPLOADED', completedAt: { not: null }, resultVersionId: null, disputeId: null
+      }, data: { status: 'CONSUMED', resultVersionId: official.id, disputeId: dispute?.id ?? null, consumedAt: now } });
+      if (claimed.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_INVALID', 'Completed administrator evidence is unavailable', 409);
+      const upload = await transaction.matchResultEvidenceUpload.findUniqueOrThrow({ where: { id: input.evidenceUploadId } });
+      const replaced = await transaction.matchResultEvidence.findMany({ where: { matchId, role: 'ADMIN', status: 'ACTIVE' }, select: { id: true } });
+      await transaction.matchResultEvidence.updateMany({ where: { matchId, role: 'ADMIN', status: 'ACTIVE' }, data: { status: 'PENDING_DELETE', expiresAt: now } });
+      const evidence = await transaction.matchResultEvidence.create({ data: {
+        matchId, resultVersionId: official.id, disputeId: dispute?.id ?? null, uploadId: upload.id, role: 'ADMIN', uploadedByAdminId: adminId,
+        objectKey: upload.objectKey, mimeType: upload.mimeType, byteSize: upload.byteSize, checksumSha256: upload.checksumSha256
+      } });
+      await this.events.append(transaction, { matchId, resultVersionId: official.id, disputeId: dispute?.id ?? null,
+        type: replaced.length ? 'EVIDENCE_REPLACED' : 'EVIDENCE_UPLOADED', eventKey: `evidence:${evidence.id}:attached`, actorType: 'ADMIN', actorAdminId: adminId,
+        occurredAt: now, metadata: { evidenceId: evidence.id, role: 'ADMIN', replacedEvidenceIds: replaced.map(({ id }) => id) } });
+    }
+    await transaction.competitionMatch.update({ where: { id: matchId }, data: {
+      officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 }, resultConfirmationDeadlineAt: null
+    } });
+    if (dispute) await transaction.matchResultDispute.update({ where: { id: dispute.id }, data: {
+      status: 'RESOLVED', activeKey: null, decisionType, decisionReason: reason, decidedByAdminId: adminId ?? null,
+      finalHomeScore: input.homeScore, finalAwayScore: input.awayScore, decidedAt: now, version: { increment: 1 }
+    } });
+    await transaction.matchResultEvidence.updateMany({ where: { matchId, status: 'ACTIVE' }, data: { expiresAt: new Date(now.getTime() + EVIDENCE_RETENTION_MS) } });
+    await this.events.append(transaction, { matchId, disputeId: dispute?.id ?? null, resultVersionId: official.id, type: 'ADMIN_DECIDED',
+      eventKey: `result:${official.id}:admin-decided`, actorType: adminId ? 'ADMIN' : 'USER', actorAdminId: adminId ?? null, actorUserId: userId ?? null,
+      occurredAt: now, metadata: { reason, decisionType, homeScore: input.homeScore, awayScore: input.awayScore } });
+    await (this.audit ?? new AuditLogService(this.prisma)).record(transaction, {
+      ...(adminId ? { actorAdminId: adminId } : { actorUserId: userId! }), leagueId: leagueId ?? null, action: 'admin.competition-result.record', resourceType: 'CompetitionMatch', resourceId: matchId,
+      reason, metadata: { competitionId: match.stage.competitionId, stageId: match.stageId, homeScore: input.homeScore, awayScore: input.awayScore,
+        corrected: Boolean(match.officialResultVersion), previousResultVersionId: match.officialResultVersion?.id ?? null, disputeId: dispute?.id ?? null }
+    });
+    await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore, true);
+    return official;
   }
 
   private async playerMatch(transaction: CompetitionTransaction, userId: string, matchId: string): Promise<MatchRecord> {
@@ -373,10 +364,12 @@ export class ResultsService {
     match: MatchRecord,
     resultVersionId: string,
     homeScore: number,
-    awayScore: number
+    awayScore: number,
+    allowCorrection = false
   ): Promise<void> {
     if (match.stage.format === 'SINGLE_ELIMINATION') {
-      await this.cupProgression.recordWinner(transaction, match.id, homeScore, awayScore);
+      if (allowCorrection) await this.cupProgression.recordWinner(transaction, match.id, homeScore, awayScore, true);
+      else await this.cupProgression.recordWinner(transaction, match.id, homeScore, awayScore);
       return;
     }
     const scopedToStage = ['DIVISION_LEAGUE', 'GROUP_KNOCKOUT_CUP'].includes(
