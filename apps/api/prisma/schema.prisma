@@ -387,6 +387,7 @@ enum CompetitionMatchStatus {
   SCHEDULED
   AWAITING_RESULT
   PENDING_CONFIRMATION
+  DISPUTED
   CONFIRMED
   ADMIN_DECIDED
 }
@@ -402,6 +403,61 @@ enum MatchResultVersionStatus {
   REJECTED
   OFFICIAL
   SUPERSEDED
+}
+
+enum MatchResultDisputeStatus {
+  EVIDENCE_COLLECTION
+  READY_FOR_REVIEW
+  RESOLVED
+  CANCELLED
+}
+
+enum MatchResultDisputeTrigger {
+  REJECTED
+  CONFIRMATION_TIMEOUT
+}
+
+enum MatchResultDecisionType {
+  USE_SUBMITTED_SCORE
+  REPLACE_SCORE
+}
+
+enum MatchResultEvidenceRole {
+  SUBMITTER
+  OPPONENT
+  ADMIN
+}
+
+enum MatchResultEvidenceStatus {
+  ACTIVE
+  PENDING_DELETE
+  DELETED
+}
+
+enum MatchResultEvidenceUploadStatus {
+  PENDING
+  UPLOADED
+  CONSUMED
+  EXPIRED
+}
+
+enum MatchResultEventType {
+  RESULT_SUBMITTED
+  RESULT_CONFIRMED
+  RESULT_REJECTED
+  CONFIRMATION_EXPIRED
+  DISPUTE_OPENED
+  EVIDENCE_UPLOADED
+  EVIDENCE_REPLACED
+  EVIDENCE_DEADLINE_EXPIRED
+  ADMIN_DECIDED
+  EVIDENCE_DELETED
+}
+
+enum MatchResultEventActorType {
+  USER
+  ADMIN
+  SYSTEM
 }
 
 enum WechatBotDeviceStatus {
@@ -518,6 +574,10 @@ model User {
   competitionRegistrationHistory   CompetitionRegistrationStatusHistory[] @relation("CompetitionRegistrationActor")
   competitionParticipants          CompetitionParticipant[]               @relation("CompetitionIndividualParticipant")
   submittedMatchResults            MatchResultVersion[]                   @relation("MatchResultSubmitter")
+  openedMatchResultDisputes        MatchResultDispute[]                   @relation("MatchResultDisputeOpener")
+  uploadedMatchResultEvidence      MatchResultEvidence[]                  @relation("MatchResultEvidenceUser")
+  matchResultEvidenceUploads       MatchResultEvidenceUpload[]            @relation("MatchResultEvidenceUploadUser")
+  matchResultEvents                MatchResultEvent[]                     @relation("MatchResultEventUser")
   mutationReceipts                 MutationReceipt[]                      @relation("MutationReceiptActor")
   ownedTeamProfile                 TeamProfile?                           @relation("TeamProfileOwner")
   leagueTeams                      LeagueTeam[]                           @relation("LeagueTeamOwner")
@@ -673,6 +733,10 @@ model AdminAccount {
   cupGroupProposals              CupGroupProposal[]                  @relation("CupGroupProposalCreator")
   cupBracketProposals            CupBracketProposal[]                @relation("CupBracketProposalCreator")
   submittedMatchResults          MatchResultVersion[]                @relation("MatchResultAdminSubmitter")
+  decidedMatchResultDisputes     MatchResultDispute[]                @relation("MatchResultDisputeDecider")
+  uploadedMatchResultEvidence    MatchResultEvidence[]               @relation("MatchResultEvidenceAdmin")
+  matchResultEvidenceUploads     MatchResultEvidenceUpload[]         @relation("MatchResultEvidenceUploadAdmin")
+  matchResultEvents              MatchResultEvent[]                  @relation("MatchResultEventAdmin")
   createdWechatBotDevices        WechatBotDevice[]                   @relation("WechatBotDeviceCreator")
   createdWechatGroupCapabilities WechatGroupCapability[]             @relation("WechatGroupCapabilityCreator")
   createdWechatScheduleSources   WechatGroupScheduleSource[]         @relation("WechatScheduleSourceCreator")
@@ -738,6 +802,7 @@ model League {
   defaultSuperCapacity      Int                               @default(23) @map("default_super_capacity") @db.UnsignedSmallInt
   defaultChampionCapacity   Int                               @default(18) @map("default_champion_capacity") @db.UnsignedSmallInt
   defaultPromotionCount     Int                               @default(4) @map("default_promotion_count") @db.UnsignedSmallInt
+  resultEvidenceRequired    Boolean                           @default(false) @map("result_evidence_required")
   createdById               String?                           @map("created_by_id") @db.Char(36)
   createdByAdminId          String?                           @map("created_by_admin_id") @db.Char(36)
   version                   Int                               @default(1) @db.UnsignedInt
@@ -2286,59 +2351,197 @@ model SeasonAllocationDecision {
 }
 
 model CompetitionMatch {
-  id                      String                 @id @default(uuid()) @db.Char(36)
-  stageId                 String                 @map("stage_id") @db.Char(36)
-  roundNumber             Int                    @map("round_number") @db.UnsignedInt
-  pairingKey              String                 @map("pairing_key") @db.VarChar(73)
-  matchNumber             Int                    @map("match_number") @db.UnsignedInt
-  homeParticipantId       String                 @map("home_participant_id") @db.Char(36)
-  awayParticipantId       String                 @map("away_participant_id") @db.Char(36)
-  plannedAt               DateTime?              @map("planned_at")
-  status                  CompetitionMatchStatus @default(SCHEDULED)
-  officialResultVersionId String?                @unique @map("official_result_version_id") @db.Char(36)
-  version                 Int                    @default(1) @db.UnsignedInt
-  createdAt               DateTime               @default(now()) @map("created_at")
-  updatedAt               DateTime               @updatedAt @map("updated_at")
-  stage                   CompetitionStage       @relation(fields: [stageId], references: [id], onDelete: Restrict)
-  homeParticipant         CompetitionParticipant @relation("CompetitionMatchHome", fields: [homeParticipantId], references: [id], onDelete: Restrict)
-  awayParticipant         CompetitionParticipant @relation("CompetitionMatchAway", fields: [awayParticipantId], references: [id], onDelete: Restrict)
-  resultVersions          MatchResultVersion[]   @relation("MatchResultHistory")
-  officialResultVersion   MatchResultVersion?    @relation("OfficialMatchResult", fields: [officialResultVersionId], references: [id], onDelete: Restrict)
-  bracketPairing          CupBracketPairing?
+  id                           String                      @id @default(uuid()) @db.Char(36)
+  stageId                      String                      @map("stage_id") @db.Char(36)
+  roundNumber                  Int                         @map("round_number") @db.UnsignedInt
+  pairingKey                   String                      @map("pairing_key") @db.VarChar(73)
+  matchNumber                  Int                         @map("match_number") @db.UnsignedInt
+  homeParticipantId            String                      @map("home_participant_id") @db.Char(36)
+  awayParticipantId            String                      @map("away_participant_id") @db.Char(36)
+  plannedAt                    DateTime?                   @map("planned_at")
+  resultConfirmationDeadlineAt DateTime?                   @map("result_confirmation_deadline_at")
+  status                       CompetitionMatchStatus      @default(SCHEDULED)
+  officialResultVersionId      String?                     @unique @map("official_result_version_id") @db.Char(36)
+  version                      Int                         @default(1) @db.UnsignedInt
+  createdAt                    DateTime                    @default(now()) @map("created_at")
+  updatedAt                    DateTime                    @updatedAt @map("updated_at")
+  stage                        CompetitionStage            @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  homeParticipant              CompetitionParticipant      @relation("CompetitionMatchHome", fields: [homeParticipantId], references: [id], onDelete: Restrict)
+  awayParticipant              CompetitionParticipant      @relation("CompetitionMatchAway", fields: [awayParticipantId], references: [id], onDelete: Restrict)
+  resultVersions               MatchResultVersion[]        @relation("MatchResultHistory")
+  officialResultVersion        MatchResultVersion?         @relation("OfficialMatchResult", fields: [officialResultVersionId], references: [id], onDelete: Restrict)
+  bracketPairing               CupBracketPairing?
+  resultDisputes               MatchResultDispute[]
+  resultEvidence               MatchResultEvidence[]
+  resultEvidenceUploads        MatchResultEvidenceUpload[]
+  resultEvents                 MatchResultEvent[]
 
   @@unique([stageId, pairingKey], map: "competition_matches_pair_unique")
   @@unique([stageId, matchNumber], map: "competition_matches_number_unique")
   @@index([stageId, roundNumber, matchNumber], map: "competition_matches_round_idx")
   @@index([homeParticipantId], map: "competition_matches_home_idx")
   @@index([awayParticipantId], map: "competition_matches_away_idx")
+  @@index([status, resultConfirmationDeadlineAt], map: "competition_matches_confirmation_deadline_idx")
   @@map("competition_matches")
 }
 
 model MatchResultVersion {
-  id                 String                    @id @default(uuid()) @db.Char(36)
-  matchId            String                    @map("match_id") @db.Char(36)
-  version            Int                       @db.UnsignedInt
-  homeScore          Int                       @map("home_score") @db.UnsignedTinyInt
-  awayScore          Int                       @map("away_score") @db.UnsignedTinyInt
-  submittedById      String?                   @map("submitted_by_id") @db.Char(36)
-  submittedByAdminId String?                   @map("submitted_by_admin_id") @db.Char(36)
-  submissionSide     MatchResultSubmissionSide @map("submission_side")
-  status             MatchResultVersionStatus  @default(PROPOSED)
-  reason             String?                   @db.VarChar(512)
-  evidenceMetadata   Json?                     @map("evidence_metadata")
-  createdAt          DateTime                  @default(now()) @map("created_at")
-  updatedAt          DateTime                  @updatedAt @map("updated_at")
-  match              CompetitionMatch          @relation("MatchResultHistory", fields: [matchId], references: [id], onDelete: Restrict)
-  submitter          User?                     @relation("MatchResultSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
-  adminSubmitter     AdminAccount?             @relation("MatchResultAdminSubmitter", fields: [submittedByAdminId], references: [id], onDelete: Restrict)
-  officialForMatch   CompetitionMatch?         @relation("OfficialMatchResult")
+  id                 String                      @id @default(uuid()) @db.Char(36)
+  matchId            String                      @map("match_id") @db.Char(36)
+  version            Int                         @db.UnsignedInt
+  homeScore          Int                         @map("home_score") @db.UnsignedTinyInt
+  awayScore          Int                         @map("away_score") @db.UnsignedTinyInt
+  submittedById      String?                     @map("submitted_by_id") @db.Char(36)
+  submittedByAdminId String?                     @map("submitted_by_admin_id") @db.Char(36)
+  submissionSide     MatchResultSubmissionSide   @map("submission_side")
+  status             MatchResultVersionStatus    @default(PROPOSED)
+  reason             String?                     @db.VarChar(512)
+  evidenceMetadata   Json?                       @map("evidence_metadata")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @updatedAt @map("updated_at")
+  match              CompetitionMatch            @relation("MatchResultHistory", fields: [matchId], references: [id], onDelete: Restrict)
+  submitter          User?                       @relation("MatchResultSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  adminSubmitter     AdminAccount?               @relation("MatchResultAdminSubmitter", fields: [submittedByAdminId], references: [id], onDelete: Restrict)
+  officialForMatch   CompetitionMatch?           @relation("OfficialMatchResult")
   triggeredSnapshots StandingsSnapshot[]
+  triggeredDisputes  MatchResultDispute[]
+  evidence           MatchResultEvidence[]
+  evidenceUploads    MatchResultEvidenceUpload[]
+  resultEvents       MatchResultEvent[]
 
   @@unique([matchId, version], map: "match_result_versions_version_unique")
   @@index([matchId, status], map: "match_result_versions_status_idx")
   @@index([submittedById], map: "match_result_versions_submitter_idx")
   @@index([submittedByAdminId], map: "match_result_versions_admin_submitter_idx")
   @@map("match_result_versions")
+}
+
+model MatchResultDispute {
+  id                     String                      @id @default(uuid()) @db.Char(36)
+  matchId                String                      @map("match_id") @db.Char(36)
+  triggerResultVersionId String                      @map("trigger_result_version_id") @db.Char(36)
+  trigger                MatchResultDisputeTrigger
+  status                 MatchResultDisputeStatus    @default(EVIDENCE_COLLECTION)
+  activeKey              String?                     @unique(map: "match_result_disputes_active_key_unique") @map("active_key") @db.Char(36)
+  openedByUserId         String                      @map("opened_by_user_id") @db.Char(36)
+  evidenceDeadlineAt     DateTime                    @map("evidence_deadline_at")
+  decidedByAdminId       String?                     @map("decided_by_admin_id") @db.Char(36)
+  decisionType           MatchResultDecisionType?    @map("decision_type")
+  finalHomeScore         Int?                        @map("final_home_score") @db.UnsignedTinyInt
+  finalAwayScore         Int?                        @map("final_away_score") @db.UnsignedTinyInt
+  decisionReason         String?                     @map("decision_reason") @db.VarChar(512)
+  decidedAt              DateTime?                   @map("decided_at")
+  version                Int                         @default(1) @db.UnsignedInt
+  createdAt              DateTime                    @default(now()) @map("created_at")
+  updatedAt              DateTime                    @updatedAt @map("updated_at")
+  match                  CompetitionMatch            @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  triggerResultVersion   MatchResultVersion          @relation(fields: [triggerResultVersionId], references: [id], onDelete: Restrict)
+  openedByUser           User                        @relation("MatchResultDisputeOpener", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  decidedByAdmin         AdminAccount?               @relation("MatchResultDisputeDecider", fields: [decidedByAdminId], references: [id], onDelete: Restrict)
+  evidence               MatchResultEvidence[]
+  uploads                MatchResultEvidenceUpload[]
+  events                 MatchResultEvent[]
+
+  @@index([matchId, status], map: "match_result_disputes_match_status_idx")
+  @@index([status, evidenceDeadlineAt], map: "match_result_disputes_status_deadline_idx")
+  @@index([triggerResultVersionId], map: "match_result_disputes_trigger_version_idx")
+  @@index([openedByUserId], map: "match_result_disputes_opener_idx")
+  @@index([decidedByAdminId], map: "match_result_disputes_decider_idx")
+  @@map("match_result_disputes")
+}
+
+model MatchResultEvidenceUpload {
+  id                String                          @id @default(uuid()) @db.Char(36)
+  matchId           String                          @map("match_id") @db.Char(36)
+  disputeId         String?                         @map("dispute_id") @db.Char(36)
+  resultVersionId   String?                         @map("result_version_id") @db.Char(36)
+  role              MatchResultEvidenceRole
+  uploadedByUserId  String?                         @map("uploaded_by_user_id") @db.Char(36)
+  uploadedByAdminId String?                         @map("uploaded_by_admin_id") @db.Char(36)
+  objectKey         String                          @unique(map: "match_result_evidence_uploads_object_key_unique") @map("object_key") @db.VarChar(512)
+  mimeType          String                          @map("mime_type") @db.VarChar(32)
+  byteSize          Int                             @map("byte_size") @db.UnsignedInt
+  checksumSha256    String                          @map("checksum_sha256") @db.Char(64)
+  status            MatchResultEvidenceUploadStatus @default(PENDING)
+  expiresAt         DateTime                        @map("expires_at")
+  completedAt       DateTime?                       @map("completed_at")
+  consumedAt        DateTime?                       @map("consumed_at")
+  createdAt         DateTime                        @default(now()) @map("created_at")
+  updatedAt         DateTime                        @updatedAt @map("updated_at")
+  match             CompetitionMatch                @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  dispute           MatchResultDispute?             @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  resultVersion     MatchResultVersion?             @relation(fields: [resultVersionId], references: [id], onDelete: Restrict)
+  uploadedByUser    User?                           @relation("MatchResultEvidenceUploadUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  uploadedByAdmin   AdminAccount?                   @relation("MatchResultEvidenceUploadAdmin", fields: [uploadedByAdminId], references: [id], onDelete: Restrict)
+  evidence          MatchResultEvidence?
+
+  @@index([matchId, status], map: "match_result_evidence_uploads_match_status_idx")
+  @@index([status, expiresAt], map: "match_result_evidence_uploads_expiry_idx")
+  @@index([disputeId], map: "match_result_evidence_uploads_dispute_idx")
+  @@index([resultVersionId], map: "match_result_evidence_uploads_result_version_idx")
+  @@index([uploadedByUserId], map: "match_result_evidence_uploads_user_idx")
+  @@index([uploadedByAdminId], map: "match_result_evidence_uploads_admin_idx")
+  @@map("match_result_evidence_uploads")
+}
+
+model MatchResultEvidence {
+  id                String                     @id @default(uuid()) @db.Char(36)
+  matchId           String                     @map("match_id") @db.Char(36)
+  disputeId         String?                    @map("dispute_id") @db.Char(36)
+  resultVersionId   String?                    @map("result_version_id") @db.Char(36)
+  uploadId          String?                    @unique(map: "match_result_evidence_upload_id_unique") @map("upload_id") @db.Char(36)
+  role              MatchResultEvidenceRole
+  status            MatchResultEvidenceStatus  @default(ACTIVE)
+  uploadedByUserId  String?                    @map("uploaded_by_user_id") @db.Char(36)
+  uploadedByAdminId String?                    @map("uploaded_by_admin_id") @db.Char(36)
+  objectKey         String                     @unique(map: "match_result_evidence_object_key_unique") @map("object_key") @db.VarChar(512)
+  mimeType          String                     @map("mime_type") @db.VarChar(32)
+  byteSize          Int                        @map("byte_size") @db.UnsignedInt
+  checksumSha256    String                     @map("checksum_sha256") @db.Char(64)
+  expiresAt         DateTime?                  @map("expires_at")
+  deletedAt         DateTime?                  @map("deleted_at")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  match             CompetitionMatch           @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  dispute           MatchResultDispute?        @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  resultVersion     MatchResultVersion?        @relation(fields: [resultVersionId], references: [id], onDelete: Restrict)
+  upload            MatchResultEvidenceUpload? @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  uploadedByUser    User?                      @relation("MatchResultEvidenceUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  uploadedByAdmin   AdminAccount?              @relation("MatchResultEvidenceAdmin", fields: [uploadedByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([matchId, role, status], map: "match_result_evidence_match_role_status_idx")
+  @@index([disputeId, role, status], map: "match_result_evidence_dispute_role_status_idx")
+  @@index([status, expiresAt], map: "match_result_evidence_expiry_idx")
+  @@index([resultVersionId], map: "match_result_evidence_result_version_idx")
+  @@index([uploadedByUserId], map: "match_result_evidence_user_idx")
+  @@index([uploadedByAdminId], map: "match_result_evidence_admin_idx")
+  @@map("match_result_evidence")
+}
+
+model MatchResultEvent {
+  id              String                    @id @default(uuid()) @db.Char(36)
+  matchId         String                    @map("match_id") @db.Char(36)
+  disputeId       String?                   @map("dispute_id") @db.Char(36)
+  resultVersionId String?                   @map("result_version_id") @db.Char(36)
+  type            MatchResultEventType
+  eventKey        String                    @unique(map: "match_result_events_event_key_unique") @map("event_key") @db.VarChar(191)
+  actorType       MatchResultEventActorType @map("actor_type")
+  actorUserId     String?                   @map("actor_user_id") @db.Char(36)
+  actorAdminId    String?                   @map("actor_admin_id") @db.Char(36)
+  metadata        Json?
+  occurredAt      DateTime                  @default(now()) @map("occurred_at")
+  match           CompetitionMatch          @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  dispute         MatchResultDispute?       @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  resultVersion   MatchResultVersion?       @relation(fields: [resultVersionId], references: [id], onDelete: Restrict)
+  actorUser       User?                     @relation("MatchResultEventUser", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorAdmin      AdminAccount?             @relation("MatchResultEventAdmin", fields: [actorAdminId], references: [id], onDelete: Restrict)
+
+  @@index([matchId, occurredAt, id], map: "match_result_events_match_timeline_idx")
+  @@index([disputeId, occurredAt], map: "match_result_events_dispute_timeline_idx")
+  @@index([resultVersionId], map: "match_result_events_result_version_idx")
+  @@index([actorUserId], map: "match_result_events_actor_user_idx")
+  @@index([actorAdminId], map: "match_result_events_actor_admin_idx")
+  @@map("match_result_events")
 }
 
 model StandingsSnapshot {

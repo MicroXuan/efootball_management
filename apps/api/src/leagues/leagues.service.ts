@@ -27,6 +27,9 @@ const LEAGUE_INCLUDE = {
   }
 } satisfies Prisma.LeagueInclude;
 type LeagueRecord = Prisma.LeagueGetPayload<{ include: typeof LEAGUE_INCLUDE }>;
+type LeagueCreationInput = Omit<ParsedCreateLeagueRequest, 'resultEvidenceRequired'> & {
+  resultEvidenceRequired?: boolean;
+};
 
 @Injectable()
 export class LeaguesService {
@@ -38,7 +41,7 @@ export class LeaguesService {
 
   create(
     actorId: string,
-    input: ParsedCreateLeagueRequest,
+    input: LeagueCreationInput,
     key: string
   ): Promise<LeagueDetail> {
     return this.receipts.execute(actorId, 'league.create', key, async (transaction) => {
@@ -55,6 +58,7 @@ export class LeaguesService {
           description: input.description,
           logoUrl: input.logoUrl,
           edition: input.edition,
+          resultEvidenceRequired: input.resultEvidenceRequired ?? false,
           defaultPlatform: 'MOBILE',
           defaultServerRegion: this.legacyRegion(input.edition),
           defaultSuperCapacity: input.defaultSuperCapacity,
@@ -109,6 +113,9 @@ export class LeaguesService {
             : {}),
           ...(input.defaultPromotionCount !== undefined
             ? { defaultPromotionCount: input.defaultPromotionCount }
+            : {}),
+          ...(input.resultEvidenceRequired !== undefined
+            ? { resultEvidenceRequired: input.resultEvidenceRequired }
             : {}),
           version: { increment: 1 }
         }
@@ -186,6 +193,7 @@ export class LeaguesService {
       logoUrl: record.logoUrl,
       status: record.status,
       edition: record.edition,
+      resultEvidenceRequired: record.resultEvidenceRequired,
       defaultSuperCapacity: record.defaultSuperCapacity,
       defaultChampionCapacity: record.defaultChampionCapacity,
       defaultPromotionCount: record.defaultPromotionCount,

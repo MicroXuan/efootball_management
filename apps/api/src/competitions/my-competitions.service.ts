@@ -197,6 +197,7 @@ export class MyCompetitionsService {
       },
       plannedAt: record.plannedAt?.toISOString() ?? null,
       status: record.status,
+      resultConfirmationDeadlineAt: record.resultConfirmationDeadlineAt?.toISOString() ?? null,
       version: record.version,
       officialResult: record.officialResultVersion ? {
         resultVersionId: record.officialResultVersion.id,

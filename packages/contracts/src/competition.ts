@@ -38,6 +38,7 @@ export const CompetitionMatchStatusSchema = z.enum([
   'SCHEDULED',
   'AWAITING_RESULT',
   'PENDING_CONFIRMATION',
+  'DISPUTED',
   'CONFIRMED',
   'ADMIN_DECIDED'
 ]);
@@ -440,6 +441,7 @@ export const CancelCompetitionRequestSchema = VersionedMutationRequestSchema.ext
 export const SubmitMatchResultRequestSchema = z.object({
   homeScore: ScoreSchema,
   awayScore: ScoreSchema,
+  evidenceUploadId: ResourceIdSchema.optional(),
   expectedVersion: ExpectedVersionSchema
 });
 
@@ -593,6 +595,7 @@ export const CompetitionMatchResponseSchema = z.object({
   awayParticipant: CompetitionParticipantSummarySchema,
   plannedAt: TimestampSchema.nullable(),
   status: CompetitionMatchStatusSchema,
+  resultConfirmationDeadlineAt: TimestampSchema.nullable().default(null),
   version: z.number().int().positive(),
   officialResult: OfficialResultSummarySchema.nullable(),
   resultVersions: z.array(MatchResultVersionResponseSchema).default([]),

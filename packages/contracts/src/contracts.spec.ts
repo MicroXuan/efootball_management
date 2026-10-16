@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   ActionCenterResponseSchema,
   AdminAccountSummarySchema,
+  AdminResolveMatchResultDisputeRequestSchema,
   AcquirePlayerRequestSchema,
   AdminAuthResponseSchema,
   AdminLeagueGrantSchema,
@@ -13,6 +14,7 @@ import {
   CompetitionFormatSchema,
   CompetitionListQuerySchema,
   CompetitionMatchResponseSchema,
+  CompetitionMatchStatusSchema,
   CompetitionParticipantSummarySchema,
   CompetitionParticipantTypeSchema,
   CompetitionStageCodeSchema,
@@ -21,6 +23,7 @@ import {
   ConfirmSeasonAllocationRequestSchema,
   DivisionStandingsResponseSchema,
   LeagueWorkspaceResponseSchema,
+  LeagueSummarySchema,
   PlatformPresentationSchema,
   PlatformPageRequestSchema,
   GenerateSeasonAllocationRequestSchema,
@@ -30,6 +33,7 @@ import {
   SeasonAllocationProposalRowSchema,
   PublishStageScheduleRequestSchema,
   CreateCompetitionRequestSchema,
+  CreateEvidenceUploadRequestSchema,
   CreateSeasonCupRequestSchema,
   RegisterSeasonCupRequestSchema,
   WithdrawSeasonCupRequestSchema,
@@ -55,6 +59,9 @@ import {
   GameAccountInputSchema,
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
+  MatchResultDisputeStatusSchema,
+  MatchResultDisputeTriggerSchema,
+  MatchResultEventTypeSchema,
   MoneyMinorSchema,
   MyLeagueTeamOverviewSchema,
   NormalizedPlayerCardRecordSchema,
@@ -114,6 +121,54 @@ import {
   StartPlatformSyncRequestSchema,
   derivePesdataPositionAutoBuild
 } from './index.js';
+
+describe('match result dispute contracts', () => {
+  it('parses the dispute and event states used by the 24-hour workflow', () => {
+    assert.equal(CompetitionMatchStatusSchema.safeParse('DISPUTED').success, true);
+    for (const status of ['EVIDENCE_COLLECTION', 'READY_FOR_REVIEW', 'RESOLVED', 'CANCELLED']) {
+      assert.equal(MatchResultDisputeStatusSchema.safeParse(status).success, true);
+    }
+    for (const trigger of ['REJECTED', 'CONFIRMATION_TIMEOUT']) {
+      assert.equal(MatchResultDisputeTriggerSchema.safeParse(trigger).success, true);
+    }
+    for (const event of ['RESULT_SUBMITTED', 'RESULT_CONFIRMED', 'RESULT_REJECTED',
+      'CONFIRMATION_EXPIRED', 'DISPUTE_OPENED', 'EVIDENCE_UPLOADED', 'EVIDENCE_REPLACED',
+      'EVIDENCE_DEADLINE_EXPIRED', 'ADMIN_DECIDED', 'EVIDENCE_DELETED']) {
+      assert.equal(MatchResultEventTypeSchema.safeParse(event).success, true);
+    }
+  });
+
+  it('accepts image uploads at 1 MB and rejects larger files or other MIME types', () => {
+    const upload = { role: 'SUBMITTER', mimeType: 'image/jpeg', byteSize: 1_048_576,
+      checksumSha256: 'a'.repeat(64), expectedVersion: 1 };
+    assert.equal(CreateEvidenceUploadRequestSchema.safeParse(upload).success, true);
+    assert.equal(CreateEvidenceUploadRequestSchema.safeParse({ ...upload, byteSize: 1_048_577 }).success, false);
+    assert.equal(CreateEvidenceUploadRequestSchema.safeParse({ ...upload, mimeType: 'image/gif' }).success, false);
+  });
+
+  it('requires a replacement score and nonempty reason for admin arbitration', () => {
+    const base = { decisionType: 'REPLACE_SCORE', expectedVersion: 1, reason: '  截图证明原比分错误  ' };
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse(base).success, false);
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1 }).success, true);
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1, reason: '   ' }).success, false);
+  });
+
+  it('rejects replacement scores when adopting the submitted score', () => {
+    const base = { decisionType: 'USE_SUBMITTED_SCORE', expectedVersion: 1, reason: '证据一致' };
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse(base).success, true);
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1 }).success, false);
+  });
+
+  it('defaults league responses to evidence optional', () => {
+    const parsed = LeagueSummarySchema.parse({
+      id: randomUUID(), name: 'CELL', shortName: 'CELL', description: '', logoUrl: null,
+      status: 'ACTIVE', edition: 'INTERNATIONAL', defaultSuperCapacity: 23,
+      defaultChampionCapacity: 18, defaultPromotionCount: 4, currentSeason: null,
+      version: 1, createdAt: '2026-10-15T12:00:00.000Z', updatedAt: '2026-10-15T12:00:00.000Z'
+    });
+    assert.equal((parsed as typeof parsed & { resultEvidenceRequired?: boolean }).resultEvidenceRequired, false);
+  });
+});
 
 describe('action center contracts', () => {
   it('parses actionable transaction, forced-transfer, and auction projections', () => {
