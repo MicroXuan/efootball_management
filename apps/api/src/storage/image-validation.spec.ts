@@ -49,6 +49,11 @@ describe('validateResultEvidenceImage', () => {
     expect(() => validateResultEvidenceImage(upload(buffer, 'proof.png', 'image/png'))).toThrow(BadRequestException);
     expect(() => validateResultEvidenceImage(upload(pngSignature, 'proof.jpg', 'image/jpeg'))).toThrow(BadRequestException);
   });
+
+  it('rejects script bytes disguised as PNG evidence', () => {
+    expect(() => validateResultEvidenceImage(upload(Buffer.from('#!/bin/sh\n'), 'proof.png', 'image/png')))
+      .toThrow(BadRequestException);
+  });
 });
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);

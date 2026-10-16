@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { BadRequestException } from '@nestjs/common';
+import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from './image-validation.js';
 import type { DirectUploadGrant, EvidenceMimeType, ObjectStorage, StorageScope, StoredObject, StoredObjectMetadata, StoredUploadInput } from './object-storage.js';
 
 export interface CloudBaseStorageClient {
@@ -73,7 +75,19 @@ export class CloudBaseObjectStorage implements ObjectStorage {
     const result = await this.client.getFileInfo({ fileList: [key] });
     const file = result.fileList.find((entry) => entry.fileID === key && entry.code === 'SUCCESS');
     if (!file || !Number.isFinite(file.size)) return null;
-    return { mimeType: file.mime ?? file.contentType?.split(';')[0]?.trim() ?? '', size: file.size! };
+    const mimeType = file.mime ?? file.contentType?.split(';')[0]?.trim() ?? '';
+    if (file.size! > MAX_RESULT_EVIDENCE_BYTES) return { mimeType, size: file.size! };
+    const downloaded = await this.client.downloadFile({ fileID: key });
+    const bytes = Buffer.isBuffer(downloaded.fileContent)
+      ? downloaded.fileContent
+      : typeof downloaded.fileContent === 'string'
+        ? Buffer.from(downloaded.fileContent, 'binary')
+        : null;
+    if (!bytes || bytes.length !== file.size) {
+      throw new BadRequestException({ code: 'INVALID_RESULT_EVIDENCE', message: 'Stored evidence size could not be verified' });
+    }
+    const validated = validateResultEvidenceImage({ buffer: bytes, originalname: key, mimetype: mimeType, size: bytes.length });
+    return { mimeType: validated.mimeType, size: validated.size };
   }
 
   publicUrlFor(key: string): string {

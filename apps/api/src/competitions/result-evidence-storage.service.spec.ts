@@ -13,10 +13,16 @@ const otherMatchId = '33333333-3333-4333-8333-333333333333';
 const uploadId = '44444444-4444-4444-8444-444444444444';
 const input = { role: 'SUBMITTER' as const, mimeType: 'image/png' as const, byteSize: 8, checksumSha256: 'a'.repeat(64), expectedVersion: 1 };
 
-function fixture(options: { archived?: boolean; deleted?: boolean } = {}) {
+function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?: string; competitionStatus?: string } = {}) {
   const match = {
     id: matchId, version: 1,
-    stage: { competition: { season: options.deleted ? { league: { isDeleted: true } } : null } },
+    stage: {
+      status: options.stageStatus ?? 'PUBLISHED',
+      competition: {
+        status: options.competitionStatus ?? 'IN_PROGRESS',
+        season: options.deleted ? { league: { isDeleted: true } } : null
+      }
+    },
     homeParticipant: { individualUserId: userId, seasonEntry: options.archived ? { ownerUserId: userId, leagueTeam: { status: 'ARCHIVED' } } : null },
     awayParticipant: { individualUserId: 'someone-else', seasonEntry: null }
   };
@@ -44,7 +50,7 @@ describe('private evidence providers', () => {
   it('maps CloudBase direct PUT metadata and ten minute reads', async () => {
     const getUploadMetadata = jest.fn(async () => ({ data: { url: 'https://cos.example/put', token: 'token', authorization: 'signature', fileId: 'cloud://env/private-file', cosFileId: 'cos-id', download_url: 'https://public.example/never-use' } }));
     const getTempFileURL = jest.fn(async () => ({ fileList: [{ code: 'SUCCESS', fileID: 'cloud://env/private-file', tempFileURL: 'https://cos.example/read' }] }));
-    const client = { uploadFile: jest.fn(async () => ({ fileID: 'unused' })), deleteFile: jest.fn(async () => undefined), downloadFile: jest.fn(async () => ({ fileContent: undefined })), getUploadMetadata, getTempFileURL, getFileInfo: jest.fn(async () => ({ fileList: [{ code: 'SUCCESS', fileID: 'cloud://env/private-file', tempFileURL: '', contentType: 'image/png', size: 8 }] })) } satisfies CloudBaseStorageClient;
+    const client = { uploadFile: jest.fn(async () => ({ fileID: 'unused' })), deleteFile: jest.fn(async () => undefined), downloadFile: jest.fn(async () => ({ fileContent: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) })), getUploadMetadata, getTempFileURL, getFileInfo: jest.fn(async () => ({ fileList: [{ code: 'SUCCESS', fileID: 'cloud://env/private-file', tempFileURL: '', contentType: 'image/png', size: 8 }] })) } satisfies CloudBaseStorageClient;
     const storage = new CloudBaseObjectStorage(client);
     await expect(storage.createDirectUpload('match-result-evidence', 'object', 'image/png')).resolves.toEqual({
       key: 'cloud://env/private-file', uploadUrl: 'https://cos.example/put',
@@ -54,6 +60,25 @@ describe('private evidence providers', () => {
     await expect(storage.temporaryReadUrl('cloud://env/private-file', 600)).resolves.toBe('https://cos.example/read');
     expect(getTempFileURL).toHaveBeenCalledWith({ fileList: [{ fileID: 'cloud://env/private-file', maxAge: 600 }] });
     await expect(storage.inspect('cloud://env/private-file')).resolves.toEqual({ mimeType: 'image/png', size: 8 });
+    expect(client.downloadFile).toHaveBeenCalledWith({ fileID: 'cloud://env/private-file' });
+  });
+
+  it('rejects CloudBase bytes disguised by an image Content-Type before completion', async () => {
+    const bytes = Buffer.from('evilcode');
+    const client: CloudBaseStorageClient = {
+      uploadFile: jest.fn(async () => ({ fileID: 'unused' })),
+      deleteFile: jest.fn(async () => undefined),
+      downloadFile: jest.fn(async () => ({ fileContent: bytes })),
+      getFileInfo: jest.fn(async () => ({ fileList: [{ code: 'SUCCESS', fileID: 'match-result-evidence--object.png', contentType: 'image/png', size: bytes.length }] }))
+    };
+    const { prisma } = fixture();
+    const storage = new CloudBaseObjectStorage(client);
+    await expect(storage.inspect('match-result-evidence--object.png'))
+      .rejects.toMatchObject({ response: { code: 'INVALID_RESULT_EVIDENCE' } });
+    const actualService = new ResultEvidenceStorageService(prisma as never, storage);
+    await expect(actualService.completeUserUpload(userId, matchId, uploadId, { expectedVersion: 1 }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_RESULT_EVIDENCE' } });
+    expect(prisma.matchResultEvidenceUpload.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns an authenticated API route for local direct upload', async () => {
@@ -129,5 +154,23 @@ describe('ResultEvidenceStorageService', () => {
       const { service } = fixture(options);
       await expect(service.createUserUpload(userId, matchId, input)).rejects.toMatchObject({ response: { code: expect.any(String) } });
     }
+  });
+
+  it.each([
+    { options: { stageStatus: 'DRAFT' }, label: 'unpublished stage' },
+    { options: { competitionStatus: 'DRAFT' }, label: 'draft competition' },
+    { options: { competitionStatus: 'CANCELLED' }, label: 'cancelled competition' }
+  ])('blocks create, complete, and read for a $label', async ({ options }) => {
+    const { service, prisma } = fixture(options);
+    for (const action of [
+      () => service.createUserUpload(userId, matchId, input),
+      () => service.completeUserUpload(userId, matchId, uploadId, { expectedVersion: 1 }),
+      () => service.userReadUrl(userId, matchId, '55555555-5555-4555-8555-555555555555')
+    ]) {
+      await expect(action()).rejects.toMatchObject({ response: { code: 'MATCH_RESULT_NOT_ALLOWED' } });
+    }
+    expect(prisma.matchResultEvidenceUpload.create).not.toHaveBeenCalled();
+    expect(prisma.matchResultEvidenceUpload.updateMany).not.toHaveBeenCalled();
+    expect(prisma.matchResultEvidence.findUnique).not.toHaveBeenCalled();
   });
 });
