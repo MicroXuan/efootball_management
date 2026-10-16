@@ -14,7 +14,7 @@ import {
 } from './player-market.viewmodel'
 
 type MarketView = 'players' | 'public' | 'announcements' | 'mine'
-type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string }
+type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string; view?: MarketView }
 type DatasetEvent = { currentTarget: { dataset: { view?: MarketView; playerId?: string } } }
 type InputEvent = { detail: { value: string } }
 type PickerEvent = { detail: { value: string } }
@@ -54,7 +54,8 @@ Page({
       this.setData({ state: 'error', errorMessage: '球员市场参数缺失' })
       return
     }
-    this.setData({ leagueId: options.leagueId, seasonId: options.seasonId, teamId: options.teamId })
+    const view = viewLabels.some(({ key }) => key === options.view) ? options.view : 'players'
+    this.setData({ leagueId: options.leagueId, seasonId: options.seasonId, teamId: options.teamId, view })
   },
 
   onShow() {

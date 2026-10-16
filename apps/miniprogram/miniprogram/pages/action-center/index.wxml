@@ -1,0 +1,46 @@
+<view class="page-shell action-center-page">
+  <view class="page-head">
+    <view><text class="kicker">跨联赛任务</text><text class="title">待办中心</text></view>
+    <text class="head-count">{{view.attentionCount ? view.attentionCount + ' 项提醒' : '暂无提醒'}}</text>
+  </view>
+  <text class="intro">只汇总需要关注的状态，具体操作仍在原业务页面完成。</text>
+
+  <loading-state wx:if="{{state === 'loading'}}" label="正在整理待办" />
+  <view wx:elif="{{state === 'error'}}" class="state-card">
+    <text class="state-title">暂时无法加载待办</text>
+    <text class="state-copy">{{errorMessage}}</text>
+    <button class="retry-button" bindtap="retry">重新加载</button>
+  </view>
+  <view wx:elif="{{view.empty}}" class="state-card state-card--empty">
+    <text class="state-title">当前没有待办</text>
+    <text class="state-copy">交易、强报或拍卖状态变化后，会统一显示在这里。</text>
+  </view>
+  <block wx:else>
+    <view wx:if="{{view.required.length}}" class="task-section">
+      <view class="section-head"><text class="section-title">待我处理</text><text class="section-count">{{view.required.length}}</text></view>
+      <view wx:for="{{view.required}}" wx:key="id" class="task-card task-card--required" data-route="{{item.route}}" bindtap="openTask" role="button">
+        <view class="task-marker">{{item.marker}}</view>
+        <view class="task-copy"><view class="task-topline"><text class="task-source">{{item.sourceLabel}} · {{item.league.name}}</text><text class="task-status">{{item.statusLabel}}</text></view><text class="task-title">{{item.title}}</text><text class="task-detail">{{item.detail}} · {{item.timeLabel}}</text></view>
+        <text class="task-arrow">›</text>
+      </view>
+    </view>
+
+    <view wx:if="{{view.updates.length}}" class="task-section">
+      <view class="section-head"><text class="section-title">状态更新</text><text class="section-count">{{view.updates.length}}</text></view>
+      <view wx:for="{{view.updates}}" wx:key="id" class="task-card" data-route="{{item.route}}" bindtap="openTask" role="button">
+        <view class="task-marker">{{item.marker}}</view>
+        <view class="task-copy"><view class="task-topline"><text class="task-source">{{item.sourceLabel}} · {{item.league.name}}</text><view class="status-line"><view wx:if="{{item.unread}}" class="unread-dot"></view><text class="task-status">{{item.statusLabel}}</text></view></view><text class="task-title">{{item.title}}</text><text class="task-detail">{{item.detail}} · {{item.timeLabel}}</text></view>
+        <text class="task-arrow">›</text>
+      </view>
+    </view>
+
+    <view wx:if="{{view.recent.length}}" class="task-section">
+      <view class="section-head"><text class="section-title">近期记录</text><text class="section-count">{{view.recent.length}}</text></view>
+      <view wx:for="{{view.recent}}" wx:key="id" class="task-card task-card--recent" data-route="{{item.route}}" bindtap="openTask" role="button">
+        <view class="task-marker">{{item.marker}}</view>
+        <view class="task-copy"><view class="task-topline"><text class="task-source">{{item.sourceLabel}} · {{item.league.name}}</text><view class="status-line"><view wx:if="{{item.unread}}" class="unread-dot"></view><text class="task-status">{{item.statusLabel}}</text></view></view><text class="task-title">{{item.title}}</text><text class="task-detail">{{item.detail}} · {{item.timeLabel}}</text></view>
+        <text class="task-arrow">›</text>
+      </view>
+    </view>
+  </block>
+</view>

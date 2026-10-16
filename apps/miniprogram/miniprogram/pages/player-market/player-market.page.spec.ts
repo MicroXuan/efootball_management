@@ -15,6 +15,7 @@ vi.mock('../../services/api', () => ({ ApiError: class ApiError extends Error {}
 
 type MarketPage = {
   data: Record<string, any>
+  onLoad(options: Record<string, string | undefined>): void
   loadView(showLoading?: boolean, mode?: 'replace' | 'append'): Promise<void>
   onPageScroll(event: { scrollTop: number }): void
   backToTop(): void
@@ -58,6 +59,14 @@ function context() {
 }
 
 describe('player market page pagination', () => {
+  it('opens the requested application view from an action-center deep link', () => {
+    const instance = context()
+
+    page.onLoad.call(instance, { leagueId: 'league-1', seasonId: 'season-1', teamId: 'team-1', view: 'mine' })
+
+    expect(instance.data.view).toBe('mine')
+  })
+
   it('loads 30 players initially, then appends the next cursor page without duplicates', async () => {
     mocks.listMarket
       .mockResolvedValueOnce({ items: [player('player-1'), player('player-2')], nextCursor: 'next-1' })
