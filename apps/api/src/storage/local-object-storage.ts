@@ -1,6 +1,8 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { EVIDENCE_TEMP_PREFIX, retainedEvidenceKey } from './evidence-object-keys.js';
+import { validateResultEvidenceImage } from './image-validation.js';
 import type {
   ObjectStorage,
   DirectUploadGrant,
@@ -13,7 +15,7 @@ import type {
 } from './object-storage.js';
 
 const SAFE_KEY = /^(?:league-images|league-center-banners|team-crests)--[0-9a-f-]+\.(?:jpg|png|webp)$/;
-const PRIVATE_KEY = /^match-result-evidence--[a-z0-9][a-z0-9-]{0,127}\.(?:jpg|png|webp)$/;
+const PRIVATE_KEY = /^match-result-evidence(?:-(?:temp|retained))?--[a-z0-9][a-z0-9-]{0,127}\.(?:jpg|png|webp)$/;
 const MIME_BY_EXTENSION: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
@@ -80,7 +82,7 @@ export class LocalObjectStorage implements ObjectStorage {
       throw new Error('Invalid private storage object');
     }
     const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/png' ? 'png' : 'webp';
-    const key = `${scope}--${name}.${extension}`;
+    const key = `${EVIDENCE_TEMP_PREFIX}${name}.${extension}`;
     return { key, uploadUrl: `${this.publicBaseUrl}/v1/result-evidence/objects/${key}`, headers: { 'content-type': mimeType } };
   }
 
@@ -104,8 +106,20 @@ export class LocalObjectStorage implements ObjectStorage {
 
   async inspect(key: string): Promise<StoredObjectMetadata | null> {
     const object = await this.readPrivate(key);
-    return object ? { mimeType: object.mimeType, size: object.size,
-      checksumSha256: createHash('sha256').update(object.buffer).digest('hex') } : null;
+    if (!object) return null;
+    validateResultEvidenceImage({ buffer: object.buffer, size: object.size, mimetype: object.mimeType, originalname: key });
+    return { ...object, checksumSha256: createHash('sha256').update(object.buffer).digest('hex') };
+  }
+
+  async promoteEvidence(key: string, object: StoredObjectMetadata & { buffer: Buffer }): Promise<string> {
+    const retainedKey = retainedEvidenceKey(key);
+    const file = validateResultEvidenceImage({ buffer: object.buffer, size: object.size,
+      mimetype: object.mimeType, originalname: key });
+    if (createHash('sha256').update(file.buffer).digest('hex') !== object.checksumSha256) throw new Error('Evidence checksum changed');
+    await mkdir(this.directory, { recursive: true });
+    // A pending session may retry this deterministic write; callers serialize it with cleanup.
+    await writeFile(this.privatePathFor(retainedKey), file.buffer);
+    return retainedKey;
   }
 
   async writePrivate(key: string, body: Buffer, mimeType: string): Promise<void> {

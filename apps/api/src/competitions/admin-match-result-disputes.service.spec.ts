@@ -25,8 +25,11 @@ describe('administrator arbitration', () => {
   const results = new ResultsService(prisma, new MutationReceiptService(prisma), standings, new CupProgressionService(),
     undefined, new AdminMutationReceiptService(prisma), authorization, new AuditLogService(prisma));
   const storage = { temporaryReadUrl: jest.fn(async () => 'https://private.test/signed'),
-    createDirectUpload: jest.fn(async () => ({ key: randomUUID(), uploadUrl: 'https://private.test/upload', headers: {} })),
-    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64) })) };
+    createDirectUpload: jest.fn(async () => ({ key: `match-result-evidence-temp--${randomUUID()}.png`, uploadUrl: 'https://private.test/upload', headers: {} })),
+    promoteEvidence: jest.fn(async (key: string) => key.replace('evidence-temp--', 'evidence-retained--')),
+    delete: jest.fn(async () => undefined),
+    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64),
+      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) })) };
   const evidence = new ResultEvidenceStorageService(prisma, storage as never, authorization);
   const service = new AdminMatchResultDisputesService(prisma, authorization, results, disputes, evidence);
   beforeAll(async () => {
@@ -228,10 +231,13 @@ describe('administrator arbitration', () => {
       await expect(results.recordByLeagueAdmin(adminId, b.leagueId, b.competition.id, b.match.id, score, randomUUID())).rejects.toMatchObject({ response: { code: 'EVIDENCE_UPLOAD_INVALID' } });
       await results.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, score, randomUUID());
       const image = await prisma.matchResultEvidence.findUniqueOrThrow({ where: { uploadId: grant.id } });
+      expect(image.objectKey).toMatch(/^match-result-evidence-retained--/);
+      expect(image.objectKey).not.toBe(grant.objectKey);
+      expect(await provider.readPrivate(grant.objectKey)).toBeNull();
       const url = new URL((await local.adminReadUrl(adminId, a.leagueId, a.match.id, image.id)).url);
       expect(url.pathname).toContain(`/admin/leagues/${a.leagueId}/`);
       expect(await provider.read(grant.objectKey)).toBeNull();
-      const file = await local.readAdminLocalObject(adminId, a.leagueId, grant.objectKey, url.searchParams.get('expires')!, url.searchParams.get('signature')!);
+      const file = await local.readAdminLocalObject(adminId, a.leagueId, image.objectKey, url.searchParams.get('expires')!, url.searchParams.get('signature')!);
       expect(file.getHeaders()).toMatchObject({ type: 'image/png', length: 8 });
       await expect(local.adminReadUrl(adminId, b.leagueId, a.match.id, image.id)).rejects.toThrow();
       await expect(local.userReadUrl(users[0]!, a.match.id, image.id)).rejects.toThrow();
@@ -299,7 +305,8 @@ describe('administrator arbitration', () => {
     expect(await prisma.matchResultDispute.findUnique({ where: { id: a.dispute!.id } })).toMatchObject({ status: 'RESOLVED', activeKey: null });
     expect(await prisma.matchResultEvidence.findUnique({ where: { uploadId: grant.id } })).toMatchObject({ role: 'ADMIN', uploadedByAdminId: adminId });
     const replacement = await evidence.createAdminUpload(adminId, a.leagueId, a.match.id, { role: 'ADMIN', expectedVersion: 4, mimeType: 'image/png', byteSize: 8, checksumSha256: 'b'.repeat(64) });
-    storage.inspect.mockResolvedValueOnce({ mimeType: 'image/png', size: 8, checksumSha256: 'b'.repeat(64) });
+    storage.inspect.mockResolvedValueOnce({ mimeType: 'image/png', size: 8, checksumSha256: 'b'.repeat(64),
+      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) });
     await evidence.completeAdminUpload(adminId, a.leagueId, a.match.id, replacement.id, { expectedVersion: 4 });
     await results.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, { ...input, expectedVersion: 4, homeScore: 4, evidenceUploadId: replacement.id }, randomUUID());
     expect(await prisma.matchResultVersion.findUnique({ where: { id: first.id } })).toMatchObject({ status: 'SUPERSEDED', homeScore: 0, awayScore: 3 });

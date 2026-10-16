@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
 import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from './image-validation.js';
+import { EVIDENCE_TEMP_PREFIX, retainedEvidenceKey } from './evidence-object-keys.js';
 import type { DirectUploadGrant, EvidenceMimeType, ObjectStorage, StorageScope, StoredObject, StoredObjectMetadata, StoredUploadInput } from './object-storage.js';
 
 export interface CloudBaseStorageClient {
@@ -40,7 +41,8 @@ export class CloudBaseObjectStorage implements ObjectStorage {
     const result = await this.client.deleteFile({ fileList: [key] }) as {
       code?: string; fileList?: Array<{ fileID: string; code: string }>;
     } | undefined;
-    if (result?.code || !result?.fileList?.some((file) => file.fileID === key && file.code === 'SUCCESS')) {
+    if (result?.code || !result?.fileList?.some((file) => file.fileID === key
+      && ['SUCCESS', 'STORAGE_FILE_NONEXIST'].includes(file.code))) {
       throw new Error('CloudBase object deletion was not acknowledged');
     }
   }
@@ -51,7 +53,7 @@ export class CloudBaseObjectStorage implements ObjectStorage {
     }
     if (!this.client.getUploadMetadata) throw new Error('CloudBase direct upload is unavailable');
     const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/png' ? 'png' : 'webp';
-    const cloudPath = `${scope}--${name}.${extension}`;
+    const cloudPath = `${EVIDENCE_TEMP_PREFIX}${name}.${extension}`;
     const { data } = await this.client.getUploadMetadata({ cloudPath });
     return {
       key: data.fileId,
@@ -92,8 +94,19 @@ export class CloudBaseObjectStorage implements ObjectStorage {
       throw new BadRequestException({ code: 'INVALID_RESULT_EVIDENCE', message: 'Stored evidence size could not be verified' });
     }
     const validated = validateResultEvidenceImage({ buffer: bytes, originalname: key, mimetype: mimeType, size: bytes.length });
-    return { mimeType: validated.mimeType, size: validated.size,
+    return { mimeType: validated.mimeType, size: validated.size, buffer: bytes,
       checksumSha256: createHash('sha256').update(bytes).digest('hex') };
+  }
+
+  async promoteEvidence(key: string, object: StoredObjectMetadata & { buffer: Buffer }): Promise<string> {
+    const retainedKey = retainedEvidenceKey(key);
+    const file = validateResultEvidenceImage({ buffer: object.buffer, size: object.size,
+      mimetype: object.mimeType, originalname: key });
+    if (createHash('sha256').update(file.buffer).digest('hex') !== object.checksumSha256) throw new Error('Evidence checksum changed');
+    // Reuse verified bytes: the signed temporary PUT may still overwrite its source object.
+    const result = await this.client.uploadFile({ cloudPath: retainedKey.replace(/^cloud:\/\/[^/]+\//, ''), fileContent: file.buffer });
+    if (result.fileID !== retainedKey) throw new Error('Evidence promotion returned an unexpected key');
+    return retainedKey;
   }
 
   publicUrlFor(key: string): string {

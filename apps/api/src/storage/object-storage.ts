@@ -15,6 +15,8 @@ export interface StoredObjectMetadata {
   size: number;
   /** Absent when inspection rejects size before downloading the object. */
   checksumSha256?: string;
+  /** The exact bytes inspected, reused for promotion without another download. */
+  buffer?: Buffer;
 }
 
 export interface StoredUploadInput {
@@ -45,6 +47,7 @@ export interface ObjectStorage {
   createDirectUpload?(scope: StorageScope, name: string, mimeType: EvidenceMimeType): Promise<DirectUploadGrant>;
   temporaryReadUrl?(key: string, maxAgeSeconds: number): Promise<string>;
   inspect?(key: string): Promise<StoredObjectMetadata | null>;
+  promoteEvidence?(key: string, object: StoredObjectMetadata & { buffer: Buffer }): Promise<string>;
   writePrivate?(key: string, body: Buffer, mimeType: string): Promise<void>;
   readPrivate?(key: string): Promise<ReadableStoredObject | null>;
   verifyPrivateRead?(key: string, expires: string, signature: string): boolean;

@@ -14,6 +14,8 @@ describe('CloudBase private evidence inspection', () => {
     }
     deleteFile.mockResolvedValueOnce({ fileList: [{ fileID: key, code: 'SUCCESS' }] });
     await expect(provider.delete(key)).resolves.toBeUndefined();
+    deleteFile.mockResolvedValueOnce({ fileList: [{ fileID: key, code: 'STORAGE_FILE_NONEXIST' }] });
+    await expect(provider.delete(key)).resolves.toBeUndefined();
   });
   const downloadFile = jest.fn(async () => ({ fileContent: png }));
   const client: CloudBaseStorageClient = {
@@ -27,7 +29,7 @@ describe('CloudBase private evidence inspection', () => {
   afterEach(() => downloadFile.mockResolvedValue({ fileContent: png }));
 
   it('reports type and size only after checking downloaded image bytes', async () => {
-    await expect(storage.inspect(key)).resolves.toEqual({ mimeType: 'image/png', size: png.length,
+    await expect(storage.inspect(key)).resolves.toEqual({ mimeType: 'image/png', size: png.length, buffer: png,
       checksumSha256: '4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6' });
     expect(downloadFile).toHaveBeenCalledWith({ fileID: key });
   });

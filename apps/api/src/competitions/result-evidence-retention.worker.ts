@@ -3,6 +3,7 @@ import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 import { MatchResultEventsService } from './match-result-events.service.js';
+import { evidenceOrphanKeys } from '../storage/evidence-object-keys.js';
 
 @Injectable()
 export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, OnModuleDestroy {
@@ -49,7 +50,8 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
     const cutoff = new Date(now.getTime() - 86_400_000);
     for (;;) {
       const batch = await this.prisma.matchResultEvidenceUpload.findMany({ where: {
-        id: { gt: after }, status: { in: ['PENDING', 'UPLOADED'] }, createdAt: { lt: cutoff },
+        // Revisit expired sessions: an in-flight provider write can finish after a DB timeout.
+        id: { gt: after }, status: { in: ['PENDING', 'UPLOADED', 'EXPIRED'] }, createdAt: { lt: cutoff },
         resultVersionId: null, disputeId: null, evidence: null
       }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: 100 });
       if (!batch.length) break;
@@ -59,12 +61,15 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
             const upload = await tx.matchResultEvidenceUpload.findUnique({ where: { id: candidate.id }, include: { evidence: true } });
-            if (!upload || !['PENDING', 'UPLOADED'].includes(upload.status) || upload.createdAt >= cutoff
+            if (!upload || !['PENDING', 'UPLOADED', 'EXPIRED'].includes(upload.status) || upload.createdAt >= cutoff
               || upload.evidence || upload.resultVersionId || upload.disputeId || upload.expiresAt > now) return;
             // Legacy evidence may reference the object without the optional uploadId relation.
-            if (await tx.matchResultEvidence.findUnique({ where: { objectKey: upload.objectKey } })) return;
-            await this.storage.delete(upload.objectKey);
-            await tx.matchResultEvidenceUpload.update({ where: { id: upload.id }, data: { status: 'EXPIRED' } });
+            const keys = evidenceOrphanKeys(upload.objectKey);
+            for (const objectKey of keys) {
+              if (await tx.matchResultEvidence.findUnique({ where: { objectKey } })) return;
+            }
+            for (const objectKey of keys) await this.storage.delete(objectKey);
+            if (upload.status !== 'EXPIRED') await tx.matchResultEvidenceUpload.update({ where: { id: upload.id }, data: { status: 'EXPIRED' } });
           });
         } catch (error) { this.logger.warn(`Upload ${candidate.id} cleanup will retry: ${String(error)}`); }
       }

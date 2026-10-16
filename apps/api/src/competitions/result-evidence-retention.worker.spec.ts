@@ -16,6 +16,31 @@ describe('evidence retention', () => {
   } });
   const worker = new ResultEvidenceRetentionWorker(scopedPrisma as never, storage as never);
   beforeEach(() => storage.delete.mockClear());
+  it.each(['PENDING', 'UPLOADED', 'EXPIRED'] as const)('cleans both temporary and deterministic retained orphan copies for %s', async (status) => {
+    const { match } = await fixture();
+    const session = await upload(match.id);
+    const temporary = `match-result-evidence-temp--${session.id}.png`;
+    const retained = `match-result-evidence-retained--${session.id}.png`;
+    await prisma.matchResultEvidenceUpload.update({ where: { id: session.id }, data: {
+      status, objectKey: status === 'PENDING' ? temporary : retained, createdAt: new Date(0), expiresAt: new Date(0)
+    } });
+    await worker.cleanup();
+    expect(storage.delete).toHaveBeenCalledWith(temporary);
+    expect(storage.delete).toHaveBeenCalledWith(retained);
+    expect(await prisma.matchResultEvidenceUpload.findUnique({ where: { id: session.id } })).toMatchObject({ status: 'EXPIRED' });
+  });
+  it('preserves a promoted copy referenced by formal evidence even without an upload relation', async () => {
+    const { match } = await fixture();
+    const session = await upload(match.id);
+    const retained = `match-result-evidence-retained--${session.id}.png`;
+    await prisma.matchResultEvidenceUpload.update({ where: { id: session.id }, data: {
+      status: 'PENDING', objectKey: `match-result-evidence-temp--${session.id}.png`, createdAt: new Date(0), expiresAt: new Date(0)
+    } });
+    await prisma.matchResultEvidence.create({ data: { matchId: match.id, role: 'SUBMITTER', uploadedByUserId: users[0]!,
+      objectKey: retained, mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64) } });
+    await worker.cleanup();
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
   it('does not delete an orphan session when legacy evidence references its object without an upload relation', async () => {
     const { match } = await fixture();
     const session = await upload(match.id);

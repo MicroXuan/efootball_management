@@ -7,6 +7,7 @@ import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from '../stora
 import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { retainedEvidenceKey } from '../storage/evidence-object-keys.js';
 
 const UPLOAD_LIFETIME_MS = 10 * 60 * 1000;
 const READ_LIFETIME_SECONDS = 10 * 60;
@@ -44,15 +45,7 @@ export class ResultEvidenceStorageService {
     await this.requireAdminMatch(adminId, leagueId, matchId, input.expectedVersion);
     const upload = await this.prisma.matchResultEvidenceUpload.findUnique({ where: { id: uploadId } });
     if (!upload || upload.matchId !== matchId || upload.uploadedByAdminId !== adminId || upload.role !== 'ADMIN') throw this.notFound();
-    if (upload.status !== 'PENDING' || upload.expiresAt <= new Date()) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Upload expired', 409);
-    const object = await this.storage.inspect?.(upload.objectKey);
-    if (!object || !this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize
-      || object.checksumSha256 !== upload.checksumSha256) {
-      throw this.invalid('Uploaded image does not match its session');
-    }
-    const claimed = await this.prisma.matchResultEvidenceUpload.updateMany({ where: { id: upload.id, status: 'PENDING', expiresAt: { gt: new Date() } }, data: { status: 'UPLOADED', completedAt: new Date() } });
-    if (claimed.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Upload expired', 409);
-    return { id: upload.id, status: 'UPLOADED' as const };
+    return this.completeUpload(upload);
   }
 
   async adminReadUrl(adminId: string, leagueId: string, matchId: string, evidenceId: string) {
@@ -130,22 +123,38 @@ export class ResultEvidenceStorageService {
     await this.requireParticipant(userId, matchId, input.expectedVersion);
     const upload = await this.prisma.matchResultEvidenceUpload.findUnique({ where: { id: uploadId } });
     if (!upload || upload.matchId !== matchId || upload.uploadedByUserId !== userId) throw this.notFound();
-    if (upload.status !== 'PENDING' || upload.expiresAt <= new Date()) {
-      throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Evidence upload is no longer pending', 409);
-    }
-    if (!this.storage.inspect) throw new Error('Storage inspection is unavailable');
-    const object = await this.storage.inspect(upload.objectKey);
-    if (!object) throw this.invalid('Uploaded evidence was not found');
-    if (!this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize
-      || object.checksumSha256 !== upload.checksumSha256) {
-      throw this.invalid('Uploaded evidence type, size, or checksum does not match the session');
-    }
-    const updated = await this.prisma.matchResultEvidenceUpload.updateMany({
-      where: { id: uploadId, matchId, uploadedByUserId: userId, status: 'PENDING', expiresAt: { gt: new Date() } },
-      data: { status: 'UPLOADED', completedAt: new Date() }
-    });
-    if (updated.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Evidence upload is no longer pending', 409);
-    return { id: upload.id, status: 'UPLOADED' as const };
+    return this.completeUpload(upload);
+  }
+
+  private async completeUpload(authorized: { id: string; matchId: string }) {
+    const sourceKey = await this.prisma.$transaction(async (transaction) => {
+      // Orphan cleanup uses this same lock, so it cannot delete between promotion and CAS.
+      await transaction.$queryRaw`SELECT id FROM competition_matches WHERE id = ${authorized.matchId} FOR UPDATE`;
+      const upload = await transaction.matchResultEvidenceUpload.findUnique({ where: { id: authorized.id } });
+      if (!upload || upload.matchId !== authorized.matchId) throw this.notFound();
+      if (upload.status === 'UPLOADED') return null;
+      if (upload.status !== 'PENDING' || upload.expiresAt <= new Date()) {
+        throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Evidence upload is no longer pending', 409);
+      }
+      const object = await this.storage.inspect?.(upload.objectKey);
+      if (!object || !this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType
+        || object.size !== upload.byteSize || !object.checksumSha256 || object.checksumSha256 !== upload.checksumSha256
+        || !object.buffer || object.buffer.length !== object.size) {
+        throw this.invalid('Uploaded evidence type, size, or checksum does not match the session');
+      }
+      if (!this.storage.promoteEvidence) throw new Error('Evidence promotion is unavailable');
+      const retainedKey = await this.storage.promoteEvidence(upload.objectKey, { ...object, buffer: object.buffer });
+      if (retainedKey !== retainedEvidenceKey(upload.objectKey)) throw this.invalid('Evidence was not promoted to its retained key');
+      const claimed = await transaction.matchResultEvidenceUpload.updateMany({
+        where: { id: upload.id, matchId: upload.matchId, objectKey: upload.objectKey, status: 'PENDING', expiresAt: { gt: new Date() } },
+        data: { status: 'UPLOADED', completedAt: new Date(), objectKey: retainedKey }
+      });
+      if (claimed.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Evidence upload is no longer pending', 409);
+      return upload.objectKey === retainedKey ? null : upload.objectKey;
+    }, { timeout: 30_000 });
+    // Failure here is harmless: the temporary-only lifecycle is the fallback.
+    if (sourceKey) await this.storage.delete(sourceKey).catch(() => undefined);
+    return { id: authorized.id, status: 'UPLOADED' as const };
   }
 
   async userReadUrl(userId: string, matchId: string, evidenceId: string): Promise<{ url: string; expiresAt: string }> {

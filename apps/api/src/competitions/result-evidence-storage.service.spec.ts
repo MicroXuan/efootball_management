@@ -29,6 +29,7 @@ function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?:
   };
   const upload = { id: uploadId, matchId, uploadedByUserId: userId, objectKey: 'match-result-evidence--object.png', mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64), status: 'PENDING', expiresAt: new Date(Date.now() + 600_000) };
   const prisma = {
+    $queryRaw: jest.fn(async () => []),
     competitionMatch: { findUnique: jest.fn(async () => match) },
     matchResultEvidenceUpload: {
       create: jest.fn(async () => upload),
@@ -41,10 +42,15 @@ function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?:
     put: jest.fn(async () => { throw new Error('unexpected'); }),
     delete: jest.fn(async () => undefined),
     createDirectUpload: jest.fn(async () => ({ key: upload.objectKey, uploadUrl: 'https://private.example/put', headers: { authorization: 'signed' } })),
-    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64) })),
+    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64),
+      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) })),
+    promoteEvidence: jest.fn(async () => 'match-result-evidence-retained--object.png'),
     temporaryReadUrl: jest.fn(async () => 'https://private.example/read')
   };
-  return { match, upload, prisma, storage, service: new ResultEvidenceStorageService(prisma as never, storage) };
+  const transactional = Object.assign(prisma, {
+    $transaction: async (callback: (client: typeof prisma) => Promise<unknown>) => callback(prisma)
+  });
+  return { match, upload, prisma: transactional, storage, service: new ResultEvidenceStorageService(transactional as never, storage) };
 }
 
 describe('private evidence providers', () => {
@@ -57,10 +63,10 @@ describe('private evidence providers', () => {
       key: 'cloud://env/private-file', uploadUrl: 'https://cos.example/put',
       headers: expect.objectContaining({ authorization: 'signature', 'x-cos-security-token': 'token', 'x-cos-meta-fileid': 'cos-id' })
     });
-    expect(getUploadMetadata).toHaveBeenCalledWith({ cloudPath: 'match-result-evidence--object.png' });
+    expect(getUploadMetadata).toHaveBeenCalledWith({ cloudPath: 'match-result-evidence-temp--object.png' });
     await expect(storage.temporaryReadUrl('cloud://env/private-file', 600)).resolves.toBe('https://cos.example/read');
     expect(getTempFileURL).toHaveBeenCalledWith({ fileList: [{ fileID: 'cloud://env/private-file', maxAge: 600 }] });
-    await expect(storage.inspect('cloud://env/private-file')).resolves.toEqual({ mimeType: 'image/png', size: 8, checksumSha256: pngChecksum });
+    await expect(storage.inspect('cloud://env/private-file')).resolves.toMatchObject({ mimeType: 'image/png', size: 8, checksumSha256: pngChecksum });
     expect(client.downloadFile).toHaveBeenCalledWith({ fileID: 'cloud://env/private-file' });
   });
 
@@ -85,8 +91,8 @@ describe('private evidence providers', () => {
   it('returns an authenticated API route for local direct upload', async () => {
     const storage = new LocalObjectStorage('/tmp/unused', 'http://127.0.0.1:3000');
     await expect(storage.createDirectUpload('match-result-evidence', 'object', 'image/png')).resolves.toEqual({
-      key: 'match-result-evidence--object.png',
-      uploadUrl: 'http://127.0.0.1:3000/v1/result-evidence/objects/match-result-evidence--object.png',
+      key: 'match-result-evidence-temp--object.png',
+      uploadUrl: 'http://127.0.0.1:3000/v1/result-evidence/objects/match-result-evidence-temp--object.png',
       headers: { 'content-type': 'image/png' }
     });
   });
@@ -99,7 +105,7 @@ describe('private evidence providers', () => {
       const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       await storage.writePrivate(grant.key, bytes, 'image/png');
       await expect(storage.read(grant.key)).resolves.toBeNull();
-      await expect(storage.inspect(grant.key)).resolves.toEqual({ mimeType: 'image/png', size: 8, checksumSha256: pngChecksum });
+      await expect(storage.inspect(grant.key)).resolves.toMatchObject({ mimeType: 'image/png', size: 8, checksumSha256: pngChecksum });
       const url = new URL(await storage.temporaryReadUrl(grant.key, 600));
       const expires = url.searchParams.get('expires') ?? '';
       const signature = url.searchParams.get('signature') ?? '';
