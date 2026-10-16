@@ -6,6 +6,7 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { PlayerMarketAccessService } from './player-market-access.service.js';
 import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
 import { playerMarketError } from './player-market.errors.js';
+import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
 
 @Injectable()
 export class TeamPlayerReleaseService {
@@ -14,7 +15,8 @@ export class TeamPlayerReleaseService {
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
     @Inject(PlayerMarketAccessService) private readonly access: PlayerMarketAccessService,
     @Inject(PlayerMarketLockRepository) private readonly locks: PlayerMarketLockRepository,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService
   ) {}
 
   async release(
@@ -22,22 +24,33 @@ export class TeamPlayerReleaseService {
     leagueTeamId: string,
     input: ReleaseOwnedPlayerRequest,
     key: string,
-    at = new Date()
+    at?: Date
   ): Promise<RosterMutationResponse> {
     const scope = await this.access.requireOwnedTeam(userId, leagueTeamId, input.seasonId);
     return this.receipts.execute(userId, `player-market.release:${input.ownershipId}`, key, async (tx) => {
-      await this.locks.lockTeam(tx, leagueTeamId);
+      const snapshot = await tx.leaguePlayerOwnership.findUnique({ where: { id: input.ownershipId } });
+      if (!snapshot || snapshot.leagueId !== scope.leagueId || snapshot.leagueTeamId !== leagueTeamId) {
+        throw playerMarketError('OWNERSHIP_NOT_FOUND', '球队中不存在该球员', 404);
+      }
+      let lockedAt = at;
+      await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(
+        tx,
+        input.seasonId,
+        () => lockedAt ??= new Date()
+      );
+      const mutationAt = lockedAt ?? new Date();
+      await this.locks.lockPlayer(tx, snapshot.leagueId, snapshot.footballPlayerId);
+      await this.locks.lockTeams(tx, [leagueTeamId]);
       const current = await tx.leaguePlayerOwnership.findUnique({ where: { id: input.ownershipId } });
       if (!current || current.leagueId !== scope.leagueId || current.leagueTeamId !== leagueTeamId) {
         throw playerMarketError('OWNERSHIP_NOT_FOUND', '球队中不存在该球员', 404);
       }
-      await this.locks.lockPlayer(tx, current.leagueId, current.footballPlayerId);
       const [team, window] = await Promise.all([
         tx.leagueTeam.findUnique({ where: { id: leagueTeamId } }),
         tx.transferWindow.findUnique({ where: { id: input.transferWindowId } })
       ]);
       if (!team || team.status !== 'ACTIVE') throw playerMarketError('LEAGUE_TEAM_INELIGIBLE', '球队已退出或不可用');
-      if (!window || window.seasonId !== input.seasonId || !window.allowSell || at < window.startsAt || at >= window.endsAt) {
+      if (!window || window.seasonId !== input.seasonId || !window.allowSell || mutationAt < window.startsAt || mutationAt >= window.endsAt) {
         throw playerMarketError('TRANSFER_WINDOW_CLOSED', '当前窗口不允许下放球员');
       }
       if (current.version !== input.expectedVersion) throw playerMarketError('VERSION_CONFLICT', '球员归属已更新，请刷新后重试');
@@ -57,7 +70,7 @@ export class TeamPlayerReleaseService {
         oldSalaryMinor: current.salaryMinor,
         reason: input.reason,
         createdByUserId: userId,
-        createdAt: at
+        createdAt: mutationAt
       } });
       await tx.playerReleaseRestriction.create({ data: {
         leagueId: current.leagueId,
@@ -67,7 +80,7 @@ export class TeamPlayerReleaseService {
         footballPlayerId: current.footballPlayerId,
         rosterTransactionId: transaction.id,
         createdByUserId: userId,
-        createdAt: at
+        createdAt: mutationAt
       } });
       await this.audit.record(tx, {
         actorUserId: userId,
@@ -82,11 +95,17 @@ export class TeamPlayerReleaseService {
         tx.leaguePlayerOwnership.count({ where: { leagueTeamId, status: 'ACTIVE' } }),
         tx.leaguePlayerOwnership.aggregate({ where: { leagueTeamId, status: 'ACTIVE' }, _sum: { salaryMinor: true } }),
         tx.leagueSalaryRuleVersion.findFirst({
-          where: { leagueId: current.leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
+          where: { leagueId: current.leagueId, status: 'ACTIVE', effectiveAt: { lte: mutationAt } },
           orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
         })
       ]);
       if (!rule) throw playerMarketError('SALARY_RULE_NOT_CONFIGURED', '联赛尚未配置工资规则', 422);
+      const salaryMinor = salary._sum.salaryMinor ?? 0;
+      const rosterStatus = salaryMinor > rule.salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT';
+      await tx.leagueTeam.updateMany({
+        where: { id: leagueTeamId, rosterStatus: { not: rosterStatus } },
+        data: { rosterStatus, version: { increment: 1 } }
+      });
       return {
         ownership: {
           id: ownership.id,
@@ -125,7 +144,7 @@ export class TeamPlayerReleaseService {
           createdByUserId: transaction.createdByUserId,
           createdAt: transaction.createdAt.toISOString()
         },
-        summary: { rosterCount, salaryMinor: salary._sum.salaryMinor ?? 0, salaryCapMinor: rule.salaryCapMinor }
+        summary: { rosterCount, salaryMinor, salaryCapMinor: rule.salaryCapMinor }
       };
     });
   }

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   LeagueDetail,
   LeagueListQuery,
@@ -13,6 +13,7 @@ import { MutationReceiptService } from '../competitions/mutation-receipt.service
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
 
 type SeasonWithCount = LeagueSeason & {
   _count: { entries: number };
@@ -27,18 +28,22 @@ const LEAGUE_INCLUDE = {
   }
 } satisfies Prisma.LeagueInclude;
 type LeagueRecord = Prisma.LeagueGetPayload<{ include: typeof LEAGUE_INCLUDE }>;
+type LeagueCreationInput = Omit<ParsedCreateLeagueRequest, 'resultEvidenceRequired'> & {
+  resultEvidenceRequired?: boolean;
+};
 
 @Injectable()
 export class LeaguesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
-    @Inject(AuthorizationService) private readonly authorization: AuthorizationService
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Optional() @Inject(AuditLogService) private readonly audit: AuditLogService = new AuditLogService(prisma)
   ) {}
 
   create(
     actorId: string,
-    input: ParsedCreateLeagueRequest,
+    input: LeagueCreationInput,
     key: string
   ): Promise<LeagueDetail> {
     return this.receipts.execute(actorId, 'league.create', key, async (transaction) => {
@@ -55,6 +60,7 @@ export class LeaguesService {
           description: input.description,
           logoUrl: input.logoUrl,
           edition: input.edition,
+          resultEvidenceRequired: input.resultEvidenceRequired ?? false,
           defaultPlatform: 'MOBILE',
           defaultServerRegion: this.legacyRegion(input.edition),
           defaultSuperCapacity: input.defaultSuperCapacity,
@@ -110,11 +116,24 @@ export class LeaguesService {
           ...(input.defaultPromotionCount !== undefined
             ? { defaultPromotionCount: input.defaultPromotionCount }
             : {}),
+          ...(input.resultEvidenceRequired !== undefined
+            ? { resultEvidenceRequired: input.resultEvidenceRequired }
+            : {}),
           version: { increment: 1 }
         }
       });
       if (updated.count !== 1) {
         throw new LeagueError('VERSION_CONFLICT', 'League has changed', 409);
+      }
+      if (input.resultEvidenceRequired !== undefined) {
+        await this.audit.record(transaction, {
+          actorUserId: actorId, leagueId, action: 'league.result-evidence-rule.update',
+          resourceType: 'League', resourceId: leagueId,
+          metadata: {
+            previousResultEvidenceRequired: existing.resultEvidenceRequired,
+            resultEvidenceRequired: input.resultEvidenceRequired
+          }
+        });
       }
       return this.getRecord(transaction, leagueId).then((record) => this.detail(record, true));
     });
@@ -186,6 +205,7 @@ export class LeaguesService {
       logoUrl: record.logoUrl,
       status: record.status,
       edition: record.edition,
+      resultEvidenceRequired: record.resultEvidenceRequired,
       defaultSuperCapacity: record.defaultSuperCapacity,
       defaultChampionCapacity: record.defaultChampionCapacity,
       defaultPromotionCount: record.defaultPromotionCount,

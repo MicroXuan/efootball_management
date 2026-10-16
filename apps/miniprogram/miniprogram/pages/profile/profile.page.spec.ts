@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ProfilePage = {
+  openActionCenter(): void
   openMyMatches(): void
   openPlayerAuctions(): void
   openFavorites(): void
@@ -19,6 +20,11 @@ beforeEach(() => {
 })
 
 describe('profile quick actions', () => {
+  it('opens the cross-league action center', () => {
+    page.openActionCenter()
+    expect(wx.navigateTo).toHaveBeenCalledWith({ url: '/pages/action-center/index' })
+  })
+
   it.each([
     ['openMyMatches', '/pages/my-matches/index'],
     ['openPlayerAuctions', '/pages/player-auctions/index'],

@@ -29,6 +29,7 @@ describe('LeaguesService', () => {
 
   afterAll(async () => {
     await prisma.mutationReceipt.deleteMany({ where: { actorId } });
+    await prisma.auditLog.deleteMany({ where: { actorUserId: actorId } });
     await prisma.seasonEntry.deleteMany({ where: { season: { leagueId: { in: leagueIds } } } });
     await prisma.league.updateMany({
       where: { id: { in: leagueIds } },
@@ -62,6 +63,7 @@ describe('LeaguesService', () => {
 
     expect(created).toMatchObject({
       name: input.name,
+      resultEvidenceRequired: false,
       defaultSuperCapacity: 23,
       defaultChampionCapacity: 18,
       defaultPromotionCount: 4,
@@ -110,6 +112,18 @@ describe('LeaguesService', () => {
       name: '过期修改',
       expectedVersion: created.version
     }, `stale-${suffix}`)).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('audits legacy manager changes to the mandatory evidence rule in the same mutation', async () => {
+    const created = await service.create(actorId, { ...input, name: '截图规则联赛' }, `evidence-create-${suffix}`);
+    leagueIds.push(created.id);
+    await service.update(actorId, created.id, { resultEvidenceRequired: true, expectedVersion: created.version }, `evidence-update-${suffix}`);
+    await expect(prisma.auditLog.findFirst({
+      where: { actorUserId: actorId, leagueId: created.id, action: 'league.result-evidence-rule.update' }
+    })).resolves.toMatchObject({
+      resourceType: 'League', resourceId: created.id,
+      metadata: { previousResultEvidenceRequired: false, resultEvidenceRequired: true }
+    });
   });
 
   it('lists only active leagues but keeps archived detail addressable', async () => {

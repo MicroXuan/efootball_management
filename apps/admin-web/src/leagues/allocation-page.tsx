@@ -293,8 +293,8 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
 
   const submitScore = async () => {
     if (!confirmed || !scoreEditor || homeScore === null || awayScore === null) return;
-    if (scoreEditor.officialResult && !correctionReason.trim()) {
-      setError('修改已有官方比分时必须填写修正原因');
+    if (!correctionReason.trim()) {
+      setError(scoreEditor.officialResult ? '修改已有官方比分时必须填写修正原因' : '录入官方比分时必须填写原因');
       return;
     }
     setScoreBusy(true); setError(null); setNotice(null);
@@ -305,7 +305,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
           method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: MatchResultVersionResponseSchema,
           body: {
             homeScore, awayScore, expectedVersion: scoreEditor.version,
-            reason: correctionReason.trim() || null
+            reason: correctionReason.trim()
           }
         }
       );
@@ -411,13 +411,13 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
           <span>:</span>
           <InputNumber aria-label="客队比分" controls={false} min={0} max={99} precision={0} value={awayScore} onChange={setAwayScore} placeholder="客队" />
         </div>
-        {scoreEditor.officialResult ? <Input.TextArea
-          aria-label="比分修正原因"
+        <Input.TextArea
+          aria-label={scoreEditor.officialResult ? '比分修正原因' : '比分录入原因'}
           value={correctionReason}
           onChange={(event) => setCorrectionReason(event.target.value)}
-          placeholder="修改已有官方比分时必须填写原因"
+          placeholder={scoreEditor.officialResult ? '修改已有官方比分时必须填写原因' : '请填写录入官方比分的依据'}
           maxLength={512}
-        /> : null}
+        />
       </div> : null}
     </Modal>
   </div>;

@@ -6,6 +6,10 @@ import { AdminError } from './admin.errors.js';
 import { AdminMutationReceiptService } from './admin-mutation-receipt.service.js';
 import { AuditLogService } from './audit-log.service.js';
 
+type LeagueCreationInput = Omit<ParsedCreateLeagueRequest, 'resultEvidenceRequired'> & {
+  resultEvidenceRequired?: boolean;
+};
+
 @Injectable()
 export class AdminLeaguesService {
   constructor(
@@ -40,7 +44,7 @@ export class AdminLeaguesService {
     return this.detail(league);
   }
 
-  create(actorAdminId: string, input: ParsedCreateLeagueRequest, key: string) {
+  create(actorAdminId: string, input: LeagueCreationInput, key: string) {
     return this.receipts.execute(actorAdminId, 'admin.league.create', key, async (transaction) => {
       const league = await transaction.league.create({
         data: {
@@ -49,6 +53,7 @@ export class AdminLeaguesService {
           description: input.description,
           logoUrl: input.logoUrl,
           edition: input.edition,
+          resultEvidenceRequired: input.resultEvidenceRequired ?? false,
           defaultPlatform: 'MOBILE',
           defaultServerRegion: this.legacyRegion(input.edition),
           defaultSuperCapacity: input.defaultSuperCapacity,
@@ -76,6 +81,9 @@ export class AdminLeaguesService {
     });
     if (!visible) throw new AdminError('LEAGUE_NOT_FOUND', 'League was not found', 404);
     return this.receipts.execute(actorAdminId, `admin.league.update:${leagueId}`, key, async (transaction) => {
+      const before = input.resultEvidenceRequired !== undefined
+        ? await transaction.league.findFirst({ where: { id: leagueId, isDeleted: false }, select: { resultEvidenceRequired: true } })
+        : null;
       const result = await transaction.league.updateMany({
         where: { id: leagueId, version: input.expectedVersion, isDeleted: false },
         data: {
@@ -91,6 +99,7 @@ export class AdminLeaguesService {
           ...(input.defaultSuperCapacity !== undefined ? { defaultSuperCapacity: input.defaultSuperCapacity } : {}),
           ...(input.defaultChampionCapacity !== undefined ? { defaultChampionCapacity: input.defaultChampionCapacity } : {}),
           ...(input.defaultPromotionCount !== undefined ? { defaultPromotionCount: input.defaultPromotionCount } : {}),
+          ...(input.resultEvidenceRequired !== undefined ? { resultEvidenceRequired: input.resultEvidenceRequired } : {}),
           version: { increment: 1 }
         }
       });
@@ -105,9 +114,12 @@ export class AdminLeaguesService {
         action: 'admin.league.update',
         resourceType: 'League',
         resourceId: leagueId,
-        metadata: Object.fromEntries(
-          Object.entries(input).filter(([keyName]) => keyName !== 'expectedVersion')
-        )
+        metadata: {
+          ...Object.fromEntries(Object.entries(input).filter(([keyName]) => keyName !== 'expectedVersion')),
+          ...(input.resultEvidenceRequired !== undefined
+            ? { previousResultEvidenceRequired: before?.resultEvidenceRequired ?? null }
+            : {})
+        }
       });
       return this.detail(league);
     });
@@ -126,6 +138,7 @@ export class AdminLeaguesService {
       logoUrl: league.logoUrl,
       status: league.status,
       edition: league.edition,
+      resultEvidenceRequired: league.resultEvidenceRequired,
       defaultSuperCapacity: league.defaultSuperCapacity,
       defaultChampionCapacity: league.defaultChampionCapacity,
       defaultPromotionCount: league.defaultPromotionCount,

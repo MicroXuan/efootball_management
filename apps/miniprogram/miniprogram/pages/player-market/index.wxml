@@ -24,6 +24,7 @@
   <view wx:elif="{{state === 'empty'}}" class="state-card"><text class="state-title">这里还没有内容</text><text class="state-copy">筛选结果、申请进度或成交公告产生后会显示在这里。</text></view>
 
   <view wx:elif="{{view === 'players'}}" class="card-list">
+    <view class="result-summary"><text>按球员展示</text><text>已加载 {{players.length}} 名</text></view>
     <view wx:for="{{players}}" wx:key="playerId" class="player-card" data-player-id="{{item.playerId}}" bindtap="openPlayer">
       <view class="player-artwork">
         <entity-artwork src="{{item.portraitUrl}}" fallback="{{item.portraitFallback}}" shape="portrait" />
@@ -33,6 +34,12 @@
       <view class="action-block"><text class="action-label {{item.actionEnabled ? 'is-ready' : ''}}">{{item.actionLabel}}</text><text class="arrow">›</text></view>
       <view wx:if="{{item.owner}}" class="owner-row"><view class="crest"><image wx:if="{{item.owner.logoUrl}}" src="{{item.owner.logoUrl}}" mode="aspectFit" /><text wx:else>{{item.owner.fallback}}</text></view><view class="owner-copy"><text>{{item.owner.numberLabel}} · {{item.owner.name}}</text><text>{{item.owner.ownerAlias}}</text></view></view>
       <view wx:else class="owner-row owner-row--free"><text>自由球员 · 暂无所属球队</text></view>
+    </view>
+    <view class="market-list-footer">
+      <text wx:if="{{loadingMore}}">正在加载更多球员…</text>
+      <text wx:elif="{{errorMessage}}">{{errorMessage}}，下滑可重试</text>
+      <text wx:elif="{{nextPlayerCursor}}">继续下滑加载更多</text>
+      <text wx:else>已展示全部球员 · 共 {{players.length}} 名</text>
     </view>
   </view>
 
@@ -47,4 +54,5 @@
       <view class="timeline"><view wx:for="{{item.timeline}}" wx:for-item="event" wx:key="id" class="timeline-row"><text>{{event.label}}</text><text>{{event.detail || event.time}}</text></view></view>
     </view>
   </view>
+  <view wx:if="{{showBackToTop}}" class="back-to-top" bindtap="backToTop" role="button" aria-label="回到顶部"><text class="back-to-top-arrow">↑</text><text>顶部</text></view>
 </view>

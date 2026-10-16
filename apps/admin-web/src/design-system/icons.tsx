@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-export type AdminIconName = 'league' | 'administrators' | 'audit' | 'sync' | 'bot' | 'teams' | 'seasons' | 'allocation' | 'cup' | 'salary' | 'transfer' | 'valuation' | 'review' | 'market' | 'finance';
+export type AdminIconName = 'league' | 'administrators' | 'audit' | 'sync' | 'bot' | 'teams' | 'seasons' | 'allocation' | 'cup' | 'salary' | 'transfer' | 'valuation' | 'review' | 'market' | 'finance' | 'dispute';
 
 const labels: Record<AdminIconName, string> = {
   league: '联赛',
@@ -18,6 +18,7 @@ const labels: Record<AdminIconName, string> = {
   review: '审核',
   market: '球员申请',
   finance: '财务',
+  dispute: '赛果争议',
 };
 
 const paths: Record<AdminIconName, ReactElement> = {
@@ -36,6 +37,7 @@ const paths: Record<AdminIconName, ReactElement> = {
   review: <><path d="M7 3h10v4H7zM5 5H3v16h18V5h-2" /><path d="m8 14 2.5 2.5L16 11" /></>,
   market: <><circle cx="8" cy="8" r="3" /><path d="M3.5 18c.6-3.4 2-5 4.5-5 1.5 0 2.7.5 3.5 1.4" /><path d="M14 8h7M18 5l3 3-3 3M21 16h-7M17 13l-3 3 3 3" /></>,
   finance: <><path d="M4 6h16v13H4zM4 9h16" /><path d="M8 14h3M15 14h1M8 17h8" /></>,
+  dispute: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9h8M8 13h4M15 14l2 2 3-3" /></>,
 };
 
 export function AdminIcon({ name, decorative = true }: {

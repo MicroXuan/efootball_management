@@ -1,6 +1,23 @@
 export const OBJECT_STORAGE = Symbol('OBJECT_STORAGE');
 
-export type StorageScope = 'league-images' | 'league-center-banners' | 'team-crests';
+export type StorageScope = 'league-images' | 'league-center-banners' | 'team-crests' | 'match-result-evidence';
+
+export type EvidenceMimeType = 'image/jpeg' | 'image/png' | 'image/webp';
+
+export interface DirectUploadGrant {
+  key: string;
+  uploadUrl: string;
+  headers: Record<string, string>;
+}
+
+export interface StoredObjectMetadata {
+  mimeType: string;
+  size: number;
+  /** Absent when inspection rejects size before downloading the object. */
+  checksumSha256?: string;
+  /** The exact bytes inspected, reused for promotion without another download. */
+  buffer?: Buffer;
+}
 
 export interface StoredUploadInput {
   buffer: Buffer;
@@ -27,4 +44,11 @@ export interface ObjectStorage {
   putNamed?(scope: StorageScope, name: string, file: StoredUploadInput): Promise<StoredObject>;
   delete(key: string): Promise<void>;
   read?(key: string): Promise<ReadableStoredObject | null>;
+  createDirectUpload?(scope: StorageScope, name: string, mimeType: EvidenceMimeType): Promise<DirectUploadGrant>;
+  temporaryReadUrl?(key: string, maxAgeSeconds: number): Promise<string>;
+  inspect?(key: string): Promise<StoredObjectMetadata | null>;
+  promoteEvidence?(key: string, object: StoredObjectMetadata & { buffer: Buffer }): Promise<string>;
+  writePrivate?(key: string, body: Buffer, mimeType: string): Promise<void>;
+  readPrivate?(key: string): Promise<ReadableStoredObject | null>;
+  verifyPrivateRead?(key: string, expires: string, signature: string): boolean;
 }

@@ -30,9 +30,11 @@ import { TeamCatalogModule } from './team-catalog/team-catalog.module.js';
 import { WechatBotModule } from './wechat-bot/wechat-bot.module.js';
 import { PlayerAuctionsModule } from './player-auctions/player-auctions.module.js';
 import { PlayerMarketModule } from './player-market/player-market.module.js';
+import { ActionCenterModule } from './action-center/action-center.module.js';
 
 @Module({
   imports: [
+    ActionCenterModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['../../.env', '.env'],

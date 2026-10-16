@@ -201,6 +201,8 @@ export function mapPesdataPlayer(detail: PesdataPlayerDetail): RawImportRow {
     ...(playerNameEn ? { playerNameEn } : {}),
     nationality: text(detail.nationality_en) ?? text(detail.nationality_cn),
     club: text(detail.team_en) ?? text(detail.team_cn),
+    clubZh: text(detail.team_cn),
+    clubEn: text(detail.team_en),
     cardName: packName,
     position: sourcePosition,
     overallRating,

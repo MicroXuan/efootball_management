@@ -131,6 +131,10 @@ export class TeamFinanceService {
       `finance-settlement.upsert:${leagueId}:${input.leagueTeamId}:${input.seasonId}`,
       key,
       async (tx) => {
+        // Global roster/economy order: season before team. Settlement still serializes
+        // on the team row, but can no longer invert a season-scoped roster operation.
+        await tx.$queryRaw`SELECT id FROM league_seasons WHERE id = ${input.seasonId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM league_teams WHERE id = ${input.leagueTeamId} FOR UPDATE`;
         const entries = await tx.financeLedgerEntry.findMany({
           where: {
             leagueTeamId: input.leagueTeamId,

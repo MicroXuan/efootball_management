@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
+  ActionCenterResponseSchema,
   AdminAccountSummarySchema,
+  AdminResolveMatchResultDisputeRequestSchema,
+  AdminMatchResultDisputeResponseSchema,
   AcquirePlayerRequestSchema,
   AdminAuthResponseSchema,
   AdminLeagueGrantSchema,
@@ -12,6 +15,7 @@ import {
   CompetitionFormatSchema,
   CompetitionListQuerySchema,
   CompetitionMatchResponseSchema,
+  CompetitionMatchStatusSchema,
   CompetitionParticipantSummarySchema,
   CompetitionParticipantTypeSchema,
   CompetitionStageCodeSchema,
@@ -20,6 +24,7 @@ import {
   ConfirmSeasonAllocationRequestSchema,
   DivisionStandingsResponseSchema,
   LeagueWorkspaceResponseSchema,
+  LeagueSummarySchema,
   PlatformPresentationSchema,
   PlatformPageRequestSchema,
   GenerateSeasonAllocationRequestSchema,
@@ -29,6 +34,7 @@ import {
   SeasonAllocationProposalRowSchema,
   PublishStageScheduleRequestSchema,
   CreateCompetitionRequestSchema,
+  CreateEvidenceUploadRequestSchema,
   CreateSeasonCupRequestSchema,
   RegisterSeasonCupRequestSchema,
   WithdrawSeasonCupRequestSchema,
@@ -54,6 +60,11 @@ import {
   GameAccountInputSchema,
   IdempotencyKeySchema,
   MatchResultVersionResponseSchema,
+  ManagerMatchResultRequestSchema,
+  MatchResultDisputeStatusSchema,
+  MatchResultDisputeTriggerSchema,
+  ParticipantMatchResultDisputeResponseSchema,
+  MatchResultEventTypeSchema,
   MoneyMinorSchema,
   MyLeagueTeamOverviewSchema,
   NormalizedPlayerCardRecordSchema,
@@ -113,6 +124,162 @@ import {
   StartPlatformSyncRequestSchema,
   derivePesdataPositionAutoBuild
 } from './index.js';
+
+describe('match result dispute contracts', () => {
+  it('requires a separate match version for administrator decisions and strips private storage fields', () => {
+    const id = randomUUID(); const time = new Date().toISOString();
+    const record = { id, matchId: id, triggerResultVersionId: id, trigger: 'REJECTED', status: 'READY_FOR_REVIEW',
+      openedByUserId: id, evidenceDeadlineAt: time, decidedByAdminId: null, decisionType: null, finalHomeScore: null, finalAwayScore: null,
+      decisionReason: null, decidedAt: null, version: 2, createdAt: time, updatedAt: time, objectKey: 'private',
+      competitionName: '冠军联赛', stageName: 'A 组', homeParticipantName: '海港', awayParticipantName: '申花', submitterSide: 'HOME',
+      triggerHomeScore: 2, triggerAwayScore: 1 };
+    assert.equal(AdminMatchResultDisputeResponseSchema.safeParse(record).success, false);
+    assert.equal(AdminMatchResultDisputeResponseSchema.safeParse({ ...record, matchVersion: 0 }).success, false);
+    const parsed = AdminMatchResultDisputeResponseSchema.parse({ ...record, matchVersion: 7 });
+    assert.equal(parsed.matchVersion, 7);
+    assert.equal(parsed.triggerHomeScore, 2);
+    assert.equal(parsed.triggerAwayScore, 1);
+    assert.equal('objectKey' in parsed, false);
+  });
+  it('exposes only participant dispute state and role presence, never administrator evidence detail', () => {
+    const response = { id: randomUUID(), matchId: randomUUID(), trigger: 'REJECTED',
+      status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: '2026-10-16T00:00:00.000Z',
+      matchVersion: 3, evidencePresence: { SUBMITTER: true, OPPONENT: false } };
+    assert.deepEqual(ParticipantMatchResultDisputeResponseSchema.parse(response), response);
+    const sanitized = ParticipantMatchResultDisputeResponseSchema.parse({ ...response,
+      evidence: [{ objectKey: 'private-key', checksumSha256: 'a'.repeat(64) }],
+      timeline: [{ metadata: { url: 'private-url' } }], openedByUserId: randomUUID()
+    });
+    assert.deepEqual(sanitized, response);
+    assert.equal(ParticipantMatchResultDisputeResponseSchema.safeParse({ ...response, matchVersion: 0 }).success, false);
+    assert.equal(ParticipantMatchResultDisputeResponseSchema.safeParse({ ...response, evidencePresence: { SUBMITTER: true } }).success, false);
+  });
+  it('parses the dispute and event states used by the 24-hour workflow', () => {
+    assert.equal(CompetitionMatchStatusSchema.safeParse('DISPUTED').success, true);
+    for (const status of ['EVIDENCE_COLLECTION', 'READY_FOR_REVIEW', 'RESOLVED', 'CANCELLED']) {
+      assert.equal(MatchResultDisputeStatusSchema.safeParse(status).success, true);
+    }
+    for (const trigger of ['REJECTED', 'CONFIRMATION_TIMEOUT']) {
+      assert.equal(MatchResultDisputeTriggerSchema.safeParse(trigger).success, true);
+    }
+    for (const event of ['RESULT_SUBMITTED', 'RESULT_CONFIRMED', 'RESULT_REJECTED',
+      'CONFIRMATION_EXPIRED', 'DISPUTE_OPENED', 'EVIDENCE_UPLOADED', 'EVIDENCE_REPLACED',
+      'EVIDENCE_DEADLINE_EXPIRED', 'ADMIN_DECIDED', 'DISPUTE_CANCELLED', 'EVIDENCE_DELETED']) {
+      assert.equal(MatchResultEventTypeSchema.safeParse(event).success, true);
+    }
+  });
+
+  it('accepts image uploads at 1 MB and rejects larger files or other MIME types', () => {
+    const upload = { role: 'SUBMITTER', mimeType: 'image/jpeg', byteSize: 1_048_576,
+      checksumSha256: 'a'.repeat(64), expectedVersion: 1 };
+    assert.equal(CreateEvidenceUploadRequestSchema.safeParse(upload).success, true);
+    assert.equal(CreateEvidenceUploadRequestSchema.safeParse({ ...upload, byteSize: 1_048_577 }).success, false);
+    assert.equal(CreateEvidenceUploadRequestSchema.safeParse({ ...upload, mimeType: 'image/gif' }).success, false);
+  });
+
+  it('requires a replacement score and nonempty reason for admin arbitration', () => {
+    const base = { decisionType: 'REPLACE_SCORE', expectedVersion: 1, reason: '  截图证明原比分错误  ' };
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse(base).success, false);
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1 }).success, true);
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1, reason: '   ' }).success, false);
+  });
+
+  it('requires a reason for every direct administrator result entry', () => {
+    const entry = { homeScore: 2, awayScore: 1, expectedVersion: 1 };
+    assert.equal(ManagerMatchResultRequestSchema.safeParse(entry).success, false);
+    assert.equal(ManagerMatchResultRequestSchema.safeParse({ ...entry, reason: null }).success, false);
+    assert.equal(ManagerMatchResultRequestSchema.safeParse({ ...entry, reason: '管理员核对' }).success, true);
+  });
+
+  it('rejects replacement scores when adopting the submitted score', () => {
+    const base = { decisionType: 'USE_SUBMITTED_SCORE', expectedVersion: 1, reason: '证据一致' };
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse(base).success, true);
+    assert.equal(AdminResolveMatchResultDisputeRequestSchema.safeParse({ ...base, homeScore: 2, awayScore: 1 }).success, false);
+  });
+
+  it('defaults league responses to evidence optional', () => {
+    const parsed = LeagueSummarySchema.parse({
+      id: randomUUID(), name: 'CELL', shortName: 'CELL', description: '', logoUrl: null,
+      status: 'ACTIVE', edition: 'INTERNATIONAL', defaultSuperCapacity: 23,
+      defaultChampionCapacity: 18, defaultPromotionCount: 4, currentSeason: null,
+      version: 1, createdAt: '2026-10-15T12:00:00.000Z', updatedAt: '2026-10-15T12:00:00.000Z'
+    });
+    assert.equal((parsed as typeof parsed & { resultEvidenceRequired?: boolean }).resultEvidenceRequired, false);
+  });
+});
+
+describe('action center contracts', () => {
+  it('accepts all current reminders beyond the combined recent-history limit', () => {
+    const items = Array.from({ length: 201 }, () => {
+      const matchId = randomUUID();
+      return {
+        id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
+        source: 'MATCH_RESULT', section: 'ACTION_REQUIRED',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+        title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
+        occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
+      };
+    });
+    const response = ActionCenterResponseSchema.parse({ items, actionRequiredCount: 201 });
+    assert.equal(response.items.length, 201);
+    assert.equal(response.actionRequiredCount, 201);
+  });
+
+  it('parses actionable transaction, forced-transfer, and auction projections', () => {
+    const response = ActionCenterResponseSchema.parse({
+      actionRequiredCount: 2,
+      items: [{
+        id: 'application:application-1', version: '2026-10-15T12:00:00.000Z',
+        source: 'TRANSACTION', section: 'ACTION_REQUIRED',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+        title: '购买申请需要重新报价', detail: '球员：劳塔罗', statusLabel: '需重新报价',
+        occurredAt: '2026-10-15T12:00:00.000Z',
+        route: '/pages/player-market/index?leagueId=league-1&view=mine'
+      }, {
+        id: 'forced:application-2', version: '2026-10-15T12:01:00.000Z',
+        source: 'FORCED_TRANSFER', section: 'STATUS_UPDATE',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+        title: '收到强报申请', detail: '对方球队强报球员', statusLabel: '等待管理员处理',
+        occurredAt: '2026-10-15T12:01:00.000Z',
+        route: '/pages/player-market/index?leagueId=league-1&view=public'
+      }, {
+        id: 'auction:batch-1', version: '2026-10-15T12:02:00.000Z',
+        source: 'AUCTION', section: 'ACTION_REQUIRED',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: null, teamId: randomUUID(),
+        title: '球员拍卖进行中', detail: '当前：劳塔罗', statusLabel: '拍卖中',
+        occurredAt: '2026-10-15T12:02:00.000Z', route: '/pages/auction-room/index?batchId=batch-1'
+      }]
+    });
+
+    assert.equal(response.items.length, 3);
+    assert.equal(response.actionRequiredCount, 2);
+  });
+
+  it('rejects non-miniprogram deep links', () => {
+    assert.throws(() => ActionCenterResponseSchema.parse({
+      actionRequiredCount: 0,
+      items: [{
+        id: 'bad', version: '2026-10-15T12:00:00.000Z', source: 'TRANSACTION', section: 'STATUS_UPDATE',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: null, teamId: null,
+        title: '状态更新', detail: '详情', statusLabel: '已更新',
+        occurredAt: '2026-10-15T12:00:00.000Z', route: 'https://example.com'
+      }]
+    }));
+  });
+
+  it('accepts a match-result reminder only with its internal match deep link', () => {
+    const matchId = randomUUID();
+    const item = {
+      id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
+      source: 'MATCH_RESULT', section: 'ACTION_REQUIRED',
+      league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+      title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
+      occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
+    };
+    assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, true);
+    assert.equal(ActionCenterResponseSchema.safeParse({ items: [{ ...item, route: `/pages/match-result/index?id=${matchId}&evil=1` }], actionRequiredCount: 1 }).success, false);
+  });
+});
 import {
   CreatePlayerAuctionBatchRequestSchema,
   PlaceMiniprogramAuctionBidRequestSchema,

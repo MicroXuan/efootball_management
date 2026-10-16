@@ -46,6 +46,17 @@ describe('calculateRecordDiff', () => {
       errors: []
     });
   });
+
+  it('detects Chinese and English club alias updates as source-owned changes', () => {
+    const existing = { ...validCard, club: 'Arsenal FC', clubZh: '阿森纳', clubEn: 'Arsenal FC' };
+    const incoming = { ...existing, clubZh: '阿森纳足球俱乐部' };
+
+    expect(calculateRecordDiff(existing, incoming)).toEqual({
+      type: 'UPDATE',
+      fields: { clubZh: { before: '阿森纳', after: '阿森纳足球俱乐部' } },
+      errors: []
+    });
+  });
 });
 
 describe('PlayerImportService', () => {

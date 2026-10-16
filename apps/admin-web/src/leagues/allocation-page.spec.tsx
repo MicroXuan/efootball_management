@@ -236,6 +236,8 @@ it('lets an administrator reopen a published schedule and record its official sc
   const recordScoreButton = screen.getByRole('button', { name: '录入比分' });
   expect(recordScoreButton).toHaveClass('fixture-score-action--pending');
   await userEvent.click(recordScoreButton);
+  expect(screen.getByRole('textbox', { name: '比分录入原因' })).toBeInTheDocument();
+  await userEvent.type(screen.getByRole('textbox', { name: '比分录入原因' }), '管理员核对赛果');
   expect(screen.queryAllByLabelText('Increase Value')).toHaveLength(0);
   expect(screen.queryAllByLabelText('Decrease Value')).toHaveLength(0);
   await userEvent.type(screen.getByLabelText('主队比分'), '2');
@@ -244,7 +246,7 @@ it('lets an administrator reopen a published schedule and record its official sc
 
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     `/v1/admin/leagues/${leagueId}/competitions/${competitionId}/matches/${matchId}/results`,
-    expect.objectContaining({ method: 'POST', body: { homeScore: 2, awayScore: 1, expectedVersion: 1, reason: null } })
+    expect.objectContaining({ method: 'POST', body: { homeScore: 2, awayScore: 1, expectedVersion: 1, reason: '管理员核对赛果' } })
   ));
   expect(await screen.findByText('2 : 1')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '修改比分' })).toHaveClass('fixture-score-action--recorded');

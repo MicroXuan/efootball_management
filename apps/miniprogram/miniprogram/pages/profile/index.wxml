@@ -42,6 +42,16 @@
       </view>
     </view>
 
+    <view class="action-center-entry" bindtap="openActionCenter" role="button">
+      <view class="action-center-entry__marker">待</view>
+      <view class="action-center-entry__copy">
+        <view class="action-center-entry__top"><text class="action-center-entry__title">待办中心</text><text class="action-center-entry__count">{{actionCenter.attentionCount}}</text></view>
+        <text class="action-center-entry__detail">{{actionCenter.attentionCount ? '跨联赛待处理与状态更新' : '当前没有需要关注的业务'}}</text>
+        <view class="action-center-entry__tags"><text wx:if="{{actionCenter.actionRequiredCount}}">待处理 {{actionCenter.actionRequiredCount}}</text><text wx:if="{{actionCenter.auctionCount}}">拍卖 {{actionCenter.auctionCount}}</text></view>
+      </view>
+      <text class="chevron">›</text>
+    </view>
+
     <view class="quick-actions">
       <view class="quick-actions__head">
         <view><text class="section-kicker">快捷入口</text><text class="quick-actions__title">现在要做什么</text></view>
@@ -55,6 +65,7 @@
         </view>
         <view class="quick-action" bindtap="openPlayerAuctions" role="button">
           <text class="quick-action__marker">拍</text>
+          <text wx:if="{{actionCenter.auctionCount}}" class="quick-action__badge">{{actionCenter.auctionCount}}</text>
           <text class="quick-action__title">球员拍卖</text>
           <text class="quick-action__detail">进入拍卖大厅</text>
         </view>

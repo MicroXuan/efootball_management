@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createNumberedTestUser } from '../../test/helpers/numbered-user.js';
 import { config } from 'dotenv';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
@@ -61,13 +62,14 @@ describe('LeagueTeamShellsService', () => {
       defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL', createdByAdminId: adminId
     } });
     ids.leagues.push(league.id);
-    const users = await Promise.all(['甲', '乙'].map(async (label, index) => {
-      const user = await prisma.user.create({ data: {
-        wechatOpenId: `shell-user-${randomUUID()}`, publicUserNo: `80${index}001`, displayName: label
-      } });
+    const users = [];
+    for (const label of ['甲', '乙']) {
+      const user = await createNumberedTestUser(prisma, {
+        wechatOpenId: `shell-user-${randomUUID()}`, displayName: label
+      });
       ids.users.push(user.id);
-      return user;
-    }));
+      users.push(user);
+    }
     const shells = await Promise.all(['阿贾克斯', '马德里竞技', '雷恩', '欧塞尔'].map((name) => shell(name)));
     const teams = await Promise.all(users.map((user, index) => prisma.leagueTeam.create({ data: {
       leagueId: league.id, ownerUserId: user.id, ownerAlias: index ? '老肥' : 'tidus',

@@ -1,6 +1,9 @@
 import { Body, Controller, Get, Headers, HttpCode, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import {
   ManagerMatchResultRequestSchema,
+  OpenTimeoutDisputeRequestSchema,
+  ParticipantMatchResultDisputeResponseSchema,
+  type OpenTimeoutDisputeRequest,
   RejectMatchResultRequestSchema,
   ResourceIdSchema,
   SubmitMatchResultRequestSchema,
@@ -23,6 +26,7 @@ import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { CompetitionError } from './competition.errors.js';
 import { ResultsService } from './results.service.js';
 import { StandingsService } from './standings.service.js';
+import { MatchResultDisputesService } from './match-result-disputes.service.js';
 
 const ResultVersionSchema = z.coerce.number().int().positive();
 
@@ -30,8 +34,35 @@ const ResultVersionSchema = z.coerce.number().int().positive();
 export class ResultsController {
   constructor(
     @Inject(ResultsService) private readonly results: ResultsService,
-    @Inject(StandingsService) private readonly standings: StandingsService
+    @Inject(StandingsService) private readonly standings: StandingsService,
+    @Inject(MatchResultDisputesService) private readonly disputes: MatchResultDisputesService
   ) {}
+
+  @Post('matches/:id/result-disputes/timeout')
+  @UseGuards(JwtAuthGuard)
+  async openTimeout(@CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ZodValidationPipe(ResourceIdSchema)) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(OpenTimeoutDisputeRequestSchema)) body: OpenTimeoutDisputeRequest) {
+    return ParticipantMatchResultDisputeResponseSchema.parse(await this.disputes.openFromTimeout(user.id, id, body, this.key(key)));
+  }
+
+  @Post('matches/:id/result-dispute/evidence')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async attachEvidence(@CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ZodValidationPipe(ResourceIdSchema)) id: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(OpenTimeoutDisputeRequestSchema)) body: OpenTimeoutDisputeRequest) {
+    return ParticipantMatchResultDisputeResponseSchema.parse(await this.disputes.attachEvidence(user.id, id, body, this.key(key)));
+  }
+
+  @Get('matches/:id/result-dispute')
+  @UseGuards(JwtAuthGuard)
+  async getDispute(@CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ZodValidationPipe(ResourceIdSchema)) id: string) {
+    return ParticipantMatchResultDisputeResponseSchema.nullable().parse(await this.disputes.getForParticipant(user.id, id));
+  }
 
   @Post('matches/:id/results')
   @UseGuards(JwtAuthGuard)

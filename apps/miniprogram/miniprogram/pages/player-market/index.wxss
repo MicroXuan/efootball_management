@@ -112,6 +112,7 @@ page {
 .picker-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10rpx; margin-top: 10rpx; }
 .filter-picker { display: flex; align-items: center; justify-content: space-between; min-height: 64rpx; padding: 0 16rpx; border: 2rpx solid #303d43; border-radius: 14rpx; color: #aab5ba; font-size: 18rpx; }
 .card-list { display: flex; flex-direction: column; gap: 16rpx; margin-top: 14rpx; }
+.result-summary { display: flex; align-items: center; justify-content: space-between; padding: 0 6rpx; color: #819097; font-size: 17rpx; }
 
 .player-card,
 .application-card,
@@ -164,3 +165,6 @@ page {
 .state-title { display: block; font-size: 28rpx; font-weight: 900; }
 .state-copy { margin: 12rpx 0 22rpx; font-size: 20rpx; }
 .outline-button { width: 100%; height: 72rpx; }
+.market-list-footer { padding: 16rpx 0 4rpx; color: #819097; font-size: 18rpx; text-align: center; }
+.back-to-top { position: fixed; right: 28rpx; bottom: calc(38rpx + env(safe-area-inset-bottom)); z-index: 20; display: flex; align-items: center; justify-content: center; gap: 7rpx; min-width: 112rpx; height: 66rpx; padding: 0 18rpx; box-sizing: border-box; border: 2rpx solid #8fbd35; border-radius: 34rpx; color: #efffcf; background: rgba(24, 35, 30, 0.96); box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.34); font-size: 18rpx; font-weight: 900; }
+.back-to-top-arrow { color: #b6f13a; font-size: 26rpx; line-height: 1; }

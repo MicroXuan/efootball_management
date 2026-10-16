@@ -70,7 +70,65 @@ describe('PlayerMarketQueryService', () => {
     expect(result.activeTransferWindowId).toBe('window-1');
     expect(result.items[2]?.currentOwner).toEqual({ teamId: 'team-2', teamNumber: 2, name: '对手队', logoUrl: '/logo.png', ownerAlias: '对手' });
     expect(prisma.footballPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: expect.arrayContaining([expect.objectContaining({ OR: expect.any(Array) })]) }
+      where: { AND: expect.arrayContaining([expect.objectContaining({ OR: expect.arrayContaining([
+        { club: { contains: '测试' } },
+        { clubZh: { contains: '测试' } },
+        { clubEn: { contains: '测试' } }
+      ]) })]) }
+    }));
+  });
+
+  it('applies ownership filtering before cursor pagination', async () => {
+    const prisma = {
+      footballPlayer: { findMany: jest.fn(async () => []) },
+      leaguePlayerOwnership: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
+      leaguePlayerValuation: { findMany: jest.fn(async () => []) },
+      leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
+      transferWindow: { findFirst: jest.fn(async () => null) }
+    };
+    const access = { requireParticipant: jest.fn(async () => ({
+      leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT'
+    })) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
+
+    await service.listMarket('user-1', 'league-1', {
+      seasonId: 'season-1', ownership: 'FREE', limit: 30
+    });
+
+    expect(prisma.footballPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { AND: expect.arrayContaining([
+        { leagueOwnerships: { none: { leagueId: 'league-1', status: 'ACTIVE' } } }
+      ]) }
+    }));
+  });
+
+  it('loads a published player detail directly instead of searching only the first market page', async () => {
+    const player = {
+      id: 'player-101', nameZh: '第 101 名球员', nameEn: null, shortName: null,
+      nationality: '中国', club: '测试队', createdAt: now,
+      bestCard: { playerCardId: 'card-101', playerCard: { id: 'card-101', cardName: '精选', imageUrl: null, position: 'CF', overallRating: 90 }, autoBuild: { maxOverall: 95 } }
+    };
+    const prisma = {
+      footballPlayer: {
+        findFirst: jest.fn(async () => player),
+        findMany: jest.fn(async () => { throw new Error('detail must not scan a limited market page'); })
+      },
+      leaguePlayerOwnership: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
+      leaguePlayerValuation: { findMany: jest.fn(async () => []) },
+      leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
+      transferWindow: { findFirst: jest.fn(async () => null) },
+      playerAcquisitionApplication: { findMany: jest.fn(async () => []) }
+    };
+    const access = { requireParticipant: jest.fn(async () => ({
+      seasonEntryId: 'entry-1', leagueId: 'league-1', seasonId: 'season-1', leagueTeamId: 'team-1',
+      teamNumber: 1, teamName: '我的队', teamLogoUrl: null, ownerAlias: '我', rosterStatus: 'COMPLIANT'
+    })) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
+
+    await expect(service.detail('user-1', 'league-1', 'player-101', 'season-1'))
+      .resolves.toMatchObject({ playerId: 'player-101', playerName: '第 101 名球员' });
+    expect(prisma.footballPlayer.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'player-101', publishedAt: { not: null } }
     }));
   });
 
@@ -79,6 +137,38 @@ describe('PlayerMarketQueryService', () => {
     expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'COMPLIANT', windowOpen: false, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' });
     expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'OVER_CAP', windowOpen: true, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'ROSTER_NON_COMPLIANT' });
     expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'COMPLIANT', windowOpen: true, releasedByMe: true })).toEqual({ action: 'DISABLED', disabledReason: 'RELEASED_BY_TEAM_IN_WINDOW' });
+  });
+
+  it('expires closed-window applications idempotently before returning the W2 queue', async () => {
+    const rootFindMany = jest.fn<() => Promise<Array<{ id: string; footballPlayerId: string }>>>(async () => [])
+      .mockResolvedValueOnce([{ id: 'app-w1', footballPlayerId: 'player-1' }]);
+    const tx = {
+      playerAcquisitionApplication: {
+        findMany: jest.fn(async () => [{ id: 'app-w1', applicantLeagueTeamId: 'team-1', sourceLeagueTeamId: null,
+          status: 'PENDING', amountMinor: 500 }]),
+        update: jest.fn(async () => ({ id: 'app-w1', status: 'EXPIRED' }))
+      },
+      playerAcquisitionApplicationEvent: { create: jest.fn(async () => ({ id: 'event-expired' })) }
+    };
+    const prisma = {
+      playerAcquisitionApplication: { findMany: rootFindMany },
+      $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx))
+    };
+    const access = { requireParticipant: jest.fn(async () => ({ leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT' })) };
+    const locks = { lockSeason: jest.fn(async () => undefined), lockPlayer: jest.fn(async () => undefined),
+      lockTeams: jest.fn(async () => undefined), lockApplicationsForPlayer: jest.fn(async () => undefined) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now, undefined, locks as never);
+
+    await expect(service.listApplications('user-1', 'league-1', {
+      seasonId: 'season-1', scope: 'PUBLIC', limit: 30
+    })).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.listApplications('user-1', 'league-1', {
+      seasonId: 'season-1', scope: 'PUBLIC', limit: 30
+    })).resolves.toEqual({ items: [], nextCursor: null });
+    expect(tx.playerAcquisitionApplication.update).toHaveBeenCalledWith({ where: { id: 'app-w1' }, data: {
+      status: 'EXPIRED', reviewedAt: now, reviewReason: 'TRANSFER_WINDOW_CLOSED', version: { increment: 1 }
+    } });
+    expect(tx.playerAcquisitionApplicationEvent.create).toHaveBeenCalledTimes(1);
   });
 
   it('uses a timestamp plus id cursor for stable pagination', () => {

@@ -8,6 +8,7 @@ import type {
   CupRegistrationResponse,
   MyCompetitionListResponse,
   MyMatchListResponse,
+  ParticipantMatchResultDisputeResponse,
   StandingsSnapshotResponse,
   SeasonEntryResponse,
   SubmitMatchResultRequest,
@@ -151,6 +152,17 @@ export const competitionsApi = {
   rejectResult(matchId: string, resultVersion: number, input: RejectMatchResultRequest) {
     return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results/${resultVersion}/reject`, method: 'POST',
       headers: { 'Idempotency-Key': actionKey() }, data: input })
+  },
+  resultDispute(matchId: string) {
+    return api.request<ParticipantMatchResultDisputeResponse | null>({ path: `/matches/${encodeURIComponent(matchId)}/result-dispute` })
+  },
+  openTimeoutDispute(matchId: string, evidenceUploadId: string, expectedVersion: number) {
+    return api.request<ParticipantMatchResultDisputeResponse>({ path: `/matches/${encodeURIComponent(matchId)}/result-disputes/timeout`, method: 'POST',
+      headers: { 'Idempotency-Key': actionKey() }, data: { evidenceUploadId, expectedVersion } })
+  },
+  attachResultEvidence(matchId: string, evidenceUploadId: string, expectedVersion: number) {
+    return api.request<ParticipantMatchResultDisputeResponse>({ path: `/matches/${encodeURIComponent(matchId)}/result-dispute/evidence`, method: 'POST',
+      headers: { 'Idempotency-Key': actionKey() }, data: { evidenceUploadId, expectedVersion } })
   },
   create(input: ParsedCreateCompetitionRequest) {
     return api.request<CompetitionDetail>({ path: '/admin/competitions', method: 'POST',

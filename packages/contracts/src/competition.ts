@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ExpectedVersionSchema, ResourceIdSchema } from './common.js';
 import { LeagueTeamLifecycleStatusSchema } from './league-team.js';
+import { MatchResultDisputeStatusSchema, MatchResultDisputeTriggerSchema, MatchResultTimelineEventSchema } from './match-result-dispute.js';
 
 export { ExpectedVersionSchema } from './common.js';
 import { GamePlatformSchema } from './game-account.js';
@@ -38,6 +39,7 @@ export const CompetitionMatchStatusSchema = z.enum([
   'SCHEDULED',
   'AWAITING_RESULT',
   'PENDING_CONFIRMATION',
+  'DISPUTED',
   'CONFIRMED',
   'ADMIN_DECIDED'
 ]);
@@ -440,6 +442,7 @@ export const CancelCompetitionRequestSchema = VersionedMutationRequestSchema.ext
 export const SubmitMatchResultRequestSchema = z.object({
   homeScore: ScoreSchema,
   awayScore: ScoreSchema,
+  evidenceUploadId: ResourceIdSchema.optional(),
   expectedVersion: ExpectedVersionSchema
 });
 
@@ -448,7 +451,7 @@ export const RejectMatchResultRequestSchema = VersionedMutationRequestSchema.ext
 });
 
 export const ManagerMatchResultRequestSchema = SubmitMatchResultRequestSchema.extend({
-  reason: z.string().trim().min(1).max(512).nullable().optional()
+  reason: z.string().trim().min(1).max(512)
 });
 
 export const CompetitionListQuerySchema = z.object({
@@ -593,6 +596,7 @@ export const CompetitionMatchResponseSchema = z.object({
   awayParticipant: CompetitionParticipantSummarySchema,
   plannedAt: TimestampSchema.nullable(),
   status: CompetitionMatchStatusSchema,
+  resultConfirmationDeadlineAt: TimestampSchema.nullable().default(null),
   version: z.number().int().positive(),
   officialResult: OfficialResultSummarySchema.nullable(),
   resultVersions: z.array(MatchResultVersionResponseSchema).default([]),
@@ -651,12 +655,23 @@ export const MyCompetitionListResponseSchema = z.object({
 });
 
 export const MyMatchActionSchema = z.enum(['SUBMIT', 'CONFIRM', 'WAIT', 'DONE']);
+export const MatchResultDisputeSummarySchema = z.object({
+  id: ResourceIdSchema,
+  status: MatchResultDisputeStatusSchema,
+  trigger: MatchResultDisputeTriggerSchema,
+  evidenceDeadlineAt: TimestampSchema
+});
 export const MyMatchResponseSchema = z.object({
   match: CompetitionMatchResponseSchema,
   competition: CompetitionSummarySchema,
   myParticipantId: ResourceIdSchema,
   action: MyMatchActionSchema,
-  actionableResultVersion: MatchResultVersionResponseSchema.nullable()
+  myEvidenceRole: z.enum(['SUBMITTER', 'OPPONENT']).nullable().optional(),
+  actionableResultVersion: MatchResultVersionResponseSchema.nullable(),
+  confirmationDeadlineAt: TimestampSchema.nullable().default(null),
+  evidenceRequired: z.boolean().default(false),
+  disputeSummary: MatchResultDisputeSummarySchema.nullable().default(null),
+  timeline: z.array(MatchResultTimelineEventSchema).default([])
 });
 
 export const MyMatchListResponseSchema = z.object({
@@ -718,4 +733,5 @@ export type StandingsSnapshotResponse = z.infer<typeof StandingsSnapshotResponse
 export type MyCompetitionResponse = z.infer<typeof MyCompetitionResponseSchema>;
 export type MyCompetitionListResponse = z.infer<typeof MyCompetitionListResponseSchema>;
 export type MyMatchResponse = z.infer<typeof MyMatchResponseSchema>;
+export type MatchResultDisputeSummary = z.infer<typeof MatchResultDisputeSummarySchema>;
 export type MyMatchListResponse = z.infer<typeof MyMatchListResponseSchema>;

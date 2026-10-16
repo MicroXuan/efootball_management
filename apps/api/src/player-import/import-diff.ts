@@ -14,6 +14,8 @@ const sourceOwnedFields = [
   'playerShortName',
   'nationality',
   'club',
+  'clubZh',
+  'clubEn',
   'cardName',
   'position',
   'overallRating',

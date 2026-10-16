@@ -25,7 +25,7 @@
       <text wx:if="{{matches.length === 0}}" class="empty">发布赛程后可录入或修正比分。</text>
       <block wx:else><scroll-view scroll-x class="match-strip"><view class="match-options"><button wx:for="{{matches}}" wx:key="id" class="match-option {{selectedMatchId === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="selectMatch">R{{item.roundNumber}} · #{{item.matchNumber}}<text>{{item.homeParticipant.displayName}} / {{item.awayParticipant.displayName}}</text></button></view></scroll-view>
         <view class="score-form"><input type="number" value="{{homeScore}}" placeholder="主队" bindinput="onHomeInput" /><text>:</text><input type="number" value="{{awayScore}}" placeholder="客队" bindinput="onAwayInput" /></view>
-        <textarea class="reason correction" value="{{correctionReason}}" placeholder="如修正已有官方比分，请填写原因" bindinput="onCorrectionReasonInput" />
+        <textarea class="reason correction" value="{{correctionReason}}" placeholder="填写比分录入或修正原因（必填）" bindinput="onCorrectionReasonInput" />
         <button class="gold" disabled="{{acting}}" bindtap="correctResult">提交官方比分</button></block>
     </view>
   </block>

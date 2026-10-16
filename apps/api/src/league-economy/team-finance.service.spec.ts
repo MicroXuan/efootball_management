@@ -1,5 +1,16 @@
 import { jest } from '@jest/globals';
+import { randomUUID } from 'node:crypto';
+import { config } from 'dotenv';
 import { TeamFinanceService } from './team-finance.service.js';
+import { PrismaService } from '../database/prisma.service.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
+import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { PlayerMarketLockRepository } from '../player-market/player-market-lock.repository.js';
+import type { Prisma } from '../generated/prisma/client.js';
+
+config({ path: '../../.env', quiet: true });
 
 const at = new Date('2026-10-02T12:00:00.000Z');
 
@@ -11,6 +22,7 @@ function harness(settlementEntries: Array<Record<string, unknown>> = []) {
     { id: 'debit-1', leagueId: 'league-1', leagueTeamId: 'team-1', seasonId: 'season-1', rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', amountMinor: 600, note: '奢侈税', createdAt: at }
   ];
   const tx = {
+    $queryRaw: jest.fn(async () => []),
     leagueTeam: { findFirst: jest.fn(async () => team) },
     leagueSeason: { findFirst: jest.fn(async () => season) },
     financeLedgerEntry: {
@@ -105,6 +117,11 @@ describe('TeamFinanceService', () => {
     }));
     expect(result).toMatchObject({ totalMinor: 414 });
     expect(result.items).toHaveLength(9);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(String((tx.$queryRaw.mock.calls as unknown[][])[0]![0])).toContain('league_seasons');
+    expect(String((tx.$queryRaw.mock.calls as unknown[][])[1]![0])).toContain('league_teams');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.$queryRaw.mock.invocationCallOrder[1]!);
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(tx.financeLedgerEntry.findMany.mock.invocationCallOrder[0]!);
   });
 
   it('creates no rows for unchanged targets and credits a reduced target', async () => {
@@ -159,4 +176,102 @@ describe('TeamFinanceService', () => {
       amountMinor: 1, note: '', reason: '测试权限'
     }, 'denied')).rejects.toMatchObject({ code: 'ADMIN_LEAGUE_ACCESS_DENIED' });
   });
+
+  it('does not deadlock against the real season-player-team-application market lock order', async () => {
+    const prisma = new PrismaService();
+    const suffix = randomUUID();
+    const adminId = randomUUID();
+    const userId = randomUUID();
+    let leagueId = '';
+    let seasonId = '';
+    let teamId = '';
+    let catalogId = '';
+    let playerId = '';
+    const gate = () => {
+      let release!: () => void;
+      const promise = new Promise<void>((resolve) => { release = resolve; });
+      return { promise, release };
+    };
+    await prisma.$connect();
+    try {
+      await prisma.adminAccount.create({ data: { id: adminId, username: `finance-lock-${suffix}`, displayName: '财务锁测试', passwordHash: 'unused', platformRole: 'PLATFORM_ADMIN' } });
+      await prisma.user.create({ data: { id: userId, wechatOpenId: `finance-lock-${suffix}`, displayName: '财务锁用户' } });
+      const league = await prisma.league.create({ data: { name: '财务锁联赛', shortName: '锁联赛', defaultPlatform: 'MOBILE', defaultServerRegion: 'GLOBAL', createdByAdminId: adminId } });
+      leagueId = league.id;
+      const season = await prisma.leagueSeason.create({ data: { leagueId, seasonNumber: 1, displayName: 'S1', isFirstSeason: true,
+        registrationOpensAt: new Date('2026-01-01'), registrationClosesAt: new Date('2026-01-02'),
+        startsAt: new Date('2026-01-03'), endsAt: new Date('2027-01-01'), superCapacity: 2,
+        championCapacity: 2, promotionCount: 1, status: 'IN_PROGRESS', createdByAdminId: adminId } });
+      seasonId = season.id;
+      const catalog = await prisma.teamCatalogItem.create({ data: { sourceType: 'CUSTOM', nameZh: '锁测试队', shortName: '锁队' } });
+      catalogId = catalog.id;
+      const team = await prisma.leagueTeam.create({ data: { leagueId, ownerUserId: userId, ownerAlias: '锁用户', catalogTeamId: catalogId,
+        teamNumber: 1, name: '锁测试队', shortName: '锁队' } });
+      teamId = team.id;
+      const player = await prisma.footballPlayer.create({ data: { nameZh: `市场锁球员-${suffix}` } });
+      playerId = player.id;
+
+      const settlementReachedFirstLock = gate();
+      let settlementLockCount = 0;
+      const observedPrisma = new Proxy(prisma, { get(target, key) {
+        if (key !== '$transaction') return Reflect.get(target, key, target);
+        return <T>(work: (tx: Prisma.TransactionClient) => Promise<T>, options?: { isolationLevel?: Prisma.TransactionIsolationLevel }) =>
+          target.$transaction((tx) => work(new Proxy(tx, { get(transaction, transactionKey) {
+            const value = Reflect.get(transaction, transactionKey, transaction);
+            if (transactionKey !== '$queryRaw') return value;
+            return async (...args: unknown[]) => {
+              const isFirst = settlementLockCount++ === 0;
+              const sql = String(args[0]);
+              if (isFirst && sql.includes('league_seasons')) settlementReachedFirstLock.release();
+              const result = await Reflect.apply(value as (...values: unknown[]) => Promise<unknown>, transaction, args);
+              if (isFirst && sql.includes('league_teams')) settlementReachedFirstLock.release();
+              return result;
+            };
+          } })), options);
+      } }) as PrismaService;
+      const service = new TeamFinanceService(observedPrisma, new AdminAuthorizationService(observedPrisma),
+        new AdminMutationReceiptService(observedPrisma), new AuditLogService(observedPrisma),
+        new LeagueVisibilityService(observedPrisma));
+      const marketHasSeasonLock = gate();
+      const marketLocks = new PlayerMarketLockRepository();
+      const market = prisma.$transaction(async (tx) => {
+        await marketLocks.lockSeason(tx, seasonId);
+        marketHasSeasonLock.release();
+        await settlementReachedFirstLock.promise;
+        await marketLocks.lockPlayer(tx, leagueId, playerId);
+        await marketLocks.lockTeams(tx, [teamId]);
+        await marketLocks.lockApplicationsForPlayer(tx, leagueId, seasonId, playerId);
+      }, { isolationLevel: 'ReadCommitted' });
+      await marketHasSeasonLock.promise;
+      const settlement = service.upsertSettlement(adminId, leagueId, {
+        leagueTeamId: teamId, seasonId,
+        amounts: { transactionAmountMinor: 0, luxuryTaxMinor: 500, offseasonFeeMinor: 0,
+          unfinishedMatchPenaltyMinor: 0, playerAuctionMinor: 0, teamAuctionMinor: 0,
+          rookieSelectionMinor: 0, installmentPaymentMinor: 0, otherAdjustmentMinor: 0 },
+        note: '锁顺序测试', reason: '验证结算与阵容并发'
+      }, `lock-${suffix}`);
+
+      const outcomes = await Promise.allSettled([market, settlement]);
+      expect(outcomes).toEqual([
+        expect.objectContaining({ status: 'fulfilled' }),
+        expect.objectContaining({ status: 'fulfilled' })
+      ]);
+      await expect(prisma.financeLedgerEntry.count({ where: { leagueTeamId: teamId, seasonId,
+        settlementCategory: 'LUXURY_TAX' } })).resolves.toBe(1);
+    } finally {
+      if (leagueId) {
+        await prisma.auditLog.deleteMany({ where: { leagueId } });
+        await prisma.adminMutationReceipt.deleteMany({ where: { adminId } });
+        await prisma.financeLedgerEntry.deleteMany({ where: { leagueId } });
+        await prisma.leagueTeam.deleteMany({ where: { leagueId } });
+        await prisma.leagueSeason.deleteMany({ where: { leagueId } });
+        await prisma.league.deleteMany({ where: { id: leagueId } });
+      }
+      if (catalogId) await prisma.teamCatalogItem.deleteMany({ where: { id: catalogId } });
+      if (playerId) await prisma.footballPlayer.deleteMany({ where: { id: playerId } });
+      await prisma.user.deleteMany({ where: { id: userId } });
+      await prisma.adminAccount.deleteMany({ where: { id: adminId } });
+      await prisma.$disconnect();
+    }
+  }, 15_000);
 });

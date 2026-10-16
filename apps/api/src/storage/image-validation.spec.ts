@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { validateLeagueImage } from './image-validation.js';
+import { validateLeagueImage, validateResultEvidenceImage } from './image-validation.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -35,3 +35,25 @@ describe('validateLeagueImage', () => {
       .toThrow(BadRequestException);
   });
 });
+
+describe('validateResultEvidenceImage', () => {
+  it('accepts an image at exactly one MiB', () => {
+    const buffer = Buffer.alloc(1_048_576);
+    pngSignature.copy(buffer);
+    expect(validateResultEvidenceImage(upload(buffer, 'proof.png', 'image/png'))).toMatchObject({ size: 1_048_576, mimeType: 'image/png' });
+  });
+
+  it('rejects a larger image and mismatched declared type', () => {
+    const buffer = Buffer.alloc(1_048_577);
+    pngSignature.copy(buffer);
+    expect(() => validateResultEvidenceImage(upload(buffer, 'proof.png', 'image/png'))).toThrow(BadRequestException);
+    expect(() => validateResultEvidenceImage(upload(pngSignature, 'proof.jpg', 'image/jpeg'))).toThrow(BadRequestException);
+  });
+
+  it('rejects script bytes disguised as PNG evidence', () => {
+    expect(() => validateResultEvidenceImage(upload(Buffer.from('#!/bin/sh\n'), 'proof.png', 'image/png')))
+      .toThrow(BadRequestException);
+  });
+});
+
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);

@@ -366,6 +366,7 @@ export class SchedulesService {
       awayParticipant: this.participant(match.awayParticipant),
       plannedAt: match.plannedAt?.toISOString() ?? null,
       status: match.status,
+      resultConfirmationDeadlineAt: match.resultConfirmationDeadlineAt?.toISOString() ?? null,
       version: match.version,
       officialResult: match.officialResultVersion ? {
         resultVersionId: match.officialResultVersion.id,

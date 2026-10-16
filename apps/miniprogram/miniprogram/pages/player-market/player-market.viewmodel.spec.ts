@@ -1,6 +1,12 @@
 import type { PlayerAcquisitionApplication, PlayerMarketAnnouncement, PlayerMarketPlayerSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { applicationCard, announcementCard, marketPlayerCard } from './player-market.viewmodel'
+import {
+  applicationCard,
+  announcementCard,
+  marketPlayerCard,
+  mergeMarketPlayerPages,
+  shouldShowMarketBackToTop,
+} from './player-market.viewmodel'
 
 const player = (overrides: Partial<PlayerMarketPlayerSummary> = {}): PlayerMarketPlayerSummary => ({
   playerId: 'player-1', playerName: 'Michele Di Gregorio', nationality: 'Italy', club: 'Juventus',
@@ -23,6 +29,21 @@ const application = (overrides: Partial<PlayerAcquisitionApplication> = {}): Pla
 })
 
 describe('player market list view model', () => {
+  it('appends cursor pages once per player and replaces them for a fresh query', () => {
+    const first = [{ playerId: 'player-1' }, { playerId: 'player-2' }]
+    const second = [{ playerId: 'player-2' }, { playerId: 'player-3' }]
+
+    expect(mergeMarketPlayerPages(first, second, 'append').map(({ playerId }) => playerId))
+      .toEqual(['player-1', 'player-2', 'player-3'])
+    expect(mergeMarketPlayerPages(first, second, 'replace').map(({ playerId }) => playerId))
+      .toEqual(['player-2', 'player-3'])
+  })
+
+  it('reveals the return-to-top action only after meaningful scrolling', () => {
+    expect(shouldShowMarketBackToTop(699)).toBe(false)
+    expect(shouldShowMarketBackToTop(700)).toBe(true)
+  })
+
   it('maps free, other-team, own, full-roster and closed-window actions', () => {
     expect(marketPlayerCard(player()).actionLabel).toBe('申请购买')
     expect(marketPlayerCard(player({ action: 'FORCE_SIGN', currentOwner: { teamId: 'team-2', teamNumber: 8, name: '成都蓉城', logoUrl: null, ownerAlias: 'Jeremy' } })).actionLabel).toBe('发起强报')

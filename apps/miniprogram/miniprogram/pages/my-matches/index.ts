@@ -26,6 +26,10 @@ Page({
   onShow() { if (!this.data.loading && this.data.items.length) void this.load(false) },
   onPullDownRefresh() { void this.load(false).finally(() => wx.stopPullDownRefresh()) },
   retry() { void this.load() },
+  openMatch(event: { currentTarget: { dataset: { id?: string } } }) {
+    const id = event.currentTarget.dataset.id
+    if (id) wx.navigateTo({ url: `/pages/match-result/index?id=${encodeURIComponent(id)}` })
+  },
   changeSeason(event: { detail: { value: string } }) {
     const selectedSeasonIndex = Number(event.detail.value)
     const seasonId = this.data.seasonChoices[selectedSeasonIndex]?.id

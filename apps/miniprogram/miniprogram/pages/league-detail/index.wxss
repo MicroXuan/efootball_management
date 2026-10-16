@@ -109,6 +109,11 @@ page { background: #0e1417; color: #f4f7f8; }
 .state-title { margin-top: 18rpx; font-size: 32rpx; font-weight: 800; }
 .outline-button { min-height: 76rpx; margin: 26rpx 0 0; padding: 0 26rpx; font-size: 23rpx; font-weight: 750; }
 .workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
+.workspace-todo { min-height:82rpx;margin-top:20rpx;padding:16rpx 20rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;border:2rpx solid #668b26;border-radius:16rpx;background:rgba(182,241,58,.08); }
+.workspace-todo__label,.workspace-todo__count { display:block; }
+.workspace-todo__label { color:#aab5ba;font-size:17rpx; }
+.workspace-todo__count { margin-top:5rpx;font-size:23rpx;font-weight:850; }
+.workspace-todo__arrow { color:#b6f13a;font-size:19rpx;font-weight:850; }
 .workspace-title { display: block; margin-top: 9rpx; font-size: 34rpx; font-weight: 850; }
 .workspace-division { padding: 10rpx 15rpx; border: 2rpx solid #546b37; border-radius: 18rpx; background: #202c25; color: #d9efac; font-size: 18rpx; font-weight: 800; }
 .workspace-metrics { display: grid; grid-template-columns: 180rpx minmax(0, 1fr); gap: 14rpx; margin-top: 26rpx; }

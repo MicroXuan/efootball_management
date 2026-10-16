@@ -11,7 +11,7 @@ import {
   type UpdateCompetitionRulesRequest,
   type VersionedMutationRequest
 } from '@efm/contracts';
-import type { Competition, Prisma } from '../generated/prisma/client.js';
+import { Prisma, type Competition } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
 import type { CompetitionTransaction } from './competition.types.js';
@@ -218,6 +218,38 @@ export class CompetitionsService {
           throw new CompetitionError('CANCELLATION_REASON_REQUIRED', 'Cancellation reason is required', 400);
         }
         data.cancellationReason = input.reason.trim();
+        const competitionMatches = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT competition_matches.id FROM competition_matches
+          INNER JOIN competition_stages ON competition_stages.id = competition_matches.stage_id
+          WHERE competition_stages.competition_id = ${competitionId}
+          ORDER BY competition_matches.id FOR UPDATE`);
+        const activeDisputes = await transaction.matchResultDispute.findMany({
+          where: { activeKey: { not: null }, match: { stage: { competitionId } } }, select: { id: true, matchId: true, triggerResultVersionId: true }
+        });
+        const now = new Date();
+        await transaction.matchResultEvidence.updateMany({
+          where: { match: { stage: { competitionId } }, status: 'ACTIVE' },
+          data: { status: 'PENDING_DELETE', expiresAt: now }
+        });
+        const matchIds = competitionMatches.map(({ id }) => id);
+        if (matchIds.length) {
+          await transaction.matchResultEvidenceUpload.updateMany({
+            where: { matchId: { in: matchIds }, status: { in: ['PENDING', 'UPLOADED'] } },
+            data: { status: 'EXPIRED' }
+          });
+        }
+        if (activeDisputes.length) {
+          const disputeIds = activeDisputes.map(({ id }) => id);
+          await transaction.matchResultDispute.updateMany({
+            where: { id: { in: disputeIds }, activeKey: { not: null } },
+            data: { status: 'CANCELLED', activeKey: null, version: { increment: 1 } }
+          });
+          await transaction.matchResultEvent.createMany({ data: activeDisputes.map((dispute) => ({
+            matchId: dispute.matchId, disputeId: dispute.id, resultVersionId: dispute.triggerResultVersionId,
+            type: 'DISPUTE_CANCELLED' as const, eventKey: `dispute:${dispute.id}:competition-cancelled`,
+            actorType: 'USER' as const, actorUserId: actorId, occurredAt: now,
+            metadata: { competitionId, reason: input.reason!.trim() }
+          })), skipDuplicates: true });
+        }
       }
       if (target === 'IN_PROGRESS') {
         const stage = await transaction.competitionStage.findFirst({

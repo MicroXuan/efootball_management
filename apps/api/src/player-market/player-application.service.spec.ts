@@ -39,7 +39,8 @@ function harness() {
     playerCard: { findFirst: jest.fn(async () => ({ id: 'card-1', playerId: 'player-1', status: 'ACTIVE', overallRating: 90, autoBuilds: [{ maxOverall: 95 }] })) },
     leaguePlayerValuation: { findUnique: jest.fn(async () => ({ currentValueMinor: 500, version: 1 })) },
     playerAcquisitionApplication: {
-      findFirst: jest.fn(async () => existing),
+      findFirst: jest.fn(async () => existing && ['PENDING', 'REQUOTE_REQUIRED'].includes(existing.status) ? existing : null),
+      findMany: jest.fn(async () => [] as ReturnType<typeof application>[]),
       findUnique: jest.fn(async () => stored),
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
         stored = application({
@@ -50,29 +51,35 @@ function harness() {
       }),
       update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
         stored = application({ ...stored, ...data, version: stored.version + 1, updatedAt: now });
+        if (existing?.id === stored.id) existing = stored;
         return stored;
       })
     },
     playerAcquisitionApplicationEvent: { create: jest.fn(async () => ({ id: 'event-1' })) }
   };
-  const prisma = {};
+  const prisma = { playerAcquisitionApplication: tx.playerAcquisitionApplication };
   const receipts = { execute: jest.fn(async (_actor: string, _operation: string, _key: string, work: (client: typeof tx) => Promise<unknown>) => work(tx)) };
   const access = {
     requireParticipant: jest.fn(async () => ({ leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT' })),
     requireOwnedTeam: jest.fn(async () => ({ leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT' }))
   };
-  const locks = { lockPlayer: jest.fn(async () => undefined), lockTeam: jest.fn(async () => undefined), lockApplication: jest.fn(async () => undefined) };
+  const locks = { lockSeason: jest.fn(async () => undefined), lockPlayer: jest.fn(async () => undefined),
+    lockTeam: jest.fn(async () => undefined), lockTeams: jest.fn(async () => undefined),
+    lockApplication: jest.fn(async () => undefined), lockApplicationsForPlayer: jest.fn(async () => undefined) };
   const service = new PlayerApplicationService(prisma as never, receipts as never, access as never, locks as never, () => now);
-  return { service, tx, receipts, access, setExisting: (value: ReturnType<typeof application> | null) => { existing = value; } };
+  return { service, tx, receipts, access, locks, setExisting: (value: ReturnType<typeof application> | null) => { existing = value; } };
 }
 
 describe('PlayerApplicationService', () => {
   it('creates a pending normal application and public event through the idempotency receipt', async () => {
-    const { service, tx, receipts } = harness();
+    const { service, tx, receipts, locks } = harness();
     const result = await service.submit('user-1', 'league-1', baseInput, 'key-1');
     expect(result).toMatchObject({ status: 'PENDING', amountMinor: 500, version: 1 });
     expect(receipts.execute).toHaveBeenCalledWith('user-1', 'player-market.submit:league-1:player-1', 'key-1', expect.any(Function));
     expect(tx.playerAcquisitionApplicationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'SUBMITTED', actorUserId: 'user-1' }) }));
+    expect(locks.lockSeason.mock.invocationCallOrder[0]).toBeLessThan(locks.lockPlayer.mock.invocationCallOrder[0]!);
+    expect(locks.lockPlayer.mock.invocationCallOrder[0]).toBeLessThan(locks.lockTeams.mock.invocationCallOrder[0]!);
+    expect(locks.lockTeams.mock.invocationCallOrder[0]).toBeLessThan(locks.lockApplicationsForPlayer.mock.invocationCallOrder[0]!);
   });
 
   it('rejects a duplicate active attempt by the same team', async () => {
@@ -80,6 +87,23 @@ describe('PlayerApplicationService', () => {
     setExisting(application());
     await expect(service.submit('user-1', 'league-1', baseInput, 'key-2'))
       .rejects.toMatchObject({ code: 'ACTIVE_APPLICATION_EXISTS' });
+  });
+
+  it('does not let a pending application from closed W1 block a submission in open W2', async () => {
+    const { service, tx, setExisting } = harness();
+    const stale = application({ transferWindowId: 'window-closed' });
+    setExisting(stale);
+    tx.playerAcquisitionApplication.findMany.mockResolvedValueOnce([stale]);
+    tx.transferWindow.findUnique.mockImplementation(async (args?: { where: { id: string } }) => args?.where.id === 'window-closed'
+      ? { id: 'window-closed', seasonId: 'season-1', allowBuy: true, startsAt: new Date(now.getTime() - 2000), endsAt: new Date(now.getTime() - 1000) }
+      : { id: 'window-1', seasonId: 'season-1', allowBuy: true, startsAt: new Date(now.getTime() - 1000), endsAt: new Date(now.getTime() + 1000) });
+
+    const result = await service.submit('user-1', 'league-1', baseInput, 'window-2');
+
+    expect(result).toMatchObject({ status: 'PENDING', transferWindowId: 'window-1' });
+    expect(tx.playerAcquisitionApplication.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'EXPIRED', reviewReason: 'TRANSFER_WINDOW_CLOSED' })
+    }));
   });
 
   it('rejects capacity, existing ownership, non-compliance, and the exact closing instant', async () => {

@@ -5,10 +5,16 @@ import {
   listPlayerMarket,
   listPlayerMarketAnnouncements,
 } from '../../services/player-market'
-import { announcementCard, applicationCard, marketPlayerCard } from './player-market.viewmodel'
+import {
+  announcementCard,
+  applicationCard,
+  marketPlayerCard,
+  mergeMarketPlayerPages,
+  shouldShowMarketBackToTop,
+} from './player-market.viewmodel'
 
 type MarketView = 'players' | 'public' | 'announcements' | 'mine'
-type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string }
+type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string; view?: MarketView }
 type DatasetEvent = { currentTarget: { dataset: { view?: MarketView; playerId?: string } } }
 type InputEvent = { detail: { value: string } }
 type PickerEvent = { detail: { value: string } }
@@ -38,6 +44,9 @@ Page({
     players: [] as ReturnType<typeof marketPlayerCard>[],
     applications: [] as ReturnType<typeof applicationCard>[],
     announcements: [] as ReturnType<typeof announcementCard>[],
+    nextPlayerCursor: null as string | null,
+    loadingMore: false,
+    showBackToTop: false,
   },
 
   onLoad(options: LoadOptions) {
@@ -45,7 +54,8 @@ Page({
       this.setData({ state: 'error', errorMessage: '球员市场参数缺失' })
       return
     }
-    this.setData({ leagueId: options.leagueId, seasonId: options.seasonId, teamId: options.teamId })
+    const view = viewLabels.some(({ key }) => key === options.view) ? options.view : 'players'
+    this.setData({ leagueId: options.leagueId, seasonId: options.seasonId, teamId: options.teamId, view })
   },
 
   onShow() {
@@ -54,6 +64,21 @@ Page({
 
   onPullDownRefresh() {
     void this.loadView(false).finally(() => wx.stopPullDownRefresh())
+  },
+
+  onReachBottom() {
+    if (this.data.view !== 'players' || this.data.loadingMore || !this.data.nextPlayerCursor) return
+    void this.loadView(false, 'append')
+  },
+
+  onPageScroll(event: { scrollTop: number }) {
+    const showBackToTop = shouldShowMarketBackToTop(event.scrollTop)
+    if (showBackToTop !== this.data.showBackToTop) this.setData({ showBackToTop })
+  },
+
+  backToTop() {
+    this.setData({ showBackToTop: false })
+    wx.pageScrollTo({ scrollTop: 0, duration: 250 })
   },
 
   switchView(event: DatasetEvent) {
@@ -81,8 +106,9 @@ Page({
     void this.loadView()
   },
 
-  async loadView(showLoading = true) {
-    if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
+  async loadView(showLoading = true, mode: 'replace' | 'append' = 'replace') {
+    if (mode === 'append') this.setData({ loadingMore: true, errorMessage: '' })
+    else if (showLoading) this.setData({ state: 'loading', errorMessage: '', nextPlayerCursor: null })
     try {
       let count = 0
       if (this.data.view === 'players') {
@@ -93,11 +119,16 @@ Page({
           keyword: this.data.keyword.trim() || undefined,
           position: position || undefined,
           ownership,
-          limit: 60,
+          cursor: mode === 'append' ? this.data.nextPlayerCursor ?? undefined : undefined,
+          limit: 30,
         })
-        const players = result.items.map(marketPlayerCard)
+        const players = mergeMarketPlayerPages(
+          this.data.players,
+          result.items.map(marketPlayerCard),
+          mode,
+        )
         count = players.length
-        this.setData({ players })
+        this.setData({ players, nextPlayerCursor: result.nextCursor })
       } else if (this.data.view === 'announcements') {
         const result = await listPlayerMarketAnnouncements(this.data.leagueId, { seasonId: this.data.seasonId, limit: 60 })
         const announcements = result.items.map(announcementCard)
@@ -113,7 +144,10 @@ Page({
       }
       this.setData({ state: count ? 'loaded' : 'empty', errorMessage: '' })
     } catch (error) {
-      this.setData({ state: 'error', errorMessage: error instanceof ApiError ? error.message : '球员市场加载失败，请稍后重试' })
+      const errorMessage = error instanceof ApiError ? error.message : '球员市场加载失败，请稍后重试'
+      this.setData(mode === 'append' ? { errorMessage } : { state: 'error', errorMessage })
+    } finally {
+      if (mode === 'append') this.setData({ loadingMore: false })
     }
   },
 

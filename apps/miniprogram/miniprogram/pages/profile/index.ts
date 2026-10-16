@@ -4,6 +4,9 @@ import { ApiError, api } from '../../services/api'
 import { auth } from '../../services/auth'
 import { leaguesApi } from '../../services/leagues'
 import { session } from '../../services/session'
+import { actionCenterAttentionCount, loadActionCenter, readActionCenterVersions } from '../../services/action-center'
+import { attentionBadgeLabel } from '../../custom-tab-bar/tabbar.viewmodel'
+import { actionCenterSourceAttention } from '../action-center/action-center.viewmodel'
 import { profileView, type ProfileView } from './profile.viewmodel'
 import { completeProfileLogin } from './profile-login'
 
@@ -21,6 +24,7 @@ Page({
     loggedIn: false,
     features: featureFlags,
     profile: profileView(null, []) as ProfileView,
+    actionCenter: { attentionCount: 0, actionRequiredCount: 0, auctionCount: 0 },
   },
 
   onShow() {
@@ -36,20 +40,27 @@ Page({
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     const loggedIn = Boolean(session.getAccessToken())
     if (!loggedIn) {
-      this.setData({ state: 'loaded', errorMessage: '', loggedIn: false, profile: profileView(null, []) })
+      this.setData({ state: 'loaded', errorMessage: '', loggedIn: false, profile: profileView(null, []), actionCenter: { attentionCount: 0, actionRequiredCount: 0, auctionCount: 0 } })
+      this.getTabBar?.()?.setData({ attentionBadge: '' })
       return
     }
     try {
-      const [user, teams] = await Promise.all([
+      const [user, teams, actionCenter] = await Promise.all([
         api.request<CurrentUserResponse>({ path: '/me' }),
         leaguesApi.mine(),
+        loadActionCenter().catch(() => ({ items: [], actionRequiredCount: 0 })),
       ])
+      const readVersions = readActionCenterVersions()
+      const sourceCounts = actionCenterSourceAttention(actionCenter, readVersions)
+      const attentionCount = actionCenterAttentionCount(actionCenter, readVersions)
       this.setData({
         state: 'loaded',
         errorMessage: '',
         loggedIn: true,
         profile: profileView(user, teams.items),
+        actionCenter: { attentionCount, actionRequiredCount: actionCenter.actionRequiredCount, auctionCount: sourceCounts.AUCTION },
       })
+      this.getTabBar?.()?.setData({ attentionBadge: attentionBadgeLabel(attentionCount) })
     } catch (error) {
       this.setData({ state: 'error', errorMessage: errorCopy(error), loggedIn: true })
     }
@@ -66,6 +77,10 @@ Page({
 
   openFavorites() {
     wx.navigateTo({ url: '/pages/favorites/index' })
+  },
+
+  openActionCenter() {
+    wx.navigateTo({ url: '/pages/action-center/index' })
   },
 
   openMyMatches() {

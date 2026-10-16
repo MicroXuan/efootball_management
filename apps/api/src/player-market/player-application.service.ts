@@ -13,6 +13,7 @@ import { PlayerMarketAccessService } from './player-market-access.service.js';
 import { playerMarketError } from './player-market.errors.js';
 import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
 import { reconcileForcedApplication } from './forced-transfer-policy.js';
+import { expireClosedPlayerApplications } from './player-market-application-reconciliation.js';
 
 const applicationInclude = {
   applicantLeagueTeam: true,
@@ -42,10 +43,15 @@ export class PlayerApplicationService {
   ): Promise<PlayerAcquisitionApplication> {
     const scope = await this.access.requireParticipant(userId, leagueId, input.seasonId);
     return this.receipts.execute(userId, `player-market.submit:${leagueId}:${input.footballPlayerId}`, key, async (tx) => {
-      await this.locks.lockTeam(tx, scope.leagueTeamId);
+      await this.locks.lockSeason(tx, input.seasonId);
       await this.locks.lockPlayer(tx, leagueId, input.footballPlayerId);
+      await this.locks.lockTeams(tx, [scope.leagueTeamId, input.sourceLeagueTeamId]);
+      await this.locks.lockApplicationsForPlayer(tx, leagueId, input.seasonId, input.footballPlayerId);
       const now = this.clock();
-      const [team, window, ownership, rosterCount, valuation, restriction, existing] = await Promise.all([
+      await expireClosedPlayerApplications(tx, {
+        leagueId, seasonId: input.seasonId, footballPlayerId: input.footballPlayerId, at: now
+      });
+      const [team, window, ownership, rosterCount, valuation, restriction, activeExisting] = await Promise.all([
         tx.leagueTeam.findUnique({ where: { id: scope.leagueTeamId } }),
         tx.transferWindow.findUnique({ where: { id: input.transferWindowId } }),
         tx.leaguePlayerOwnership.findUnique({
@@ -106,7 +112,7 @@ export class PlayerApplicationService {
       });
       if (!card) throw playerMarketError('PLAYER_CARD_NOT_AVAILABLE', '所选球员卡不可用', 404);
       if (restriction) throw playerMarketError('RELEASED_BY_TEAM_IN_WINDOW', '本队在当前窗口下放过该球员，不能回购');
-      if (existing) throw playerMarketError('ACTIVE_APPLICATION_EXISTS', '本队已有一笔有效申请');
+      if (activeExisting) throw playerMarketError('ACTIVE_APPLICATION_EXISTS', '本队已有一笔有效申请');
 
       const created = await tx.playerAcquisitionApplication.create({
         data: {
@@ -140,12 +146,16 @@ export class PlayerApplicationService {
     input: AmendPlayerApplicationRequest,
     key: string
   ): Promise<PlayerAcquisitionApplication> {
+    const snapshot = await this.prisma.playerAcquisitionApplication.findUnique({ where: { id: applicationId } });
+    if (!snapshot) throw playerMarketError('PLAYER_APPLICATION_NOT_FOUND', '申请不存在', 404);
     return this.receipts.execute(userId, `player-market.amend:${applicationId}`, key, async (tx) => {
-      await this.locks.lockApplication(tx, applicationId);
+      await this.locks.lockSeason(tx, snapshot.seasonId);
+      await this.locks.lockPlayer(tx, snapshot.leagueId, snapshot.footballPlayerId);
+      await this.locks.lockTeams(tx, [snapshot.applicantLeagueTeamId, snapshot.sourceLeagueTeamId]);
+      await this.locks.lockApplicationsForPlayer(tx, snapshot.leagueId, snapshot.seasonId, snapshot.footballPlayerId);
       const current = await tx.playerAcquisitionApplication.findUnique({ where: { id: applicationId }, include: applicationInclude });
       if (!current) throw playerMarketError('PLAYER_APPLICATION_NOT_FOUND', '申请不存在', 404);
       await this.access.requireOwnedTeam(userId, current.applicantLeagueTeamId, current.seasonId);
-      await this.locks.lockTeam(tx, current.applicantLeagueTeamId);
       this.assertVersion(current.version, input.expectedVersion);
       const amendable = current.type === 'FORCED_TRANSFER'
         ? ['PENDING', 'REQUOTE_REQUIRED'].includes(current.status)
@@ -159,7 +169,6 @@ export class PlayerApplicationService {
         if (input.amountMinor < current.amountMinor) {
           throw playerMarketError('FORCED_AMOUNT_CANNOT_DECREASE', '强报补价不能低于当前报价');
         }
-        await this.locks.lockPlayer(tx, current.leagueId, current.footballPlayerId);
         const [ownership, valuation] = await Promise.all([
           tx.leaguePlayerOwnership.findUnique({
             where: { leagueId_footballPlayerId: { leagueId: current.leagueId, footballPlayerId: current.footballPlayerId } }
@@ -205,8 +214,13 @@ export class PlayerApplicationService {
     input: WithdrawPlayerApplicationRequest,
     key: string
   ): Promise<PlayerAcquisitionApplication> {
+    const snapshot = await this.prisma.playerAcquisitionApplication.findUnique({ where: { id: applicationId } });
+    if (!snapshot) throw playerMarketError('PLAYER_APPLICATION_NOT_FOUND', '申请不存在', 404);
     return this.receipts.execute(userId, `player-market.withdraw:${applicationId}`, key, async (tx) => {
-      await this.locks.lockApplication(tx, applicationId);
+      await this.locks.lockSeason(tx, snapshot.seasonId);
+      await this.locks.lockPlayer(tx, snapshot.leagueId, snapshot.footballPlayerId);
+      await this.locks.lockTeams(tx, [snapshot.applicantLeagueTeamId, snapshot.sourceLeagueTeamId]);
+      await this.locks.lockApplicationsForPlayer(tx, snapshot.leagueId, snapshot.seasonId, snapshot.footballPlayerId);
       const current = await tx.playerAcquisitionApplication.findUnique({ where: { id: applicationId }, include: applicationInclude });
       if (!current) throw playerMarketError('PLAYER_APPLICATION_NOT_FOUND', '申请不存在', 404);
       await this.access.requireOwnedTeam(userId, current.applicantLeagueTeamId, current.seasonId);
@@ -246,7 +260,7 @@ export class PlayerApplicationService {
     toStatus: ApplicationRow['status'],
     fromAmountMinor: number | null,
     toAmountMinor: number | null,
-    actorUserId: string,
+    actorUserId: string | null,
     reason: string | null
   ): Promise<void> {
     await tx.playerAcquisitionApplicationEvent.create({

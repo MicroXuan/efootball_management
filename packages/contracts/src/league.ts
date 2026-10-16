@@ -67,6 +67,7 @@ const LeagueFieldsSchema = z.object({
   description: z.string().trim().max(500),
   logoUrl: NullableLogoUrlSchema,
   edition: LeagueEditionSchema,
+  resultEvidenceRequired: z.boolean(),
   defaultSuperCapacity: CapacitySchema,
   defaultChampionCapacity: CapacitySchema,
   defaultPromotionCount: PromotionCountSchema
@@ -75,6 +76,7 @@ const LeagueFieldsSchema = z.object({
 export const CreateLeagueRequestSchema = LeagueFieldsSchema.extend({
   description: z.string().trim().max(500).default(''),
   logoUrl: NullableLogoUrlSchema.default(null),
+  resultEvidenceRequired: z.boolean().default(false),
   defaultSuperCapacity: CapacitySchema.default(23),
   defaultChampionCapacity: CapacitySchema.default(18),
   defaultPromotionCount: PromotionCountSchema.default(4)
@@ -227,6 +229,7 @@ export const LeagueSummarySchema = z.object({
   logoUrl: z.string().nullable(),
   status: LeagueStatusSchema,
   edition: LeagueEditionSchema,
+  resultEvidenceRequired: z.boolean().default(false),
   defaultSuperCapacity: CapacitySchema,
   defaultChampionCapacity: CapacitySchema,
   defaultPromotionCount: PromotionCountSchema,

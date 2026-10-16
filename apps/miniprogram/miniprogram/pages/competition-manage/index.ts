@@ -98,10 +98,11 @@ Page({
     const match = this.data.matches.find(({ id }) => id === this.data.selectedMatchId)
     const homeScore = validateScore(this.data.homeScore), awayScore = validateScore(this.data.awayScore)
     if (!match || homeScore === null || awayScore === null) { this.setData({ errorMessage: '请选择比赛并填写 0 到 99 的整数比分' }); return }
-    if (match.officialResult && !this.data.correctionReason.trim()) { this.setData({ errorMessage: '修改已有官方比分时必须填写修正原因' }); return }
+    const reason = this.data.correctionReason.trim()
+    if (!reason) { this.setData({ errorMessage: match.officialResult ? '修改已有官方比分时必须填写修正原因' : '录入官方比分时必须填写原因' }); return }
     const content = match.officialResult ? `将官方比分改为 ${homeScore}:${awayScore}，原记录会保留在审计历史中。` : `确认录入官方比分 ${homeScore}:${awayScore}？`
     wx.showModal({ title: match.officialResult ? '修正官方比分' : '录入官方比分', content, confirmText: '确认提交',
-      success: ({ confirm }) => { if (confirm) void this.run(async () => { await competitionsApi.managerResult(this.data.id, match.id, { homeScore, awayScore, expectedVersion: match.version, reason: this.data.correctionReason.trim() || null }) }, '官方比分已更新') } })
+      success: ({ confirm }) => { if (confirm) void this.run(async () => { await competitionsApi.managerResult(this.data.id, match.id, { homeScore, awayScore, expectedVersion: match.version, reason }) }, '官方比分已更新') } })
   },
   async run(work: () => Promise<void>, successTitle: string) {
     if (this.data.acting) return

@@ -2,6 +2,46 @@ import { jest } from '@jest/globals';
 import { AdminLeaguesService } from './admin-leagues.service.js';
 
 describe('AdminLeaguesService', () => {
+  it('defaults screenshot requirement off and audits an optimistic administrator change', async () => {
+    const create = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'league-evidence', ...data, status: 'ACTIVE', version: 1,
+      createdAt: new Date('2026-10-15T00:00:00.000Z'), updatedAt: new Date('2026-10-15T00:00:00.000Z')
+    }));
+    const updateMany = jest.fn(async () => ({ count: 1 }));
+    const record = { ...await create({ data: {
+      name: '测试', shortName: '测试', description: '', logoUrl: null, edition: 'NATIONAL',
+      resultEvidenceRequired: false, defaultSuperCapacity: 23, defaultChampionCapacity: 18,
+      defaultPromotionCount: 4
+    } }), version: 1 };
+    const findFirst = jest.fn(async () => record);
+    findFirst.mockResolvedValueOnce({ id: 'league-evidence' } as never)
+      .mockResolvedValueOnce({ resultEvidenceRequired: false } as never)
+      .mockResolvedValueOnce({ ...record, resultEvidenceRequired: true, version: 2 } as never);
+    const transaction = { league: { create, updateMany, findFirst } };
+    const receipts = { execute: jest.fn(async (_actor: string, _operation: string, _key: string,
+      work: (value: typeof transaction) => Promise<unknown>) => work(transaction)) };
+    const audit = { record: jest.fn(async () => undefined) };
+    const service = new AdminLeaguesService({ league: { findFirst } } as never, receipts as never, audit as never);
+    const created = await service.create('admin-1', {
+      name: '测试', shortName: '测试', description: '', logoUrl: null, edition: 'NATIONAL',
+      defaultSuperCapacity: 23, defaultChampionCapacity: 18, defaultPromotionCount: 4
+    }, 'create-evidence');
+    expect(created.resultEvidenceRequired).toBe(false);
+    const updated = await service.update('admin-1', 'league-evidence', {
+      resultEvidenceRequired: true, expectedVersion: 1
+    }, 'update-evidence');
+    expect(updated.resultEvidenceRequired).toBe(true);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ version: 1 }),
+      data: expect.objectContaining({ resultEvidenceRequired: true })
+    }));
+    expect(audit.record).toHaveBeenCalledWith(transaction, expect.objectContaining({
+      action: 'admin.league.update', metadata: {
+        resultEvidenceRequired: true,
+        previousResultEvidenceRequired: false
+      }
+    }));
+  });
   it('persists the required edition while keeping retired identity fields internal', async () => {
     const create = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 'league-1',
