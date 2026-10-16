@@ -233,6 +233,22 @@ describe('administrator arbitration', () => {
     ]));
   });
 
+  it('computes missing roles only from active evidence attached to the current dispute', async () => {
+    const a = await setup();
+    const historical = await prisma.matchResultEvidence.create({ data: {
+      matchId: a.match.id, disputeId: null, resultVersionId: a.proposal.id, role: 'OPPONENT',
+      uploadedByUserId: users[1]!, objectKey: `legacy-active-${randomUUID()}`,
+      mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64), status: 'ACTIVE'
+    } });
+
+    const detail = await service.detail(adminId, a.leagueId, a.dispute!.id);
+
+    expect(detail.missingRoles).toContain('OPPONENT');
+    expect(detail.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: historical.id, role: 'OPPONENT', status: 'ACTIVE', uploaderSide: 'AWAY' })
+    ]));
+  });
+
   it('supports private local administrator upload/read without a dispute and rejects other roles, owners and leagues', async () => {
     const a = await setup(false); const b = await setup(false);
     const directory = await mkdtemp(join(tmpdir(), 'efm-admin-evidence-'));

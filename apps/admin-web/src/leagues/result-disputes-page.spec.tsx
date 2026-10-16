@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ApiError, type AdminApi } from '../lib/api';
@@ -392,4 +392,24 @@ it.each(['close', 'unmount-pending'] as const)('gets a private evidence URL lazi
   expect(revoke).toHaveBeenCalledWith('blob:preview');
   URL.createObjectURL = originalCreate;
   URL.revokeObjectURL = originalRevoke;
+});
+
+it('uses current-dispute missing roles for the evidence rail while retaining historical evidence rows', async () => {
+  const historical = { id: '99999999-9999-4999-8999-999999999999', matchId, disputeId: null,
+    resultVersionId: row.triggerResultVersionId, role: 'OPPONENT', uploaderSide: 'AWAY', status: 'ACTIVE',
+    uploadedByUserId: row.openedByUserId, uploadedByAdminId: null, mimeType: 'image/png', byteSize: 64,
+    checksumSha256: 'a'.repeat(64), expiresAt: null, deletedAt: null, createdAt: at };
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/workspace')) return { id: leagueId, resultEvidenceRequired: false, version: 3 };
+    if (path.endsWith('/result-disputes')) return [row];
+    if (path.endsWith(`/${disputeId}`)) return { ...detail, missingRoles: ['OPPONENT'], evidence: [historical] };
+    throw new Error(path);
+  }) as unknown as AdminApi['request'];
+
+  renderPage(request);
+  await userEvent.click(await screen.findByRole('button', { name: /查看争议/ }));
+
+  const rail = await screen.findByLabelText('双方证据状态');
+  expect(within(rail).getByText(/对方（客队：申花）/).parentElement).toHaveTextContent('未提交');
+  expect(screen.getByText(/客队：申花.*有效/)).toBeInTheDocument();
 });

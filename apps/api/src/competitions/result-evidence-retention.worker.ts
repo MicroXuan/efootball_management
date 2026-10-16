@@ -8,6 +8,13 @@ import { EVIDENCE_RETAINED_PREFIX, evidenceOrphanKeys, evidenceSourceKeys } from
 @Injectable()
 export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private static readonly RUN_BUDGET = 100;
+  private static readonly PHASE_BUDGETS = {
+    evidence: Math.ceil(ResultEvidenceRetentionWorker.RUN_BUDGET / 3),
+    orphan: Math.floor(ResultEvidenceRetentionWorker.RUN_BUDGET / 3),
+    source: ResultEvidenceRetentionWorker.RUN_BUDGET
+      - Math.ceil(ResultEvidenceRetentionWorker.RUN_BUDGET / 3)
+      - Math.floor(ResultEvidenceRetentionWorker.RUN_BUDGET / 3)
+  } as const;
   private readonly logger = new Logger(ResultEvidenceRetentionWorker.name);
   private readonly events = new MatchResultEventsService();
   private timer?: NodeJS.Timeout;
@@ -33,15 +40,16 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
   }
 
   private async cleanupPass(now: Date): Promise<void> {
-    let remaining = ResultEvidenceRetentionWorker.RUN_BUDGET;
-    while (remaining > 0) {
+    let evidenceRemaining = ResultEvidenceRetentionWorker.PHASE_BUDGETS.evidence;
+    while (evidenceRemaining > 0) {
       const batch = await this.prisma.matchResultEvidence.findMany({ where: {
         id: { gt: this.evidenceCursor }, status: { in: ['ACTIVE', 'PENDING_DELETE'] }, expiresAt: { lte: now }
-      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: Math.min(100, remaining) });
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: evidenceRemaining });
       if (!batch.length) { this.evidenceCursor = ''; break; }
+      const requested = evidenceRemaining;
       for (const candidate of batch) {
         this.evidenceCursor = candidate.id;
-        remaining -= 1;
+        evidenceRemaining -= 1;
         try {
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
@@ -60,20 +68,21 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
           });
         } catch (error) { this.logger.warn(`Evidence ${candidate.id} cleanup will retry: ${String(error)}`); }
       }
-      if (batch.length < Math.min(100, remaining + batch.length)) { this.evidenceCursor = ''; break; }
+      if (batch.length < requested) { this.evidenceCursor = ''; break; }
     }
     const cutoff = new Date(now.getTime() - 86_400_000);
-    while (remaining > 0) {
+    let orphanRemaining = ResultEvidenceRetentionWorker.PHASE_BUDGETS.orphan;
+    while (orphanRemaining > 0) {
       const batch = await this.prisma.matchResultEvidenceUpload.findMany({ where: {
         // Revisit expired sessions: an in-flight provider write can finish after a DB timeout.
         id: { gt: this.orphanCursor }, status: { in: ['PENDING', 'UPLOADED', 'EXPIRED'] }, createdAt: { lt: cutoff },
         resultVersionId: null, disputeId: null, evidence: null
-      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: Math.min(100, remaining) });
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: orphanRemaining });
       if (!batch.length) { this.orphanCursor = ''; break; }
-      const requested = Math.min(100, remaining);
+      const requested = orphanRemaining;
       for (const candidate of batch) {
         this.orphanCursor = candidate.id;
-        remaining -= 1;
+        orphanRemaining -= 1;
         try {
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;
@@ -94,17 +103,18 @@ export class ResultEvidenceRetentionWorker implements OnApplicationBootstrap, On
     }
     // Completion can persist the retained key before source deletion fails. Consumption
     // removes these sessions from orphan cleanup, so revisit their source siblings daily.
-    while (remaining > 0) {
+    let sourceRemaining = ResultEvidenceRetentionWorker.PHASE_BUDGETS.source;
+    while (sourceRemaining > 0) {
       const batch = await this.prisma.matchResultEvidenceUpload.findMany({ where: {
         id: { gt: this.sourceCursor }, objectKey: { contains: EVIDENCE_RETAINED_PREFIX }, createdAt: { lt: cutoff },
         OR: [{ status: 'CONSUMED' }, { evidence: { isNot: null } },
           { resultVersionId: { not: null } }, { disputeId: { not: null } }]
-      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: Math.min(100, remaining) });
+      }, select: { id: true, matchId: true }, orderBy: { id: 'asc' }, take: sourceRemaining });
       if (!batch.length) { this.sourceCursor = ''; break; }
-      const requested = Math.min(100, remaining);
+      const requested = sourceRemaining;
       for (const candidate of batch) {
         this.sourceCursor = candidate.id;
-        remaining -= 1;
+        sourceRemaining -= 1;
         try {
           await this.prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM competition_matches WHERE id = ${candidate.matchId} FOR UPDATE`;

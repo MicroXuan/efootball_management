@@ -55,6 +55,35 @@ describe('evidence retention', () => {
     await Promise.all([first, second]);
     expect(storage.delete).toHaveBeenCalledTimes(1);
   });
+  it('gives evidence, orphan, and source cleanup bounded progress when more than 100 evidence rows are due', async () => {
+    const { match, proposal } = await fixture();
+    const now = new Date();
+    await prisma.matchResultVersion.update({ where: { id: proposal.id }, data: { status: 'OFFICIAL' } });
+    await prisma.competitionMatch.update({ where: { id: match.id }, data: { status: 'CONFIRMED', officialResultVersionId: proposal.id } });
+    await prisma.matchResultEvidence.createMany({ data: Array.from({ length: 101 }, () => ({
+      matchId: match.id, resultVersionId: proposal.id, role: 'SUBMITTER' as const, uploadedByUserId: users[0]!,
+      objectKey: `fair-evidence-${randomUUID()}`, mimeType: 'image/png', byteSize: 8,
+      checksumSha256: 'a'.repeat(64), expiresAt: now
+    })) });
+    const orphan = await upload(match.id);
+    await prisma.matchResultEvidenceUpload.update({ where: { id: orphan.id }, data: {
+      createdAt: new Date(0), expiresAt: new Date(0), objectKey: `match-result-evidence-temp--${orphan.id}.png`
+    } });
+    const source = await upload(match.id);
+    await prisma.matchResultEvidenceUpload.update({ where: { id: source.id }, data: {
+      status: 'CONSUMED', createdAt: new Date(0), expiresAt: new Date(0),
+      objectKey: `match-result-evidence-retained--${source.id}.png`
+    } });
+
+    await worker.cleanup(now);
+
+    const deletedEvidence = await prisma.matchResultEvidence.count({ where: { matchId: match.id, status: 'DELETED' } });
+    expect(deletedEvidence).toBeGreaterThan(0);
+    expect(deletedEvidence).toBeLessThan(100);
+    expect(await prisma.matchResultEvidenceUpload.findUnique({ where: { id: orphan.id } })).toMatchObject({ status: 'EXPIRED' });
+    expect(storage.delete).toHaveBeenCalledWith(`match-result-evidence-temp--${source.id}.png`);
+    expect(storage.delete).toHaveBeenCalledWith(`match-result-evidence--${source.id}.png`);
+  });
   it.each(['PENDING', 'UPLOADED', 'EXPIRED'] as const)('cleans both temporary and deterministic retained orphan copies for %s', async (status) => {
     const { match } = await fixture();
     const session = await upload(match.id);
@@ -105,8 +134,7 @@ describe('evidence retention', () => {
     })) });
     await worker.cleanup(new Date(now.getTime() - 1));
     expect(storage.delete).not.toHaveBeenCalled();
-    await worker.cleanup(now);
-    await worker.cleanup(now);
+    while (storage.delete.mock.calls.length < 101) await worker.cleanup(now);
     expect(storage.delete).toHaveBeenCalledTimes(101);
     expect(await prisma.matchResultEvidence.count({ where: { matchId: match.id, status: 'DELETED' } })).toBe(101);
     expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'EVIDENCE_DELETED' } })).toBe(101);

@@ -273,7 +273,7 @@ function LeagueResultDisputesWorkspace({ leagueId, api }: { leagueId: string; ap
             <div className="dispute-detail__score"><span>提交比分</span><strong>{score(detail)}</strong></div>
             {rejectedReason(detail) ? <div className="dispute-detail__reason"><span>拒绝原因</span><p>{rejectedReason(detail)}</p></div> : null}
             <div className="dispute-evidence-rail" aria-label="双方证据状态">{(['SUBMITTER', 'OPPONENT'] as const).map((role) => {
-              const present = detail.evidence.some((item) => item.role === role && item.status === 'ACTIVE');
+              const present = !missingRoles(detail).includes(role);
               return <div key={role} className={present ? 'is-present' : 'is-missing'}><span>{participantRoleLabel(detail, role)}</span><strong>{present ? '已提交' : '未提交'}</strong></div>;
             })}</div>
             {missingRoles(detail).length ? <Alert type="warning" showIcon title={`缺少${missingRoles(detail).map((role) => roleLabels[role]).join('、')}证据，请在裁决前核对时间线。`} /> : null}

@@ -103,7 +103,13 @@ export class AdminMatchResultDisputesService {
         : null;
       return { ...item, uploaderSide: item.uploadedByAdminId ? 'ADMIN' : evidenceSide ?? side(item.uploadedByUserId) };
     });
-    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({ ...dispute, ...this.identity(dispute), evidence: attributed, timeline })));
+    const currentRoles = new Set(evidence
+      .filter((item) => item.disputeId === dispute.id && item.status === 'ACTIVE')
+      .map((item) => item.role));
+    const missingRoles = (['SUBMITTER', 'OPPONENT'] as const).filter((role) => !currentRoles.has(role));
+    return AdminMatchResultDisputeResponseSchema.parse(JSON.parse(JSON.stringify({
+      ...dispute, ...this.identity(dispute), missingRoles, evidence: attributed, timeline
+    })));
   }
 
   async readUrl(adminId: string, leagueId: string, disputeId: string, evidenceId: string) {
