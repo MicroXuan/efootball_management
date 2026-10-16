@@ -18,6 +18,9 @@ describe('PESDATA player mapping', () => {
       playerExternalId: '33079',
       playerNameZh: '莱昂纳多·博努奇',
       playerNameEn: 'Leonardo Bonucci',
+      club: 'Italy',
+      clubZh: '意大利',
+      clubEn: 'Italy',
       position: 'CB',
       overallRating: 87,
       cardType: 'EPIC',
@@ -45,7 +48,7 @@ describe('PESDATA player mapping', () => {
       'fixture-preserved'
     );
     expect(row.skills).toHaveLength(10);
-    expect(() => normalizeImportRow(row)).not.toThrow();
+    expect(normalizeImportRow(row)).toMatchObject({ club: 'Italy', clubZh: '意大利', clubEn: 'Italy' });
   });
 
   it('falls back to the small artwork only when PESDATA has no large card image', () => {

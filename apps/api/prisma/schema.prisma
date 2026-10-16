@@ -1551,6 +1551,8 @@ model FootballPlayer {
   shortName                    String?                        @map("short_name") @db.VarChar(64)
   nationality                  String?                        @db.VarChar(64)
   club                         String?                        @db.VarChar(128)
+  clubZh                       String?                        @map("club_zh") @db.VarChar(128)
+  clubEn                       String?                        @map("club_en") @db.VarChar(128)
   publishedAt                  DateTime?                      @map("published_at")
   lastPublishedReleaseSequence Int?                           @map("last_published_release_sequence")
   createdAt                    DateTime                       @default(now()) @map("created_at")

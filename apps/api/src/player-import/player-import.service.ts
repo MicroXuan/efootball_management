@@ -65,6 +65,8 @@ function toExistingRecord(card: {
     shortName: string | null;
     nationality: string | null;
     club: string | null;
+    clubZh: string | null;
+    clubEn: string | null;
     sources: Array<{ externalId: string }>;
   };
   cardPack: {
@@ -85,6 +87,8 @@ function toExistingRecord(card: {
     playerShortName: card.player.shortName ?? undefined,
     nationality: card.player.nationality ?? undefined,
     club: card.player.club ?? undefined,
+    clubZh: card.player.clubZh ?? undefined,
+    clubEn: card.player.clubEn ?? undefined,
     cardName: card.cardName,
     position: card.position,
     overallRating: card.overallRating,

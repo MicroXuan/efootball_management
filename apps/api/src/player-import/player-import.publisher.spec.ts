@@ -36,6 +36,8 @@ describe('PlayerImportPublisher', () => {
     playerNameZh: `发布测试 ${externalId}`,
     nationality: 'Argentina',
     club: 'Test FC',
+    clubZh: '测试足球俱乐部',
+    clubEn: 'Test FC',
     cardName: 'Featured',
     position: 'CMF',
     overallRating: 95,
@@ -113,6 +115,9 @@ describe('PlayerImportPublisher', () => {
     expect(published.status).toBe('PUBLISHED');
     expect(published.releaseSequence).toBeGreaterThan(0);
     expect(stored?.player.sources).toHaveLength(1);
+    expect(stored?.player as unknown as Record<string, unknown>).toMatchObject({
+      club: 'Test FC', clubZh: '测试足球俱乐部', clubEn: 'Test FC'
+    });
     expect(stored?.cardPack?.externalId).toBe('pack-create');
     expect(stored?.skills).toHaveLength(1);
     expect(stored?.attributes?.attributesJson).toEqual({ passing: 96 });

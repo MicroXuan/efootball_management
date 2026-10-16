@@ -70,7 +70,11 @@ describe('PlayerMarketQueryService', () => {
     expect(result.activeTransferWindowId).toBe('window-1');
     expect(result.items[2]?.currentOwner).toEqual({ teamId: 'team-2', teamNumber: 2, name: '对手队', logoUrl: '/logo.png', ownerAlias: '对手' });
     expect(prisma.footballPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: expect.arrayContaining([expect.objectContaining({ OR: expect.any(Array) })]) }
+      where: { AND: expect.arrayContaining([expect.objectContaining({ OR: expect.arrayContaining([
+        { club: { contains: '测试' } },
+        { clubZh: { contains: '测试' } },
+        { clubEn: { contains: '测试' } }
+      ]) })]) }
     }));
   });
 

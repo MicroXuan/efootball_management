@@ -90,7 +90,9 @@ export class PlayerMarketQueryService {
         { nameZh: { contains: keyword } },
         { nameEn: { contains: keyword } },
         { shortName: { contains: keyword } },
-        { club: { contains: keyword } }
+        { club: { contains: keyword } },
+        { clubZh: { contains: keyword } },
+        { clubEn: { contains: keyword } }
       ] } as Prisma.FootballPlayerWhereInput] : []),
       ...(query.position ? [{ cards: { some: { position: query.position, status: 'ACTIVE' } } } as Prisma.FootballPlayerWhereInput] : []),
       ...(query.ownership === 'FREE' ? [{

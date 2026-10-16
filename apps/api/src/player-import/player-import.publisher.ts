@@ -291,6 +291,8 @@ export class PlayerImportPublisher {
       shortName: value.playerShortName ?? null,
       nationality: value.nationality ?? null,
       club: value.club ?? null,
+      clubZh: value.clubZh ?? null,
+      clubEn: value.clubEn ?? null,
       publishedAt,
       lastPublishedReleaseSequence: releaseSequence
     };
@@ -312,7 +314,9 @@ export class PlayerImportPublisher {
       } : {}),
       ...(writeAll || changed.has('playerShortName') ? { shortName: value.playerShortName ?? null } : {}),
       ...(writeAll || changed.has('nationality') ? { nationality: value.nationality ?? null } : {}),
-      ...(writeAll || changed.has('club') ? { club: value.club ?? null } : {})
+      ...(writeAll || changed.has('club') ? { club: value.club ?? null } : {}),
+      ...(writeAll || changed.has('clubZh') ? { clubZh: value.clubZh ?? null } : {}),
+      ...(writeAll || changed.has('clubEn') ? { clubEn: value.clubEn ?? null } : {})
     };
   }
 

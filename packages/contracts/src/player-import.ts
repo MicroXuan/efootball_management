@@ -26,6 +26,8 @@ export const NormalizedPlayerCardRecordSchema = z.object({
   playerShortName: z.string().trim().min(1).max(64).optional(),
   nationality: z.string().trim().max(64).optional(),
   club: z.string().trim().max(128).optional(),
+  clubZh: z.string().trim().max(128).optional(),
+  clubEn: z.string().trim().max(128).optional(),
   cardName: z.string().trim().min(1).max(128),
   position: PlayerPositionSchema,
   overallRating: z.number().int().min(1).max(110),
