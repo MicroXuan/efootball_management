@@ -13,6 +13,8 @@ export interface DirectUploadGrant {
 export interface StoredObjectMetadata {
   mimeType: string;
   size: number;
+  /** Absent when inspection rejects size before downloading the object. */
+  checksumSha256?: string;
 }
 
 export interface StoredUploadInput {

@@ -197,6 +197,22 @@ describe('match result dispute contracts', () => {
 });
 
 describe('action center contracts', () => {
+  it('accepts all current reminders beyond the combined recent-history limit', () => {
+    const items = Array.from({ length: 201 }, () => {
+      const matchId = randomUUID();
+      return {
+        id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
+        source: 'MATCH_RESULT', section: 'ACTION_REQUIRED',
+        league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+        title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
+        occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
+      };
+    });
+    const response = ActionCenterResponseSchema.parse({ items, actionRequiredCount: 201 });
+    assert.equal(response.items.length, 201);
+    assert.equal(response.actionRequiredCount, 201);
+  });
+
   it('parses actionable transaction, forced-transfer, and auction projections', () => {
     const response = ActionCenterResponseSchema.parse({
       actionRequiredCount: 2,

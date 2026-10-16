@@ -26,7 +26,7 @@ describe('administrator arbitration', () => {
     undefined, new AdminMutationReceiptService(prisma), authorization, new AuditLogService(prisma));
   const storage = { temporaryReadUrl: jest.fn(async () => 'https://private.test/signed'),
     createDirectUpload: jest.fn(async () => ({ key: randomUUID(), uploadUrl: 'https://private.test/upload', headers: {} })),
-    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8 })) };
+    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64) })) };
   const evidence = new ResultEvidenceStorageService(prisma, storage as never, authorization);
   const service = new AdminMatchResultDisputesService(prisma, authorization, results, disputes, evidence);
   beforeAll(async () => {
@@ -215,7 +215,8 @@ describe('administrator arbitration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'efm-admin-evidence-'));
     const provider = new LocalObjectStorage(directory, 'http://localhost:3000');
     const local = new ResultEvidenceStorageService(prisma, provider, authorization);
-    const input = { role: 'ADMIN' as const, expectedVersion: 2, mimeType: 'image/png' as const, byteSize: 8, checksumSha256: 'a'.repeat(64) };
+    const input = { role: 'ADMIN' as const, expectedVersion: 2, mimeType: 'image/png' as const, byteSize: 8,
+      checksumSha256: '4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6' };
     try {
       await expect(local.createAdminUpload(adminId, a.leagueId, a.match.id, { ...input, role: 'SUBMITTER' })).rejects.toThrow();
       const grant = await local.createAdminUpload(adminId, a.leagueId, a.match.id, input);
@@ -278,6 +279,16 @@ describe('administrator arbitration', () => {
     expect(await prisma.matchResultEvent.count({ where: { matchId: a.match.id, type: 'ADMIN_DECIDED' } })).toBe(0);
   });
 
+  it('keeps an administrator upload pending when its image checksum differs', async () => {
+    const a = await setup();
+    const grant = await evidence.createAdminUpload(adminId, a.leagueId, a.match.id, {
+      role: 'ADMIN', expectedVersion: 3, mimeType: 'image/png', byteSize: 8, checksumSha256: 'b'.repeat(64)
+    });
+    await expect(evidence.completeAdminUpload(adminId, a.leagueId, a.match.id, grant.id, { expectedVersion: 3 }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_RESULT_EVIDENCE' } });
+    expect(await prisma.matchResultEvidenceUpload.findUnique({ where: { id: grant.id } })).toMatchObject({ status: 'PENDING' });
+  });
+
   it('direct administrator scores require reasons, consume authorized admin evidence, supersede and clear disputes', async () => {
     const a = await setup();
     const input = { homeScore: 0, awayScore: 3, expectedVersion: 3, reason: '核验后改分' };
@@ -288,6 +299,7 @@ describe('administrator arbitration', () => {
     expect(await prisma.matchResultDispute.findUnique({ where: { id: a.dispute!.id } })).toMatchObject({ status: 'RESOLVED', activeKey: null });
     expect(await prisma.matchResultEvidence.findUnique({ where: { uploadId: grant.id } })).toMatchObject({ role: 'ADMIN', uploadedByAdminId: adminId });
     const replacement = await evidence.createAdminUpload(adminId, a.leagueId, a.match.id, { role: 'ADMIN', expectedVersion: 4, mimeType: 'image/png', byteSize: 8, checksumSha256: 'b'.repeat(64) });
+    storage.inspect.mockResolvedValueOnce({ mimeType: 'image/png', size: 8, checksumSha256: 'b'.repeat(64) });
     await evidence.completeAdminUpload(adminId, a.leagueId, a.match.id, replacement.id, { expectedVersion: 4 });
     await results.recordByLeagueAdmin(adminId, a.leagueId, a.competition.id, a.match.id, { ...input, expectedVersion: 4, homeScore: 4, evidenceUploadId: replacement.id }, randomUUID());
     expect(await prisma.matchResultVersion.findUnique({ where: { id: first.id } })).toMatchObject({ status: 'SUPERSEDED', homeScore: 0, awayScore: 3 });

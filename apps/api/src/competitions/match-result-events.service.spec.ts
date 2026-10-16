@@ -5,8 +5,13 @@ describe('MatchResultEventsService', () => {
     const stored: Array<Record<string, unknown>> = [];
     const tx = {
       matchResultEvent: {
-        createMany: async ({ data }: { data: Record<string, unknown> }) => {
-          if (!stored.some((event) => event.eventKey === data.eventKey)) stored.push(data);
+        createMany: async ({ data, skipDuplicates }: { data: Record<string, unknown>; skipDuplicates?: boolean }) => {
+          expect(skipDuplicates).toBe(true);
+          if (stored.some((event) => event.eventKey === data.eventKey)) {
+            if (!skipDuplicates) throw new Error('Duplicate event key');
+            return { count: 0 };
+          }
+          stored.push(data);
           return { count: 1 };
         }
       }

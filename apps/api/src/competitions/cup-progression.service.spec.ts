@@ -11,8 +11,8 @@ describe('CupProgressionService', () => {
     const tx = {
       $queryRaw: jest.fn(async () => []),
       cupBracketPairing: { findUnique: jest.fn(async () => pairing), findMany: jest.fn(async () => [next]), update: jest.fn(async ({ data }: { data: object }) => Object.assign(pairing, data)) },
-      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()), findUniqueOrThrow: jest.fn(async () => ({ id: 'next', stageId: 'final-stage', status, officialResultVersionId: null })), update: jest.fn(async (_input: unknown) => ({})) },
-      stageParticipant: { updateMany: jest.fn(async (_input: unknown) => ({ count: 1 })) }
+      competitionMatch: { findUnique: jest.fn(async () => competitionLookup()), findUniqueOrThrow: jest.fn(async () => ({ id: 'next', stageId: 'final-stage', status, officialResultVersionId: null })), update: jest.fn<(input: unknown) => Promise<object>>().mockResolvedValue({}) },
+      stageParticipant: { updateMany: jest.fn<(input: unknown) => Promise<{ count: number }>>().mockResolvedValue({ count: 1 }) }
     };
     const service = new CupProgressionService();
     if (status === 'PENDING_CONFIRMATION') {

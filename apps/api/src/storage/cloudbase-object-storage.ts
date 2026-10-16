@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
 import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from './image-validation.js';
 import type { DirectUploadGrant, EvidenceMimeType, ObjectStorage, StorageScope, StoredObject, StoredObjectMetadata, StoredUploadInput } from './object-storage.js';
@@ -92,7 +92,8 @@ export class CloudBaseObjectStorage implements ObjectStorage {
       throw new BadRequestException({ code: 'INVALID_RESULT_EVIDENCE', message: 'Stored evidence size could not be verified' });
     }
     const validated = validateResultEvidenceImage({ buffer: bytes, originalname: key, mimetype: mimeType, size: bytes.length });
-    return { mimeType: validated.mimeType, size: validated.size };
+    return { mimeType: validated.mimeType, size: validated.size,
+      checksumSha256: createHash('sha256').update(bytes).digest('hex') };
   }
 
   publicUrlFor(key: string): string {

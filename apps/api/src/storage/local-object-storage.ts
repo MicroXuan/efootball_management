@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import type {
@@ -104,7 +104,8 @@ export class LocalObjectStorage implements ObjectStorage {
 
   async inspect(key: string): Promise<StoredObjectMetadata | null> {
     const object = await this.readPrivate(key);
-    return object ? { mimeType: object.mimeType, size: object.size } : null;
+    return object ? { mimeType: object.mimeType, size: object.size,
+      checksumSha256: createHash('sha256').update(object.buffer).digest('hex') } : null;
   }
 
   async writePrivate(key: string, body: Buffer, mimeType: string): Promise<void> {

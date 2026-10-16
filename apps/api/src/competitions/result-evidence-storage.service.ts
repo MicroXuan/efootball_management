@@ -46,7 +46,8 @@ export class ResultEvidenceStorageService {
     if (!upload || upload.matchId !== matchId || upload.uploadedByAdminId !== adminId || upload.role !== 'ADMIN') throw this.notFound();
     if (upload.status !== 'PENDING' || upload.expiresAt <= new Date()) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Upload expired', 409);
     const object = await this.storage.inspect?.(upload.objectKey);
-    if (!object || !this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize) {
+    if (!object || !this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize
+      || object.checksumSha256 !== upload.checksumSha256) {
       throw this.invalid('Uploaded image does not match its session');
     }
     const claimed = await this.prisma.matchResultEvidenceUpload.updateMany({ where: { id: upload.id, status: 'PENDING', expiresAt: { gt: new Date() } }, data: { status: 'UPLOADED', completedAt: new Date() } });
@@ -135,8 +136,9 @@ export class ResultEvidenceStorageService {
     if (!this.storage.inspect) throw new Error('Storage inspection is unavailable');
     const object = await this.storage.inspect(upload.objectKey);
     if (!object) throw this.invalid('Uploaded evidence was not found');
-    if (!this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize) {
-      throw this.invalid('Uploaded evidence type or size does not match the session');
+    if (!this.validMetadata(object.mimeType, object.size) || object.mimeType !== upload.mimeType || object.size !== upload.byteSize
+      || object.checksumSha256 !== upload.checksumSha256) {
+      throw this.invalid('Uploaded evidence type, size, or checksum does not match the session');
     }
     const updated = await this.prisma.matchResultEvidenceUpload.updateMany({
       where: { id: uploadId, matchId, uploadedByUserId: userId, status: 'PENDING', expiresAt: { gt: new Date() } },

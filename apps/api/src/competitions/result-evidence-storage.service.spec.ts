@@ -11,6 +11,7 @@ const matchId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
 const otherMatchId = '33333333-3333-4333-8333-333333333333';
 const uploadId = '44444444-4444-4444-8444-444444444444';
+const pngChecksum = '4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6';
 const input = { role: 'SUBMITTER' as const, mimeType: 'image/png' as const, byteSize: 8, checksumSha256: 'a'.repeat(64), expectedVersion: 1 };
 
 function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?: string; competitionStatus?: string } = {}) {
@@ -26,7 +27,7 @@ function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?:
     homeParticipant: { individualUserId: userId, seasonEntry: options.archived ? { ownerUserId: userId, leagueTeam: { status: 'ARCHIVED' } } : null },
     awayParticipant: { individualUserId: 'someone-else', seasonEntry: null }
   };
-  const upload = { id: uploadId, matchId, uploadedByUserId: userId, objectKey: 'match-result-evidence--object.png', mimeType: 'image/png', byteSize: 8, status: 'PENDING', expiresAt: new Date(Date.now() + 600_000) };
+  const upload = { id: uploadId, matchId, uploadedByUserId: userId, objectKey: 'match-result-evidence--object.png', mimeType: 'image/png', byteSize: 8, checksumSha256: 'a'.repeat(64), status: 'PENDING', expiresAt: new Date(Date.now() + 600_000) };
   const prisma = {
     competitionMatch: { findUnique: jest.fn(async () => match) },
     matchResultEvidenceUpload: {
@@ -40,7 +41,7 @@ function fixture(options: { archived?: boolean; deleted?: boolean; stageStatus?:
     put: jest.fn(async () => { throw new Error('unexpected'); }),
     delete: jest.fn(async () => undefined),
     createDirectUpload: jest.fn(async () => ({ key: upload.objectKey, uploadUrl: 'https://private.example/put', headers: { authorization: 'signed' } })),
-    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8 })),
+    inspect: jest.fn(async () => ({ mimeType: 'image/png', size: 8, checksumSha256: 'a'.repeat(64) })),
     temporaryReadUrl: jest.fn(async () => 'https://private.example/read')
   };
   return { match, upload, prisma, storage, service: new ResultEvidenceStorageService(prisma as never, storage) };
@@ -59,7 +60,7 @@ describe('private evidence providers', () => {
     expect(getUploadMetadata).toHaveBeenCalledWith({ cloudPath: 'match-result-evidence--object.png' });
     await expect(storage.temporaryReadUrl('cloud://env/private-file', 600)).resolves.toBe('https://cos.example/read');
     expect(getTempFileURL).toHaveBeenCalledWith({ fileList: [{ fileID: 'cloud://env/private-file', maxAge: 600 }] });
-    await expect(storage.inspect('cloud://env/private-file')).resolves.toEqual({ mimeType: 'image/png', size: 8 });
+    await expect(storage.inspect('cloud://env/private-file')).resolves.toEqual({ mimeType: 'image/png', size: 8, checksumSha256: pngChecksum });
     expect(client.downloadFile).toHaveBeenCalledWith({ fileID: 'cloud://env/private-file' });
   });
 
@@ -98,7 +99,7 @@ describe('private evidence providers', () => {
       const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       await storage.writePrivate(grant.key, bytes, 'image/png');
       await expect(storage.read(grant.key)).resolves.toBeNull();
-      await expect(storage.inspect(grant.key)).resolves.toEqual({ mimeType: 'image/png', size: 8 });
+      await expect(storage.inspect(grant.key)).resolves.toEqual({ mimeType: 'image/png', size: 8, checksumSha256: pngChecksum });
       const url = new URL(await storage.temporaryReadUrl(grant.key, 600));
       const expires = url.searchParams.get('expires') ?? '';
       const signature = url.searchParams.get('signature') ?? '';
@@ -112,6 +113,14 @@ describe('private evidence providers', () => {
 });
 
 describe('ResultEvidenceStorageService', () => {
+  it('rejects a different image digest despite matching type and byte count', async () => {
+    const { service, prisma, upload } = fixture();
+    upload.checksumSha256 = 'b'.repeat(64);
+    await expect(service.completeUserUpload(userId, matchId, uploadId, { expectedVersion: 1 }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_RESULT_EVIDENCE' } });
+    expect(prisma.matchResultEvidenceUpload.updateMany).not.toHaveBeenCalled();
+  });
+
   it('creates a pending session without evidence and uses the private scope', async () => {
     const { service, prisma, storage } = fixture();
     await expect(service.createUserUpload(userId, matchId, input)).resolves.toMatchObject({ id: uploadId, uploadUrl: 'https://private.example/put' });

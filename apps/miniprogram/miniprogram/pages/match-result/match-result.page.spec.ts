@@ -32,6 +32,17 @@ function page(evidenceRequired: boolean) {
 }
 
 describe('participant match result page', () => {
+  it('renders the retry control busy and disabled while a request is pending', () => {
+    const retryButton = markup.match(/<button\b[^>]*bindtap="retry"[^>]*>/)?.[0] ?? ''
+    for (const attribute of ['disabled', 'loading']) {
+      const expression = retryButton.match(new RegExp(`${attribute}="\\{\\{(.*?)\\}\\}"`))?.[1] ?? 'false'
+      const evaluate = new Function('acting', 'loading', `return (${expression})`)
+      expect(evaluate(false, true)).toBe(true)
+      expect(evaluate(true, false)).toBe(true)
+      expect(evaluate(false, false)).toBe(false)
+    }
+  })
+
   it('offers a role-aware action for every result state', () => {
     for (const state of ['SUBMIT', 'WAIT_CONFIRM', 'CONFIRM', 'CONFIRMATION_EXPIRED', 'EVIDENCE_COLLECTION', 'READY_FOR_REVIEW', 'DONE']) {
       expect(markup).toContain(`state === '${state}'`)

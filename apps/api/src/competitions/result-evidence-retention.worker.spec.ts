@@ -5,8 +5,16 @@ import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worke
 
 describe('evidence retention', () => {
   const { prisma, users, disputes, rejected, fixture, upload } = disputeFixture();
-  const storage = { delete: jest.fn(async (_key: string) => {}) };
-  const worker = new ResultEvidenceRetentionWorker(prisma, storage as never);
+  const storage = { delete: jest.fn<(key: string) => Promise<void>>().mockResolvedValue(undefined) };
+  // Worker scans must never expire another test's or a developer's evidence in the shared DB.
+  const ownedMatches = { match: { stage: { competition: { createdById: { in: users } } } } };
+  const scopedPrisma = prisma.$extends({ query: {
+    matchResultEvidence: { findMany: ({ args, query }) => query({ ...args,
+      where: { AND: [args.where ?? {}, ownedMatches] } }) },
+    matchResultEvidenceUpload: { findMany: ({ args, query }) => query({ ...args,
+      where: { AND: [args.where ?? {}, ownedMatches] } }) }
+  } });
+  const worker = new ResultEvidenceRetentionWorker(scopedPrisma as never, storage as never);
   beforeEach(() => storage.delete.mockClear());
   it('does not delete an orphan session when legacy evidence references its object without an upload relation', async () => {
     const { match } = await fixture();

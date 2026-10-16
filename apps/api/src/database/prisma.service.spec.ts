@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
 import { PlayerAuctionBidChannel, RosterEntryStatus } from '../generated/prisma/client.js';
 import { PrismaService } from './prisma.service.js';
+import { createNumberedTestUser } from '../../test/helpers/numbered-user.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -223,46 +224,43 @@ describe('PrismaService', () => {
 
   it('enforces league-scoped team ownership and numbering while preserving public user numbers', async () => {
     const suffix = randomUUID();
-    const owner = await prisma.user.create({
-      data: {
+    const { owner, secondOwner, firstLeague, secondLeague, firstShell, secondShell } = await prisma.$transaction(async (prisma) => {
+      const owner = await createNumberedTestUser(prisma, {
         wechatOpenId: `team-owner-${suffix}`,
-        publicUserNo: '800001',
         displayName: '联赛球队测试玩家'
-      }
-    });
-    const secondOwner = await prisma.user.create({
-      data: {
+      });
+      const secondOwner = await createNumberedTestUser(prisma, {
         wechatOpenId: `team-owner-two-${suffix}`,
-        publicUserNo: '800002',
         displayName: '第二位测试玩家'
-      }
+      });
+      const firstLeague = await prisma.league.create({
+        data: {
+          name: `第一测试联赛-${suffix}`,
+          shortName: '第一联赛',
+          defaultPlatform: 'MOBILE',
+          defaultServerRegion: 'GLOBAL',
+          createdById: owner.id
+        }
+      });
+      const secondLeague = await prisma.league.create({
+        data: {
+          name: `第二测试联赛-${suffix}`,
+          shortName: '第二联赛',
+          defaultPlatform: 'MOBILE',
+          defaultServerRegion: 'GLOBAL',
+          createdById: owner.id
+        }
+      });
+      const [firstShell, secondShell] = await Promise.all([
+        prisma.teamCatalogItem.create({
+          data: { sourceType: 'CUSTOM', nameZh: '第一联赛球队', shortName: '一队' }
+        }),
+        prisma.teamCatalogItem.create({
+          data: { sourceType: 'CUSTOM', nameZh: '备用球队', shortName: '备用' }
+        })
+      ]);
+      return { owner, secondOwner, firstLeague, secondLeague, firstShell, secondShell };
     });
-    const firstLeague = await prisma.league.create({
-      data: {
-        name: `第一测试联赛-${suffix}`,
-        shortName: '第一联赛',
-        defaultPlatform: 'MOBILE',
-        defaultServerRegion: 'GLOBAL',
-        createdById: owner.id
-      }
-    });
-    const secondLeague = await prisma.league.create({
-      data: {
-        name: `第二测试联赛-${suffix}`,
-        shortName: '第二联赛',
-        defaultPlatform: 'MOBILE',
-        defaultServerRegion: 'GLOBAL',
-        createdById: owner.id
-      }
-    });
-    const [firstShell, secondShell] = await Promise.all([
-      prisma.teamCatalogItem.create({
-        data: { sourceType: 'CUSTOM', nameZh: '第一联赛球队', shortName: '一队' }
-      }),
-      prisma.teamCatalogItem.create({
-        data: { sourceType: 'CUSTOM', nameZh: '备用球队', shortName: '备用' }
-      })
-    ]);
 
     try {
       await prisma.leagueTeam.create({
@@ -314,11 +312,11 @@ describe('PrismaService', () => {
       })).resolves.toMatchObject({ ownerUserId: owner.id, teamNumber: 0 });
 
       await expect(prisma.user.findUniqueOrThrow({ where: { id: owner.id } }))
-        .resolves.toMatchObject({ publicUserNo: '800001' });
+        .resolves.toMatchObject({ publicUserNo: owner.publicUserNo });
       await expect(prisma.user.create({
         data: {
           wechatOpenId: `duplicate-public-number-${suffix}`,
-          publicUserNo: '800001',
+          publicUserNo: owner.publicUserNo,
           displayName: '重复编号玩家'
         }
       })).rejects.toMatchObject({ code: 'P2002' });

@@ -56,5 +56,5 @@
     <text wx:if="{{errorMessage}}" class="error" role="alert">{{errorMessage}}</text>
     <view wx:if="{{state === 'DONE' && timeline.length}}" class="timeline"><text class="timeline-title">赛果记录</text><view wx:for="{{timeline}}" wx:key="index" class="timeline-row"><text class="timeline-time">{{item.at}}</text><view><text class="timeline-label">{{item.label}}</text><text wx:if="{{item.reason}}" class="timeline-reason">原因：{{item.reason}}</text></view></view></view>
   </view>
-  <view wx:else class="empty-state"><text>{{errorMessage || '比赛不存在或已不可操作'}}</text><button bindtap="retry">重新加载</button></view>
+  <view wx:else class="empty-state"><text>{{errorMessage || '比赛不存在或已不可操作'}}</text><button disabled="{{acting || loading}}" loading="{{acting || loading}}" bindtap="retry">重新加载</button></view>
 </view>

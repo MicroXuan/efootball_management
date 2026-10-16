@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- focused action-center projection fixtures */
 import { jest } from '@jest/globals';
+import { randomUUID } from 'node:crypto';
+import { ActionCenterResponseSchema } from '@efm/contracts';
 import { ActionCenterService } from './action-center.service.js';
 
 const at = new Date('2026-10-15T12:00:00.000Z');
@@ -61,6 +63,36 @@ function match(input: Partial<any> = {}) {
 }
 
 describe('ActionCenterService', () => {
+  it('preserves every current action alongside both full recent sources at the response boundary', async () => {
+    const validLeague = { ...league, id: randomUUID(), currentSeasonId: randomUUID() };
+    const validTeam = { ...mine, id: randomUUID(), leagueId: validLeague.id, league: validLeague };
+    const currentApplications = [application({ id: randomUUID(), status: 'REQUOTE_REQUIRED',
+      leagueId: validLeague.id, league: validLeague, seasonId: validLeague.currentSeasonId,
+      applicantLeagueTeamId: validTeam.id, applicantLeagueTeam: validTeam })];
+    const recentApplications = Array.from({ length: 100 }, () => ({ ...currentApplications[0], id: randomUUID(), status: 'APPROVED' }));
+    const currentMatches = [match({ id: randomUUID(),
+      stage: { competition: { seasonId: validLeague.currentSeasonId, season: { league: validLeague } } },
+      homeParticipant: { displayNameSnapshot: '申花', seasonEntry: { ownerUserId: 'user-1', leagueTeam: { id: validTeam.id, status: 'ACTIVE' } } }
+    })];
+    const recentMatches = Array.from({ length: 100 }, () => ({ ...currentMatches[0], id: randomUUID(),
+      status: 'CONFIRMED', officialResultVersion: { homeScore: 2, awayScore: 1, reason: null, updatedAt: at } }));
+
+    const result = await harness({ teams: [validTeam], currentApplications, recentApplications,
+      currentMatches, recentMatches }).service.get('user-1');
+
+    expect(result.items).toHaveLength(202);
+    expect(result.actionRequiredCount).toBe(2);
+    expect(ActionCenterResponseSchema.parse(result).items).toHaveLength(202);
+  });
+
+  it('collapses multiline official reasons into single-line reminder text', async () => {
+    const result = await harness({ recentMatches: [match({ status: 'ADMIN_DECIDED',
+      officialResultVersion: { homeScore: 3, awayScore: 1, reason: '  核对截图\n\t 比分有效  ', updatedAt: at }
+    })] }).service.get('user-1');
+
+    expect(result.items[0]!.detail).toBe('申花 对 海港 · 3:1 · 核对截图 比分有效');
+  });
+
   it('returns an empty center when the user has no active league team', async () => {
     const { service, prisma } = harness({ teams: [] });
 

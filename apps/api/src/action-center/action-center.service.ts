@@ -207,7 +207,7 @@ export class ActionCenterService {
     let title: string;
     let statusLabel: string;
     let detail = `${match.homeParticipant.displayNameSnapshot} 对 ${match.awayParticipant.displayNameSnapshot}`;
-    let version = match.updatedAt;
+    let version: Date;
 
     if ((match.status === 'CONFIRMED' || match.status === 'ADMIN_DECIDED' || dispute?.status === 'RESOLVED')
       && match.officialResultVersion) {
@@ -215,7 +215,7 @@ export class ActionCenterService {
       title = match.status === 'CONFIRMED' ? '比分已确认' : '赛果裁决完成';
       statusLabel = match.status === 'CONFIRMED' ? '已确认' : '已裁决';
       detail += ` · ${match.officialResultVersion.homeScore}:${match.officialResultVersion.awayScore}`;
-      const reason = match.officialResultVersion.reason?.trim();
+      const reason = match.officialResultVersion.reason?.replace(/\s+/gu, ' ').trim();
       if (reason && /^[\p{L}\p{N}\s，。！？、；（）《》「」『』]+$/u.test(reason)) detail += ` · ${reason}`;
       version = [match.updatedAt, match.officialResultVersion.updatedAt, dispute?.updatedAt ?? match.updatedAt]
         .reduce((latest, updated) => updated > latest ? updated : latest);

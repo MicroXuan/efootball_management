@@ -27,7 +27,9 @@ export const ActionCenterItemSchema = z.object({
 { path: ['route'], message: 'Match result reminder requires an internal match route' });
 
 export const ActionCenterResponseSchema = z.object({
-  items: z.array(ActionCenterItemSchema).max(200),
+  // Current actions are uncapped; each recent-history source is capped by the API.
+  // A total cap would reject valid aggregates and hide actionable reminders.
+  items: z.array(ActionCenterItemSchema),
   actionRequiredCount: z.number().int().nonnegative()
 });
 
