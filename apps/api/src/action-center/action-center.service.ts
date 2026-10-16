@@ -40,7 +40,7 @@ type AuctionRow = {
 
 const MATCH_SELECT = {
   id: true, status: true, updatedAt: true, resultConfirmationDeadlineAt: true,
-  stage: { select: { competition: { select: { name: true, seasonId: true,
+  stage: { select: { competition: { select: { seasonId: true,
     season: { select: { league: { select: { id: true, name: true } } } }
   } } } },
   homeParticipant: { select: { displayNameSnapshot: true, seasonEntry: { select: {
@@ -52,7 +52,7 @@ const MATCH_SELECT = {
   resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' }, take: 1,
     select: { submittedById: true, homeScore: true, awayScore: true, updatedAt: true } },
   resultDisputes: { orderBy: { createdAt: 'desc' }, take: 1, select: {
-    status: true, evidenceDeadlineAt: true, updatedAt: true, decisionReason: true,
+    status: true, evidenceDeadlineAt: true, updatedAt: true,
     triggerResultVersion: { select: { submittedById: true } },
     evidence: { select: { role: true, status: true, updatedAt: true } }
   } },
@@ -80,7 +80,8 @@ export class ActionCenterService {
     const teamIds = teams.map(({ id }) => id);
     const seasonIds = teams.flatMap(({ league }) => league.currentSeasonId ? [league.currentSeasonId] : []);
     const leagueIds = [...new Set(teams.map(({ leagueId }) => leagueId))];
-    const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const now = Date.now();
+    const recentCutoff = new Date(now - 30 * 24 * 60 * 60 * 1000);
     const matchWhere: Prisma.CompetitionMatchWhereInput = {
       stage: { status: 'PUBLISHED' as const, competition: {
         status: { in: ['IN_PROGRESS', 'COMPLETED'] },
@@ -162,6 +163,9 @@ export class ActionCenterService {
     const applications = [...new Map(
       [...currentApplications, ...recentApplications].map((application) => [application.id, application])
     ).values()];
+    const matches = [...new Map(
+      [...currentMatches, ...recentMatches].map((match) => [match.id, match])
+    ).values()];
     const teamByLeague = new Map(teams.map((team) => [team.leagueId, team]));
     const items = [
       ...applications.flatMap((application) => {
@@ -172,8 +176,8 @@ export class ActionCenterService {
         const team = teamByLeague.get(auction.leagueId);
         return team ? [this.auctionItem(auction, team)] : [];
       }),
-      ...[...currentMatches, ...recentMatches].flatMap((match) => {
-        const item = this.matchItem(match, userId, teamIds);
+      ...matches.flatMap((match) => {
+        const item = this.matchItem(match, userId, teamIds, now);
         return item ? [item] : [];
       })
     ].sort((left, right) => {
@@ -189,7 +193,7 @@ export class ActionCenterService {
     };
   }
 
-  private matchItem(match: MatchRow, userId: string, teamIds: string[]): ActionCenterItem | null {
+  private matchItem(match: MatchRow, userId: string, teamIds: string[], now: number): ActionCenterItem | null {
     const participant = [match.homeParticipant, match.awayParticipant].find((entry) =>
       entry.seasonEntry?.ownerUserId === userId && entry.seasonEntry.leagueTeam?.status === 'ACTIVE'
         && teamIds.includes(entry.seasonEntry.leagueTeam.id));
@@ -199,7 +203,6 @@ export class ActionCenterService {
 
     const proposal = match.resultVersions[0];
     const dispute = match.resultDisputes[0];
-    const now = Date.now();
     let section: ActionCenterItem['section'];
     let title: string;
     let statusLabel: string;
@@ -212,8 +215,8 @@ export class ActionCenterService {
       title = match.status === 'CONFIRMED' ? '比分已确认' : '赛果裁决完成';
       statusLabel = match.status === 'CONFIRMED' ? '已确认' : '已裁决';
       detail += ` · ${match.officialResultVersion.homeScore}:${match.officialResultVersion.awayScore}`;
-      const reason = (dispute?.decisionReason ?? match.officialResultVersion.reason)?.trim();
-      if (reason && !/(?:https?|s3|cos|cloudbase):\/\//i.test(reason)) detail += ` · ${reason}`;
+      const reason = match.officialResultVersion.reason?.trim();
+      if (reason && /^[\p{L}\p{N}\s，。！？、；（）《》「」『』]+$/u.test(reason)) detail += ` · ${reason}`;
       version = [match.updatedAt, match.officialResultVersion.updatedAt, dispute?.updatedAt ?? match.updatedAt]
         .reduce((latest, updated) => updated > latest ? updated : latest);
     } else if (match.status === 'PENDING_CONFIRMATION' && proposal) {
