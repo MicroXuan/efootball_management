@@ -25,6 +25,8 @@ export function resultView(item: MyMatchResponse, dispute: ParticipantMatchResul
   const evidenceDeadline = dispute?.evidenceDeadlineAt ?? item.disputeSummary?.evidenceDeadlineAt ?? null
   const evidenceExpired = !!evidenceDeadline && now >= Date.parse(evidenceDeadline)
   const role = item.myEvidenceRole ?? null
+  const ownEvidenceSubmitted = role === 'SUBMITTER' ? dispute?.evidencePresence.SUBMITTER
+    : role === 'OPPONENT' ? dispute?.evidencePresence.OPPONENT : false
   let state: ResultState = 'WAIT_CONFIRM'
   if (item.action === 'DONE' || dispute?.status === 'RESOLVED' || dispute?.status === 'CANCELLED') state = 'DONE'
   else if (dispute?.status === 'READY_FOR_REVIEW' || (dispute?.status === 'EVIDENCE_COLLECTION' && evidenceExpired)) state = 'READY_FOR_REVIEW'
@@ -53,7 +55,8 @@ export function resultView(item: MyMatchResponse, dispute: ParticipantMatchResul
       ? `证据截止 ${resultTime(evidenceDeadline)}`
       : deadline ? `确认截止 ${resultTime(deadline)}` : '等待比赛进入赛果阶段',
     canOpenTimeout: state === 'CONFIRMATION_EXPIRED' && role === 'SUBMITTER',
-    canUploadEvidence: state === 'EVIDENCE_COLLECTION' && role !== null,
+    canUploadEvidence: (state === 'EVIDENCE_COLLECTION' || state === 'READY_FOR_REVIEW') && !evidenceExpired && role !== null,
+    canReplaceEvidence: state === 'READY_FOR_REVIEW' && !evidenceExpired && role !== null && !!ownEvidenceSubmitted,
     evidence: [
       { role: 'SUBMITTER', submitted: dispute?.evidencePresence.SUBMITTER ?? false },
       { role: 'OPPONENT', submitted: dispute?.evidencePresence.OPPONENT ?? false }

@@ -25,7 +25,7 @@ beforeAll(async () => {
 beforeEach(() => vi.clearAllMocks())
 
 function page(evidenceRequired: boolean) {
-  const instance = { ...registered, data: { ...registered.data, state: 'SUBMIT', homeScore: '2', awayScore: '1', reason: '比分截图不一致',
+  const instance = { ...registered, data: { ...registered.data, loading: false, state: 'SUBMIT', homeScore: '2', awayScore: '1', reason: '比分截图不一致',
     item: { match: { id: 'match-1', version: 4 }, evidenceRequired } },
     setData(update: Record<string, unknown>) { this.data = { ...this.data, ...update } }, load: vi.fn().mockResolvedValue(undefined) }
   return instance
@@ -39,6 +39,8 @@ describe('participant match result page', () => {
     expect(markup).toContain('bindtap="chooseEvidence"')
     expect(markup).toContain('bindtap="openTimeout"')
     expect(markup).toContain('bindtap="attachEvidence"')
+    expect(markup).toContain('canReplaceEvidence')
+    expect(markup).toContain('disabled="{{acting || loading}}"')
     expect(markup).toContain('拒绝后将进入证据收集')
     expect(markup).toContain('{{evidenceStatus.submitter}}')
     expect(markup).toContain('{{evidenceStatus.opponent}}')
@@ -89,5 +91,77 @@ describe('participant match result page', () => {
     }], nextCursor: null } as any)
     await instance.retry()
     expect(instance.data.errorMessage).toBe('')
+  })
+
+  it('ignores an older load response and error after a newer state load completes', async () => {
+    const instance = page(false)
+    instance.data.id = 'match-1'
+    instance.load = registered.load
+    const pending: Array<{ resolve: (value: any) => void; reject: (error: Error) => void }> = []
+    vi.mocked(competitionsApi.myMatches).mockImplementation(() => new Promise((resolve, reject) => pending.push({ resolve, reject })))
+    const oldLoad = instance.load()
+    const newLoad = instance.load()
+    pending[1]!.resolve({ items: [{ action: 'SUBMIT', myEvidenceRole: null, confirmationDeadlineAt: null, disputeSummary: null, timeline: [],
+      match: { id: 'match-1', version: 5, officialResult: null, resultConfirmationDeadlineAt: null } }], nextCursor: null })
+    await newLoad
+    pending[0]!.reject(new Error('stale failure'))
+    await oldLoad
+    expect(instance.data.item.match.version).toBe(5)
+    expect(instance.data.errorMessage).toBe('')
+    expect(instance.data.loading).toBe(false)
+  })
+
+  it('blocks every edit and action while a server refresh is pending', async () => {
+    const instance = page(false)
+    instance.data.loading = true
+    const prior = { homeScore: instance.data.homeScore, awayScore: instance.data.awayScore, reason: instance.data.reason }
+    instance.onHomeInput({ detail: { value: '9' } })
+    instance.onAwayInput({ detail: { value: '9' } })
+    instance.onReasonInput({ detail: { value: 'changed' } })
+    await instance.submit()
+    expect(instance.data).toMatchObject(prior)
+    expect(competitionsApi.submitResult).not.toHaveBeenCalled()
+  })
+
+  it('lets the current role replace evidence in ready state before the deadline', async () => {
+    const instance = page(false)
+    instance.data.state = 'READY_FOR_REVIEW'
+    instance.data.myRole = 'SUBMITTER'
+    instance.data.canUploadEvidence = true
+    instance.data.dispute = { matchVersion: 6 }
+    instance.selectedEvidence = { bytes: new Uint8Array([1]).buffer, byteSize: 1, mimeType: 'image/jpeg', checksumSha256: 'a'.repeat(64) }
+    vi.mocked(evidence.createEvidenceUpload).mockResolvedValue({ id: 'upload-2', uploadUrl: 'https://storage.example/put', headers: {} } as any)
+    vi.mocked(evidence.uploadEvidenceGrant).mockResolvedValue()
+    vi.mocked(evidence.completeEvidenceUpload).mockResolvedValue({ id: 'upload-2', status: 'UPLOADED' })
+    vi.mocked(competitionsApi.attachResultEvidence).mockResolvedValue({} as any)
+    await instance.attachEvidence()
+    expect(evidence.createEvidenceUpload).toHaveBeenCalledWith('match-1', expect.objectContaining({ role: 'SUBMITTER', expectedVersion: 6 }))
+    expect(competitionsApi.attachResultEvidence).toHaveBeenCalledWith('match-1', 'upload-2', 6)
+  })
+
+  it('lets a conflict reload win over an earlier in-flight read without clearing form values', async () => {
+    const instance = page(false)
+    instance.data.id = 'match-1'
+    instance.load = registered.load
+    const chosen = { bytes: new Uint8Array([1]).buffer }
+    instance.selectedEvidence = chosen
+    let rejectMutation!: (error: Error) => void
+    vi.mocked(competitionsApi.submitResult).mockImplementation(() => new Promise((_resolve, reject) => { rejectMutation = reject }))
+    const reads: Array<(value: any) => void> = []
+    vi.mocked(competitionsApi.myMatches).mockImplementation(() => new Promise((resolve) => reads.push(resolve)))
+    const mutation = instance.submit()
+    const olderRead = instance.load()
+    rejectMutation(new ApiError('VERSION_CONFLICT', 'changed', 409))
+    await vi.waitFor(() => expect(reads).toHaveLength(2))
+    reads[1]!({ items: [{ action: 'SUBMIT', myEvidenceRole: null, confirmationDeadlineAt: null, disputeSummary: null, timeline: [],
+      match: { id: 'match-1', version: 7, officialResult: null, resultConfirmationDeadlineAt: null } }], nextCursor: null })
+    await mutation
+    reads[0]!({ items: [{ action: 'SUBMIT', myEvidenceRole: null, confirmationDeadlineAt: null, disputeSummary: null, timeline: [],
+      match: { id: 'match-1', version: 3, officialResult: null, resultConfirmationDeadlineAt: null } }], nextCursor: null })
+    await olderRead
+    expect(instance.data.item.match.version).toBe(7)
+    expect(instance.data).toMatchObject({ homeScore: '2', awayScore: '1', reason: '比分截图不一致' })
+    expect(instance.selectedEvidence).toBe(chosen)
+    expect(instance.data.errorMessage).toMatch(/状态已更新/)
   })
 })

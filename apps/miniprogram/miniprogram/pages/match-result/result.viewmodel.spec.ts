@@ -57,10 +57,23 @@ describe('match result view model', () => {
   })
 
   it('locks evidence after the deadline and exposes resolved timeline with reason', () => {
-    expect(resultView(item('WAIT'), dispute('READY_FOR_REVIEW'))).toMatchObject({ state: 'READY_FOR_REVIEW', canUploadEvidence: false })
+    expect(resultView(item('WAIT'), dispute('READY_FOR_REVIEW'), Date.parse('2026-10-18T00:00:00.000Z'))).toMatchObject({ state: 'READY_FOR_REVIEW', canUploadEvidence: false })
     const resolved = { ...item('DONE'), match: { ...item('DONE').match, officialResult: { resultVersionId: 'result-2', version: 2, homeScore: 3, awayScore: 2, status: 'OFFICIAL' as const } },
       timeline: [{ type: 'ADMIN_DECIDED', occurredAt: '2026-10-18T12:00:00.000Z', metadata: { reason: '截图有效', objectKey: 'secret' } }] } as unknown as MyMatchResponse
     expect(resultView(resolved, dispute('RESOLVED'))).toMatchObject({ state: 'DONE', deadlineCopy: '赛果已确定' })
     expect(resultView(resolved, dispute('RESOLVED')).timeline).toContainEqual({ label: '管理员已裁决', at: resultTime('2026-10-18T12:00:00.000Z'), reason: '截图有效' })
+  })
+
+  it('keeps the own evidence replace action in ready state until the evidence deadline', () => {
+    const ready = { ...dispute('READY_FOR_REVIEW'), evidencePresence: { SUBMITTER: true, OPPONENT: true } }
+    expect(resultView(item('WAIT'), ready, Date.parse('2026-10-17T12:00:00.000Z'))).toMatchObject({
+      state: 'READY_FOR_REVIEW', canUploadEvidence: true, canReplaceEvidence: true, myRole: 'SUBMITTER'
+    })
+    expect(resultView(item('WAIT', false), ready, Date.parse('2026-10-17T12:00:00.000Z'))).toMatchObject({
+      state: 'READY_FOR_REVIEW', canUploadEvidence: true, canReplaceEvidence: true, myRole: 'OPPONENT'
+    })
+    expect(resultView(item('WAIT'), ready, Date.parse(ready.evidenceDeadlineAt))).toMatchObject({
+      state: 'READY_FOR_REVIEW', canUploadEvidence: false, canReplaceEvidence: false
+    })
   })
 })

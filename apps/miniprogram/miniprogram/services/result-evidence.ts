@@ -49,7 +49,7 @@ export function sha256Hex(buffer: ArrayBuffer): string {
 function mimeFromBytes(buffer: ArrayBuffer): CreateEvidenceUploadRequest['mimeType'] {
   const bytes = new Uint8Array(buffer)
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png'
+  if ([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((part, index) => bytes[index] === part)) return 'image/png'
   if (String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp'
   throw new Error('请选择 JPG、PNG 或 WebP 图片')
 }
@@ -67,25 +67,84 @@ function compress(path: string, quality: number): Promise<string> {
   }))
 }
 
+function imageInfo(path: string): Promise<{ width: number; height: number; type: string }> {
+  return new Promise((resolve, reject) => wx.getImageInfo({ src: path,
+    success: ({ width, height, type }) => resolve({ width, height, type }),
+    fail: () => reject(new Error('无法识别图片格式，请重新选择'))
+  }))
+}
+
+function normalizedMime(value: string): CreateEvidenceUploadRequest['mimeType'] | null {
+  const type = value.toLowerCase()
+  return type === 'jpg' || type === 'jpeg' ? 'image/jpeg'
+    : type === 'png' ? 'image/png' : type === 'webp' ? 'image/webp' : null
+}
+
+async function validateImage(path: string, bytes: ArrayBuffer): Promise<CreateEvidenceUploadRequest['mimeType']> {
+  const mimeType = mimeFromBytes(bytes)
+  const extension = path.split(/[?#]/)[0]?.match(/\.([a-z\d]+)$/i)?.[1]
+  if (extension && normalizedMime(extension) !== mimeType) throw new Error('图片扩展名与实际格式不一致，请重新选择')
+  const info = await imageInfo(path)
+  if (normalizedMime(info.type) !== mimeType || !Number.isInteger(info.width) || !Number.isInteger(info.height)
+    || info.width <= 0 || info.height <= 0) throw new Error('图片格式与文件信息不一致，请重新选择')
+  return mimeType
+}
+
+function exportResizedJpeg(path: string, width: number, height: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const context = wx.createCanvasContext('result-evidence-canvas')
+    context.drawImage(path, 0, 0, width, height)
+    context.draw(false, () => wx.canvasToTempFilePath({
+      canvasId: 'result-evidence-canvas', width, height, destWidth: width, destHeight: height,
+      fileType: 'jpg', quality,
+      success: ({ tempFilePath }) => resolve(tempFilePath),
+      fail: () => reject(new Error('图片缩放失败，请重新选择'))
+    }))
+  })
+}
+
 export type SelectedEvidence = { path: string; bytes: ArrayBuffer; byteSize: number; mimeType: CreateEvidenceUploadRequest['mimeType']; checksumSha256: string }
 
-export async function chooseAndCompressEvidence(): Promise<SelectedEvidence> {
+export async function chooseAndCompressEvidence(resizeCanvas?: (width: number, height: number) => Promise<void>): Promise<SelectedEvidence> {
   const original = await new Promise<string>((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'],
     success: ({ tempFiles }) => tempFiles[0]?.tempFilePath ? resolve(tempFiles[0].tempFilePath) : reject(new Error('未选择图片')),
     fail: () => reject(new Error('未选择图片'))
   }))
   let path = original
   let bytes = await readBytes(path)
+  const originalMime = await validateImage(path, bytes)
   if (bytes.byteLength > TARGET_BYTES) {
-    for (const quality of [80, 65, 50, 35, 20]) {
-      const nextPath = await compress(original, quality)
-      const nextBytes = await readBytes(nextPath)
-      if (nextBytes.byteLength < bytes.byteLength) { path = nextPath; bytes = nextBytes }
-      if (bytes.byteLength <= TARGET_BYTES) break
+    if (originalMime === 'image/jpeg') {
+      for (const quality of [80, 65, 50, 35, 20]) {
+        const nextPath = await compress(original, quality)
+        const nextBytes = await readBytes(nextPath)
+        await validateImage(nextPath, nextBytes)
+        if (nextBytes.byteLength < bytes.byteLength) { path = nextPath; bytes = nextBytes }
+        if (bytes.byteLength <= TARGET_BYTES) break
+      }
+    } else {
+      if (!resizeCanvas) throw new Error('当前页面无法缩放图片，请选择较小的截图')
+      const dimensions = await imageInfo(original)
+      const longest = Math.max(dimensions.width, dimensions.height)
+      const edges = [1600, 1280, 960, 720, 540]
+      const qualities = [0.85, 0.75, 0.68, 0.6, 0.5]
+      for (let index = 0; index < edges.length; index++) {
+        const target = Math.min(edges[index]!, Math.round(longest * Math.pow(0.85, index + 1)))
+        const ratio = target / longest
+        const width = Math.max(1, Math.round(dimensions.width * ratio))
+        const height = Math.max(1, Math.round(dimensions.height * ratio))
+        await resizeCanvas(width, height)
+        const nextPath = await exportResizedJpeg(original, width, height, qualities[index]!)
+        const nextBytes = await readBytes(nextPath)
+        const nextMime = await validateImage(nextPath, nextBytes)
+        if (nextMime !== 'image/jpeg') throw new Error('缩放图片格式不正确，请重新选择')
+        if (nextBytes.byteLength < bytes.byteLength) { path = nextPath; bytes = nextBytes }
+        if (bytes.byteLength <= TARGET_BYTES) break
+      }
     }
   }
   if (bytes.byteLength > MAX_BYTES) throw new Error('图片仍超过 1 MB，请裁剪后重新选择')
-  const mimeType = mimeFromBytes(bytes)
+  const mimeType = await validateImage(path, bytes)
   return { path, bytes, byteSize: bytes.byteLength, mimeType, checksumSha256: sha256Hex(bytes) }
 }
 
