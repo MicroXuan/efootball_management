@@ -123,12 +123,12 @@ export class ResultEvidenceStorageService {
       }
     });
     if (!match || match.stage.competition.season?.league.isDeleted) throw this.notFound();
-    if (match.stage.status !== 'PUBLISHED' || ['DRAFT', 'CANCELLED'].includes(match.stage.competition.status)) {
-      throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Evidence is unavailable for this match', 409);
-    }
     const participants = [match.homeParticipant, match.awayParticipant];
     if (!participants.some((participant) => participant.individualUserId === userId || participant.seasonEntry?.ownerUserId === userId)) {
       throw this.notFound();
+    }
+    if (match.stage.status !== 'PUBLISHED' || ['DRAFT', 'CANCELLED'].includes(match.stage.competition.status)) {
+      throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Evidence is unavailable for this match', 409);
     }
     if (participants.some((participant) => participant.seasonEntry && participant.seasonEntry.leagueTeam.status !== 'ACTIVE')) {
       throw new CompetitionError('TEAM_ARCHIVED', 'League team has withdrawn', 409);

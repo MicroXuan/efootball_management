@@ -173,4 +173,19 @@ describe('ResultEvidenceStorageService', () => {
     expect(prisma.matchResultEvidenceUpload.updateMany).not.toHaveBeenCalled();
     expect(prisma.matchResultEvidence.findUnique).not.toHaveBeenCalled();
   });
+
+  it('hides an unpublished match from nonparticipants across create, complete, and read', async () => {
+    const outsiderId = '66666666-6666-4666-8666-666666666666';
+    const { service, prisma } = fixture({ stageStatus: 'DRAFT' });
+    for (const action of [
+      () => service.createUserUpload(outsiderId, matchId, input),
+      () => service.completeUserUpload(outsiderId, matchId, uploadId, { expectedVersion: 1 }),
+      () => service.userReadUrl(outsiderId, matchId, '55555555-5555-4555-8555-555555555555')
+    ]) {
+      await expect(action()).rejects.toMatchObject({ status: 404, response: { code: 'MATCH_NOT_FOUND' } });
+    }
+    expect(prisma.matchResultEvidenceUpload.create).not.toHaveBeenCalled();
+    expect(prisma.matchResultEvidenceUpload.findUnique).not.toHaveBeenCalled();
+    expect(prisma.matchResultEvidence.findUnique).not.toHaveBeenCalled();
+  });
 });
