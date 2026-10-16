@@ -238,6 +238,19 @@ describe('action center contracts', () => {
       }]
     }));
   });
+
+  it('accepts a match-result reminder only with its internal match deep link', () => {
+    const matchId = randomUUID();
+    const item = {
+      id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
+      source: 'MATCH_RESULT', section: 'ACTION_REQUIRED',
+      league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
+      title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
+      occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
+    };
+    assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, true);
+    assert.equal(ActionCenterResponseSchema.safeParse({ items: [{ ...item, route: `/pages/match-result/index?id=${matchId}&evil=1` }], actionRequiredCount: 1 }).success, false);
+  });
 });
 import {
   CreatePlayerAuctionBatchRequestSchema,

@@ -13,7 +13,7 @@
   </view>
   <view wx:elif="{{view.empty}}" class="state-card state-card--empty">
     <text class="state-title">当前没有待办</text>
-    <text class="state-copy">交易、强报或拍卖状态变化后，会统一显示在这里。</text>
+    <text class="state-copy">交易、强报、拍卖或比赛赛果状态变化后，会统一显示在这里。</text>
   </view>
   <block wx:else>
     <view wx:if="{{view.required.length}}" class="task-section">

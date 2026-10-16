@@ -23,6 +23,7 @@ function taskView(item: ActionCenterItem, readVersions: ActionCenterReadVersions
     TRANSACTION: { marker: '交', label: '球员交易' },
     FORCED_TRANSFER: { marker: '强', label: '强报' },
     AUCTION: { marker: '拍', label: '球员拍卖' },
+    MATCH_RESULT: { marker: '赛', label: '比赛赛果' },
   } as const
   return {
     ...item,
@@ -58,7 +59,7 @@ export function actionCenterSourceAttention(
   readVersions: ActionCenterReadVersions,
   leagueId = '',
 ): ActionCenterSourceAttention {
-  const counts: ActionCenterSourceAttention = { TRANSACTION: 0, FORCED_TRANSFER: 0, AUCTION: 0 }
+  const counts: ActionCenterSourceAttention = { TRANSACTION: 0, FORCED_TRANSFER: 0, AUCTION: 0, MATCH_RESULT: 0 }
   for (const item of response.items) {
     if (leagueId && item.league.id !== leagueId) continue
     const deservesAttention = item.section === 'ACTION_REQUIRED' || readVersions[item.id] !== item.version
