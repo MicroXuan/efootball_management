@@ -28,6 +28,8 @@ import { StorageModule } from '../storage/storage.module.js';
 import { ResultEvidenceController } from './result-evidence.controller.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
 import { MatchResultEventsService } from './match-result-events.service.js';
+import { MatchResultDisputesService } from './match-result-disputes.service.js';
+import { MatchResultDeadlineWorker } from './match-result-deadline.worker.js';
 
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({}), StorageModule],
@@ -58,6 +60,8 @@ import { MatchResultEventsService } from './match-result-events.service.js';
     CupBracketQueriesService,
     ResultEvidenceStorageService,
     MatchResultEventsService,
+    MatchResultDisputesService,
+    MatchResultDeadlineWorker,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],
@@ -75,7 +79,8 @@ import { MatchResultEventsService } from './match-result-events.service.js';
     CupProgressionService,
     CupBracketQueriesService,
     ResultEvidenceStorageService,
-    MatchResultEventsService
+    MatchResultEventsService,
+    MatchResultDisputesService
   ]
 })
 export class CompetitionsModule {}

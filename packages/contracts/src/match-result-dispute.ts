@@ -71,6 +71,17 @@ export const MatchResultDisputeResponseSchema = z.object({
   timeline: z.array(MatchResultTimelineEventSchema).default([])
 });
 
+// Participant-facing projection: no evidence metadata or administrator timeline.
+export const ParticipantMatchResultDisputeResponseSchema = z.object({
+  id: ResourceIdSchema,
+  matchId: ResourceIdSchema,
+  trigger: MatchResultDisputeTriggerSchema,
+  status: MatchResultDisputeStatusSchema,
+  evidenceDeadlineAt: TimestampSchema,
+  matchVersion: z.number().int().positive(),
+  evidencePresence: z.object({ SUBMITTER: z.boolean(), OPPONENT: z.boolean() })
+});
+
 export const CreateEvidenceUploadRequestSchema = z.object({
   role: MatchResultEvidenceRoleSchema,
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
@@ -124,6 +135,7 @@ export type MatchResultEventActorType = z.infer<typeof MatchResultEventActorType
 export type MatchResultEvidenceResponse = z.infer<typeof MatchResultEvidenceResponseSchema>;
 export type MatchResultTimelineEvent = z.infer<typeof MatchResultTimelineEventSchema>;
 export type MatchResultDisputeResponse = z.infer<typeof MatchResultDisputeResponseSchema>;
+export type ParticipantMatchResultDisputeResponse = z.infer<typeof ParticipantMatchResultDisputeResponseSchema>;
 export type CreateEvidenceUploadRequest = z.input<typeof CreateEvidenceUploadRequestSchema>;
 export type CreateEvidenceUploadResponse = z.infer<typeof CreateEvidenceUploadResponseSchema>;
 export type CompleteEvidenceUploadRequest = z.infer<typeof CompleteEvidenceUploadRequestSchema>;

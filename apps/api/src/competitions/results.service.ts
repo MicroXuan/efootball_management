@@ -18,6 +18,7 @@ import { AdminAuthorizationService } from '../admin/admin-authorization.service.
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { MatchResultEventsService } from './match-result-events.service.js';
+import { MatchResultDisputesService } from './match-result-disputes.service.js';
 
 const CONFIRMATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
@@ -35,6 +36,7 @@ type MatchRecord = Prisma.CompetitionMatchGetPayload<{
 export class ResultsService {
   private readonly visibility: LeagueVisibilityService;
   private readonly events: MatchResultEventsService;
+  private readonly disputes: MatchResultDisputesService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -45,10 +47,12 @@ export class ResultsService {
     @Optional() @Inject(AdminMutationReceiptService) private readonly adminReceipts?: AdminMutationReceiptService,
     @Optional() @Inject(AdminAuthorizationService) private readonly adminAuthorization?: AdminAuthorizationService,
     @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService,
-    @Optional() @Inject(MatchResultEventsService) events?: MatchResultEventsService
+    @Optional() @Inject(MatchResultEventsService) events?: MatchResultEventsService,
+    @Optional() @Inject(MatchResultDisputesService) disputes?: MatchResultDisputesService
   ) {
     this.visibility = visibility ?? new LeagueVisibilityService(prisma);
     this.events = events ?? new MatchResultEventsService();
+    this.disputes = disputes ?? new MatchResultDisputesService(prisma, receipts, this.events);
   }
 
   async submit(userId: string, matchId: string, input: SubmitMatchResultRequest, key: string) {
@@ -58,6 +62,7 @@ export class ResultsService {
       const match = await this.playerMatch(transaction, userId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+      if (match.status === 'DISPUTED') throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Match is under dispute review', 409);
       this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
       if (match.stage.competition.season?.league.resultEvidenceRequired && !input.evidenceUploadId) {
         throw new CompetitionError('RESULT_EVIDENCE_REQUIRED', 'Result evidence is required by this league', 400);
@@ -120,6 +125,8 @@ export class ResultsService {
       const match = await this.playerMatch(transaction, userId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+      if (match.status !== 'PENDING_CONFIRMATION') throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Match is not awaiting confirmation', 409);
+      await this.disputes.advanceMatch(transaction, matchId, new Date());
       const proposal = await transaction.matchResultVersion.findUnique({
         where: { matchId_version: { matchId, version: resultVersion } }
       });
@@ -164,6 +171,8 @@ export class ResultsService {
       const match = await this.playerMatch(transaction, userId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+      if (match.status !== 'PENDING_CONFIRMATION') throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Match is not awaiting confirmation', 409);
+      await this.disputes.advanceMatch(transaction, matchId, new Date());
       const proposal = await transaction.matchResultVersion.findUnique({
         where: { matchId_version: { matchId, version: resultVersion } }
       });
@@ -177,7 +186,7 @@ export class ResultsService {
       });
       const updated = await transaction.competitionMatch.updateMany({
         where: { id: matchId, version: input.expectedVersion },
-        data: { status: 'AWAITING_RESULT', version: { increment: 1 }, resultConfirmationDeadlineAt: null }
+        data: { status: 'DISPUTED', version: { increment: 1 }, resultConfirmationDeadlineAt: null }
       });
       if (updated.count !== 1) throw this.versionConflict();
       await this.events.append(transaction, {
@@ -185,6 +194,7 @@ export class ResultsService {
         eventKey: `result:${rejected.id}:rejected`, actorType: 'USER', actorUserId: userId,
         occurredAt: now, metadata: { reason: input.reason.trim() }
       });
+      await this.disputes.openFromRejection(transaction, rejected, userId, now);
       return this.response(rejected, userId);
     });
   }

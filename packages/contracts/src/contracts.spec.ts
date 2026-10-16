@@ -61,6 +61,7 @@ import {
   MatchResultVersionResponseSchema,
   MatchResultDisputeStatusSchema,
   MatchResultDisputeTriggerSchema,
+  ParticipantMatchResultDisputeResponseSchema,
   MatchResultEventTypeSchema,
   MoneyMinorSchema,
   MyLeagueTeamOverviewSchema,
@@ -123,6 +124,19 @@ import {
 } from './index.js';
 
 describe('match result dispute contracts', () => {
+  it('exposes only participant dispute state and role presence, never administrator evidence detail', () => {
+    const response = { id: randomUUID(), matchId: randomUUID(), trigger: 'REJECTED',
+      status: 'EVIDENCE_COLLECTION', evidenceDeadlineAt: '2026-10-16T00:00:00.000Z',
+      matchVersion: 3, evidencePresence: { SUBMITTER: true, OPPONENT: false } };
+    assert.deepEqual(ParticipantMatchResultDisputeResponseSchema.parse(response), response);
+    const sanitized = ParticipantMatchResultDisputeResponseSchema.parse({ ...response,
+      evidence: [{ objectKey: 'private-key', checksumSha256: 'a'.repeat(64) }],
+      timeline: [{ metadata: { url: 'private-url' } }], openedByUserId: randomUUID()
+    });
+    assert.deepEqual(sanitized, response);
+    assert.equal(ParticipantMatchResultDisputeResponseSchema.safeParse({ ...response, matchVersion: 0 }).success, false);
+    assert.equal(ParticipantMatchResultDisputeResponseSchema.safeParse({ ...response, evidencePresence: { SUBMITTER: true } }).success, false);
+  });
   it('parses the dispute and event states used by the 24-hour workflow', () => {
     assert.equal(CompetitionMatchStatusSchema.safeParse('DISPUTED').success, true);
     for (const status of ['EVIDENCE_COLLECTION', 'READY_FOR_REVIEW', 'RESOLVED', 'CANCELLED']) {

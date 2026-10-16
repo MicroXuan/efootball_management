@@ -6,6 +6,7 @@ import { MutationReceiptService } from './mutation-receipt.service.js';
 import { ResultsService } from './results.service.js';
 import { StandingsService } from './standings.service.js';
 import { CupProgressionService } from './cup-progression.service.js';
+import { MatchResultDisputesService } from './match-result-disputes.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -13,6 +14,7 @@ describe('ResultsService', () => {
   const prisma = new PrismaService();
   const standings = new StandingsService(prisma);
   const service = new ResultsService(prisma, new MutationReceiptService(prisma), standings, new CupProgressionService());
+  const disputes = new MatchResultDisputesService(prisma, new MutationReceiptService(prisma));
   const users = [randomUUID(), randomUUID(), randomUUID(), randomUUID()] as const;
   const competitionIds: string[] = [];
   const leagueIds: string[] = [];
@@ -35,6 +37,7 @@ describe('ResultsService', () => {
     await prisma.matchResultEvent.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.matchResultEvidence.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.matchResultEvidenceUpload.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
+    await prisma.matchResultDispute.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.matchResultVersion.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: competitionIds } } } });
     await prisma.competitionStage.deleteMany({ where: { competitionId: { in: competitionIds } } });
@@ -195,14 +198,38 @@ describe('ResultsService', () => {
       .rejects.toMatchObject({ response: { code: 'RESULT_REJECTION_REASON_REQUIRED' } });
     await service.reject(users[1], match.id, proposal.version, { expectedVersion: 2, reason: '比分不符' }, randomUUID());
     expect(await prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } }))
-      .toMatchObject({ resultConfirmationDeadlineAt: null, status: 'AWAITING_RESULT' });
+      .toMatchObject({ resultConfirmationDeadlineAt: null, status: 'DISPUTED' });
     expect(await prisma.matchResultEvent.findFirstOrThrow({ where: { matchId: match.id, type: 'RESULT_REJECTED' } }))
       .toMatchObject({ actorType: 'USER', actorUserId: users[1], resultVersionId: proposal.id, metadata: { reason: '比分不符' } });
-    const second = await service.submit(users[0], match.id, { homeScore: 3, awayScore: 1, expectedVersion: 3 }, randomUUID());
-    const official = await service.confirm(users[1], match.id, second.version, { expectedVersion: 4 }, randomUUID());
-    expect(official.status).toBe('OFFICIAL');
+    await expect(service.submit(users[0], match.id, { homeScore: 3, awayScore: 1, expectedVersion: 3 }, randomUUID()))
+      .rejects.toMatchObject({ response: { code: 'MATCH_RESULT_NOT_ALLOWED' } });
     await expect(prisma.matchResultVersion.findMany({ where: { matchId: match.id }, orderBy: { version: 'asc' } }))
-      .resolves.toMatchObject([{ status: 'REJECTED' }, { status: 'OFFICIAL' }]);
+      .resolves.toMatchObject([{ status: 'REJECTED' }]);
+    const dispute = await prisma.matchResultDispute.findUniqueOrThrow({ where: { activeKey: match.id } });
+    const opened = await prisma.matchResultEvent.findFirstOrThrow({ where: { disputeId: dispute.id, type: 'DISPUTE_OPENED' } });
+    expect(dispute).toMatchObject({ status: 'EVIDENCE_COLLECTION', trigger: 'REJECTED' });
+    expect(dispute.evidenceDeadlineAt.getTime()).toBe(opened.occurredAt.getTime() + 86_400_000);
+  });
+
+  it.each(['confirm', 'timeout', 'reject'] as const)('serializes confirm, rejection and timeout-open with %s first', async (first) => {
+    const { match } = await fixture();
+    const proposal = await service.submit(users[0], match.id, { homeScore: 2, awayScore: 1, expectedVersion: 1 }, randomUUID());
+    await prisma.competitionMatch.update({ where: { id: match.id }, data: { resultConfirmationDeadlineAt: new Date(0) } });
+    const upload = await uploadedEvidence(match.id);
+    const actions = {
+      confirm: () => service.confirm(users[1], match.id, proposal.version, { expectedVersion: 2 }, randomUUID()),
+      timeout: () => disputes.openFromTimeout(users[0], match.id, { expectedVersion: 2, evidenceUploadId: upload.id }, randomUUID()),
+      reject: () => service.reject(users[1], match.id, proposal.version, { expectedVersion: 2, reason: '错误' }, randomUUID())
+    };
+    const order = [first, ...(['confirm', 'timeout', 'reject'] as const).filter((action) => action !== first)];
+    const outcomes = await Promise.allSettled(order.map((action) => actions[action]()));
+    expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
+    for (const outcome of outcomes.filter(({ status }) => status === 'rejected')) {
+      expect(outcome).toMatchObject({ reason: { response: { code: 'VERSION_CONFLICT' } } });
+    }
+    const stored = await prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } });
+    expect(stored.version).toBe(3);
+    expect(await prisma.matchResultDispute.count({ where: { activeKey: match.id } })).toBe(stored.status === 'DISPUTED' ? 1 : 0);
   });
 
   it('requires a reason for manager correction and preserves immutable standings snapshots', async () => {
