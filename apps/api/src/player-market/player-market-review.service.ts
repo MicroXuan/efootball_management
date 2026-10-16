@@ -39,12 +39,18 @@ export class PlayerMarketReviewService {
     applicationId: string,
     input: ReviewPlayerApplicationRequest,
     key: string,
-    at = new Date()
+    at?: Date
   ): Promise<PlayerMarketReviewResult> {
     return this.receipts.execute(adminId, `player-market.approve:${applicationId}`, key, async (tx) => {
       const snapshot = await tx.playerAcquisitionApplication.findUnique({ where: { id: applicationId } });
       if (!snapshot) throw playerMarketError('PLAYER_APPLICATION_NOT_FOUND', '申请不存在', 404);
-      await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, snapshot.seasonId, () => at);
+      let lockedAt = at;
+      await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(
+        tx,
+        snapshot.seasonId,
+        () => lockedAt ??= new Date()
+      );
+      const mutationAt = lockedAt ?? new Date();
       await this.marketLocks.lockPlayer(tx, snapshot.leagueId, snapshot.footballPlayerId);
       const teamIds = [snapshot.applicantLeagueTeamId, snapshot.sourceLeagueTeamId].filter((id): id is string => Boolean(id));
       await this.rosterLocks.lockTeams(tx, teamIds);
@@ -53,7 +59,7 @@ export class PlayerMarketReviewService {
         leagueId: snapshot.leagueId,
         seasonId: snapshot.seasonId,
         footballPlayerId: snapshot.footballPlayerId,
-        at,
+        at: mutationAt,
         excludeApplicationId: applicationId
       });
       const application = await tx.playerAcquisitionApplication.findUnique({
@@ -72,8 +78,8 @@ export class PlayerMarketReviewService {
         tx.leaguePlayerValuation.findUnique({ where: { leagueId_footballPlayerId: { leagueId: application.leagueId, footballPlayerId: application.footballPlayerId } } }),
         tx.leaguePlayerOwnership.findUnique({ where: { leagueId_footballPlayerId: { leagueId: application.leagueId, footballPlayerId: application.footballPlayerId } } })
       ]);
-      if (!window || window.seasonId !== application.seasonId || !window.allowBuy || at < window.startsAt || at >= window.endsAt) {
-        return this.mark(tx, application, adminId, 'EXPIRED', input.reason, 'TRANSFER_WINDOW_CLOSED', at);
+      if (!window || window.seasonId !== application.seasonId || !window.allowBuy || mutationAt < window.startsAt || mutationAt >= window.endsAt) {
+        return this.mark(tx, application, adminId, 'EXPIRED', input.reason, 'TRANSFER_WINDOW_CLOSED', mutationAt);
       }
       if (!buyer || buyer.status !== 'ACTIVE' || buyer.rosterStatus !== 'COMPLIANT' || rosterCount >= 25) {
         return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, rosterCount >= 25 ? 'ROSTER_CAPACITY_REACHED' : 'TEAM_INELIGIBLE');
@@ -88,7 +94,7 @@ export class PlayerMarketReviewService {
         if (!valuation || application.amountMinor < valuation.currentValueMinor) {
           return this.mark(tx, application, adminId, 'REQUOTE_REQUIRED', input.reason, 'OFFICIAL_VALUE_INCREASED');
         }
-        const quote = await this.salaryRules.quoteWithClient(tx, application.leagueId, ownership.maxOverallSnapshot, at);
+        const quote = await this.salaryRules.quoteWithClient(tx, application.leagueId, ownership.maxOverallSnapshot, mutationAt);
         const salary = await tx.leaguePlayerOwnership.aggregate({
           where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' },
           _sum: { salaryMinor: true }
@@ -111,7 +117,7 @@ export class PlayerMarketReviewService {
         if (sortForcedQueue(queue)[0]?.id !== application.id) {
           throw playerMarketError('FORCED_QUEUE_ORDER_VIOLATION', '只能审核当前强报队列首位');
         }
-        return this.settleForced(tx, adminId, application, ownership, quote.salaryCapMinor, input.reason, at);
+        return this.settleForced(tx, adminId, application, ownership, quote.salaryCapMinor, input.reason, mutationAt);
       }
 
       if (ownership?.status === 'ACTIVE') {
@@ -119,7 +125,7 @@ export class PlayerMarketReviewService {
       }
       const build = application.playerCard.autoBuilds[0];
       if (!build) return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'PLAYER_BUILD_REQUIRED');
-      const quote = await this.salaryRules.quoteWithClient(tx, application.leagueId, build.maxOverall, at);
+      const quote = await this.salaryRules.quoteWithClient(tx, application.leagueId, build.maxOverall, mutationAt);
       const salary = await tx.leaguePlayerOwnership.aggregate({
         where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' },
         _sum: { salaryMinor: true }
@@ -138,7 +144,7 @@ export class PlayerMarketReviewService {
           salaryMinor: quote.salaryMinor,
           acquisitionType: 'NORMAL',
           acquisitionSeasonId: application.seasonId,
-          acquiredAt: at,
+          acquiredAt: mutationAt,
           status: 'ACTIVE' as const
       };
       const settledOwnership = ownership?.status === 'RELEASED'
@@ -160,7 +166,7 @@ export class PlayerMarketReviewService {
           playerApplicationId: application.id,
           reason: input.reason,
           createdByAdminId: adminId,
-          createdAt: at
+          createdAt: mutationAt
         }
       });
       await tx.financeLedgerEntry.create({ data: {
@@ -172,9 +178,9 @@ export class PlayerMarketReviewService {
         type: 'PLAYER_PURCHASE',
         amountMinor: application.amountMinor,
         note: input.reason,
-        createdAt: at
+        createdAt: mutationAt
       } });
-      await this.approveApplication(tx, application, adminId, input.reason, at);
+      await this.approveApplication(tx, application, adminId, input.reason, mutationAt);
       await this.setRosterStatus(tx, application.applicantLeagueTeamId,
         (salary._sum.salaryMinor ?? 0) + quote.salaryMinor, quote.salaryCapMinor);
       await tx.playerAcquisitionApplication.updateMany({
@@ -186,7 +192,7 @@ export class PlayerMarketReviewService {
           type: 'NORMAL_PURCHASE',
           status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }
         },
-        data: { status: 'NOT_SELECTED', reviewReason: '其他申请已获批准', reviewedAt: at, version: { increment: 1 } }
+        data: { status: 'NOT_SELECTED', reviewReason: '其他申请已获批准', reviewedAt: mutationAt, version: { increment: 1 } }
       });
       await this.recordAudit(tx, adminId, application, settledOwnership.id, transaction.id, input.reason);
       return { applicationId, status: 'APPROVED', transactionId: transaction.id, transactionType: 'BUY', ownershipId: settledOwnership.id };

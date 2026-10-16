@@ -64,13 +64,42 @@ function harness(type: 'NORMAL_PURCHASE' | 'FORCED_TRANSFER' = 'NORMAL_PURCHASE'
   const rosterLocks = { lockTeams: jest.fn(async () => undefined) };
   const salaryRules = { quoteWithClient: jest.fn(async () => ({ salaryRuleVersionId: 'salary-rule-1', salaryMinor: 300, salaryCapMinor: 5000 })) };
   const audit = { record: jest.fn(async () => ({ id: 'audit-1' })) };
-  const valuationSnapshots = { synchronizeSeasonBeforeRosterMutation: jest.fn(async () => undefined) };
+  const valuationSnapshots = {
+    synchronizeSeasonBeforeRosterMutation:
+      jest.fn<(tx: unknown, seasonId: string, clock: () => Date) => Promise<void>>()
+        .mockResolvedValue(undefined)
+  };
   const service = new PlayerMarketReviewService(prisma as never, receipts as never, authorization as never, locks as never, rosterLocks as never, salaryRules as never, audit as never, valuationSnapshots as never);
   return { service, tx, receipts, authorization, ownership, locks, rosterLocks, valuationSnapshots,
     setApplication: (value: ReturnType<typeof row>) => { application = value; } };
 }
 
 describe('PlayerMarketReviewService', () => {
+  it('evaluates valuation-window opening with the clock after waiting for the season lock', async () => {
+    jest.useFakeTimers();
+    try {
+      const beforeLock = new Date('2026-10-14T12:00:00.000Z');
+      const afterLock = new Date('2026-10-14T12:00:00.500Z');
+      jest.setSystemTime(beforeLock);
+      const { service, valuationSnapshots } = harness();
+      valuationSnapshots.synchronizeSeasonBeforeRosterMutation.mockImplementationOnce(
+        async (_tx: unknown, _seasonId: string, clock: () => Date) => {
+          jest.setSystemTime(afterLock);
+          expect(clock()).toEqual(afterLock);
+        }
+      );
+
+      await service.approve(
+        'admin-1',
+        'app-1',
+        { expectedVersion: 1, reason: '锁后时钟' },
+        'post-lock-clock'
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('approves a selected normal application and closes rivals', async () => {
     const { service, tx, locks, rosterLocks, valuationSnapshots } = harness();
     const result = await service.approve('admin-1', 'app-1', { expectedVersion: 1, reason: '择优通过' }, 'key', at);
