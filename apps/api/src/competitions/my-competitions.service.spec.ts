@@ -31,6 +31,7 @@ describe('MyCompetitionsService', () => {
     await prisma.matchResultEvent.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.matchResultEvidence.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.matchResultEvidenceUpload.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
+    await prisma.matchResultDispute.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.competitionMatch.updateMany({ where: { stage: { competitionId: { in: competitionIds } } }, data: { officialResultVersionId: null } });
     await prisma.matchResultVersion.deleteMany({ where: { match: { stage: { competitionId: { in: competitionIds } } } } });
     await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: competitionIds } } } });
@@ -145,6 +146,8 @@ describe('MyCompetitionsService', () => {
     expect(page.items.map(({ match }) => match.id)).toEqual([submit.id, wait.id, confirm.id, done.id]);
     expect(page.items.map(({ action }) => action)).toEqual(['SUBMIT', 'WAIT', 'CONFIRM', 'DONE']);
     expect(page.items.find(({ action }) => action === 'WAIT')?.actionableResultVersion).toBeNull();
+    expect(page.items.find(({ match }) => match.id === wait.id)?.myEvidenceRole).toBe('SUBMITTER');
+    expect(page.items.find(({ match }) => match.id === confirm.id)?.myEvidenceRole).toBe('OPPONENT');
     expect(page.items.find(({ action }) => action === 'CONFIRM')?.actionableResultVersion?.submittedByMe).toBe(false);
     expect(page.items.find(({ action }) => action === 'CONFIRM')).toMatchObject({
       confirmationDeadlineAt: deadline.toISOString(), evidenceRequired: false, disputeSummary: null,
@@ -152,6 +155,18 @@ describe('MyCompetitionsService', () => {
     });
     expect(JSON.stringify(page.items)).not.toContain('objectKey');
     expect(JSON.stringify(page.items)).not.toContain('private.example');
+
+    const proposal = await prisma.matchResultVersion.findFirstOrThrow({ where: { matchId: wait.id } });
+    await prisma.matchResultVersion.update({ where: { id: proposal.id }, data: { status: 'REJECTED' } });
+    const createdDispute = await prisma.matchResultDispute.create({ data: {
+      matchId: wait.id, triggerResultVersionId: proposal.id, trigger: 'REJECTED', openedByUserId: opponentId,
+      evidenceDeadlineAt: new Date('2026-10-18T12:00:00.000Z'), activeKey: wait.id
+    } });
+    await prisma.competitionMatch.update({ where: { id: wait.id }, data: { status: 'DISPUTED' } });
+    expect((await service.listMatches(userId, { limit: 10 })).items.find(({ match }) => match.id === wait.id)?.myEvidenceRole).toBe('SUBMITTER');
+    await prisma.matchResultDispute.delete({ where: { id: createdDispute.id } });
+    await prisma.matchResultVersion.update({ where: { id: proposal.id }, data: { status: 'PROPOSED' } });
+    await prisma.competitionMatch.update({ where: { id: wait.id }, data: { status: 'AWAITING_RESULT' } });
 
     await prisma.competition.update({ where: { id: competition.id }, data: { status: 'SCHEDULED' } });
     const scheduled = await service.listMatches(userId, { limit: 10 });

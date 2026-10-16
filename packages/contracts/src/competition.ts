@@ -666,6 +666,7 @@ export const MyMatchResponseSchema = z.object({
   competition: CompetitionSummarySchema,
   myParticipantId: ResourceIdSchema,
   action: MyMatchActionSchema,
+  myEvidenceRole: z.enum(['SUBMITTER', 'OPPONENT']).nullable().optional(),
   actionableResultVersion: MatchResultVersionResponseSchema.nullable(),
   confirmationDeadlineAt: TimestampSchema.nullable().default(null),
   evidenceRequired: z.boolean().default(false),

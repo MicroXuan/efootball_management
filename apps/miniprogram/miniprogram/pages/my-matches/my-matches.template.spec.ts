@@ -17,7 +17,9 @@ describe('my matches template', () => {
     expect(markup).toContain('{{item.resultCopy}}')
     expect(markup).not.toContain('提交比分')
     expect(markup).not.toContain('确认对手比分')
-    expect(markup).not.toContain('bindtap="openMatch"')
+    expect(markup).toContain('bindtap="openMatch"')
+    expect(markup).toContain('{{item.nextActionCopy}}')
+    expect(markup).toContain('{{item.deadlineCopy}}')
   })
 
   it('registers the team badge component used by each fixture', () => {

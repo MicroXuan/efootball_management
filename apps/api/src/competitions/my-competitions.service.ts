@@ -105,7 +105,7 @@ export class MyCompetitionsService {
         awayParticipant: { include: { seasonEntry: { select: { ownerUserId: true, teamNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true, leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, logoUrl: true } } } } } },
         officialResultVersion: true,
         resultVersions: { where: { status: 'PROPOSED' }, orderBy: { version: 'desc' } },
-        resultDisputes: { orderBy: { createdAt: 'desc' }, take: 1 },
+        resultDisputes: { orderBy: { createdAt: 'desc' }, take: 1, include: { triggerResultVersion: { select: { submittedById: true } } } },
         resultEvents: { orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] }
       }
     });
@@ -129,11 +129,14 @@ export class MyCompetitionsService {
               ? 'WAIT'
               : 'SUBMIT';
         const actionable = action === 'CONFIRM' ? this.result(opponentProposal!, userId) : null;
+        const submitterId = record.resultDisputes[0]?.triggerResultVersion.submittedById
+          ?? ownProposal?.submittedById ?? opponentProposal?.submittedById ?? null;
         return {
           match: this.match(record, userId, actionable),
           competition: this.summary(record.stage.competition, record.stage.competition._count.participants),
           myParticipantId,
           action,
+          myEvidenceRole: submitterId ? (submitterId === userId ? 'SUBMITTER' : 'OPPONENT') : null,
           actionableResultVersion: actionable,
           confirmationDeadlineAt: record.resultConfirmationDeadlineAt?.toISOString() ?? null,
           evidenceRequired: record.stage.competition.season?.league.resultEvidenceRequired ?? false,
