@@ -16,6 +16,8 @@ import { PrismaService } from '../database/prisma.service.js';
 import { playerMarketError } from './player-market.errors.js';
 import { PlayerMarketAccessService, type ParticipantScope } from './player-market-access.service.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
+import { expireClosedPlayerApplications } from './player-market-application-reconciliation.js';
 
 export type MarketActionContext = {
   owned: boolean;
@@ -58,7 +60,8 @@ export class PlayerMarketQueryService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PlayerMarketAccessService) private readonly access: PlayerMarketAccessService,
     @Optional() private readonly clock: () => Date = () => new Date(),
-    @Optional() @Inject(AdminAuthorizationService) private readonly authorization?: AdminAuthorizationService
+    @Optional() @Inject(AdminAuthorizationService) private readonly authorization?: AdminAuthorizationService,
+    @Optional() @Inject(PlayerMarketLockRepository) private readonly locks?: PlayerMarketLockRepository
   ) {}
 
   static encodeCursor(createdAt: Date, id: string): string {
@@ -224,6 +227,7 @@ export class PlayerMarketQueryService {
   }
 
   private async applicationList(leagueId: string, query: PlayerApplicationListQuery, mineTeamId: string | null): Promise<PlayerApplicationListResponse> {
+    await this.expireClosedApplications(leagueId, query.seasonId, this.clock());
     const cursor = query.cursor ? PlayerMarketQueryService.decodeCursor(query.cursor) : null;
     const rows = await this.prisma.playerAcquisitionApplication.findMany({
       where: {
@@ -255,6 +259,27 @@ export class PlayerMarketQueryService {
       items: page.map((row) => this.application(row, queueById.get(row.id) ?? null)),
       nextCursor: rows.length > query.limit && last ? PlayerMarketQueryService.encodeCursor(last.createdAt, last.id) : null
     };
+  }
+
+  private async expireClosedApplications(leagueId: string, seasonId: string, now: Date): Promise<void> {
+    if (!this.locks) return;
+    const candidates = await this.prisma.playerAcquisitionApplication.findMany({
+      where: { leagueId, seasonId, status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }, transferWindow: { endsAt: { lte: now } } },
+      select: { id: true, footballPlayerId: true }
+    });
+    const playerIds = [...new Set(candidates.map(({ footballPlayerId }) => footballPlayerId))].sort();
+    for (const footballPlayerId of playerIds) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.locks!.lockSeason(tx, seasonId);
+        await this.locks!.lockPlayer(tx, leagueId, footballPlayerId);
+        const rows = await tx.playerAcquisitionApplication.findMany({ where: {
+          leagueId, seasonId, footballPlayerId, status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }, transferWindow: { endsAt: { lte: now } }
+        }, select: { id: true, applicantLeagueTeamId: true, sourceLeagueTeamId: true, status: true, amountMinor: true } });
+        await this.locks!.lockTeams(tx, rows.flatMap((row) => [row.applicantLeagueTeamId, row.sourceLeagueTeamId]));
+        await this.locks!.lockApplicationsForPlayer(tx, leagueId, seasonId, footballPlayerId);
+        await expireClosedPlayerApplications(tx, { leagueId, seasonId, footballPlayerId, at: now });
+      });
+    }
   }
 
   async listAnnouncements(userId: string, leagueId: string, query: PlayerMarketAnnouncementQuery): Promise<PlayerMarketAnnouncementListResponse> {

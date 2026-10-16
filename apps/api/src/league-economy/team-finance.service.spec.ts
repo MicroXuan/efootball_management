@@ -7,8 +7,7 @@ import { AdminAuthorizationService } from '../admin/admin-authorization.service.
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
-import { RosterLockRepository } from '../league-rosters/roster-lock.repository.js';
-import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuation-snapshot-coordinator.js';
+import { PlayerMarketLockRepository } from '../player-market/player-market-lock.repository.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 config({ path: '../../.env', quiet: true });
@@ -178,7 +177,7 @@ describe('TeamFinanceService', () => {
     }, 'denied')).rejects.toMatchObject({ code: 'ADMIN_LEAGUE_ACCESS_DENIED' });
   });
 
-  it('does not deadlock against the real season-then-team roster lock order', async () => {
+  it('does not deadlock against the real season-player-team-application market lock order', async () => {
     const prisma = new PrismaService();
     const suffix = randomUUID();
     const adminId = randomUUID();
@@ -187,6 +186,7 @@ describe('TeamFinanceService', () => {
     let seasonId = '';
     let teamId = '';
     let catalogId = '';
+    let playerId = '';
     const gate = () => {
       let release!: () => void;
       const promise = new Promise<void>((resolve) => { release = resolve; });
@@ -208,6 +208,8 @@ describe('TeamFinanceService', () => {
       const team = await prisma.leagueTeam.create({ data: { leagueId, ownerUserId: userId, ownerAlias: '锁用户', catalogTeamId: catalogId,
         teamNumber: 1, name: '锁测试队', shortName: '锁队' } });
       teamId = team.id;
+      const player = await prisma.footballPlayer.create({ data: { nameZh: `市场锁球员-${suffix}` } });
+      playerId = player.id;
 
       const settlementReachedFirstLock = gate();
       let settlementLockCount = 0;
@@ -230,14 +232,17 @@ describe('TeamFinanceService', () => {
       const service = new TeamFinanceService(observedPrisma, new AdminAuthorizationService(observedPrisma),
         new AdminMutationReceiptService(observedPrisma), new AuditLogService(observedPrisma),
         new LeagueVisibilityService(observedPrisma));
-      const rosterHasSeasonLock = gate();
-      const roster = prisma.$transaction(async (tx) => {
-        await synchronizeSeasonValuationSnapshots(tx, seasonId);
-        rosterHasSeasonLock.release();
+      const marketHasSeasonLock = gate();
+      const marketLocks = new PlayerMarketLockRepository();
+      const market = prisma.$transaction(async (tx) => {
+        await marketLocks.lockSeason(tx, seasonId);
+        marketHasSeasonLock.release();
         await settlementReachedFirstLock.promise;
-        await new RosterLockRepository().lockTeam(tx, teamId);
+        await marketLocks.lockPlayer(tx, leagueId, playerId);
+        await marketLocks.lockTeams(tx, [teamId]);
+        await marketLocks.lockApplicationsForPlayer(tx, leagueId, seasonId, playerId);
       }, { isolationLevel: 'ReadCommitted' });
-      await rosterHasSeasonLock.promise;
+      await marketHasSeasonLock.promise;
       const settlement = service.upsertSettlement(adminId, leagueId, {
         leagueTeamId: teamId, seasonId,
         amounts: { transactionAmountMinor: 0, luxuryTaxMinor: 500, offseasonFeeMinor: 0,
@@ -246,7 +251,7 @@ describe('TeamFinanceService', () => {
         note: '锁顺序测试', reason: '验证结算与阵容并发'
       }, `lock-${suffix}`);
 
-      const outcomes = await Promise.allSettled([roster, settlement]);
+      const outcomes = await Promise.allSettled([market, settlement]);
       expect(outcomes).toEqual([
         expect.objectContaining({ status: 'fulfilled' }),
         expect.objectContaining({ status: 'fulfilled' })
@@ -263,6 +268,7 @@ describe('TeamFinanceService', () => {
         await prisma.league.deleteMany({ where: { id: leagueId } });
       }
       if (catalogId) await prisma.teamCatalogItem.deleteMany({ where: { id: catalogId } });
+      if (playerId) await prisma.footballPlayer.deleteMany({ where: { id: playerId } });
       await prisma.user.deleteMany({ where: { id: userId } });
       await prisma.adminAccount.deleteMany({ where: { id: adminId } });
       await prisma.$disconnect();

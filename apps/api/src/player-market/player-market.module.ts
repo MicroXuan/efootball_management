@@ -12,9 +12,10 @@ import { MyPlayerMarketController } from './my-player-market.controller.js';
 import { AdminPlayerMarketController } from './admin-player-market.controller.js';
 import { AuthorizationModule } from '../authorization/authorization.module.js';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
+import { PlayerValuationsModule } from '../player-valuations/player-valuations.module.js';
 
 @Module({
-  imports: [AuthorizationModule, AdminAuthModule, AdminModule, LeagueRostersModule],
+  imports: [AuthorizationModule, AdminAuthModule, AdminModule, LeagueRostersModule, PlayerValuationsModule],
   controllers: [MyPlayerMarketController, AdminPlayerMarketController],
   providers: [MutationReceiptService, PlayerMarketAccessService, PlayerMarketQueryService, PlayerApplicationService, PlayerMarketLockRepository, PlayerMarketReviewService, TeamPlayerReleaseService],
   exports: [PlayerMarketAccessService, PlayerMarketQueryService, PlayerApplicationService, PlayerMarketLockRepository, PlayerMarketReviewService, TeamPlayerReleaseService]

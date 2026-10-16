@@ -139,6 +139,38 @@ describe('PlayerMarketQueryService', () => {
     expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'COMPLIANT', windowOpen: true, releasedByMe: true })).toEqual({ action: 'DISABLED', disabledReason: 'RELEASED_BY_TEAM_IN_WINDOW' });
   });
 
+  it('expires closed-window applications idempotently before returning the W2 queue', async () => {
+    const rootFindMany = jest.fn<() => Promise<Array<{ id: string; footballPlayerId: string }>>>(async () => [])
+      .mockResolvedValueOnce([{ id: 'app-w1', footballPlayerId: 'player-1' }]);
+    const tx = {
+      playerAcquisitionApplication: {
+        findMany: jest.fn(async () => [{ id: 'app-w1', applicantLeagueTeamId: 'team-1', sourceLeagueTeamId: null,
+          status: 'PENDING', amountMinor: 500 }]),
+        update: jest.fn(async () => ({ id: 'app-w1', status: 'EXPIRED' }))
+      },
+      playerAcquisitionApplicationEvent: { create: jest.fn(async () => ({ id: 'event-expired' })) }
+    };
+    const prisma = {
+      playerAcquisitionApplication: { findMany: rootFindMany },
+      $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx))
+    };
+    const access = { requireParticipant: jest.fn(async () => ({ leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT' })) };
+    const locks = { lockSeason: jest.fn(async () => undefined), lockPlayer: jest.fn(async () => undefined),
+      lockTeams: jest.fn(async () => undefined), lockApplicationsForPlayer: jest.fn(async () => undefined) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now, undefined, locks as never);
+
+    await expect(service.listApplications('user-1', 'league-1', {
+      seasonId: 'season-1', scope: 'PUBLIC', limit: 30
+    })).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(service.listApplications('user-1', 'league-1', {
+      seasonId: 'season-1', scope: 'PUBLIC', limit: 30
+    })).resolves.toEqual({ items: [], nextCursor: null });
+    expect(tx.playerAcquisitionApplication.update).toHaveBeenCalledWith({ where: { id: 'app-w1' }, data: {
+      status: 'EXPIRED', reviewedAt: now, reviewReason: 'TRANSFER_WINDOW_CLOSED', version: { increment: 1 }
+    } });
+    expect(tx.playerAcquisitionApplicationEvent.create).toHaveBeenCalledTimes(1);
+  });
+
   it('uses a timestamp plus id cursor for stable pagination', () => {
     const cursor = PlayerMarketQueryService.encodeCursor(now, 'player-2');
     expect(PlayerMarketQueryService.decodeCursor(cursor)).toEqual({ createdAt: now, id: 'player-2' });
