@@ -125,6 +125,84 @@ describe('MatchResultDisputesService', () => {
     expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'EVIDENCE_DEADLINE_EXPIRED' } })).toBe(1);
   });
 
+  it('persists a newly due evidence deadline after a stale-version attach and preserves VERSION_CONFLICT', async () => {
+    const { match } = await rejected();
+    const evidence = await upload(match.id);
+    const realReceipts = new MutationReceiptService(prisma);
+    const receipts = {
+      execute: async (...args: Parameters<MutationReceiptService['execute']>) => {
+        await prisma.competitionMatch.update({ where: { id: match.id }, data: { version: 4 } });
+        await prisma.matchResultDispute.update({ where: { activeKey: match.id }, data: { evidenceDeadlineAt: new Date(0) } });
+        return realReceipts.execute(...args);
+      }
+    };
+    const racingService = new MatchResultDisputesService(prisma, receipts as never);
+    const key = randomUUID();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(racingService.attachEvidence(users[0]!, match.id, { expectedVersion: 3, evidenceUploadId: evidence.id }, key))
+        .rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+      expect(await prisma.matchResultDispute.findUniqueOrThrow({ where: { activeKey: match.id } })).toMatchObject({ status: 'READY_FOR_REVIEW' });
+      expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'EVIDENCE_DEADLINE_EXPIRED' } })).toBe(1);
+    }
+    expect(await prisma.matchResultEvidenceUpload.findUniqueOrThrow({ where: { id: evidence.id } })).toMatchObject({ status: 'UPLOADED' });
+    expect(await prisma.mutationReceipt.count({ where: { actorId: users[0]!, key } })).toBe(0);
+  });
+
+  it.each(['invalid-upload', 'non-submitter'] as const)('persists newly due confirmation expiry after a rejected %s timeout request', async (failure) => {
+    const { match } = await fixture();
+    const evidence = await upload(match.id);
+    const realReceipts = new MutationReceiptService(prisma);
+    const receipts = {
+      execute: async (...args: Parameters<MutationReceiptService['execute']>) => {
+        await prisma.competitionMatch.update({ where: { id: match.id }, data: { resultConfirmationDeadlineAt: new Date(0) } });
+        return realReceipts.execute(...args);
+      }
+    };
+    const racingService = new MatchResultDisputesService(prisma, receipts as never);
+    const userId = users[failure === 'invalid-upload' ? 0 : 1]!;
+    const input = { expectedVersion: 2, evidenceUploadId: failure === 'invalid-upload' ? randomUUID() : evidence.id };
+    const code = failure === 'invalid-upload' ? 'EVIDENCE_UPLOAD_INVALID' : 'DISPUTE_SUBMITTER_REQUIRED';
+    const key = randomUUID();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(racingService.openFromTimeout(userId, match.id, input, key)).rejects.toMatchObject({ response: { code } });
+      expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'CONFIRMATION_EXPIRED' } })).toBe(1);
+    }
+    expect(await prisma.competitionMatch.findUniqueOrThrow({ where: { id: match.id } })).toMatchObject({ status: 'PENDING_CONFIRMATION', version: 2 });
+    expect(await prisma.matchResultDispute.count({ where: { matchId: match.id } })).toBe(0);
+    expect(await prisma.matchResultEvidenceUpload.findUniqueOrThrow({ where: { id: evidence.id } })).toMatchObject({ status: 'UPLOADED' });
+    expect(await prisma.mutationReceipt.count({ where: { actorId: userId, key } })).toBe(0);
+  });
+
+  it('does not let a nonparticipant advance an overdue dispute', async () => {
+    const { match } = await rejected();
+    await prisma.matchResultDispute.update({ where: { activeKey: match.id }, data: { evidenceDeadlineAt: new Date(0) } });
+    await expect(disputes.attachEvidence(users[2]!, match.id, { expectedVersion: 3, evidenceUploadId: randomUUID() }, randomUUID()))
+      .rejects.toMatchObject({ response: { code: 'MATCH_NOT_FOUND' } });
+    expect(await prisma.matchResultDispute.findUniqueOrThrow({ where: { activeKey: match.id } })).toMatchObject({ status: 'EVIDENCE_COLLECTION' });
+    expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'EVIDENCE_DEADLINE_EXPIRED' } })).toBe(0);
+  });
+
+  it('preserves the original conflict if the match becomes hidden before independent error correction', async () => {
+    const { match, stage } = await rejected();
+    const realReceipts = new MutationReceiptService(prisma);
+    const receipts = {
+      execute: async (...args: Parameters<MutationReceiptService['execute']>) => {
+        await prisma.competitionMatch.update({ where: { id: match.id }, data: { version: 4 } });
+        await prisma.matchResultDispute.update({ where: { activeKey: match.id }, data: { evidenceDeadlineAt: new Date(0) } });
+        try { return await realReceipts.execute(...args); }
+        catch (error) {
+          await prisma.competitionStage.update({ where: { id: stage.id }, data: { status: 'DRAFT' } });
+          throw error;
+        }
+      }
+    };
+    const racingService = new MatchResultDisputesService(prisma, receipts as never);
+    await expect(racingService.attachEvidence(users[0]!, match.id, { expectedVersion: 3, evidenceUploadId: randomUUID() }, randomUUID()))
+      .rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(await prisma.matchResultDispute.findUniqueOrThrow({ where: { activeKey: match.id } })).toMatchObject({ status: 'EVIDENCE_COLLECTION' });
+    expect(await prisma.matchResultEvent.count({ where: { matchId: match.id, type: 'EVIDENCE_DEADLINE_EXPIRED' } })).toBe(0);
+  });
+
   it('corrects on a participant read exactly at the evidence deadline, never one millisecond early', async () => {
     const { match } = await rejected();
     const deadline = new Date('2026-10-17T00:00:00Z');

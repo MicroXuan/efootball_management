@@ -50,7 +50,7 @@ export class MatchResultDisputesService {
         status: 'DISPUTED', version: { increment: 1 }, resultConfirmationDeadlineAt: null
       } });
       return this.participantResponse(transaction, dispute, match.version + 1);
-    });
+    }).catch((error: unknown) => this.rejectAfterDeadlineCorrection(userId, matchId, error, at));
   }
 
   async attachEvidence(userId: string, matchId: string, input: OpenTimeoutDisputeRequest, key: string, at?: Date): Promise<ParticipantMatchResultDisputeResponse> {
@@ -75,14 +75,7 @@ export class MatchResultDisputesService {
       } });
       await transaction.competitionMatch.update({ where: { id: matchId }, data: { version: { increment: 1 } } });
       return this.participantResponse(transaction, updated, match.version + 1);
-    }).catch(async (error: unknown) => {
-      // The deadline can pass after preflight while waiting for this transaction's lock.
-      // Its failed write rolled back correction too; persist that transition separately.
-      if (error instanceof CompetitionError && error.code === 'EVIDENCE_DEADLINE_EXPIRED') {
-        await this.correctForParticipant(userId, matchId, at);
-      }
-      throw error;
-    });
+    }).catch((error: unknown) => this.rejectAfterDeadlineCorrection(userId, matchId, error, at));
   }
 
   async getForParticipant(userId: string, matchId: string, at?: Date): Promise<ParticipantMatchResultDisputeResponse | null> {
@@ -137,6 +130,18 @@ export class MatchResultDisputesService {
       await this.participantMatch(transaction, userId, matchId);
       await this.advanceMatch(transaction, matchId, at ?? new Date());
     });
+  }
+
+  private async rejectAfterDeadlineCorrection(userId: string, matchId: string, error: unknown, at?: Date): Promise<never> {
+    // Preflight authorized this request, but a deadline may pass before the write lock.
+    // The rejected transaction cannot persist correction; use a fresh, authorized transaction.
+    try {
+      await this.correctForParticipant(userId, matchId, at);
+    } catch {
+      // Access may have changed or storage may be unavailable. Never replace the original
+      // mutation error or disclose the new state; the deadline worker can retry correction.
+    }
+    throw error;
   }
 
   private async createDispute(transaction: CompetitionTransaction, proposal: MatchResultVersion, userId: string,
