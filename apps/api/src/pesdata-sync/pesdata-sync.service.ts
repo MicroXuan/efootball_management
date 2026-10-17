@@ -514,23 +514,23 @@ export class PesdataSyncService {
         seenExternalIds.add(externalId);
         counters.scannedCount += 1;
         try {
-          if (state.mode === 'incremental' && state.runId) {
-            const prior = await this.latestSuccessfulItem(state.runId, externalId);
-            if (prior?.summaryChecksum === summaryChecksum && prior.normalizedJson) {
-              const row = prior.normalizedJson as RawImportRow;
-              rows.push(row);
-              counters.skippedCount += 1;
-              await this.persistSkippedItem(state.runId, externalId, summaryChecksum, prior, row, state.leaseOwnerToken);
-              continue;
+          const prior = state.mode === 'incremental' && state.runId
+            ? await this.latestSuccessfulItem(state.runId, externalId)
+            : null;
+          if (prior?.summaryChecksum === summaryChecksum && prior.normalizedJson && state.runId) {
+            const row = prior.normalizedJson as RawImportRow;
+            rows.push(row);
+            counters.skippedCount += 1;
+            await this.persistSkippedItem(state.runId, externalId, summaryChecksum, prior, row, state.leaseOwnerToken);
+          } else {
+            const detail = await this.client.getPlayerDetail(externalId);
+            const row = mapPesdataPlayer(detail);
+            const detailChecksum = pesdataValueChecksum(detail);
+            rows.push(row);
+            counters.fetchedCount += 1;
+            if (state.runId) {
+              await this.persistItem(state.runId, externalId, summaryChecksum, detailChecksum, detail, row, 'FETCHED', state.leaseOwnerToken);
             }
-          }
-          const detail = await this.client.getPlayerDetail(externalId);
-          const row = mapPesdataPlayer(detail);
-          const detailChecksum = pesdataValueChecksum(detail);
-          rows.push(row);
-          counters.fetchedCount += 1;
-          if (state.runId) {
-            await this.persistItem(state.runId, externalId, summaryChecksum, detailChecksum, detail, row, 'FETCHED', state.leaseOwnerToken);
           }
         } catch (error) {
           if (error instanceof PesdataClientError && error.code === 'PESDATA_PROTOCOL_ERROR') throw error;
@@ -540,26 +540,14 @@ export class PesdataSyncService {
             await this.persistFailedItem(state.runId, externalId, summaryChecksum, error, state.leaseOwnerToken);
           }
         }
+        if (state.runId && counters.scannedCount % 10 === 0) {
+          await this.persistProgress(state.runId, counters, offset, state.leaseOwnerToken);
+        }
       }
 
       offset += page.list.length;
       if (state.runId) {
-        const heartbeatAt = new Date();
-        const checkpoint = await this.prisma.externalSyncRun.updateMany({
-          where: { id: state.runId, status: 'RUNNING', ...(state.leaseOwnerToken ? { leaseOwnerToken: state.leaseOwnerToken } : {}) },
-          data: {
-            sourceTotal: counters.sourceTotal,
-            scannedCount: counters.scannedCount,
-            fetchedCount: counters.fetchedCount,
-            skippedCount: counters.skippedCount,
-            failedCount: counters.failedCount,
-            currentOffset: offset,
-            currentPhase: 'FETCHING',
-            heartbeatAt,
-            leaseExpiresAt: new Date(heartbeatAt.getTime() + SYNC_LEASE_MS)
-          }
-        });
-        if (checkpoint.count !== 1) this.throwLeaseLost();
+        await this.persistProgress(state.runId, counters, offset, state.leaseOwnerToken);
       }
       if (page.list.length < remaining) break;
     }
@@ -605,6 +593,30 @@ export class PesdataSyncService {
       batchIds,
       dryRun: state.dryRun
     };
+  }
+
+  private async persistProgress(
+    runId: string,
+    counters: SyncCounters,
+    currentOffset: number,
+    leaseOwnerToken?: string
+  ): Promise<void> {
+    const heartbeatAt = new Date();
+    const checkpoint = await this.prisma.externalSyncRun.updateMany({
+      where: { id: runId, status: 'RUNNING', ...(leaseOwnerToken ? { leaseOwnerToken } : {}) },
+      data: {
+        sourceTotal: counters.sourceTotal,
+        scannedCount: counters.scannedCount,
+        fetchedCount: counters.fetchedCount,
+        skippedCount: counters.skippedCount,
+        failedCount: counters.failedCount,
+        currentOffset,
+        currentPhase: 'FETCHING',
+        heartbeatAt,
+        leaseExpiresAt: new Date(heartbeatAt.getTime() + SYNC_LEASE_MS)
+      }
+    });
+    if (checkpoint.count !== 1) this.throwLeaseLost();
   }
 
   private async persistItem(

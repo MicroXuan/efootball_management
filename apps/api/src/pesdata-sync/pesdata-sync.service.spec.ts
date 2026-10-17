@@ -266,6 +266,38 @@ describe('PesdataSyncService', () => {
       .resolves.toMatchObject({ status: 'READY', totalCount: 3 });
   });
 
+  it('persists visible progress after every ten processed player cards', async () => {
+    let releaseEleventh!: () => void;
+    let markEleventhStarted!: () => void;
+    const eleventhBlocked = new Promise<void>((resolve) => { releaseEleventh = resolve; });
+    const eleventhStarted = new Promise<void>((resolve) => { markEleventhStarted = resolve; });
+    const client = {
+      listPlayers: async () => ({
+        list: Array.from({ length: 20 }, (_, index) => summary(910_000 + index)),
+        count: 20
+      }),
+      getPlayerDetail: async (id: string) => {
+        if (id === '910010') {
+          markEleventhStarted();
+          await eleventhBlocked;
+        }
+        return detail(id);
+      }
+    };
+    const service = new PesdataSyncService(prisma, importService, client as never, { pageSize: 100 });
+
+    const execution = service.start(actorId, { mode: 'sample', limit: 20 });
+    await eleventhStarted;
+    const checkpoint = await prisma.externalSyncRun.findFirstOrThrow({
+      where: { actorId, status: 'RUNNING' },
+      orderBy: { createdAt: 'desc' }
+    });
+    releaseEleventh();
+    await execution;
+
+    expect(checkpoint).toMatchObject({ scannedCount: 10, fetchedCount: 10, failedCount: 0 });
+  });
+
   it('uses monotonic offsets and stops on a short page even when count changes', async () => {
     const offsets: number[] = [];
     const pages = new Map([

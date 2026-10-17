@@ -31,6 +31,11 @@ describe('SyncRunCard', () => {
     expect(screen.getByText('待确认批次')).toBeInTheDocument();
     expect(screen.getByText('已发布批次')).toBeInTheDocument();
     expect(screen.getByText('本次已检查')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '球员卡同步进度' })).toHaveAttribute(
+      'aria-valuetext',
+      '已处理 120 条，失败 3 条'
+    );
+    expect(screen.getByText('已处理 120 条 · 失败 3 条')).toBeInTheDocument();
   });
 
   it('says there is no current task instead of implying sync has never run', () => {
