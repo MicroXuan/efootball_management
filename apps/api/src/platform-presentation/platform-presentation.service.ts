@@ -24,12 +24,7 @@ export class PlatformPresentationService {
     });
     return presentation
       ? this.present(presentation)
-      : {
-          leagueCenterBannerUrl: null,
-          leagueCenterBannerCloudFileId: null,
-          leagueCenterBannerDataUrl: null,
-          version: 0,
-        };
+      : { leagueCenterBannerUrl: null, leagueCenterBannerCloudFileId: null, version: 0 };
   }
 
   async update(
@@ -84,23 +79,16 @@ export class PlatformPresentationService {
     leagueCenterBannerUrl: string | null;
     version: number;
   }): Promise<PlatformPresentation> {
-    const isCloudFile = value.leagueCenterBannerUrl?.startsWith('cloud://') ?? false;
-    const [leagueCenterBannerUrl, storedBanner] = isCloudFile
-      ? await Promise.all([
-          this.storage.temporaryReadUrl?.(value.leagueCenterBannerUrl!, 3600),
-          this.storage.read?.(value.leagueCenterBannerUrl!),
-        ])
-      : [value.leagueCenterBannerUrl, null];
+    const leagueCenterBannerUrl = value.leagueCenterBannerUrl?.startsWith('cloud://')
+      ? await this.storage.temporaryReadUrl?.(value.leagueCenterBannerUrl, 3600)
+      : value.leagueCenterBannerUrl;
     if (value.leagueCenterBannerUrl?.startsWith('cloud://') && !leagueCenterBannerUrl) {
       throw new Error('CloudBase banner reads are unavailable');
     }
     return {
       leagueCenterBannerUrl: leagueCenterBannerUrl ?? null,
-      leagueCenterBannerCloudFileId: isCloudFile
+      leagueCenterBannerCloudFileId: value.leagueCenterBannerUrl?.startsWith('cloud://')
         ? value.leagueCenterBannerUrl
-        : null,
-      leagueCenterBannerDataUrl: storedBanner
-        ? `data:${storedBanner.mimeType};base64,${storedBanner.buffer.toString('base64')}`
         : null,
       version: value.version,
     };

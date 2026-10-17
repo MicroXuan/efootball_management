@@ -17,12 +17,14 @@ describe('profile template', () => {
 
   it('presents the three high-frequency destinations as one compact action hub', () => {
     const template = readFileSync(resolve(process.cwd(), 'miniprogram/pages/profile/index.wxml'), 'utf8')
+    const stylesheet = readFileSync(resolve(process.cwd(), 'miniprogram/pages/profile/index.wxss'), 'utf8')
 
     expect(template).toContain('class="quick-actions"')
     expect(template).toContain('bindtap="openMyMatches"')
     expect(template).toContain('bindtap="openPlayerAuctions"')
     expect(template).toContain('bindtap="openFavorites"')
     expect(template).not.toContain('class="favorites-entry" bindtap="openFavorites"')
+    expect(stylesheet).not.toContain('.quick-action:first-child')
   })
 
   it('keeps the WeChat bot entry behind a disabled feature flag', () => {

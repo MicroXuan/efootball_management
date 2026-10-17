@@ -784,11 +784,9 @@ describe('shared API contracts', () => {
   it('validates the public league banner presentation and versioned administrator update', () => {
     assert.deepEqual(PlatformPresentationSchema.parse({
       leagueCenterBannerUrl: null,
-      leagueCenterBannerDataUrl: 'data:image/webp;base64,YmFubmVy',
       version: 0,
     }), {
       leagueCenterBannerUrl: null,
-      leagueCenterBannerDataUrl: 'data:image/webp;base64,YmFubmVy',
       version: 0,
     });
     assert.deepEqual(UpdatePlatformPresentationRequestSchema.parse({

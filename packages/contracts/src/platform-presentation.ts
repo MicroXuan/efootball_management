@@ -12,7 +12,6 @@ const BannerImageUrlSchema = z.url().refine(
 export const PlatformPresentationSchema = z.object({
   leagueCenterBannerUrl: BannerImageUrlSchema.nullable(),
   leagueCenterBannerCloudFileId: z.string().startsWith('cloud://').nullable().optional(),
-  leagueCenterBannerDataUrl: z.string().startsWith('data:image/').nullable().optional(),
   version: z.number().int().nonnegative(),
 });
 

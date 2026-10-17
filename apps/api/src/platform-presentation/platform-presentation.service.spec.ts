@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { PlatformPresentationService } from './platform-presentation.service.js';
 
 describe('PlatformPresentationService', () => {
-  it('embeds a stored CloudBase banner for clients that cannot read private cloud storage', async () => {
+  it('resolves a stored CloudBase banner id to a browser-readable HTTPS URL', async () => {
     const cloudFileId = 'cloud://env/banners--opaque.webp';
     const prisma = {
       platformPresentation: { findUnique: jest.fn(async () => ({
@@ -12,11 +12,6 @@ describe('PlatformPresentationService', () => {
     };
     const storage = {
       temporaryReadUrl: jest.fn(async () => 'https://cos.example/banner.webp?signature=temporary'),
-      read: jest.fn(async () => ({
-        buffer: Buffer.from('banner-bytes'),
-        mimeType: 'image/webp',
-        size: 12,
-      })),
     };
     const ServiceWithStorage = PlatformPresentationService as unknown as new (
       prisma: unknown,
@@ -28,9 +23,9 @@ describe('PlatformPresentationService', () => {
     await expect(service.get()).resolves.toEqual({
       leagueCenterBannerUrl: 'https://cos.example/banner.webp?signature=temporary',
       leagueCenterBannerCloudFileId: cloudFileId,
-      leagueCenterBannerDataUrl: 'data:image/webp;base64,YmFubmVyLWJ5dGVz',
       version: 2,
     });
+    expect(storage.temporaryReadUrl).toHaveBeenCalledWith(cloudFileId, 3600);
   });
 
   it('returns a stable empty presentation before the first banner is configured', async () => {
@@ -42,7 +37,6 @@ describe('PlatformPresentationService', () => {
     await expect(service.get()).resolves.toEqual({
       leagueCenterBannerUrl: null,
       leagueCenterBannerCloudFileId: null,
-      leagueCenterBannerDataUrl: null,
       version: 0,
     });
   });
@@ -81,7 +75,6 @@ describe('PlatformPresentationService', () => {
     })).resolves.toEqual({
       leagueCenterBannerUrl: 'https://media.example.com/banner.webp',
       leagueCenterBannerCloudFileId: null,
-      leagueCenterBannerDataUrl: null,
       version: 1,
     });
     expect(transaction.platformPresentation.create).toHaveBeenCalledWith({

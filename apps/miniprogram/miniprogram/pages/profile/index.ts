@@ -28,7 +28,7 @@ Page({
 
   onShow() {
     this.getTabBar?.()?.setData({ selected: 2 })
-    void this.loadPage()
+    void this.loadPage(this.data.state !== 'loaded')
   },
 
   onPullDownRefresh() {

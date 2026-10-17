@@ -9,14 +9,12 @@ import type {
 export type LeagueListTab = 'all' | 'mine'
 
 export function leagueBannerView(presentation: PlatformPresentation) {
-  const displaySource = presentation.leagueCenterBannerDataUrl
-    ?? presentation.leagueCenterBannerCloudFileId
-    ?? presentation.leagueCenterBannerUrl
-    ?? ''
   return {
-    imageUrl: presentation.leagueCenterBannerDataUrl ?? presentation.leagueCenterBannerUrl ?? '',
-    cacheSource: displaySource,
-    hasImage: Boolean(displaySource),
+    imageUrl: presentation.leagueCenterBannerUrl ?? '',
+    cacheSource: presentation.leagueCenterBannerCloudFileId
+      ?? presentation.leagueCenterBannerUrl
+      ?? '',
+    hasImage: Boolean(presentation.leagueCenterBannerUrl),
   }
 }
 

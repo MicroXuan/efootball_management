@@ -1,6 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ProfilePage = {
+  data: { state: 'loading' | 'loaded' | 'error' }
+  onShow(): void
+  loadPage(showLoading?: boolean): Promise<void>
   openActionCenter(): void
   openMyMatches(): void
   openPlayerAuctions(): void
@@ -20,6 +23,18 @@ beforeEach(() => {
 })
 
 describe('profile quick actions', () => {
+  it('refreshes silently when returning to an already loaded profile', () => {
+    const loadPage = vi.fn(async () => undefined)
+
+    page.onShow.call({
+      data: { state: 'loaded' },
+      getTabBar: () => ({ setData: vi.fn() }),
+      loadPage,
+    })
+
+    expect(loadPage).toHaveBeenCalledWith(false)
+  })
+
   it('opens the cross-league action center', () => {
     page.openActionCenter()
     expect(wx.navigateTo).toHaveBeenCalledWith({ url: '/pages/action-center/index' })

@@ -26,6 +26,5 @@ page { background:#0e1417; color:#f4f7f8; }
 .team-owner { width:100%; margin-top:7rpx; overflow:hidden; color:#aab5ba; font-size:19rpx; text-overflow:ellipsis; white-space:nowrap; }
 .fixture-center { height:100%; display:flex; align-items:center; justify-content:center; color:#f4f7f8; font-size:31rpx; font-weight:900; font-variant-numeric:tabular-nums; text-align:center; }
 .archived { margin-top:7rpx; color:#ff9c8e; font-size:17rpx; }
-.state { min-height:520rpx; display:flex; flex-direction:column; justify-content:center; gap:16rpx; color:#aab5ba; font-size:23rpx; }
-.state text:first-child { color:#f4f7f8; font-size:32rpx; font-weight:800; }
+.outline-button { min-height:80rpx;margin:24rpx 0 0;padding:0 28rpx;border:2rpx solid #344047;border-radius:16rpx;color:#f4f7f8;background:#1c262b;font-size:22rpx; }
 @media (max-width:340px) { .fixture-grid { grid-template-columns:minmax(0,1fr) 86rpx minmax(0,1fr); } .team-badge { width:70rpx; height:70rpx; } .team-identity { font-size:20rpx; } .fixture-center { font-size:26rpx; } }

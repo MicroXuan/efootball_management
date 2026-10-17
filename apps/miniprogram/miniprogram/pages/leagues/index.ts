@@ -79,7 +79,7 @@ Page({
           },
         ).catch(() => '')
         if (preloadedSource) {
-          bannerDisplayUrl = preloadedSource
+          bannerDisplayUrl = banner.imageUrl
           bannerMode = 'image'
         } else if (!bannerDisplayUrl) {
           bannerMode = 'fallback'

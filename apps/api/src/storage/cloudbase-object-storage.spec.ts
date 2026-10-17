@@ -22,9 +22,7 @@ describe('CloudBase private evidence inspection', () => {
     uploadFile: jest.fn(async () => ({ fileID: key })),
     deleteFile: jest.fn(async () => undefined),
     downloadFile,
-    getFileInfo: jest.fn(async ({ fileList }) => ({
-      fileList: [{ code: 'SUCCESS', fileID: fileList[0]!, mime: 'image/png', size: png.length }],
-    })),
+    getFileInfo: jest.fn(async () => ({ fileList: [{ code: 'SUCCESS', fileID: key, mime: 'image/png', size: png.length }] }))
   };
   const storage = new CloudBaseObjectStorage(client);
 
@@ -34,14 +32,6 @@ describe('CloudBase private evidence inspection', () => {
     await expect(storage.inspect(key)).resolves.toEqual({ mimeType: 'image/png', size: png.length, buffer: png,
       checksumSha256: '4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6' });
     expect(downloadFile).toHaveBeenCalledWith({ fileID: key });
-  });
-
-  it('reads a public presentation asset through the trusted server SDK', async () => {
-    await expect(storage.read('cloud://env/league-center-banners--banner.png')).resolves.toEqual({
-      buffer: png,
-      mimeType: 'image/png',
-      size: png.length,
-    });
   });
 
   it('rejects non-image bytes even when HEAD says image/png', async () => {

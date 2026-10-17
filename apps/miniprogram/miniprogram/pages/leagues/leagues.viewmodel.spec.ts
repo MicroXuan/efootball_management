@@ -33,17 +33,15 @@ describe('league list view model', () => {
     expect(leagueBannerView({
       leagueCenterBannerUrl: 'https://media.example.com/league-center.webp',
       leagueCenterBannerCloudFileId: 'cloud://production/league-center.webp',
-      leagueCenterBannerDataUrl: 'data:image/webp;base64,YmFubmVy',
       version: 2,
     })).toEqual({
-      imageUrl: 'data:image/webp;base64,YmFubmVy',
-      cacheSource: 'data:image/webp;base64,YmFubmVy',
+      imageUrl: 'https://media.example.com/league-center.webp',
+      cacheSource: 'cloud://production/league-center.webp',
       hasImage: true,
     });
     expect(leagueBannerView({
       leagueCenterBannerUrl: null,
       leagueCenterBannerCloudFileId: null,
-      leagueCenterBannerDataUrl: null,
       version: 0,
     })).toEqual({
       imageUrl: '',

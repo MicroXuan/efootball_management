@@ -9,8 +9,17 @@
   </picker>
 
   <loading-state wx:if="{{loading && items.length === 0}}" label="正在整理赛程" />
-  <view wx:elif="{{errorMessage && items.length === 0}}" class="state"><text>赛程列表不可用</text><text>{{errorMessage}}</text><button class="efm-retry-button" bindtap="retry">重试</button></view>
-  <view wx:elif="{{!loading && items.length === 0}}" class="state"><text>当前赛季暂无赛程</text><text>赛程发布后会显示在这里。</text></view>
+  <view wx:elif="{{errorMessage && items.length === 0}}" class="state-card efm-empty-state">
+    <text class="efm-empty-state__kicker">连接失败</text>
+    <text class="efm-empty-state__title">赛程列表不可用</text>
+    <text class="efm-empty-state__copy">{{errorMessage}}</text>
+    <button class="outline-button efm-retry-button" bindtap="retry">重新加载</button>
+  </view>
+  <view wx:elif="{{!loading && items.length === 0}}" class="state-card efm-empty-state">
+    <text class="efm-empty-state__kicker">暂无赛程</text>
+    <text class="efm-empty-state__title">当前赛季暂无赛程</text>
+    <text class="efm-empty-state__copy">赛程发布后会显示在这里。</text>
+  </view>
   <view wx:else class="match-list">
     <view wx:for="{{items}}" wx:key="matchId" class="match-card" data-id="{{item.matchId}}" bindtap="openMatch" hover-class="match-card-pressed">
       <view class="match-head"><text>{{item.competition.name}}</text><text class="state-tag">{{item.stateCopy}}</text></view>
