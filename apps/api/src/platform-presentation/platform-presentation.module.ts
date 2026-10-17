@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminModule } from '../admin/admin.module.js';
+import { StorageModule } from '../storage/storage.module.js';
 import {
   AdminPlatformPresentationController,
   PublicPlatformPresentationController,
@@ -8,7 +9,7 @@ import {
 import { PlatformPresentationService } from './platform-presentation.service.js';
 
 @Module({
-  imports: [AdminAuthModule, AdminModule],
+  imports: [AdminAuthModule, AdminModule, StorageModule],
   controllers: [
     PublicPlatformPresentationController,
     AdminPlatformPresentationController,

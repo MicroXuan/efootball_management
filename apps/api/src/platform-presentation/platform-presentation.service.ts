@@ -6,6 +6,7 @@ import type {
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { AdminError } from '../admin/admin.errors.js';
 import { PrismaService } from '../database/prisma.service.js';
+import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 
 const PRESENTATION_ID = 'global';
 
@@ -14,6 +15,7 @@ export class PlatformPresentationService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
   async get(): Promise<PlatformPresentation> {
@@ -25,11 +27,11 @@ export class PlatformPresentationService {
       : { leagueCenterBannerUrl: null, version: 0 };
   }
 
-  update(
+  async update(
     adminId: string,
     input: UpdatePlatformPresentationRequest,
   ): Promise<PlatformPresentation> {
-    return this.prisma.$transaction(async (transaction) => {
+    const saved = await this.prisma.$transaction(async (transaction) => {
       const current = await transaction.platformPresentation.findUnique({
         where: { id: PRESENTATION_ID },
       });
@@ -68,16 +70,23 @@ export class PlatformPresentationService {
         resourceId: PRESENTATION_ID,
         metadata: { leagueCenterBannerUrl: input.leagueCenterBannerUrl },
       });
-      return this.present(saved);
+      return saved;
     });
+    return this.present(saved);
   }
 
-  private present(value: {
+  private async present(value: {
     leagueCenterBannerUrl: string | null;
     version: number;
-  }): PlatformPresentation {
+  }): Promise<PlatformPresentation> {
+    const leagueCenterBannerUrl = value.leagueCenterBannerUrl?.startsWith('cloud://')
+      ? await this.storage.temporaryReadUrl?.(value.leagueCenterBannerUrl, 3600)
+      : value.leagueCenterBannerUrl;
+    if (value.leagueCenterBannerUrl?.startsWith('cloud://') && !leagueCenterBannerUrl) {
+      throw new Error('CloudBase banner reads are unavailable');
+    }
     return {
-      leagueCenterBannerUrl: value.leagueCenterBannerUrl,
+      leagueCenterBannerUrl: leagueCenterBannerUrl ?? null,
       version: value.version,
     };
   }
