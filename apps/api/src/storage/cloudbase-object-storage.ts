@@ -2,7 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
 import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from './image-validation.js';
 import { EVIDENCE_TEMP_PREFIX, retainedEvidenceKey } from './evidence-object-keys.js';
-import type { DirectUploadGrant, EvidenceMimeType, ObjectStorage, StorageScope, StoredObject, StoredObjectMetadata, StoredUploadInput } from './object-storage.js';
+import type { DirectUploadGrant, EvidenceMimeType, ObjectStorage, ReadableStoredObject, StorageScope, StoredObject, StoredObjectMetadata, StoredUploadInput } from './object-storage.js';
+
+const READABLE_PUBLIC_OBJECT = /^cloud:\/\/[^/]+\/(?:league-images|league-center-banners|team-crests)--[^/]+\.(?:jpg|png|webp)$/;
 
 export interface CloudBaseStorageClient {
   uploadFile(input: { cloudPath: string; fileContent: Buffer }): Promise<{ fileID: string }>;
@@ -75,6 +77,26 @@ export class CloudBaseObjectStorage implements ObjectStorage {
     const file = result.fileList.find((entry) => entry.fileID === key && entry.code === 'SUCCESS');
     if (!file?.tempFileURL) throw new Error('CloudBase object is unavailable');
     return file.tempFileURL;
+  }
+
+  async read(key: string): Promise<ReadableStoredObject | null> {
+    if (!READABLE_PUBLIC_OBJECT.test(key)) throw new Error('Invalid public storage object');
+    if (!this.client.getFileInfo) throw new Error('CloudBase object reads are unavailable');
+    const result = await this.client.getFileInfo({ fileList: [key] });
+    const file = result.fileList.find((entry) => entry.fileID === key && entry.code === 'SUCCESS');
+    if (!file || !Number.isFinite(file.size)) return null;
+    const downloaded = await this.client.downloadFile({ fileID: key });
+    const buffer = Buffer.isBuffer(downloaded.fileContent)
+      ? downloaded.fileContent
+      : typeof downloaded.fileContent === 'string'
+        ? Buffer.from(downloaded.fileContent, 'binary')
+        : null;
+    if (!buffer || buffer.length !== file.size) return null;
+    return {
+      buffer,
+      mimeType: file.mime ?? file.contentType?.split(';')[0]?.trim() ?? 'application/octet-stream',
+      size: file.size!,
+    };
   }
 
   async inspect(key: string): Promise<StoredObjectMetadata | null> {
