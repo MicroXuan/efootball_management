@@ -1,5 +1,5 @@
 import type { AuthTokenResponse } from '@efm/contracts'
-import { apiBaseUrl } from '../config/api'
+import { apiBasePath, cloudbaseEnvironmentId, cloudbaseServiceName } from '../config/api'
 import { session } from './session'
 
 type ApiErrorEnvelope = {
@@ -23,6 +23,16 @@ type RawResponse<T> = {
   data: T
 }
 
+type CloudContainerApi = {
+  callContainer<T>(options: {
+    config: { env: string }
+    path: string
+    method: ApiRequestOptions['method']
+    data?: ApiRequestOptions['data']
+    header: Record<string, string>
+  }): Promise<RawResponse<T>>
+}
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -38,19 +48,20 @@ export class ApiError extends Error {
 let refreshPromise: Promise<void> | undefined
 
 function rawRequest<T>(options: ApiRequestOptions, accessToken?: string): Promise<RawResponse<T>> {
-  return new Promise((resolve, reject) => {
-    wx.request({
-      url: `${apiBaseUrl}${options.path}`,
-      method: (options.method ?? 'GET') as WechatMiniprogram.RequestOption['method'],
-      data: options.data,
-      header: {
-        'content-type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...options.headers,
-      },
-      success: ({ statusCode, data }) => resolve({ statusCode, data: data as T }),
-      fail: () => reject(new ApiError('NETWORK_ERROR', '网络连接失败，请稍后重试', 0)),
-    })
+  const cloud = wx.cloud as unknown as CloudContainerApi
+  return cloud.callContainer<T>({
+    config: { env: cloudbaseEnvironmentId },
+    path: `${apiBasePath}${options.path}`,
+    method: options.method ?? 'GET',
+    data: options.data,
+    header: {
+      'X-WX-SERVICE': cloudbaseServiceName,
+      'content-type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...options.headers,
+    },
+  }).catch(() => {
+    throw new ApiError('NETWORK_ERROR', '网络连接失败，请稍后重试', 0)
   })
 }
 
