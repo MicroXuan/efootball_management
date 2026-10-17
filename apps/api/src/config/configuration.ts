@@ -34,6 +34,7 @@ export function configuration() {
       publicApiBaseUrl: environment.PUBLIC_API_BASE_URL,
       cloudbase: {
         environmentId: environment.CLOUDBASE_ENV_ID,
+        accessKey: environment.CLOUDBASE_APIKEY,
         secretId: environment.CLOUDBASE_SECRET_ID,
         secretKey: environment.CLOUDBASE_SECRET_KEY
       }

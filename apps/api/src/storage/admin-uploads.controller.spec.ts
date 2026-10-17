@@ -153,6 +153,19 @@ describe('league image storage', () => {
 
     expect(validateEnvironment({ ...base, STORAGE_PROVIDER: 'local' }).STORAGE_PROVIDER).toBe('local');
     expect(() => validateEnvironment({ ...base, STORAGE_PROVIDER: 'cloudbase' })).toThrow();
+    expect(validateEnvironment({
+      ...base,
+      STORAGE_PROVIDER: 'cloudbase',
+      CLOUDBASE_ENV_ID: 'env-staging',
+      CLOUDBASE_APIKEY: 'server-api-key'
+    }).CLOUDBASE_APIKEY).toBe('server-api-key');
+    expect(validateEnvironment({
+      ...base,
+      STORAGE_PROVIDER: 'cloudbase',
+      CLOUDBASE_ENV_ID: 'env-staging',
+      CLOUDBASE_SECRET_ID: 'secret-id',
+      CLOUDBASE_SECRET_KEY: 'secret-key'
+    }).CLOUDBASE_SECRET_ID).toBe('secret-id');
   });
 
   it('maps opaque keys and public URLs through a mocked CloudBase client', async () => {
