@@ -7,7 +7,8 @@ export function configuration() {
   return {
     app: {
       environment: environment.NODE_ENV,
-      port: environment.PORT
+      port: environment.PORT,
+      adminWebOrigins: environment.ADMIN_WEB_ORIGINS
     },
     wechat: {
       gatewayMode: environment.WECHAT_GATEWAY_MODE,

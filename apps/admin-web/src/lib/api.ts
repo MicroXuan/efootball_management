@@ -264,4 +264,14 @@ export class AdminApiClient implements AdminApi {
   }
 }
 
-export const adminApi = new AdminApiClient();
+export function createAdminApiClient(
+  baseUrl = import.meta.env.VITE_API_BASE_URL,
+  fetcher?: Fetcher
+): AdminApiClient {
+  return new AdminApiClient({
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(fetcher ? { fetcher } : {})
+  });
+}
+
+export const adminApi = createAdminApiClient();

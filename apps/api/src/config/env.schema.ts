@@ -1,8 +1,15 @@
 import { z } from 'zod';
 
+const AdminWebOriginsSchema = z.string().optional()
+  .transform((value) => value
+    ? value.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : [])
+  .pipe(z.array(z.url()).transform((origins) => origins.map((origin) => new URL(origin).origin)));
+
 export const EnvironmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3_000),
+  ADMIN_WEB_ORIGINS: AdminWebOriginsSchema,
   DATABASE_URL: z.string().startsWith('mysql://'),
   JWT_ACCESS_SECRET: z.string().min(32),
   REFRESH_TOKEN_PEPPER: z.string().min(32),
