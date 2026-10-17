@@ -8,11 +8,13 @@ Component({
     },
   },
 
-  data: { imageFailed: false, imageLoaded: false },
+  data: { imageUrl: '', imageFailed: false, imageLoaded: false },
 
   observers: {
-    card() {
-      this.setData({ imageFailed: false, imageLoaded: false })
+    card(card: PlayerCardViewModel | null) {
+      const imageUrl = card?.imageUrl ?? ''
+      if (imageUrl === this.data.imageUrl) return
+      this.setData({ imageUrl, imageFailed: false, imageLoaded: false })
     },
   },
 
