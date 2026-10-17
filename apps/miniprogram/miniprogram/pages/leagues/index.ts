@@ -72,8 +72,11 @@ Page({
         bannerMode = 'fallback'
       } else {
         const preloadedSource = await cacheImageSource(
-          banner.imageUrl,
-          (options) => wx.downloadFile(options),
+          banner.cacheSource,
+          {
+            downloadHttp: (options) => wx.downloadFile(options),
+            downloadCloud: (options) => wx.cloud.downloadFile(options),
+          },
         ).catch(() => '')
         if (preloadedSource) {
           bannerDisplayUrl = preloadedSource

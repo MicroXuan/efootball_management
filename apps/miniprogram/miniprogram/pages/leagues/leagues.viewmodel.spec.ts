@@ -32,13 +32,20 @@ describe('league list view model', () => {
   it('uses the configured league center banner and falls back cleanly when it is absent', () => {
     expect(leagueBannerView({
       leagueCenterBannerUrl: 'https://media.example.com/league-center.webp',
+      leagueCenterBannerCloudFileId: 'cloud://production/league-center.webp',
       version: 2,
     })).toEqual({
       imageUrl: 'https://media.example.com/league-center.webp',
+      cacheSource: 'cloud://production/league-center.webp',
       hasImage: true,
     });
-    expect(leagueBannerView({ leagueCenterBannerUrl: null, version: 0 })).toEqual({
+    expect(leagueBannerView({
+      leagueCenterBannerUrl: null,
+      leagueCenterBannerCloudFileId: null,
+      version: 0,
+    })).toEqual({
       imageUrl: '',
+      cacheSource: '',
       hasImage: false,
     });
   });

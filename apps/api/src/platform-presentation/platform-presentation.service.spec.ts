@@ -22,6 +22,7 @@ describe('PlatformPresentationService', () => {
 
     await expect(service.get()).resolves.toEqual({
       leagueCenterBannerUrl: 'https://cos.example/banner.webp?signature=temporary',
+      leagueCenterBannerCloudFileId: cloudFileId,
       version: 2,
     });
     expect(storage.temporaryReadUrl).toHaveBeenCalledWith(cloudFileId, 3600);
@@ -35,6 +36,7 @@ describe('PlatformPresentationService', () => {
 
     await expect(service.get()).resolves.toEqual({
       leagueCenterBannerUrl: null,
+      leagueCenterBannerCloudFileId: null,
       version: 0,
     });
   });
@@ -72,6 +74,7 @@ describe('PlatformPresentationService', () => {
       expectedVersion: 0,
     })).resolves.toEqual({
       leagueCenterBannerUrl: 'https://media.example.com/banner.webp',
+      leagueCenterBannerCloudFileId: null,
       version: 1,
     });
     expect(transaction.platformPresentation.create).toHaveBeenCalledWith({

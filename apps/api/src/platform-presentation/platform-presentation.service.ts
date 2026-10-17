@@ -24,7 +24,7 @@ export class PlatformPresentationService {
     });
     return presentation
       ? this.present(presentation)
-      : { leagueCenterBannerUrl: null, version: 0 };
+      : { leagueCenterBannerUrl: null, leagueCenterBannerCloudFileId: null, version: 0 };
   }
 
   async update(
@@ -87,6 +87,9 @@ export class PlatformPresentationService {
     }
     return {
       leagueCenterBannerUrl: leagueCenterBannerUrl ?? null,
+      leagueCenterBannerCloudFileId: value.leagueCenterBannerUrl?.startsWith('cloud://')
+        ? value.leagueCenterBannerUrl
+        : null,
       version: value.version,
     };
   }
