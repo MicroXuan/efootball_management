@@ -1,4 +1,4 @@
-export const apiBaseUrl = 'http://127.0.0.1:3000/v1'
+export const apiBaseUrl = 'https://efm-api-staging-330149-5-1495246258.sh.run.tcloudbase.com/v1'
 
 export const localWechatLoginCode = /^http:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\//.test(apiBaseUrl)
   // Deliberately does not use the API's test-code-* identity namespace. The local
