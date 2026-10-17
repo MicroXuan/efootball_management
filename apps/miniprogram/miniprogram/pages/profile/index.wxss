@@ -48,7 +48,6 @@ page { background: #0e1417; color: #f4f7f8; }
 .quick-actions__grid { margin-top:24rpx; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12rpx; }
 .quick-action { position:relative;min-width:0; min-height:154rpx; padding:18rpx 14rpx; box-sizing:border-box; display:flex; flex-direction:column; border:2rpx solid #2c3a40; border-radius:16rpx; background:#10181c; }
 .quick-action__badge { position:absolute;top:12rpx;right:12rpx;min-width:30rpx;height:30rpx;padding:0 7rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:15rpx;background:#ffba52;color:#171d1f;font-size:15rpx;font-weight:900; }
-.quick-action:first-child { border-color:#668b26; background:linear-gradient(150deg,rgba(182,241,58,.13),rgba(16,24,28,.96) 68%); }
 .quick-action__marker { width:42rpx; height:42rpx; display:flex; align-items:center; justify-content:center; border-radius:10rpx; background:#263238; color:#b6f13a; font-size:20rpx; font-weight:900; }
 .quick-action__title { margin-top:18rpx; overflow:hidden; color:#f4f7f8; font-size:23rpx; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
 .quick-action__detail { margin-top:7rpx; overflow:hidden; color:#8f9ca2; font-size:17rpx; text-overflow:ellipsis; white-space:nowrap; }

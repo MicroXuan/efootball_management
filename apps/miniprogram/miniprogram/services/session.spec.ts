@@ -2,18 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, ApiError } from './api'
 import { session } from './session'
 
-type RequestOptions = WechatMiniprogram.RequestOption
+type ContainerOptions = { path: string }
 
 describe('mini-program session and API client', () => {
   const storage = new Map<string, unknown>()
+  const callContainer = vi.fn()
 
   beforeEach(() => {
     storage.clear()
+    callContainer.mockReset()
     ;(globalThis as typeof globalThis & { wx: WechatMiniprogram.Wx }).wx = {
       getStorageSync: vi.fn((key: string) => storage.get(key)),
       setStorageSync: vi.fn((key: string, value: unknown) => storage.set(key, value)),
       removeStorageSync: vi.fn((key: string) => storage.delete(key)),
-      request: vi.fn(),
+      cloud: { callContainer },
       reLaunch: vi.fn(),
     } as unknown as WechatMiniprogram.Wx
   })
@@ -39,10 +41,10 @@ describe('mini-program session and API client', () => {
     })
     let protectedCalls = 0
     let refreshCalls = 0
-    vi.mocked(wx.request).mockImplementation(((options: RequestOptions) => {
-      if (String(options.url).endsWith('/auth/refresh')) {
+    callContainer.mockImplementation(async (options: ContainerOptions) => {
+      if (options.path.endsWith('/auth/refresh')) {
         refreshCalls += 1
-        queueMicrotask(() => options.success?.({
+        return {
           statusCode: 200,
           data: {
             accessToken: 'new-access',
@@ -50,27 +52,17 @@ describe('mini-program session and API client', () => {
             refreshToken: 'refresh-2',
             refreshExpiresInSeconds: 2_592_000,
           },
-          header: {},
-          cookies: [],
-          errMsg: 'request:ok',
-          profile: {} as WechatMiniprogram.RequestProfile,
-        }))
-      } else {
-        protectedCalls += 1
-        const expired = protectedCalls <= 2
-        queueMicrotask(() => options.success?.({
-          statusCode: expired ? 401 : 200,
-          data: expired
-            ? { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'expired', requestId: 'r1' } }
-            : { ok: true },
-          header: {},
-          cookies: [],
-          errMsg: 'request:ok',
-          profile: {} as WechatMiniprogram.RequestProfile,
-        }))
+        }
       }
-      return {} as WechatMiniprogram.RequestTask
-    }) as typeof wx.request)
+      protectedCalls += 1
+      const expired = protectedCalls <= 2
+      return {
+        statusCode: expired ? 401 : 200,
+        data: expired
+          ? { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'expired', requestId: 'r1' } }
+          : { ok: true },
+      }
+    })
 
     const [first, second] = await Promise.all([
       api.request<{ ok: boolean }>({ path: '/me' }),
@@ -91,18 +83,13 @@ describe('mini-program session and API client', () => {
       refreshToken: 'refresh-1',
       refreshExpiresInSeconds: 2_592_000,
     })
-    vi.mocked(wx.request).mockImplementation(((options: RequestOptions) => {
-      const isRefresh = String(options.url).endsWith('/auth/refresh')
-      queueMicrotask(() => options.success?.({
+    callContainer.mockImplementation(async (options: ContainerOptions) => {
+      const isRefresh = options.path.endsWith('/auth/refresh')
+      return {
         statusCode: 401,
         data: { error: { code: isRefresh ? 'AUTH_REFRESH_INVALID' : 'AUTH_TOKEN_EXPIRED', message: 'unauthorized', requestId: 'r2' } },
-        header: {},
-        cookies: [],
-        errMsg: 'request:ok',
-        profile: {} as WechatMiniprogram.RequestProfile,
-      }))
-      return {} as WechatMiniprogram.RequestTask
-    }) as typeof wx.request)
+      }
+    })
 
     await expect(api.request({ path: '/me' })).rejects.toBeInstanceOf(ApiError)
     expect(session.getAccessToken()).toBeUndefined()
@@ -110,22 +97,17 @@ describe('mini-program session and API client', () => {
   })
 
   it('does not refresh or redirect when a public request returns 401', async () => {
-    vi.mocked(wx.request).mockImplementation(((options: RequestOptions) => {
-      queueMicrotask(() => options.success?.({
+    callContainer.mockImplementation(async () => {
+      return {
         statusCode: 401,
         data: { error: { code: 'AUTH_REQUIRED', message: 'unexpected auth', requestId: 'public-1' } },
-        header: {},
-        cookies: [],
-        errMsg: 'request:ok',
-        profile: {} as WechatMiniprogram.RequestProfile,
-      }))
-      return {} as WechatMiniprogram.RequestTask
-    }) as typeof wx.request)
+      }
+    })
 
     await expect(api.request({ path: '/players', skipAuth: true })).rejects.toMatchObject({
       code: 'AUTH_REQUIRED',
     })
-    expect(wx.request).toHaveBeenCalledTimes(1)
+    expect(callContainer).toHaveBeenCalledTimes(1)
     expect(wx.reLaunch).not.toHaveBeenCalled()
   })
 })

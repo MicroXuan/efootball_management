@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AdminAuthResponse } from '@efm/contracts';
-import { AdminApiClient, ApiError } from './api';
+import { AdminApiClient, ApiError, createAdminApiClient } from './api';
 
 const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -28,6 +28,18 @@ const auth = (accessToken: string, refreshToken: string): AdminAuthResponse => (
 
 describe('AdminApiClient', () => {
   beforeEach(() => sessionStorage.clear());
+
+  it('sends production requests to the configured remote API origin', async () => {
+    const fetcher = vi.fn().mockResolvedValue(ok({ ok: true }));
+    const client = createAdminApiClient('https://efm-api-staging.example.com/', fetcher);
+
+    await client.request('/v1/health', { schema: z.object({ ok: z.literal(true) }) });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://efm-api-staging.example.com/v1/health',
+      expect.any(Object)
+    );
+  });
 
   it('refreshes once after 401 and retries with the rotated in-memory access token', async () => {
     sessionStorage.setItem('efm.admin.refresh', 'r'.repeat(32));

@@ -5,8 +5,9 @@ import { configuration } from './config/configuration.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
-  configureApplication(app);
-  await app.listen(configuration().app.port, '0.0.0.0');
+  const config = configuration();
+  configureApplication(app, { adminWebOrigins: config.app.adminWebOrigins });
+  await app.listen(config.app.port, '0.0.0.0');
 }
 
 void bootstrap();

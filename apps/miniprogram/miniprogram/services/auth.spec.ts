@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthTokenResponse } from '@efm/contracts'
 import { auth, resolveWechatLoginCode } from './auth'
 import { api } from './api'
 import { session } from './session'
@@ -18,27 +17,18 @@ describe('mini-program WeChat login', () => {
     expect(() => resolveWechatLoginCode({ errMsg: 'login:ok' })).toThrow('微信未返回登录凭证')
   })
 
-  it('defers to the server-configured development identity when DevTools omits the code', async () => {
-    const tokens: AuthTokenResponse = {
-      accessToken: 'access',
-      expiresInSeconds: 900,
-      refreshToken: 'refresh',
-      refreshExpiresInSeconds: 2_592_000,
-    }
+  it('rejects login when cloud mode does not receive a WeChat code', async () => {
     ;(globalThis as typeof globalThis & { wx: WechatMiniprogram.Wx }).wx = {
       login: vi.fn(({ success }: WechatMiniprogram.LoginOption) => {
         success?.({ errMsg: 'login:ok' } as WechatMiniprogram.LoginSuccessCallbackResult)
       }),
     } as unknown as WechatMiniprogram.Wx
-    vi.spyOn(api, 'request').mockResolvedValue(tokens)
+    const request = vi.spyOn(api, 'request')
     vi.spyOn(session, 'setTokens').mockImplementation(() => undefined)
 
-    await auth.login()
+    await expect(auth.login()).rejects.toThrow('微信未返回登录凭证')
 
-    expect(api.request).toHaveBeenCalledWith(expect.objectContaining({
-      path: '/auth/wechat',
-      data: { code: 'devtools-code-unavailable' },
-    }))
-    expect(session.setTokens).toHaveBeenCalledWith(tokens)
+    expect(request).not.toHaveBeenCalled()
+    expect(session.setTokens).not.toHaveBeenCalled()
   })
 })

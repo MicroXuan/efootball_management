@@ -11,17 +11,17 @@
 
   <loading-state wx:if="{{state === 'loading' && cards.length === 0}}" label="正在整理收藏球员" />
 
-  <view wx:elif="{{state === 'error'}}" class="state-card">
-    <text class="state-code">收藏读取失败</text>
-    <text class="state-title">{{errorCopy.title}}</text>
-    <text class="state-copy">{{errorMessage || errorCopy.detail}}</text>
+  <view wx:elif="{{state === 'error'}}" class="state-card efm-empty-state">
+    <text class="efm-empty-state__kicker">收藏读取失败</text>
+    <text class="efm-empty-state__title">{{errorCopy.title}}</text>
+    <text class="efm-empty-state__copy">{{errorMessage || errorCopy.detail}}</text>
     <button class="outline-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
 
-  <view wx:elif="{{cards.length === 0}}" class="state-card">
-    <text class="state-code">暂无收藏</text>
-    <text class="state-title">{{emptyCopy.title}}</text>
-    <text class="state-copy">{{emptyCopy.detail}}</text>
+  <view wx:elif="{{cards.length === 0}}" class="state-card efm-empty-state">
+    <text class="efm-empty-state__kicker">暂无收藏</text>
+    <text class="efm-empty-state__title">{{emptyCopy.title}}</text>
+    <text class="efm-empty-state__copy">{{emptyCopy.detail}}</text>
   </view>
 
   <view wx:else class="favorite-grid">

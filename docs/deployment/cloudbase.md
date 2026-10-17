@@ -94,3 +94,41 @@ CloudBase 的服务版本不可变。出现故障时：
 4. 若本次发布包含数据库迁移，优先采用向前兼容修复；不要直接手工回滚数据。确需数据库回档时，按 CloudBase 备份策略单独执行并评估数据丢失窗口。
 
 官方版本回退入口说明见[查看或删除版本](https://docs.cloudbase.net/run/deploy/managing/revisions)。
+
+## 7. 部署测试后台
+
+后台是 Vite 单页应用，使用 CloudBase 静态网站托管，不需要额外创建容器服务。
+
+1. 在 API 服务的新版本中设置后台允许来源：
+
+   ```dotenv
+   ADMIN_WEB_ORIGINS=https://cloud1-d0g1gwk2aefd9f1e8-1495246258.tcloudbaseapp.com
+   ```
+
+   环境变量属于具体服务版本，修改后必须部署新版本并把流量切换到该版本。
+
+2. 使用测试模式构建后台。`apps/admin-web/.env.staging` 只保存公开的 API 地址，不包含密钥：
+
+   ```bash
+   pnpm --filter @efm/admin-web build:staging
+   ```
+
+3. 上传构建产物：
+
+   ```bash
+   pnpm --package=@cloudbase/cli dlx tcb hosting deploy \
+     apps/admin-web/dist \
+     -e cloud1-d0g1gwk2aefd9f1e8 \
+     --verify --safe
+   ```
+
+4. 在静态网站托管设置中将错误页面配置为 `index.html`，保证直接刷新
+   `/platform/data-sync` 等 React Router 路由时仍返回应用入口。
+
+5. 打开测试后台并验证登录、令牌刷新、数据同步和批次发布：
+
+   ```text
+   https://cloud1-d0g1gwk2aefd9f1e8-1495246258.tcloudbaseapp.com
+   ```
+
+测试后台与微信小程序必须访问同一个 `efm-api-staging`，禁止使用本地后台发布云端数据。

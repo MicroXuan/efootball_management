@@ -22,10 +22,15 @@ import { PublicMediaController } from './public-media.controller.js';
           config.getOrThrow<string>('storage.publicApiBaseUrl')
         );
       }
+      const accessKey = config.get<string>('storage.cloudbase.accessKey');
       const client = cloudbase.init({
         env: config.getOrThrow<string>('storage.cloudbase.environmentId'),
-        secretId: config.getOrThrow<string>('storage.cloudbase.secretId'),
-        secretKey: config.getOrThrow<string>('storage.cloudbase.secretKey')
+        ...(accessKey
+          ? { accessKey }
+          : {
+              secretId: config.getOrThrow<string>('storage.cloudbase.secretId'),
+              secretKey: config.getOrThrow<string>('storage.cloudbase.secretKey')
+            })
       }) as CloudBaseStorageClient;
       return new CloudBaseObjectStorage(client);
     }

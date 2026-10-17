@@ -2,14 +2,41 @@ import { jest } from '@jest/globals';
 import { PlatformPresentationService } from './platform-presentation.service.js';
 
 describe('PlatformPresentationService', () => {
+  it('resolves a stored CloudBase banner id to a browser-readable HTTPS URL', async () => {
+    const cloudFileId = 'cloud://env/banners--opaque.webp';
+    const prisma = {
+      platformPresentation: { findUnique: jest.fn(async () => ({
+        leagueCenterBannerUrl: cloudFileId,
+        version: 2,
+      })) },
+    };
+    const storage = {
+      temporaryReadUrl: jest.fn(async () => 'https://cos.example/banner.webp?signature=temporary'),
+    };
+    const ServiceWithStorage = PlatformPresentationService as unknown as new (
+      prisma: unknown,
+      audit: unknown,
+      storage: { temporaryReadUrl: (key: string, maxAgeSeconds: number) => Promise<string> },
+    ) => PlatformPresentationService;
+    const service = new ServiceWithStorage(prisma, {}, storage);
+
+    await expect(service.get()).resolves.toEqual({
+      leagueCenterBannerUrl: 'https://cos.example/banner.webp?signature=temporary',
+      leagueCenterBannerCloudFileId: cloudFileId,
+      version: 2,
+    });
+    expect(storage.temporaryReadUrl).toHaveBeenCalledWith(cloudFileId, 3600);
+  });
+
   it('returns a stable empty presentation before the first banner is configured', async () => {
     const prisma = {
       platformPresentation: { findUnique: jest.fn(async () => null) },
     };
-    const service = new PlatformPresentationService(prisma as never, {} as never);
+    const service = new PlatformPresentationService(prisma as never, {} as never, {} as never);
 
     await expect(service.get()).resolves.toEqual({
       leagueCenterBannerUrl: null,
+      leagueCenterBannerCloudFileId: null,
       version: 0,
     });
   });
@@ -40,13 +67,14 @@ describe('PlatformPresentationService', () => {
         });
       }),
     };
-    const service = new PlatformPresentationService(prisma as never, audit as never);
+    const service = new PlatformPresentationService(prisma as never, audit as never, {} as never);
 
     await expect(service.update('admin-1', {
       leagueCenterBannerUrl: 'https://media.example.com/banner.webp',
       expectedVersion: 0,
     })).resolves.toEqual({
       leagueCenterBannerUrl: 'https://media.example.com/banner.webp',
+      leagueCenterBannerCloudFileId: null,
       version: 1,
     });
     expect(transaction.platformPresentation.create).toHaveBeenCalledWith({
@@ -71,7 +99,7 @@ describe('PlatformPresentationService', () => {
     const prisma = {
       $transaction: jest.fn(async (work: (client: typeof transaction) => Promise<unknown>) => work(transaction)),
     };
-    const service = new PlatformPresentationService(prisma as never, {} as never);
+    const service = new PlatformPresentationService(prisma as never, {} as never, {} as never);
 
     await expect(service.update('admin-1', {
       leagueCenterBannerUrl: 'https://media.example.com/stale.webp',

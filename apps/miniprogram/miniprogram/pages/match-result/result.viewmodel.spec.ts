@@ -45,7 +45,8 @@ describe('match result view model', () => {
   })
 
   it('keeps the submitted score visible while the submitter waits', () => {
-    expect(resultView(item('WAIT'), null)).toMatchObject({ state: 'WAIT_CONFIRM', scoreCopy: '2 : 1' })
+    expect(resultView(item('WAIT'), null, Date.parse('2026-10-16T12:00:00.000Z')))
+      .toMatchObject({ state: 'WAIT_CONFIRM', scoreCopy: '2 : 1' })
   })
 
   it('shows only presence for each role during evidence collection', () => {

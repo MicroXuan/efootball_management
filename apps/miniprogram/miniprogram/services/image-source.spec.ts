@@ -48,8 +48,28 @@ describe('cacheImageSource', () => {
       options.success({ statusCode: 200, tempFilePath: 'wxfile://tmp/banner.webp' })
     })
 
-    await expect(cacheImageSource('https://media.example/banner.webp', download)).resolves.toBe(
+    await expect(cacheImageSource('https://media.example/banner.webp', {
+      downloadHttp: download,
+      downloadCloud: vi.fn(),
+    })).resolves.toBe(
       'wxfile://tmp/banner.webp',
     )
+  })
+
+  it('downloads CloudBase file IDs without relying on a configured HTTPS download domain', async () => {
+    const downloadCloud = vi.fn((options: {
+      fileID: string
+      success: (result: { statusCode: number; tempFilePath: string }) => void
+    }) => {
+      options.success({ statusCode: 200, tempFilePath: 'wxfile://tmp/cloud-banner.webp' })
+    })
+
+    await expect(cacheImageSource('cloud://production/banner.webp', {
+      downloadHttp: vi.fn(),
+      downloadCloud,
+    })).resolves.toBe('wxfile://tmp/cloud-banner.webp')
+    expect(downloadCloud).toHaveBeenCalledWith(expect.objectContaining({
+      fileID: 'cloud://production/banner.webp',
+    }))
   })
 })

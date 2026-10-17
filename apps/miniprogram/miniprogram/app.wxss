@@ -107,6 +107,40 @@ button::after {
   box-shadow: var(--efm-shadow-card);
 }
 
+.efm-empty-state {
+  min-height: 260rpx;
+  margin-top: 28rpx;
+  padding: 30rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.efm-empty-state__kicker {
+  display: block;
+  color: var(--efm-text-secondary);
+  font-size: 17rpx;
+  font-weight: 750;
+  letter-spacing: 4rpx;
+}
+
+.efm-empty-state__title {
+  display: block;
+  margin-top: 18rpx;
+  color: var(--efm-text);
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.efm-empty-state__copy {
+  display: block;
+  margin-top: 14rpx;
+  color: var(--efm-text-secondary);
+  font-size: 22rpx;
+  line-height: 1.65;
+}
+
 .primary-button,
 .action-button,
 .retry-button,

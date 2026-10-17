@@ -1,8 +1,15 @@
 import { z } from 'zod';
 
+const AdminWebOriginsSchema = z.string().optional()
+  .transform((value) => value
+    ? value.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : [])
+  .pipe(z.array(z.url()).transform((origins) => origins.map((origin) => new URL(origin).origin)));
+
 export const EnvironmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3_000),
+  ADMIN_WEB_ORIGINS: AdminWebOriginsSchema,
   DATABASE_URL: z.string().startsWith('mysql://'),
   JWT_ACCESS_SECRET: z.string().min(32),
   REFRESH_TOKEN_PEPPER: z.string().min(32),
@@ -21,6 +28,7 @@ export const EnvironmentSchema = z.object({
   LOCAL_STORAGE_DIR: z.string().trim().min(1).default('.data/uploads'),
   PUBLIC_API_BASE_URL: z.url().default('http://127.0.0.1:3000'),
   CLOUDBASE_ENV_ID: z.string().trim().min(1).optional(),
+  CLOUDBASE_APIKEY: z.string().trim().min(1).optional(),
   CLOUDBASE_SECRET_ID: z.string().trim().min(1).optional(),
   CLOUDBASE_SECRET_KEY: z.string().trim().min(1).optional(),
   WECHAT_BOT_OUTBOX_LEASE_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
@@ -29,14 +37,19 @@ export const EnvironmentSchema = z.object({
   WECHAT_BOT_COMMAND_RETENTION_HOURS: z.coerce.number().int().min(1).max(720).default(24)
 }).passthrough().superRefine((environment, context) => {
   if (environment.STORAGE_PROVIDER !== 'cloudbase') return;
-  for (const field of ['CLOUDBASE_ENV_ID', 'CLOUDBASE_SECRET_ID', 'CLOUDBASE_SECRET_KEY'] as const) {
-    if (!environment[field]) {
-      context.addIssue({
-        code: 'custom',
-        path: [field],
-        message: `${field} is required when STORAGE_PROVIDER=cloudbase`
-      });
-    }
+  if (!environment.CLOUDBASE_ENV_ID) {
+    context.addIssue({
+      code: 'custom',
+      path: ['CLOUDBASE_ENV_ID'],
+      message: 'CLOUDBASE_ENV_ID is required when STORAGE_PROVIDER=cloudbase'
+    });
+  }
+  if (!environment.CLOUDBASE_APIKEY && (!environment.CLOUDBASE_SECRET_ID || !environment.CLOUDBASE_SECRET_KEY)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['CLOUDBASE_APIKEY'],
+      message: 'CLOUDBASE_APIKEY or a complete CLOUDBASE_SECRET_ID/CLOUDBASE_SECRET_KEY pair is required when STORAGE_PROVIDER=cloudbase'
+    });
   }
 });
 

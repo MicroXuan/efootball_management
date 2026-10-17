@@ -1,5 +1,6 @@
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '../src/generated/prisma/client.js';
+import { SEED_TRANSACTION_OPTIONS } from './seed.config.js';
 
 const url = new URL(process.env.DATABASE_URL ?? '');
 const adapter = new PrismaMariaDb({
@@ -602,6 +603,6 @@ await prisma.$transaction(async (transaction) => {
       });
     }
   }
-});
+}, SEED_TRANSACTION_OPTIONS);
 
 await prisma.$disconnect();

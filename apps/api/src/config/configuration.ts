@@ -7,7 +7,8 @@ export function configuration() {
   return {
     app: {
       environment: environment.NODE_ENV,
-      port: environment.PORT
+      port: environment.PORT,
+      adminWebOrigins: environment.ADMIN_WEB_ORIGINS
     },
     wechat: {
       gatewayMode: environment.WECHAT_GATEWAY_MODE,
@@ -34,6 +35,7 @@ export function configuration() {
       publicApiBaseUrl: environment.PUBLIC_API_BASE_URL,
       cloudbase: {
         environmentId: environment.CLOUDBASE_ENV_ID,
+        accessKey: environment.CLOUDBASE_APIKEY,
         secretId: environment.CLOUDBASE_SECRET_ID,
         secretKey: environment.CLOUDBASE_SECRET_KEY
       }

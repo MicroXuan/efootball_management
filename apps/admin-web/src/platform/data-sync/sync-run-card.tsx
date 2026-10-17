@@ -42,7 +42,13 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
       <div><span className="section-kicker">PESDATA · {dataName}</span><h2>当前同步任务</h2><p>检查 PESDATA 的{dataName}变化，确认后再进入正式目录。</p></div>
       {run ? <Tag color={statusCopy[run.status].color}>{statusCopy[run.status].label}</Tag> : <Tag>当前无任务</Tag>}
     </div>
-    <div className="sync-run-card__pulse" aria-hidden="true"><span /><span /><span /><span /></div>
+    <div
+      className="sync-run-card__pulse"
+      role={active ? 'progressbar' : undefined}
+      aria-label={active ? `${dataName}同步进度` : undefined}
+      aria-valuetext={active && run ? `已处理 ${run.counters.scanned} 条，失败 ${run.counters.failed} 条` : undefined}
+      aria-hidden={active ? undefined : true}
+    ><span /><span /><span /><span /></div>
     <dl className="sync-run-card__metrics">
       <div><dt>{metricLabels.pending}</dt><dd>{pendingReview}</dd></div>
       <div><dt>{metricLabels.failed}</dt><dd>{failedReview}</dd></div>
@@ -51,7 +57,8 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
     </dl>
     {run ? <div className="sync-run-card__status">
       <span>当前进度</span><strong>{phase}</strong>
-      {run.errorMessage ? <small>{run.errorMessage}</small> : null}
+      {active ? <small className="sync-run-card__live-count">已处理 {run.counters.scanned} 条 · 失败 {run.counters.failed} 条</small> : null}
+      {run.errorMessage ? <small className="sync-run-card__error">{run.errorMessage}</small> : null}
     </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“更新变化数据”；首次验证数据可使用“抽样检查”。</span></p>}
     <Space wrap className="sync-run-card__actions">
       <Button disabled={active || busy} onClick={() => void onStart('sample')}>抽样检查</Button>

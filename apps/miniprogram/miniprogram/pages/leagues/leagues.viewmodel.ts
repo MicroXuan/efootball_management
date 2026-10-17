@@ -11,6 +11,9 @@ export type LeagueListTab = 'all' | 'mine'
 export function leagueBannerView(presentation: PlatformPresentation) {
   return {
     imageUrl: presentation.leagueCenterBannerUrl ?? '',
+    cacheSource: presentation.leagueCenterBannerCloudFileId
+      ?? presentation.leagueCenterBannerUrl
+      ?? '',
     hasImage: Boolean(presentation.leagueCenterBannerUrl),
   }
 }

@@ -6,7 +6,7 @@ describe('mini-program startup boundary', () => {
     vi.resetModules()
   })
 
-  it('starts without initializing an unused WeChat cloud environment', async () => {
+  it('initializes the staging WeChat cloud environment once on launch', async () => {
     let appOptions: { onLaunch?: () => void } | undefined
     const cloudInit = vi.fn()
     vi.stubGlobal('App', (options: { onLaunch?: () => void }) => { appOptions = options })
@@ -15,6 +15,7 @@ describe('mini-program startup boundary', () => {
     await import('../app')
     appOptions?.onLaunch?.()
 
-    expect(cloudInit).not.toHaveBeenCalled()
+    expect(cloudInit).toHaveBeenCalledOnce()
+    expect(cloudInit).toHaveBeenCalledWith({ env: 'cloud1-d0g1gwk2aefd9f1e8' })
   })
 })
