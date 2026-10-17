@@ -52,6 +52,34 @@ describe('DataSyncPage', () => {
     expect(await screen.findByRole('tab', { name: /球队队壳/ })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('keeps the browser sample small enough for an atomic cloud publication', async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === '/v1/admin/data-sync/overview') return overview;
+      if (path === '/v1/admin/data-sync/players/runs') return {
+        runId: '11111111-1111-4111-8111-111111111111', status: 'PENDING'
+      };
+      if (path.includes('/runs?')) return {
+        items: [], page: 1, pageSize: 20, total: 0,
+        summary: { pending: 0, running: 0, ready: 0, paused: 0, failed: 0 }
+      };
+      if (path.includes('/batches?')) return {
+        items: [], page: 1, pageSize: 20, total: 0,
+        summary: { uploaded: 0, validated: 0, ready: 0, published: 0, failed: 0, cancelled: 0 }
+      };
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    render(<MemoryRouter initialEntries={['/platform/data-sync']}>
+      <DataSyncPage api={{ request } as unknown as AdminApi} />
+    </MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '抽样检查' }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      '/v1/admin/data-sync/players/runs',
+      expect.objectContaining({ method: 'POST', body: { mode: 'sample', limit: 10 } })
+    ));
+  });
+
   it('resumes the exact interrupted run selected from history', async () => {
     const runId = '11111111-1111-4111-8111-111111111111';
     const failedRun = {

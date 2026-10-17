@@ -48,7 +48,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
     setMutating(true); setError(null);
     try {
       await api.request(`/v1/admin/data-sync/${activeTab}/runs`, {
-        method: 'POST', body: { mode, ...(mode === 'sample' ? { limit: 100 } : {}) }, schema: QueuedSyncRunSchema
+        method: 'POST', body: { mode, ...(mode === 'sample' ? { limit: 10 } : {}) }, schema: QueuedSyncRunSchema
       });
       await refreshAfterMutation();
     } catch { setError('同步任务启动失败，请确认没有同类任务正在执行'); }
