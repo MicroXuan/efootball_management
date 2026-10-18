@@ -41,6 +41,46 @@ describe('resolveImageSource', () => {
 })
 
 describe('cacheImageSource', () => {
+  it('reuses the downloaded temporary file for the same banner during one app session', async () => {
+    let downloads = 0
+    const download = (options: {
+      success: (result: { statusCode: number; tempFilePath: string }) => void
+    }) => {
+      downloads += 1
+      options.success({ statusCode: 200, tempFilePath: 'wxfile://tmp/session-banner.webp' })
+    }
+
+    const first = await cacheImageSource('https://media.example/session-banner.webp', {
+      downloadHttp: download,
+      downloadCloud: vi.fn(),
+    })
+    const second = await cacheImageSource('https://media.example/session-banner.webp', {
+      downloadHttp: download,
+      downloadCloud: vi.fn(),
+    })
+
+    expect(first).toBe('wxfile://tmp/session-banner.webp')
+    expect(second).toBe('wxfile://tmp/session-banner.webp')
+    expect(downloads).toBe(1)
+  })
+
+  it('downloads the banner again when its cache identity changes', async () => {
+    let downloads = 0
+    const download = (options: {
+      success: (result: { statusCode: number; tempFilePath: string }) => void
+    }) => {
+      downloads += 1
+      options.success({ statusCode: 200, tempFilePath: `wxfile://tmp/banner-${downloads}.webp` })
+    }
+    const source = 'https://media.example/versioned-banner.webp'
+    const clients = { downloadHttp: download, downloadCloud: vi.fn() }
+
+    await expect(cacheImageSource(source, clients, `${source}:1`)).resolves.toBe('wxfile://tmp/banner-1.webp')
+    await expect(cacheImageSource(source, clients, `${source}:1`)).resolves.toBe('wxfile://tmp/banner-1.webp')
+    await expect(cacheImageSource(source, clients, `${source}:2`)).resolves.toBe('wxfile://tmp/banner-2.webp')
+    expect(downloads).toBe(2)
+  })
+
   it('downloads HTTPS images before exposing them as CSS backgrounds', async () => {
     const download = vi.fn((options: {
       success: (result: { statusCode: number; tempFilePath: string }) => void

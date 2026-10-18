@@ -15,6 +15,8 @@ type ImageDownloads = {
   downloadCloud: CloudImageDownload
 }
 
+const cachedImageSources = new Map<string, Promise<string>>()
+
 export function resolveImageSource(url: string, download: ImageDownload): Promise<string> {
   if (!url.startsWith('http://')) return Promise.resolve(url)
 
@@ -33,11 +35,18 @@ export function resolveImageSource(url: string, download: ImageDownload): Promis
   })
 }
 
-export function cacheImageSource(source: string, downloads: ImageDownloads): Promise<string> {
+export function cacheImageSource(
+  source: string,
+  downloads: ImageDownloads,
+  cacheIdentity = source,
+): Promise<string> {
   const isCloudFile = source.startsWith('cloud://')
   if (!isCloudFile && !/^https?:\/\//.test(source)) return Promise.resolve(source)
 
-  return new Promise((resolve, reject) => {
+  const cached = cachedImageSources.get(cacheIdentity)
+  if (cached) return cached
+
+  const pending = new Promise<string>((resolve, reject) => {
     const callbacks = {
       success: (result) => {
         if (result.statusCode === 200 && result.tempFilePath) {
@@ -54,4 +63,9 @@ export function cacheImageSource(source: string, downloads: ImageDownloads): Pro
       downloads.downloadHttp({ url: source, ...callbacks })
     }
   })
+  cachedImageSources.set(cacheIdentity, pending)
+  void pending.catch(() => {
+    if (cachedImageSources.get(cacheIdentity) === pending) cachedImageSources.delete(cacheIdentity)
+  })
+  return pending
 }

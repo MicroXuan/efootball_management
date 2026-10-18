@@ -77,9 +77,10 @@ Page({
             downloadHttp: (options) => wx.downloadFile(options),
             downloadCloud: (options) => wx.cloud.downloadFile(options),
           },
+          `${banner.cacheSource}:${presentation.version}`,
         ).catch(() => '')
         if (preloadedSource) {
-          bannerDisplayUrl = banner.imageUrl
+          bannerDisplayUrl = preloadedSource
           bannerMode = 'image'
         } else if (!bannerDisplayUrl) {
           bannerMode = 'fallback'
