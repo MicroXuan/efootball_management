@@ -216,7 +216,14 @@ export class PesdataSyncService {
       });
       if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
       const updated = await tx.externalSyncRun.updateMany({
-        where: { id: runId, status: 'PAUSED', activeLeaseKey: 'pesdata', leaseOwnerToken: null },
+        where: {
+          id: runId,
+          leaseOwnerToken: null,
+          OR: [
+            { status: 'PAUSED', activeLeaseKey: 'pesdata' },
+            { status: 'FAILED', activeLeaseKey: null }
+          ]
+        },
         data: {
           status: 'CANCELLED',
           activeLeaseKey: null,
@@ -245,7 +252,7 @@ export class PesdataSyncService {
       return 1;
     });
     if (changed !== 1) {
-      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only a paused synchronization run can be cancelled');
+      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only a paused or failed inactive synchronization run can be cancelled');
     }
     return { runId, status: 'CANCELLED' };
   }
@@ -598,10 +605,14 @@ export class PesdataSyncService {
         seenExternalIds.add(externalId);
         counters.scannedCount += 1;
         try {
-          const prior = state.mode === 'incremental' && state.runId
+          const prior = (state.mode === 'incremental' || state.mode === 'sample') && state.runId
             ? await this.latestSuccessfulItem(state.runId, externalId)
             : null;
-          if (prior?.summaryChecksum === summaryChecksum && prior.normalizedJson && state.runId) {
+          if (state.mode === 'sample' && prior?.normalizedJson && state.runId) {
+            const row = prior.normalizedJson as RawImportRow;
+            counters.skippedCount += 1;
+            await this.persistSkippedItem(state.runId, externalId, summaryChecksum, prior, row, state.leaseOwnerToken);
+          } else if (prior?.summaryChecksum === summaryChecksum && prior.normalizedJson && state.runId) {
             const row = prior.normalizedJson as RawImportRow;
             rows.push(row);
             counters.skippedCount += 1;

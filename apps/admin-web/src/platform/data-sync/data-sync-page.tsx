@@ -22,6 +22,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
   const [overview, setOverview] = useState<PlatformDataSyncOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
+  const [sampleLimit, setSampleLimit] = useState<10 | 100 | 500>(100);
   const [error, setError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
@@ -49,7 +50,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
     setMutating(true); setError(null);
     try {
       await api.request(`/v1/admin/data-sync/${activeTab}/runs`, {
-        method: 'POST', body: { mode, ...(mode === 'sample' ? { limit: 10 } : {}) }, schema: QueuedSyncRunSchema
+        method: 'POST', body: { mode, ...(mode === 'sample' ? { limit: sampleLimit } : {}) }, schema: QueuedSyncRunSchema
       });
       await refreshAfterMutation();
     } catch { setError('同步任务启动失败，请确认没有同类任务正在执行'); }
@@ -86,13 +87,15 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       failedReview={section.failedReview}
       published={section.published}
       busy={mutating}
+      sampleLimit={sampleLimit}
+      onSampleLimitChange={setSampleLimit}
       onStart={start}
       onPause={() => section.activeRun ? control(section.activeRun.id, 'pause') : Promise.resolve()}
       onResume={() => section.activeRun ? resume(section.activeRun.id) : Promise.resolve()}
       onCancel={() => section.activeRun ? control(section.activeRun.id, 'cancel') : Promise.resolve()}
     /> : null}
-    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
-    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
+    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} onCancelRun={(runId) => control(runId, 'cancel')} refreshKey={refreshKey} /> : null}
+    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} onCancelRun={(runId) => control(runId, 'cancel')} refreshKey={refreshKey} /> : null}
   </>;
 
   return <div className="data-sync-page">

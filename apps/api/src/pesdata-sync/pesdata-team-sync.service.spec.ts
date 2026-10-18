@@ -163,6 +163,45 @@ describe('PesdataTeamSyncService', () => {
     await expect(prisma.teamCatalogSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(0);
   });
 
+  it('cancels a failed resumable team-shell run so it cannot be resumed again', async () => {
+    const admin = await actor();
+    const sync = new PesdataTeamSyncService(prisma, { listTeams: async () => ({ list: [], count: 0 }) } as never, {} as never);
+    const queued = await sync.createPlatformRun(admin.id, { mode: 'incremental' });
+    await prisma.teamCatalogSyncRun.update({ where: { id: queued.runId }, data: {
+      status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null, currentPhase: 'INTERRUPTED'
+    } });
+
+    await expect(sync.cancelPlatformRun(admin.id, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'CANCELLED'
+    });
+    await expect(sync.resumePlatformRun(admin.id, queued.runId))
+      .rejects.toMatchObject({ code: 'PESDATA_TEAM_SYNC_CONFLICT' });
+  });
+
+  it('skips catalog teams already stored in the database during a sample', async () => {
+    const admin = await actor();
+    const sourceExternalId = `sample-existing-${randomUUID()}`;
+    const existing = await prisma.teamCatalogItem.create({ data: {
+      sourceType: 'PESDATA', sourceExternalId, sourceLeagueName: '测试联赛', nameZh: '已有球队', shortName: '已有'
+    } });
+    catalogIds.push(existing.id);
+    const detailIds: string[] = [];
+    const client = {
+      listTeams: async () => ({ list: [{
+        teamId: sourceExternalId, leagueId: 'league', leagueName: '测试联赛', nameZh: '已有球队',
+        nameEn: null, nameJa: null, shortName: null, teamLogo: null, updatedAt: null
+      }], count: 1 }),
+      getTeamDetail: async (id: string) => { detailIds.push(id); throw new Error('existing team should not be fetched'); }
+    };
+    const result = await new PesdataTeamSyncService(prisma, client as never, {} as never, { pageSize: 10 })
+      .start(admin.id, { mode: 'sample', limit: 1 });
+
+    expect(detailIds).toEqual([]);
+    expect(result).toMatchObject({ scannedCount: 1, skippedCount: 1, addedCount: 0, updatedCount: 0 });
+    await expect(prisma.teamCatalogSyncItem.count({ where: { runId: result.runId } })).resolves.toBe(0);
+  });
+
   it('renews the team lease independently while an upstream request is still pending', async () => {
     const admin = await actor();
     let releaseRequest!: () => void;

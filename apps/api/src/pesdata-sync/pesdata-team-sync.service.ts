@@ -184,7 +184,14 @@ export class PesdataTeamSyncService {
       const exists = await tx.teamCatalogSyncRun.findUnique({ where: { id: runId }, select: { id: true } });
       if (!exists) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
       const updated = await tx.teamCatalogSyncRun.updateMany({
-        where: { id: runId, status: 'PAUSED', activeLeaseKey: 'pesdata-team-catalog', leaseOwnerToken: null },
+        where: {
+          id: runId,
+          leaseOwnerToken: null,
+          OR: [
+            { status: 'PAUSED', activeLeaseKey: 'pesdata-team-catalog' },
+            { status: 'FAILED', activeLeaseKey: null }
+          ]
+        },
         data: {
           status: 'CANCELLED',
           activeLeaseKey: null,
@@ -206,7 +213,7 @@ export class PesdataTeamSyncService {
       return 1;
     });
     if (changed !== 1) {
-      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a paused team synchronization run can be cancelled');
+      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a paused or failed inactive team synchronization run can be cancelled');
     }
     return { runId, status: 'CANCELLED' };
   }
@@ -338,6 +345,15 @@ export class PesdataTeamSyncService {
         scannedCount += 1;
         const summaryChecksum = pesdataValueChecksum(summary);
         try {
+          const current = await this.prisma.teamCatalogItem.findUnique({
+            where: { sourceType_sourceExternalId: { sourceType: 'PESDATA', sourceExternalId: externalId } }
+          });
+          if (mode === 'sample' && current) {
+            skippedCount += 1;
+            processed.add(externalId);
+            if (leaseOwnerToken) await this.touchLease(runId, leaseOwnerToken);
+            continue;
+          }
           const detail = await this.client.getTeamDetail(externalId);
           assertLeaseHealthy?.();
           let candidate = mapPesdataTeam({
@@ -351,9 +367,6 @@ export class PesdataTeamSyncService {
             assertLeaseHealthy?.();
           }
           const detailChecksum = pesdataValueChecksum(candidate);
-          const current = await this.prisma.teamCatalogItem.findUnique({
-            where: { sourceType_sourceExternalId: { sourceType: 'PESDATA', sourceExternalId: externalId } }
-          });
           if (current?.sourceChecksum === detailChecksum && mode === 'incremental') {
             skippedCount += 1;
             processed.add(externalId);

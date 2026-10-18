@@ -28,7 +28,7 @@ const record = {
   validationErrors: [{ code: 'IMAGE_INVALID', path: 'imageUrl', message: '图片无效' }], targetPlayerId: null, targetCardId: null
 };
 
-function fixture({ publishFails = false, resumableRun = false, mode = 'INCREMENTAL' } = {}) {
+function fixture({ publishFails = false, resumableRun = false, resumableStatus = 'FAILED', mode = 'INCREMENTAL' } = {}) {
   const request = vi.fn(async (path: string) => {
     if (path.includes('/publish')) {
       if (publishFails) throw new ApiError({ status: 409, code: 'IMPORT_BATCH_NOT_READY' });
@@ -37,7 +37,7 @@ function fixture({ publishFails = false, resumableRun = false, mode = 'INCREMENT
     if (path.includes('/records')) return { items: [record], page: 1, pageSize: 20, total: 43000, summary: { create: 100, update: 20, unchanged: 42880, invalid: 0 } };
     if (path.includes('/batches')) return { items: [batch], page: path.includes('page=2') ? 2 : 1, pageSize: 20, total: 43000, summary: { uploaded: 0, validated: 0, ready: 1, published: 0, failed: 0, cancelled: 0 } };
     if (path.includes('/runs')) return {
-      items: [{ ...run, mode, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      items: [{ ...run, mode, status: resumableRun ? resumableStatus : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
       page: 1, pageSize: 20, total: 1,
       summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
     };
@@ -62,7 +62,7 @@ describe('PlayerSyncPanel', () => {
     const historyTitle = screen.getByText('历史同步记录');
     expect(reviewTitle.compareDocumentPosition(historyTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(historyTitle.closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByText(/当前显示.*增量更新任务/)).toBeInTheDocument();
+    expect(screen.getByText(/当前显示.*增量同步任务/)).toBeInTheDocument();
   });
 
   it('uses server pagination, default exception filters, and only 20/50 page sizes', async () => {
@@ -127,6 +127,17 @@ describe('PlayerSyncPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     await waitFor(() => expect(onResumeRun).toHaveBeenCalledWith(runId));
     await waitFor(() => expect(screen.getByText('继续任务').closest('button')).not.toHaveClass('ant-btn-loading'));
+  });
+
+  it('offers cancellation beside a resumable paused history item', async () => {
+    const { api } = fixture({ resumableRun: true, resumableStatus: 'PAUSED' });
+    const onCancelRun = vi.fn().mockResolvedValue(undefined);
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} onCancelRun={onCancelRun} />);
+
+    fireEvent.click(await screen.findByText('历史同步记录'));
+    fireEvent.click(await screen.findByRole('button', { name: '取消任务' }));
+    fireEvent.click(await screen.findByRole('button', { name: '确认取消' }));
+    await waitFor(() => expect(onCancelRun).toHaveBeenCalledWith(runId));
   });
 
   it('refreshes history and review batches when the overview run state changes', async () => {

@@ -1,4 +1,4 @@
-import { Button, Card, Popconfirm, Space, Tag } from 'antd';
+import { Button, Card, Popconfirm, Select, Space, Tag } from 'antd';
 import type { PlatformSyncMode, PlatformSyncRunSummary } from '@efm/contracts';
 
 const statusCopy: Record<PlatformSyncRunSummary['status'], { label: string; color: string }> = {
@@ -21,13 +21,15 @@ const phaseCopy: Record<string, { players: string; teams: string }> = {
   CANCELLED: { players: '任务已取消', teams: '任务已取消' }
 };
 
-export function SyncRunCard({ kind, run, pendingReview, failedReview, published, busy = false, onStart, onPause, onResume, onCancel }: {
+export function SyncRunCard({ kind, run, pendingReview, failedReview, published, busy = false, sampleLimit = 100, onSampleLimitChange = () => undefined, onStart, onPause, onResume, onCancel }: {
   kind: 'PLAYER_CARDS' | 'TEAM_SHELLS';
   run: PlatformSyncRunSummary | null;
   pendingReview: number;
   failedReview: number;
   published: number;
   busy?: boolean;
+  sampleLimit?: 10 | 100 | 500;
+  onSampleLimitChange?: (limit: 10 | 100 | 500) => void;
   onStart: (mode: Exclude<Lowercase<PlatformSyncMode>, 'resume'>) => Promise<void>;
   onPause: () => Promise<void>;
   onResume: () => Promise<void>;
@@ -66,10 +68,17 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
       <span>当前进度</span><strong>{phase}</strong>
       {active ? <small className="sync-run-card__live-count">已处理 {run.counters.scanned} 条 · 失败 {run.counters.failed} 条</small> : null}
       {run.errorMessage ? <small className="sync-run-card__error">{run.errorMessage}</small> : null}
-    </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“更新变化数据”；首次验证数据可使用“抽样同步”。</span></p>}
+    </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“增量同步”；首次验证数据可使用“抽样同步”。</span></p>}
     <Space wrap className="sync-run-card__actions">
+      <Select
+        aria-label="抽样数量"
+        value={sampleLimit}
+        disabled={blocked || busy}
+        onChange={(value) => onSampleLimitChange(value)}
+        options={[10, 100, 500].map((value) => ({ value, label: `${value} 条` }))}
+      />
       <Button disabled={blocked || busy} onClick={() => void onStart('sample')}>抽样同步</Button>
-      <Button type="primary" disabled={blocked || busy} loading={busy} onClick={() => void onStart('incremental')}>更新变化数据</Button>
+      <Button type="primary" disabled={blocked || busy} loading={busy} onClick={() => void onStart('incremental')}>增量同步</Button>
       <Popconfirm
         title="确认进行全量同步？"
         description="该操作耗时较长，并会产生更多等待确认的数据。"

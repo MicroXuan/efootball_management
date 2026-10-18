@@ -45,11 +45,11 @@ describe('SyncRunCard', () => {
 
     expect(screen.getByText('当前没有同步任务')).toBeInTheDocument();
     expect(screen.queryByText('尚未运行')).not.toBeInTheDocument();
-    expect(screen.getByText('日常更新请选择“更新变化数据”；首次验证数据可使用“抽样同步”。')).toBeInTheDocument();
+    expect(screen.getByText('日常更新请选择“增量同步”；首次验证数据可使用“抽样同步”。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '抽样同步' })).toBeInTheDocument();
     expect(screen.getByText('待确认队壳')).toBeInTheDocument();
     expect(screen.getByText('正式队壳')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '更新变化数据' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '增量同步' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '全量同步' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '重新检查全部' })).not.toBeInTheDocument();
   });
@@ -71,6 +71,6 @@ describe('SyncRunCard', () => {
     expect(screen.getByText('任务已暂停，可继续执行或取消')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '继续同步' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '更新变化数据' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '增量同步' })).toBeDisabled();
   });
 });

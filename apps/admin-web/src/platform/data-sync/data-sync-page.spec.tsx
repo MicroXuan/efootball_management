@@ -52,7 +52,7 @@ describe('DataSyncPage', () => {
     expect(await screen.findByRole('tab', { name: /球队队壳/ })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('keeps the browser sample small enough for an atomic cloud publication', async () => {
+  it('starts a 100-item sample by default and labels incremental synchronization clearly', async () => {
     const request = vi.fn(async (path: string) => {
       if (path === '/v1/admin/data-sync/overview') return overview;
       if (path === '/v1/admin/data-sync/players/runs') return {
@@ -72,11 +72,14 @@ describe('DataSyncPage', () => {
       <DataSyncPage api={{ request } as unknown as AdminApi} />
     </MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '抽样同步' }));
+    expect(await screen.findByRole('combobox', { name: '抽样数量' })).toBeInTheDocument();
+    expect(screen.getByText('100 条')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '增量同步' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '抽样同步' }));
 
     await waitFor(() => expect(request).toHaveBeenCalledWith(
       '/v1/admin/data-sync/players/runs',
-      expect.objectContaining({ method: 'POST', body: { mode: 'sample', limit: 10 } })
+      expect.objectContaining({ method: 'POST', body: { mode: 'sample', limit: 100 } })
     ));
   });
 

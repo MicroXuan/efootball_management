@@ -16,13 +16,14 @@ const DEFAULT_STATUSES = ['PENDING', 'FAILED'];
 const pageSizeOptions = [20, 50];
 const statusCopy = { PENDING: '等待确认', FAILED: '同步失败', PUBLISHED: '已发布', REJECTED: '已驳回' } as const;
 const changeCopy = { ADDED: '新增', UPDATED: '更新', SOURCE_MISSING: '来源缺失' } as const;
-const runModeCopy = { SAMPLE: '抽样同步', INCREMENTAL: '增量更新', FULL: '全量同步', RESUME: '继续执行' } as const;
+const runModeCopy = { SAMPLE: '抽样同步', INCREMENTAL: '增量同步', FULL: '全量同步', RESUME: '继续执行' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '同步完成', PAUSED: '已暂停', FAILED: '同步失败', CANCELLED: '已取消' } as const;
 
-export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {
+export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancelRun, refreshKey = '' }: {
   api?: AdminApi;
   onChanged: () => Promise<unknown> | unknown;
   onResumeRun: (runId: string) => Promise<unknown>;
+  onCancelRun?: (runId: string) => Promise<unknown>;
   refreshKey?: string;
 }) {
   const [runs, setRuns] = useState<PlatformSyncRunSummary[]>([]);
@@ -45,6 +46,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
   const [loading, setLoading] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [resumingRunId, setResumingRunId] = useState<string | null>(null);
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadedRefreshKey = useRef<string | null>(null);
   const runRequestSequence = useRef(0);
@@ -112,6 +114,13 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
     setResumingRunId(runId);
     try { await onResumeRun(runId); await loadRuns(); }
     finally { setResumingRunId(null); }
+  };
+
+  const cancelRun = async (runId: string) => {
+    if (!onCancelRun || cancellingRunId) return;
+    setCancellingRunId(runId);
+    try { await onCancelRun(runId); await loadRuns(); }
+    finally { setCancellingRunId(null); }
   };
 
   const columns = useMemo(() => [
@@ -184,11 +193,21 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshK
             { title: '同步方式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
             { title: '任务状态', dataIndex: 'status', render: (value: PlatformSyncRunSummary['status']) => runStatusCopy[value] },
             { title: '已检查', render: (_, item) => item.counters.scanned }, { title: '失败', render: (_, item) => item.counters.failed },
-            { title: '操作', render: (_, item) => item.resumable ? <Button
-              loading={resumingRunId === item.id}
-              disabled={Boolean(resumingRunId)}
-              onClick={(event) => { event.stopPropagation(); void resumeRun(item.id); }}
-            >继续任务</Button> : '—' }
+            { title: '操作', render: (_, item) => item.resumable ? <Space wrap onClick={(event) => event.stopPropagation()}>
+              <Button
+                loading={resumingRunId === item.id}
+                disabled={Boolean(resumingRunId) || Boolean(cancellingRunId)}
+                onClick={() => void resumeRun(item.id)}
+              >继续任务</Button>
+              {onCancelRun ? <Popconfirm
+                title="确认取消这个同步任务？"
+                description="取消后会清除尚未发布的临时结果，并且不能继续该任务。"
+                okText="确认取消"
+                cancelText="返回"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => cancelRun(item.id)}
+              ><Button danger loading={cancellingRunId === item.id} disabled={Boolean(resumingRunId) || Boolean(cancellingRunId)}>取消任务</Button></Popconfirm> : null}
+            </Space> : '—' }
           ]}
           pagination={{ current: runPage, pageSize: 20, total: runTotal, showSizeChanger: false, onChange: setRunPage }}
         />

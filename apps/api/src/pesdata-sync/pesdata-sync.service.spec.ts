@@ -143,6 +143,22 @@ describe('PesdataSyncService', () => {
     await expect(prisma.externalSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(0);
   });
 
+  it('cancels a failed resumable player run so it cannot be resumed again', async () => {
+    const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
+    const sync = new PesdataSyncService(prisma, importService, client as never);
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+    await prisma.externalSyncRun.update({ where: { id: queued.runId }, data: {
+      status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null, currentPhase: 'INTERRUPTED'
+    } });
+
+    await expect(sync.cancelPlatformRun(adminId, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'CANCELLED'
+    });
+    await expect(sync.resumePlatformRun(adminId, queued.runId))
+      .rejects.toMatchObject({ code: 'PESDATA_SYNC_CONFLICT' });
+  });
+
   it('renews the lease independently while an upstream request is still pending', async () => {
     let releaseRequest!: () => void;
     let requestStarted!: () => void;
@@ -455,6 +471,26 @@ describe('PesdataSyncService', () => {
       ['2', 'FETCHED'],
       ['3', 'FETCHED']
     ]);
+  });
+
+  it('skips previously synchronized players during a sample without creating review rows', async () => {
+    const initialClient = {
+      listPlayers: async () => ({ list: [summary(1)], count: 1 }),
+      getPlayerDetail: async (id: string) => detail(id)
+    };
+    await new PesdataSyncService(prisma, importService, initialClient as never, { pageSize: 10 })
+      .start(actorId, { mode: 'full' });
+
+    const detailIds: string[] = [];
+    const sampleClient = {
+      listPlayers: async () => ({ list: [summary(1)], count: 1 }),
+      getPlayerDetail: async (id: string) => { detailIds.push(id); return detail(id); }
+    };
+    const result = await new PesdataSyncService(prisma, importService, sampleClient as never, { pageSize: 10 })
+      .start(actorId, { mode: 'sample', limit: 1 });
+
+    expect(detailIds).toEqual([]);
+    expect(result).toMatchObject({ scannedCount: 1, skippedCount: 1, fetchedCount: 0, batchIds: [] });
   });
 
   it('removes a newly created unlinked batch when ownership is lost before linking', async () => {

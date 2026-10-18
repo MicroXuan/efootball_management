@@ -27,7 +27,7 @@ const secondPageItems = items.map((item, index) => ({
   candidate: { ...item.candidate, sourceExternalId: `team-page-2-${index + 1}`, nameZh: `第二页球队 ${index + 1}` }
 }));
 
-function fixture({ resumableRun = false, mode = 'INCREMENTAL' } = {}) {
+function fixture({ resumableRun = false, resumableStatus = 'FAILED', mode = 'INCREMENTAL' } = {}) {
   const request = vi.fn(async (path: string, options?: { method?: string; body?: { ids?: string[] } }) => {
     if (path.endsWith('/publish') && options?.method === 'POST') return {
       requestedCount: options.body?.ids?.length ?? 0,
@@ -40,7 +40,7 @@ function fixture({ resumableRun = false, mode = 'INCREMENTAL' } = {}) {
       return { items: path.includes('page=2') ? secondPageItems : items, page: path.includes('page=2') ? 2 : 1, pageSize: path.includes('pageSize=50') ? 50 : 20, total: 981, summary: { pending: 19, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
     }
     if (path.includes('/runs')) return {
-      items: [{ ...run, mode, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      items: [{ ...run, mode, status: resumableRun ? resumableStatus : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
       page: 1, pageSize: 20, total: 1,
       summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
     };
@@ -65,7 +65,7 @@ describe('TeamSyncPanel', () => {
     const historyTitle = screen.getByText('历史同步记录');
     expect(reviewTitle.compareDocumentPosition(historyTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(historyTitle.closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByText(/当前显示.*增量更新任务/)).toBeInTheDocument();
+    expect(screen.getByText(/当前显示.*增量同步任务/)).toBeInTheDocument();
   });
 
   it('shows only the current server page and applies exception-first filters', async () => {
@@ -121,6 +121,17 @@ describe('TeamSyncPanel', () => {
     await userEvent.click(await screen.findByText('历史同步记录'));
     await userEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     expect(onResumeRun).toHaveBeenCalledWith(runId);
+  });
+
+  it('offers cancellation beside a resumable paused history item', async () => {
+    const { api } = fixture({ resumableRun: true, resumableStatus: 'PAUSED' });
+    const onCancelRun = vi.fn().mockResolvedValue(undefined);
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} onCancelRun={onCancelRun} />);
+
+    await userEvent.click(await screen.findByText('历史同步记录'));
+    await userEvent.click(await screen.findByRole('button', { name: '取消任务' }));
+    await userEvent.click(await screen.findByRole('button', { name: '确认取消' }));
+    expect(onCancelRun).toHaveBeenCalledWith(runId);
   });
 
   it('keeps eligible selections when paging through a large review list', async () => {

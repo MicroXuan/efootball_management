@@ -293,6 +293,7 @@ select { font: inherit; }
 .sync-run-card__empty { margin: 0; padding: 18px 24px 0; display: grid; gap: 4px; color: var(--admin-text-secondary); }
 .sync-run-card__empty strong { color: var(--admin-text); }
 .sync-run-card__actions { padding: 20px 24px 24px; }
+.sync-run-card__actions .ant-select { min-width: 92px; }
 .player-sync-panel { margin-top: 20px; display: grid; gap: 20px; }
 .player-sync-panel > .ant-alert { margin: 0; }
 .sync-section-title { display: grid; gap: 4px; }
