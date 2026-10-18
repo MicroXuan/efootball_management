@@ -98,14 +98,19 @@ export class PesdataTeamSyncService {
   ): Promise<{ runId: string; status: 'PENDING' }> {
     const run = await this.prisma.teamCatalogSyncRun.findUnique({ where: { id: runId } });
     if (!run) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
-    if (run.status !== 'FAILED' || run.activeLeaseKey || run.leaseOwnerToken) {
-      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a failed, inactive team synchronization run can be resumed');
+    const paused = run.status === 'PAUSED' && run.activeLeaseKey === 'pesdata-team-catalog' && !run.leaseOwnerToken;
+    const failed = run.status === 'FAILED' && !run.activeLeaseKey && !run.leaseOwnerToken;
+    if (!paused && !failed) {
+      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a paused or failed inactive team synchronization run can be resumed');
     }
     const now = new Date();
     try {
       const resumed = await this.prisma.$transaction(async (tx) => {
         const changed = await tx.teamCatalogSyncRun.updateMany({ where: {
-          id: runId, status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null
+          id: runId,
+          status: paused ? 'PAUSED' : 'FAILED',
+          activeLeaseKey: paused ? 'pesdata-team-catalog' : null,
+          leaseOwnerToken: null
         }, data: {
           status: 'PENDING',
           activeLeaseKey: 'pesdata-team-catalog',
@@ -135,6 +140,75 @@ export class PesdataTeamSyncService {
       }
       throw error;
     }
+  }
+
+  async pausePlatformRun(
+    actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'PAUSED' }> {
+    const now = new Date();
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.teamCatalogSyncRun.updateMany({
+        where: { id: runId, status: { in: ['PENDING', 'RUNNING'] }, activeLeaseKey: 'pesdata-team-catalog' },
+        data: {
+          status: 'PAUSED',
+          currentPhase: 'PAUSED',
+          heartbeatAt: now,
+          leaseOwnerToken: null,
+          leaseExpiresAt: null
+        }
+      });
+      if (updated.count === 1 && this.audit) await this.audit.record(tx, {
+        actorAdminId,
+        action: 'PAUSE_TEAM_SHELL_SYNC',
+        resourceType: 'TeamCatalogSyncRun',
+        resourceId: runId,
+        metadata: { runId }
+      });
+      return updated.count;
+    });
+    if (changed !== 1) {
+      const exists = await this.prisma.teamCatalogSyncRun.findUnique({ where: { id: runId }, select: { id: true } });
+      if (!exists) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
+      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only an active team synchronization run can be paused');
+    }
+    return { runId, status: 'PAUSED' };
+  }
+
+  async cancelPlatformRun(
+    actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'CANCELLED' }> {
+    const now = new Date();
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const exists = await tx.teamCatalogSyncRun.findUnique({ where: { id: runId }, select: { id: true } });
+      if (!exists) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
+      const updated = await tx.teamCatalogSyncRun.updateMany({
+        where: { id: runId, status: 'PAUSED', activeLeaseKey: 'pesdata-team-catalog', leaseOwnerToken: null },
+        data: {
+          status: 'CANCELLED',
+          activeLeaseKey: null,
+          currentPhase: 'CANCELLED',
+          heartbeatAt: now,
+          leaseExpiresAt: null,
+          completedAt: now
+        }
+      });
+      if (updated.count !== 1) return 0;
+      await tx.teamCatalogSyncItem.deleteMany({ where: { runId } });
+      if (this.audit) await this.audit.record(tx, {
+        actorAdminId,
+        action: 'CANCEL_TEAM_SHELL_SYNC',
+        resourceType: 'TeamCatalogSyncRun',
+        resourceId: runId,
+        metadata: { runId }
+      });
+      return 1;
+    });
+    if (changed !== 1) {
+      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a paused team synchronization run can be cancelled');
+    }
+    return { runId, status: 'CANCELLED' };
   }
 
   async executePlatformRun(runId: string): Promise<TeamSyncResult> {

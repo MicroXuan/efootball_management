@@ -15,15 +15,26 @@ describe('PlatformDataSyncController', () => {
 
   it('returns accepted queued runs without executing remote synchronization inline', async () => {
     const queued = { runId: '22222222-2222-4222-8222-222222222222', status: 'PENDING' as const };
+    const paused = { runId: queued.runId, status: 'PAUSED' as const };
+    const cancelled = { runId: queued.runId, status: 'CANCELLED' as const };
     const startPlayerRun = jest.fn(async () => queued);
     const resumeTeamRun = jest.fn(async () => queued);
-    const controller = new PlatformDataSyncController({ startPlayerRun, resumeTeamRun } as never);
+    const pausePlayerRun = jest.fn(async () => paused);
+    const cancelTeamRun = jest.fn(async () => cancelled);
+    const controller = new PlatformDataSyncController({ startPlayerRun, resumeTeamRun, pausePlayerRun, cancelTeamRun } as never);
 
     await expect(controller.startPlayerRun(admin, { mode: 'incremental' })).resolves.toEqual(queued);
     await expect(controller.resumeTeamRun(admin, queued.runId)).resolves.toEqual(queued);
+    await expect(controller.pausePlayerRun(admin, queued.runId)).resolves.toEqual(paused);
+    await expect(controller.cancelTeamRun(admin, queued.runId)).resolves.toEqual(cancelled);
     expect(startPlayerRun).toHaveBeenCalledWith(admin.id, { mode: 'incremental' });
     expect(resumeTeamRun).toHaveBeenCalledWith(admin.id, queued.runId);
-    for (const handler of ['startPlayerRun', 'resumePlayerRun', 'startTeamRun', 'resumeTeamRun'] as const) {
+    expect(pausePlayerRun).toHaveBeenCalledWith(admin.id, queued.runId);
+    expect(cancelTeamRun).toHaveBeenCalledWith(admin.id, queued.runId);
+    for (const handler of [
+      'startPlayerRun', 'resumePlayerRun', 'pausePlayerRun', 'cancelPlayerRun',
+      'startTeamRun', 'resumeTeamRun', 'pauseTeamRun', 'cancelTeamRun'
+    ] as const) {
       expect(Reflect.getMetadata(HTTP_CODE_METADATA, PlatformDataSyncController.prototype[handler])).toBe(202);
     }
   });

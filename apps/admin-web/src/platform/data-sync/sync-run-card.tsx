@@ -6,7 +6,8 @@ const statusCopy: Record<PlatformSyncRunSummary['status'], { label: string; colo
   RUNNING: { label: '同步中', color: 'processing' },
   READY: { label: '同步完成', color: 'success' },
   PAUSED: { label: '已暂停', color: 'warning' },
-  FAILED: { label: '同步失败', color: 'error' }
+  FAILED: { label: '同步失败', color: 'error' },
+  CANCELLED: { label: '已取消', color: 'default' }
 };
 
 const phaseCopy: Record<string, { players: string; teams: string }> = {
@@ -15,10 +16,12 @@ const phaseCopy: Record<string, { players: string; teams: string }> = {
   IMPORTING: { players: '正在整理待确认数据', teams: '正在整理待确认数据' },
   READY: { players: '数据已准备好，请确认后发布', teams: '数据已准备好，请确认后发布' },
   INTERRUPTED: { players: '任务中断，可以继续执行', teams: '任务中断，可以继续执行' },
-  FAILED: { players: '同步失败，请查看原因', teams: '同步失败，请查看原因' }
+  FAILED: { players: '同步失败，请查看原因', teams: '同步失败，请查看原因' },
+  PAUSED: { players: '任务已暂停，可继续执行或取消', teams: '任务已暂停，可继续执行或取消' },
+  CANCELLED: { players: '任务已取消', teams: '任务已取消' }
 };
 
-export function SyncRunCard({ kind, run, pendingReview, failedReview, published, busy = false, onStart, onResume }: {
+export function SyncRunCard({ kind, run, pendingReview, failedReview, published, busy = false, onStart, onPause, onResume, onCancel }: {
   kind: 'PLAYER_CARDS' | 'TEAM_SHELLS';
   run: PlatformSyncRunSummary | null;
   pendingReview: number;
@@ -26,9 +29,13 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
   published: number;
   busy?: boolean;
   onStart: (mode: Exclude<Lowercase<PlatformSyncMode>, 'resume'>) => Promise<void>;
+  onPause: () => Promise<void>;
   onResume: () => Promise<void>;
+  onCancel: () => Promise<void>;
 }) {
   const active = run?.status === 'PENDING' || run?.status === 'RUNNING';
+  const paused = run?.status === 'PAUSED';
+  const blocked = active || paused;
   const isPlayers = kind === 'PLAYER_CARDS';
   const dataName = isPlayers ? '球员卡' : '球队队壳';
   const metricLabels = isPlayers
@@ -61,16 +68,32 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
       {run.errorMessage ? <small className="sync-run-card__error">{run.errorMessage}</small> : null}
     </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“更新变化数据”；首次验证数据可使用“抽样同步”。</span></p>}
     <Space wrap className="sync-run-card__actions">
-      <Button disabled={active || busy} onClick={() => void onStart('sample')}>抽样同步</Button>
-      <Button type="primary" disabled={active || busy} loading={busy} onClick={() => void onStart('incremental')}>更新变化数据</Button>
+      <Button disabled={blocked || busy} onClick={() => void onStart('sample')}>抽样同步</Button>
+      <Button type="primary" disabled={blocked || busy} loading={busy} onClick={() => void onStart('incremental')}>更新变化数据</Button>
       <Popconfirm
-        title="确认重新检查全部数据？"
+        title="确认进行全量同步？"
         description="该操作耗时较长，并会产生更多等待确认的数据。"
         okText="开始全部检查"
         cancelText="取消"
         onConfirm={() => onStart('full')}
-      ><Button danger disabled={active || busy}>重新检查全部</Button></Popconfirm>
-      {run?.resumable ? <Button disabled={busy} onClick={() => void onResume()}>继续上次任务</Button> : null}
+      ><Button danger disabled={blocked || busy}>全量同步</Button></Popconfirm>
+      {active ? <Popconfirm
+        title="确认暂停当前同步？"
+        description="任务进度会保留，之后可以继续同步。"
+        okText="暂停同步"
+        cancelText="返回"
+        onConfirm={onPause}
+      ><Button disabled={busy}>暂停同步</Button></Popconfirm> : null}
+      {paused ? <Button type="primary" disabled={busy} loading={busy} onClick={() => void onResume()}>继续同步</Button> : null}
+      {paused ? <Popconfirm
+        title="确认取消当前任务？"
+        description="取消后将释放任务，并清除本次尚未发布的临时同步结果；该操作不能继续。"
+        okText="取消任务"
+        cancelText="返回"
+        okButtonProps={{ danger: true }}
+        onConfirm={onCancel}
+      ><Button danger disabled={busy}>取消任务</Button></Popconfirm> : null}
+      {run?.resumable && !paused ? <Button disabled={busy} onClick={() => void onResume()}>继续上次任务</Button> : null}
     </Space>
   </Card>;
 }

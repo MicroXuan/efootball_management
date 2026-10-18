@@ -23,7 +23,7 @@ const run: PlatformSyncRunSummary = {
 
 describe('SyncRunCard', () => {
   it('explains an active task with business language instead of internal phase codes', () => {
-    render(<SyncRunCard kind="PLAYER_CARDS" run={run} pendingReview={2} failedReview={3} published={911} onStart={vi.fn()} onResume={vi.fn()} />);
+    render(<SyncRunCard kind="PLAYER_CARDS" run={run} pendingReview={2} failedReview={3} published={911} onStart={vi.fn()} onPause={vi.fn()} onResume={vi.fn()} onCancel={vi.fn()} />);
 
     expect(screen.getByRole('heading', { name: '当前同步任务' })).toBeInTheDocument();
     expect(screen.getByText('正在获取球员卡')).toBeInTheDocument();
@@ -36,10 +36,12 @@ describe('SyncRunCard', () => {
       '已处理 120 条，失败 3 条'
     );
     expect(screen.getByText('已处理 120 条 · 失败 3 条')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '暂停同步' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '取消任务' })).not.toBeInTheDocument();
   });
 
   it('says there is no current task instead of implying sync has never run', () => {
-    render(<SyncRunCard kind="TEAM_SHELLS" run={null} pendingReview={2} failedReview={70} published={911} onStart={vi.fn()} onResume={vi.fn()} />);
+    render(<SyncRunCard kind="TEAM_SHELLS" run={null} pendingReview={2} failedReview={70} published={911} onStart={vi.fn()} onPause={vi.fn()} onResume={vi.fn()} onCancel={vi.fn()} />);
 
     expect(screen.getByText('当前没有同步任务')).toBeInTheDocument();
     expect(screen.queryByText('尚未运行')).not.toBeInTheDocument();
@@ -48,5 +50,27 @@ describe('SyncRunCard', () => {
     expect(screen.getByText('待确认队壳')).toBeInTheDocument();
     expect(screen.getByText('正式队壳')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '更新变化数据' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '全量同步' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重新检查全部' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a paused task visible with continue and cancel actions', () => {
+    render(<SyncRunCard
+      kind="PLAYER_CARDS"
+      run={{ ...run, status: 'PAUSED', currentPhase: 'PAUSED', leaseExpiresAt: null, resumable: true }}
+      pendingReview={2}
+      failedReview={3}
+      published={911}
+      onStart={vi.fn()}
+      onPause={vi.fn()}
+      onResume={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+
+    expect(screen.getByText('已暂停')).toBeInTheDocument();
+    expect(screen.getByText('任务已暂停，可继续执行或取消')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '继续同步' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '更新变化数据' })).toBeDisabled();
   });
 });

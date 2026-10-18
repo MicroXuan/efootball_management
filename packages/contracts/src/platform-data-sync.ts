@@ -8,7 +8,7 @@ const NonNegativeCountSchema = z.number().int().nonnegative();
 
 export const PlatformSyncKindSchema = z.enum(['PLAYER_CARDS', 'TEAM_SHELLS']);
 export const PlatformSyncModeSchema = z.enum(['SAMPLE', 'FULL', 'INCREMENTAL', 'RESUME']);
-export const PlatformSyncStatusSchema = z.enum(['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED']);
+export const PlatformSyncStatusSchema = z.enum(['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED', 'CANCELLED']);
 export const StartPlatformSyncRequestSchema = z.object({
   mode: z.enum(['sample', 'incremental', 'full']),
   limit: z.number().int().min(1).max(5_000).optional()
@@ -194,6 +194,11 @@ export const QueuedSyncRunSchema = z.object({
   status: z.literal('PENDING')
 });
 
+export const ControlledSyncRunSchema = z.object({
+  runId: ResourceIdSchema,
+  status: z.enum(['PAUSED', 'CANCELLED'])
+});
+
 export type PlatformSyncKind = z.infer<typeof PlatformSyncKindSchema>;
 export type PlatformSyncMode = z.infer<typeof PlatformSyncModeSchema>;
 export type PlatformSyncStatus = z.infer<typeof PlatformSyncStatusSchema>;
@@ -208,3 +213,4 @@ export type TeamSyncItemPage = z.infer<typeof TeamSyncItemPageSchema>;
 export type BatchMutationRequest = z.infer<typeof BatchMutationRequestSchema>;
 export type BatchMutationResult = z.infer<typeof BatchMutationResultSchema>;
 export type QueuedSyncRun = z.infer<typeof QueuedSyncRunSchema>;
+export type ControlledSyncRun = z.infer<typeof ControlledSyncRunSchema>;

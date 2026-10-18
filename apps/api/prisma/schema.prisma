@@ -265,6 +265,7 @@ enum ExternalSyncStatus {
   READY
   PAUSED
   FAILED
+  CANCELLED
 }
 
 enum ExternalSyncItemStatus {
@@ -304,7 +305,9 @@ enum TeamCatalogSyncStatus {
   PENDING
   RUNNING
   READY
+  PAUSED
   FAILED
+  CANCELLED
 }
 
 enum TeamCatalogSyncChangeType {

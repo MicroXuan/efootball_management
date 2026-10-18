@@ -112,6 +112,57 @@ describe('PesdataTeamSyncService', () => {
     await expect(prisma.teamCatalogSyncItem.count({ where: { runId: run.id } })).resolves.toBe(1);
   });
 
+  it('pauses and resumes a queued team-shell run without losing its checkpoint', async () => {
+    const admin = await actor();
+    const client = { listTeams: async () => ({ list: [], count: 0 }) };
+    const sync = new PesdataTeamSyncService(prisma, client as never, {} as never);
+    const queued = await sync.createPlatformRun(admin.id, { mode: 'incremental' });
+
+    await expect(sync.pausePlatformRun(admin.id, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'PAUSED'
+    });
+    await expect(prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).resolves.toMatchObject({
+      status: 'PAUSED',
+      activeLeaseKey: 'pesdata-team-catalog',
+      leaseOwnerToken: null,
+      leaseExpiresAt: null,
+      currentPhase: 'PAUSED'
+    });
+
+    await expect(sync.resumePlatformRun(admin.id, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'PENDING'
+    });
+  });
+
+  it('cancels a paused team-shell run and removes its unpublished items', async () => {
+    const admin = await actor();
+    const client = { listTeams: async () => ({ list: [], count: 0 }) };
+    const sync = new PesdataTeamSyncService(prisma, client as never, {} as never);
+    const queued = await sync.createPlatformRun(admin.id, { mode: 'incremental' });
+    await prisma.teamCatalogSyncItem.create({ data: {
+      runId: queued.runId,
+      sourceExternalId: 'cancel-team-1',
+      summaryChecksum: 'b'.repeat(64),
+      changeType: 'ADDED',
+      reviewStatus: 'PENDING'
+    } });
+    await sync.pausePlatformRun(admin.id, queued.runId);
+
+    await expect(sync.cancelPlatformRun(admin.id, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'CANCELLED'
+    });
+    await expect(prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).resolves.toMatchObject({
+      status: 'CANCELLED',
+      activeLeaseKey: null,
+      leaseOwnerToken: null,
+      currentPhase: 'CANCELLED'
+    });
+    await expect(prisma.teamCatalogSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(0);
+  });
+
   it('renews the team lease independently while an upstream request is still pending', async () => {
     const admin = await actor();
     let releaseRequest!: () => void;

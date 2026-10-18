@@ -2,6 +2,7 @@ import { Alert, Spin, Tabs } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  ControlledSyncRunSchema,
   PlatformDataSyncOverviewSchema,
   QueuedSyncRunSchema,
   type PlatformDataSyncOverview
@@ -63,6 +64,18 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
     } catch { setError('任务继续失败，请刷新后确认任务状态'); }
     finally { setMutating(false); }
   };
+  const control = async (runId: string, action: 'pause' | 'cancel') => {
+    if (mutating) return;
+    setMutating(true); setError(null);
+    try {
+      await api.request(`/v1/admin/data-sync/${activeTab}/runs/${runId}/${action}`, {
+        method: 'POST', schema: ControlledSyncRunSchema
+      });
+      await refreshAfterMutation();
+    } catch {
+      setError(action === 'pause' ? '任务暂停失败，请刷新后确认任务状态' : '任务取消失败，请刷新后确认任务状态');
+    } finally { setMutating(false); }
+  };
 
   const panel = <>
     {loading && !overview ? <div className="loading-block"><Spin /></div> : null}
@@ -74,7 +87,9 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       published={section.published}
       busy={mutating}
       onStart={start}
+      onPause={() => section.activeRun ? control(section.activeRun.id, 'pause') : Promise.resolve()}
       onResume={() => section.activeRun ? resume(section.activeRun.id) : Promise.resolve()}
+      onCancel={() => section.activeRun ? control(section.activeRun.id, 'cancel') : Promise.resolve()}
     /> : null}
     {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
     {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
