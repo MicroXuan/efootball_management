@@ -24,7 +24,7 @@ COPY packages/contracts packages/contracts
 RUN pnpm --filter @efm/contracts build \
   && pnpm --filter @efm/api prisma:generate \
   && pnpm --filter @efm/api build \
-  && pnpm --filter @efm/api --prod deploy --legacy /output/api
+  && pnpm --filter @efm/api --prod --no-optional deploy --legacy /output/api
 
 FROM node:24-alpine AS runtime
 
