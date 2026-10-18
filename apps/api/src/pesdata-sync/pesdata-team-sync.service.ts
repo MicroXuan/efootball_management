@@ -331,8 +331,10 @@ export class PesdataTeamSyncService {
     let skippedCount = 0;
     const seen = new Set(priorItems.map(({ sourceExternalId }) => sourceExternalId));
 
-    while (limit === undefined || scannedCount < limit) {
-      const size = limit === undefined ? this.pageSize : Math.min(this.pageSize, limit - scannedCount);
+    while (limit === undefined || addedCount + updatedCount < limit) {
+      const size = limit === undefined
+        ? this.pageSize
+        : Math.min(this.pageSize, limit - addedCount - updatedCount);
       const page = await this.client.listTeams({ start: offset, limit: size, order: 'ASC' });
       assertLeaseHealthy?.();
       if (leaseOwnerToken) await this.touchLease(runId, leaseOwnerToken);

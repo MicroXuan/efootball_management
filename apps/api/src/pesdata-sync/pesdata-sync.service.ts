@@ -587,10 +587,14 @@ export class PesdataSyncService {
     const seenExternalIds = state.initial?.seenExternalIds ?? new Set<string>();
     let offset = state.offset;
 
-    while (state.limit === undefined || counters.scannedCount < state.limit) {
+    while (state.limit === undefined || (state.mode === 'sample'
+      ? counters.fetchedCount < state.limit
+      : counters.scannedCount < state.limit)) {
       const remaining = state.limit === undefined
         ? this.pageSize
-        : Math.min(this.pageSize, state.limit - counters.scannedCount);
+        : Math.min(this.pageSize, state.limit - (state.mode === 'sample'
+          ? counters.fetchedCount
+          : counters.scannedCount));
       const page = await this.client.listPlayers({ start: offset, limit: remaining, order: 'DESC' });
       state.assertLeaseHealthy?.();
       if (state.runId && state.leaseOwnerToken) await this.touchLease(state.runId, state.leaseOwnerToken);

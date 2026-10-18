@@ -473,7 +473,7 @@ describe('PesdataSyncService', () => {
     ]);
   });
 
-  it('skips previously synchronized players during a sample without creating review rows', async () => {
+  it('keeps scanning past previously synchronized players until the sample contains the requested number of new rows', async () => {
     const initialClient = {
       listPlayers: async () => ({ list: [summary(1)], count: 1 }),
       getPlayerDetail: async (id: string) => detail(id)
@@ -483,14 +483,18 @@ describe('PesdataSyncService', () => {
 
     const detailIds: string[] = [];
     const sampleClient = {
-      listPlayers: async () => ({ list: [summary(1)], count: 1 }),
+      listPlayers: async ({ start, limit }: { start: number; limit: number }) => ({
+        list: [summary(1), summary(2)].slice(start, start + limit),
+        count: 2
+      }),
       getPlayerDetail: async (id: string) => { detailIds.push(id); return detail(id); }
     };
-    const result = await new PesdataSyncService(prisma, importService, sampleClient as never, { pageSize: 10 })
+    const result = await new PesdataSyncService(prisma, importService, sampleClient as never, { pageSize: 1 })
       .start(actorId, { mode: 'sample', limit: 1 });
 
-    expect(detailIds).toEqual([]);
-    expect(result).toMatchObject({ scannedCount: 1, skippedCount: 1, fetchedCount: 0, batchIds: [] });
+    expect(detailIds).toEqual(['2']);
+    expect(result).toMatchObject({ scannedCount: 2, skippedCount: 1, fetchedCount: 1 });
+    expect(result.batchIds).toHaveLength(1);
   });
 
   it('removes a newly created unlinked batch when ownership is lost before linking', async () => {
