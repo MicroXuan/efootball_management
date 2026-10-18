@@ -116,7 +116,7 @@ describe('TeamCatalogService', () => {
       remoteLogoUrl: 'https://images.example/ajax.png', storedLogoUrl: `cloud://test/team-crests--ajax-${suffix}.png`,
       sourceUpdatedAt: null
     };
-    const [publishItem, rejectItem] = await Promise.all([
+    const [publishItem, rejectItem, failedItem] = await Promise.all([
       prisma.teamCatalogSyncItem.create({ data: {
         runId: run.id, sourceExternalId: candidate.sourceExternalId, summaryChecksum: 'a'.repeat(64),
         detailChecksum: 'b'.repeat(64), changeType: 'ADDED', candidateJson: candidate
@@ -124,6 +124,11 @@ describe('TeamCatalogService', () => {
       prisma.teamCatalogSyncItem.create({ data: {
         runId: run.id, sourceExternalId: `reject-${suffix}`, summaryChecksum: 'c'.repeat(64),
         changeType: 'ADDED', candidateJson: { ...candidate, sourceExternalId: `reject-${suffix}` }
+      } }),
+      prisma.teamCatalogSyncItem.create({ data: {
+        runId: run.id, sourceExternalId: `failed-${suffix}`, summaryChecksum: 'd'.repeat(64),
+        changeType: 'UPDATED', reviewStatus: 'FAILED', errorCode: 'PESDATA_CREST_INVALID',
+        errorMessage: '队徽图片无效'
       } })
     ]);
     const service = new TeamCatalogService(
@@ -142,10 +147,12 @@ describe('TeamCatalogService', () => {
 
       await service.publishSyncItem(admin.id, publishItem.id);
       await service.rejectSyncItem(admin.id, rejectItem.id);
+      await service.rejectSyncItem(admin.id, failedItem.id);
       await expect(prisma.teamCatalogItem.findUnique({ where: {
         sourceType_sourceExternalId: { sourceType: 'PESDATA', sourceExternalId: candidate.sourceExternalId }
       } })).resolves.toMatchObject({ nameZh: '阿贾克斯', status: 'ACTIVE', storedLogoUrl: candidate.storedLogoUrl });
       await expect(prisma.teamCatalogSyncItem.findUnique({ where: { id: rejectItem.id } })).resolves.toMatchObject({ reviewStatus: 'REJECTED' });
+      await expect(prisma.teamCatalogSyncItem.findUnique({ where: { id: failedItem.id } })).resolves.toMatchObject({ reviewStatus: 'REJECTED' });
       await expect(prisma.auditLog.findMany({ where: { actorAdminId: admin.id }, orderBy: { createdAt: 'asc' } })).resolves.toEqual(expect.arrayContaining([
         expect.objectContaining({ action: 'PUBLISH_TEAM_SHELL_SYNC_ITEM' }),
         expect.objectContaining({ action: 'REJECT_TEAM_SHELL_SYNC_ITEM' })

@@ -321,8 +321,8 @@ export class TeamCatalogService {
       const item = await tx.teamCatalogSyncItem.findUnique({ where: { id: itemId } });
       if (!item) throw new NotFoundException({ code: 'TEAM_SYNC_ITEM_NOT_FOUND', message: 'Team sync item was not found' });
       if (item.reviewStatus === 'REJECTED') return { ok: true as const };
-      if (item.reviewStatus !== 'PENDING') {
-        throw new ConflictException({ code: 'TEAM_SYNC_ITEM_NOT_PENDING', message: 'Only pending team sync items can be rejected' });
+      if (!['PENDING', 'FAILED'].includes(item.reviewStatus)) {
+        throw new ConflictException({ code: 'TEAM_SYNC_ITEM_NOT_REJECTABLE', message: 'Only pending or failed team sync items can be rejected' });
       }
       await tx.teamCatalogSyncItem.update({ where: { id: itemId }, data: { reviewStatus: 'REJECTED' } });
       await this.audit.record(tx, {
