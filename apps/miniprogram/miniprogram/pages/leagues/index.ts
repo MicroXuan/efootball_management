@@ -80,7 +80,7 @@ Page({
           `${banner.cacheSource}:${presentation.version}`,
         ).catch(() => '')
         if (preloadedSource) {
-          bannerDisplayUrl = preloadedSource
+          bannerDisplayUrl = banner.imageUrl
           bannerMode = 'image'
         } else if (!bannerDisplayUrl) {
           bannerMode = 'fallback'
