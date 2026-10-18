@@ -50,7 +50,10 @@ describe('read-only season fixture view model', () => {
   })
 
   it('shows the participant next action and confirmation deadline', () => {
-    expect(matchCard({ ...response(false), action: 'CONFIRM', confirmationDeadlineAt: '2026-10-17T13:30:00.000Z' })).toMatchObject({
+    expect(matchCard(
+      { ...response(false), action: 'CONFIRM', confirmationDeadlineAt: '2026-10-17T13:30:00.000Z' },
+      Date.parse('2026-10-17T12:00:00.000Z')
+    )).toMatchObject({
       nextActionCopy: '确认或拒绝比分', deadlineCopy: `确认截止 ${resultTime('2026-10-17T13:30:00.000Z')}`
     })
     expect(matchCard({ ...response(false), action: 'WAIT', myEvidenceRole: 'SUBMITTER', confirmationDeadlineAt: '2026-10-17T13:30:00.000Z',

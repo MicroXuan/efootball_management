@@ -113,6 +113,39 @@ describe('AdminLeaguesService', () => {
     }));
   });
 
+  it('returns a browser-readable URL for a CloudBase league logo', async () => {
+    const prisma = { league: { findMany: jest.fn(async () => [{
+      id: 'league-cloud-logo',
+      name: '体验联赛',
+      shortName: '体验',
+      description: '',
+      logoUrl: 'cloud://env/league-images--logo.png',
+      status: 'ACTIVE',
+      edition: 'NATIONAL',
+      resultEvidenceRequired: false,
+      defaultSuperCapacity: 23,
+      defaultChampionCapacity: 18,
+      defaultPromotionCount: 4,
+      currentSeason: null,
+      version: 1,
+      createdAt: new Date('2026-10-17T00:00:00.000Z'),
+      updatedAt: new Date('2026-10-17T00:00:00.000Z')
+    }]) } };
+    const storage = {
+      temporaryReadUrl: jest.fn(async () => 'https://temporary.example/league-logo.png')
+    };
+    const Service = AdminLeaguesService as unknown as new (...args: unknown[]) => AdminLeaguesService;
+    const service = new Service(prisma, {}, {}, storage);
+
+    await expect(service.list()).resolves.toMatchObject({
+      items: [{ logoUrl: 'https://temporary.example/league-logo.png' }]
+    });
+    expect(storage.temporaryReadUrl).toHaveBeenCalledWith(
+      'cloud://env/league-images--logo.png',
+      3600
+    );
+  });
+
   it('loads one scoped league workspace with its current season', async () => {
     const findFirst = jest.fn(async () => ({
       id: 'league-1',

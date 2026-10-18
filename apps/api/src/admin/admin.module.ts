@@ -20,9 +20,10 @@ import {
   InMemoryAdminLookupRateLimiter
 } from './admin-user-lookup.service.js';
 import { AuditLogService } from './audit-log.service.js';
+import { StorageModule } from '../storage/storage.module.js';
 
 @Module({
-  imports: [AdminAuthModule],
+  imports: [AdminAuthModule, StorageModule],
   controllers: [
     AdminAccountsController,
     AdminAuditController,

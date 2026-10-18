@@ -20,12 +20,15 @@ describe('PlatformPresentationService', () => {
     ) => PlatformPresentationService;
     const service = new ServiceWithStorage(prisma, {}, storage);
 
-    await expect(service.get()).resolves.toEqual({
+    const expected = {
       leagueCenterBannerUrl: 'https://cos.example/banner.webp?signature=temporary',
       leagueCenterBannerCloudFileId: cloudFileId,
       version: 2,
-    });
+    };
+    await expect(service.get()).resolves.toEqual(expected);
+    await expect(service.get()).resolves.toEqual(expected);
     expect(storage.temporaryReadUrl).toHaveBeenCalledWith(cloudFileId, 3600);
+    expect(storage.temporaryReadUrl).toHaveBeenCalledTimes(1);
   });
 
   it('returns a stable empty presentation before the first banner is configured', async () => {

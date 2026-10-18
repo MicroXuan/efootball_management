@@ -1,10 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { ParsedCreateLeagueRequest, UpdateLeagueRequest } from '@efm/contracts';
 import type { League, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { AdminError } from './admin.errors.js';
 import { AdminMutationReceiptService } from './admin-mutation-receipt.service.js';
 import { AuditLogService } from './audit-log.service.js';
+import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
+import { publicImageUrl } from '../storage/public-image-url.js';
 
 type LeagueCreationInput = Omit<ParsedCreateLeagueRequest, 'resultEvidenceRequired'> & {
   resultEvidenceRequired?: boolean;
@@ -15,7 +17,8 @@ export class AdminLeaguesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
-    @Inject(AuditLogService) private readonly audit: AuditLogService
+    @Inject(AuditLogService) private readonly audit: AuditLogService,
+    @Optional() @Inject(OBJECT_STORAGE) private readonly storage?: ObjectStorage
   ) {}
 
   async list() {
@@ -28,7 +31,7 @@ export class AdminLeaguesService {
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
-    return { items: leagues.map((league) => this.detail(league)), nextCursor: null };
+    return { items: await Promise.all(leagues.map((league) => this.detail(league))), nextCursor: null };
   }
 
   async get(leagueId: string) {
@@ -125,7 +128,7 @@ export class AdminLeaguesService {
     });
   }
 
-  private detail(league: League & {
+  private async detail(league: League & {
     currentSeason?: (Prisma.LeagueSeasonGetPayload<Record<string, never>> & {
       _count: { entries: number };
     }) | null;
@@ -135,7 +138,7 @@ export class AdminLeaguesService {
       name: league.name,
       shortName: league.shortName,
       description: league.description,
-      logoUrl: league.logoUrl,
+      logoUrl: await publicImageUrl(this.storage, league.logoUrl),
       status: league.status,
       edition: league.edition,
       resultEvidenceRequired: league.resultEvidenceRequired,
