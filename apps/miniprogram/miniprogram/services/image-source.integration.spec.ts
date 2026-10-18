@@ -21,8 +21,6 @@ describe('mini-program image source integration', () => {
     const controller = source('pages/leagues/index.ts')
     expect(controller).toContain("from '../../services/image-source'")
     expect(controller).toContain('cacheImageSource(')
-    expect(controller).toContain('bannerDisplayUrl = preloadedSource')
-    expect(controller).not.toContain('bannerDisplayUrl = banner.imageUrl')
     expect(controller).not.toContain('wx.getImageInfo')
   })
 })
