@@ -27,7 +27,7 @@ const secondPageItems = items.map((item, index) => ({
   candidate: { ...item.candidate, sourceExternalId: `team-page-2-${index + 1}`, nameZh: `第二页球队 ${index + 1}` }
 }));
 
-function fixture({ resumableRun = false } = {}) {
+function fixture({ resumableRun = false, mode = 'INCREMENTAL' } = {}) {
   const request = vi.fn(async (path: string, options?: { method?: string; body?: { ids?: string[] } }) => {
     if (path.endsWith('/publish') && options?.method === 'POST') return {
       requestedCount: options.body?.ids?.length ?? 0,
@@ -40,7 +40,7 @@ function fixture({ resumableRun = false } = {}) {
       return { items: path.includes('page=2') ? secondPageItems : items, page: path.includes('page=2') ? 2 : 1, pageSize: path.includes('pageSize=50') ? 50 : 20, total: 981, summary: { pending: 19, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
     }
     if (path.includes('/runs')) return {
-      items: [{ ...run, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      items: [{ ...run, mode, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
       page: 1, pageSize: 20, total: 1,
       summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
     };
@@ -50,6 +50,13 @@ function fixture({ resumableRun = false } = {}) {
 }
 
 describe('TeamSyncPanel', () => {
+  it('labels sample history as sample synchronization', async () => {
+    const { api } = fixture({ mode: 'SAMPLE' });
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    expect(await screen.findByText(/当前显示.*抽样同步任务/)).toBeInTheDocument();
+  });
+
   it('puts team shells needing attention before a collapsed history section', async () => {
     const { api } = fixture();
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { TeamCatalogService } from './team-catalog.service.js';
@@ -27,7 +28,7 @@ describe('TeamCatalogService', () => {
     ]);
     const [ajax, englishClub, disabled] = await Promise.all([
       prisma.teamCatalogItem.create({
-        data: { sourceType: 'PESDATA', sourceExternalId: `ajax-${suffix}`, sourceLeagueName: '荷兰足球甲级联赛', nameZh: '阿贾克斯', nameEn: 'Ajax', shortName: '阿贾克斯', storedLogoUrl: 'https://media.example/ajax.webp' }
+        data: { sourceType: 'PESDATA', sourceExternalId: `ajax-${suffix}`, sourceLeagueName: '荷兰足球甲级联赛', nameZh: '阿贾克斯', nameEn: 'Ajax', shortName: '阿贾克斯', storedLogoUrl: `cloud://test/team-crests--ajax-${suffix}.webp` }
       }),
       prisma.teamCatalogItem.create({
         data: { sourceType: 'PESDATA', sourceExternalId: `english-${suffix}`, sourceLeagueName: '英格兰联赛', nameZh: '阿森纳', nameEn: 'Arsenal', shortName: '阿森纳', storedLogoUrl: 'https://media.example/arsenal.webp' }
@@ -44,12 +45,20 @@ describe('TeamCatalogService', () => {
       new AuditLogService(prisma),
       new LeagueVisibilityService(prisma)
     );
+    const temporaryReadUrl = jest.fn(async () => 'https://temporary.example/ajax.webp');
+    Object.assign(service, { storage: { temporaryReadUrl } });
 
     try {
       const ajaxSearch = await service.listAvailable(firstLeague.id, { keyword: 'ajax' });
       expect(ajaxSearch.items).toEqual(expect.arrayContaining([
-        expect.objectContaining({ id: ajax.id, isAssigned: true, assignedLeagueTeamId: team.id })
+        expect.objectContaining({
+          id: ajax.id,
+          storedLogoUrl: 'https://temporary.example/ajax.webp',
+          isAssigned: true,
+          assignedLeagueTeamId: team.id
+        })
       ]));
+      expect(temporaryReadUrl).toHaveBeenCalledWith(ajax.storedLogoUrl, 600);
       await prisma.leagueTeam.update({ where: { id: team.id }, data: { status: 'ARCHIVED' } });
       await expect(service.listAvailable(firstLeague.id, { keyword: 'ajax' })).resolves.toEqual({
         items: expect.arrayContaining([
@@ -66,9 +75,10 @@ describe('TeamCatalogService', () => {
         expect.objectContaining({ id: englishClub.id, nameZh: '阿森纳' })
       ]));
       await expect(service.listAvailable(firstLeague.id, { keyword: '停用' })).resolves.toMatchObject({ items: [] });
-      await expect(service.listAvailable(firstLeague.id, { keyword: '停用', includeDisabled: true })).resolves.toMatchObject({
-        items: [{ id: disabled.id, status: 'DISABLED' }]
-      });
+      const disabledSearch = await service.listAvailable(firstLeague.id, { keyword: '停用', includeDisabled: true });
+      expect(disabledSearch.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: disabled.id, status: 'DISABLED' })
+      ]));
 
       await prisma.league.update({ where: { id: firstLeague.id }, data: { isDeleted: true } });
       await expect(service.listAvailable(firstLeague.id)).rejects.toMatchObject({ status: 404 });
@@ -103,7 +113,7 @@ describe('TeamCatalogService', () => {
     const candidate = {
       sourceExternalId: `ajax-${suffix}`, sourceLeagueExternalId: 'eredivisie', sourceLeagueName: '荷甲',
       nameZh: '阿贾克斯', nameEn: 'Ajax', nameJa: null, shortName: 'AJA',
-      remoteLogoUrl: 'https://images.example/ajax.png', storedLogoUrl: 'https://assets.example/ajax.png',
+      remoteLogoUrl: 'https://images.example/ajax.png', storedLogoUrl: `cloud://test/team-crests--ajax-${suffix}.png`,
       sourceUpdatedAt: null
     };
     const [publishItem, rejectItem] = await Promise.all([
@@ -121,8 +131,15 @@ describe('TeamCatalogService', () => {
       new AuditLogService(prisma),
       new LeagueVisibilityService(prisma)
     );
+    const temporaryReadUrl = jest.fn(async () => 'https://temporary.example/ajax.png');
+    Object.assign(service, { storage: { temporaryReadUrl } });
 
     try {
+      const review = await service.listSyncDifferencesPage(run.id, { page: 1, pageSize: 20 });
+      expect(review.items.find(({ id }) => id === publishItem.id)?.candidate?.storedLogoUrl)
+        .toBe('https://temporary.example/ajax.png');
+      expect(temporaryReadUrl).toHaveBeenCalledWith(candidate.storedLogoUrl, 600);
+
       await service.publishSyncItem(admin.id, publishItem.id);
       await service.rejectSyncItem(admin.id, rejectItem.id);
       await expect(prisma.teamCatalogItem.findUnique({ where: {

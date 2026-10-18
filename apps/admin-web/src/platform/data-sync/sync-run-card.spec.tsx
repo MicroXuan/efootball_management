@@ -43,6 +43,8 @@ describe('SyncRunCard', () => {
 
     expect(screen.getByText('当前没有同步任务')).toBeInTheDocument();
     expect(screen.queryByText('尚未运行')).not.toBeInTheDocument();
+    expect(screen.getByText('日常更新请选择“更新变化数据”；首次验证数据可使用“抽样同步”。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '抽样同步' })).toBeInTheDocument();
     expect(screen.getByText('待确认队壳')).toBeInTheDocument();
     expect(screen.getByText('正式队壳')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '更新变化数据' })).toBeInTheDocument();

@@ -27,7 +27,7 @@ describe('PlatformPresentationService', () => {
     };
     await expect(service.get()).resolves.toEqual(expected);
     await expect(service.get()).resolves.toEqual(expected);
-    expect(storage.temporaryReadUrl).toHaveBeenCalledWith(cloudFileId, 3600);
+    expect(storage.temporaryReadUrl).toHaveBeenCalledWith(cloudFileId, 600);
     expect(storage.temporaryReadUrl).toHaveBeenCalledTimes(1);
   });
 

@@ -72,7 +72,7 @@ describe('DataSyncPage', () => {
       <DataSyncPage api={{ request } as unknown as AdminApi} />
     </MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '抽样检查' }));
+    fireEvent.click(await screen.findByRole('button', { name: '抽样同步' }));
 
     await waitFor(() => expect(request).toHaveBeenCalledWith(
       '/v1/admin/data-sync/players/runs',

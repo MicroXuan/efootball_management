@@ -16,7 +16,7 @@ const DEFAULT_STATUSES = ['PENDING', 'FAILED'];
 const pageSizeOptions = [20, 50];
 const statusCopy = { PENDING: '等待确认', FAILED: '同步失败', PUBLISHED: '已发布', REJECTED: '已驳回' } as const;
 const changeCopy = { ADDED: '新增', UPDATED: '更新', SOURCE_MISSING: '来源缺失' } as const;
-const runModeCopy = { SAMPLE: '抽样检查', INCREMENTAL: '增量更新', FULL: '全部检查', RESUME: '继续执行' } as const;
+const runModeCopy = { SAMPLE: '抽样同步', INCREMENTAL: '增量更新', FULL: '全部检查', RESUME: '继续执行' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '同步完成', PAUSED: '已暂停', FAILED: '同步失败' } as const;
 
 export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {

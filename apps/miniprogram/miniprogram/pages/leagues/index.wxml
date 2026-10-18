@@ -43,7 +43,7 @@
     >
       <view class="league-card__identity">
         <view class="league-mark">
-          <entity-artwork src="{{item.logoUrl}}" fallback="{{item.logoText}}" shape="square" />
+          <entity-artwork src="{{item.logoUrl}}" fallback="{{item.logoText}}" shape="square" surface="light" />
         </view>
         <view class="league-card__copy">
           <view class="league-card__meta-line">

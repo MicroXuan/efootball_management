@@ -20,7 +20,7 @@ const batchStatusCopy: Record<ImportBatchResponse['status'], string> = {
 const diffCopy: Record<ImportRecordResponse['diffType'], string> = {
   CREATE: '新增', UPDATE: '更新', UNCHANGED: '无变化', INVALID: '无效'
 };
-const runModeCopy = { SAMPLE: '抽样检查', INCREMENTAL: '增量更新', FULL: '全部检查', RESUME: '继续执行' } as const;
+const runModeCopy = { SAMPLE: '抽样同步', INCREMENTAL: '增量更新', FULL: '全部检查', RESUME: '继续执行' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '同步完成', PAUSED: '已暂停', FAILED: '同步失败' } as const;
 
 export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, refreshKey = '' }: {

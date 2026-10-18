@@ -10,7 +10,7 @@
     <view class="league-hero league-hero--compact">
       <view class="league-hero__main">
         <view class="league-mark">
-          <entity-artwork src="{{league.logoUrl}}" fallback="{{leagueLogoText}}" shape="square" />
+          <entity-artwork src="{{league.logoUrl}}" fallback="{{leagueLogoText}}" shape="square" surface="light" />
         </view>
         <view class="league-hero__copy">
           <text class="hero-kicker">{{leagueEditionLabel}} · 联赛中心</text>

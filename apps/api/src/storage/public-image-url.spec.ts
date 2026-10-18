@@ -7,7 +7,7 @@ describe('publicImageUrl', () => {
     jest.useRealTimers();
   });
 
-  it('reuses one signed URL for fifty minutes and refreshes it afterwards', async () => {
+  it('refreshes a CloudBase signed URL before its ten-minute expiry', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-10-17T12:00:00.000Z'));
     const temporaryReadUrl = jest.fn<() => Promise<string>>()
       .mockResolvedValueOnce('https://temporary.example/logo-1.png')
@@ -20,13 +20,15 @@ describe('publicImageUrl', () => {
     const fileId = 'cloud://env/league-images--logo.png';
 
     await expect(publicImageUrl(storage, fileId)).resolves.toBe('https://temporary.example/logo-1.png');
-    jest.advanceTimersByTime(49 * 60 * 1000);
+    jest.advanceTimersByTime(4 * 60 * 1000 + 59 * 1000);
     await expect(publicImageUrl(storage, fileId)).resolves.toBe('https://temporary.example/logo-1.png');
     expect(temporaryReadUrl).toHaveBeenCalledTimes(1);
 
-    jest.advanceTimersByTime(60 * 1000 + 1);
+    jest.advanceTimersByTime(1000 + 1);
     await expect(publicImageUrl(storage, fileId)).resolves.toBe('https://temporary.example/logo-2.png');
     expect(temporaryReadUrl).toHaveBeenCalledTimes(2);
+    expect(temporaryReadUrl).toHaveBeenNthCalledWith(1, fileId, 600);
+    expect(temporaryReadUrl).toHaveBeenNthCalledWith(2, fileId, 600);
   });
 
   it('coalesces concurrent requests for the same CloudBase file', async () => {

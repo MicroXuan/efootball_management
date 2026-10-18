@@ -59,9 +59,9 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
       <span>当前进度</span><strong>{phase}</strong>
       {active ? <small className="sync-run-card__live-count">已处理 {run.counters.scanned} 条 · 失败 {run.counters.failed} 条</small> : null}
       {run.errorMessage ? <small className="sync-run-card__error">{run.errorMessage}</small> : null}
-    </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“更新变化数据”；首次验证数据可使用“抽样检查”。</span></p>}
+    </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“更新变化数据”；首次验证数据可使用“抽样同步”。</span></p>}
     <Space wrap className="sync-run-card__actions">
-      <Button disabled={active || busy} onClick={() => void onStart('sample')}>抽样检查</Button>
+      <Button disabled={active || busy} onClick={() => void onStart('sample')}>抽样同步</Button>
       <Button type="primary" disabled={active || busy} loading={busy} onClick={() => void onStart('incremental')}>更新变化数据</Button>
       <Popconfirm
         title="确认重新检查全部数据？"

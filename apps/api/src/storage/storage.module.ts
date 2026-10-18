@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import cloudbase from '@cloudbase/node-sdk';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminUploadsController } from './admin-uploads.controller.js';
@@ -7,6 +8,7 @@ import { CloudBaseObjectStorage, type CloudBaseStorageClient } from './cloudbase
 import { LocalObjectStorage } from './local-object-storage.js';
 import { OBJECT_STORAGE, type ObjectStorage } from './object-storage.js';
 import { PublicMediaController } from './public-media.controller.js';
+import { PublicImageResponseInterceptor } from './public-image-response.interceptor.js';
 
 @Module({
   imports: [AdminAuthModule],
@@ -34,6 +36,9 @@ import { PublicMediaController } from './public-media.controller.js';
       }) as CloudBaseStorageClient;
       return new CloudBaseObjectStorage(client);
     }
+  }, {
+    provide: APP_INTERCEPTOR,
+    useClass: PublicImageResponseInterceptor
   }],
   exports: [OBJECT_STORAGE]
 })

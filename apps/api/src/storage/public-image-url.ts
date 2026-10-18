@@ -1,7 +1,7 @@
 import type { ObjectStorage } from './object-storage.js';
 
-const PUBLIC_IMAGE_URL_MAX_AGE_SECONDS = 3600;
-const PUBLIC_IMAGE_CACHE_MILLISECONDS = 50 * 60 * 1000;
+const PUBLIC_IMAGE_URL_MAX_AGE_SECONDS = 10 * 60;
+const PUBLIC_IMAGE_CACHE_MILLISECONDS = 5 * 60 * 1000;
 
 type CacheEntry = {
   url?: string;

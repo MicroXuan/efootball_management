@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type {
   CreateCustomTeamCatalogItemRequest,
   TeamCatalogCandidate,
@@ -15,6 +15,8 @@ import type { TeamCatalogItem as TeamCatalogRecord } from '../generated/prisma/c
 import { AuditLogService } from '../admin/audit-log.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
+import { publicImageUrl } from '../storage/public-image-url.js';
 
 export type TeamCatalogListQuery = {
   keyword?: string;
@@ -36,7 +38,8 @@ export class TeamCatalogService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(LeagueVisibilityService) private readonly visibility: LeagueVisibilityService
+    @Inject(LeagueVisibilityService) private readonly visibility: LeagueVisibilityService,
+    @Optional() @Inject(OBJECT_STORAGE) private readonly storage?: ObjectStorage
   ) {}
 
   async listAvailable(leagueId: string, query: TeamCatalogListQuery = {}): Promise<TeamCatalogListResponse> {
@@ -75,7 +78,9 @@ export class TeamCatalogService {
     });
 
     return {
-      items: records.map(({ leagueTeams, ...record }) => this.present(record, leagueTeams[0]?.id ?? null)),
+      items: await Promise.all(records.map(({ leagueTeams, ...record }) =>
+        this.present(record, leagueTeams[0]?.id ?? null)
+      )),
       nextCursor: null
     };
   }
@@ -84,7 +89,7 @@ export class TeamCatalogService {
     actorAdminId: string,
     input: CreateCustomTeamCatalogItemRequest
   ): Promise<TeamCatalogItem> {
-    return this.prisma.$transaction(async (transaction) => {
+    const record = await this.prisma.$transaction(async (transaction) => {
       const record = await transaction.teamCatalogItem.create({
         data: {
           sourceType: 'CUSTOM',
@@ -103,8 +108,9 @@ export class TeamCatalogService {
         resourceId: record.id,
         metadata: { name: record.nameZh, shortName: record.shortName }
       });
-      return this.present(record, null);
+      return record;
     });
+    return this.present(record, null);
   }
 
   async listSyncRuns(): Promise<{ items: TeamCatalogSyncRunSummary[] }> {
@@ -121,13 +127,13 @@ export class TeamCatalogService {
     const items = await this.prisma.teamCatalogSyncItem.findMany({
       where: { runId }, orderBy: [{ sourceExternalId: 'asc' }, { id: 'asc' }]
     });
-    return { items: items.map((item) => ({
+    return { items: await Promise.all(items.map(async (item) => ({
       id: item.id, runId: item.runId, sourceExternalId: item.sourceExternalId,
       changeType: item.changeType, reviewStatus: item.reviewStatus,
       currentCatalogItemId: item.currentCatalogItemId,
-      candidate: item.candidateJson ? TeamCatalogCandidateSchema.parse(item.candidateJson) : null,
+      candidate: item.candidateJson ? await this.presentCandidate(item.candidateJson) : null,
       errorCode: item.errorCode
-    })) };
+    }))) };
   }
 
   async listSyncDifferencesPage(
@@ -214,20 +220,20 @@ export class TeamCatalogService {
     ]);
     const statusCount = new Map(statusGroups.map((entry) => [entry.reviewStatus, entry._count.reviewStatus]));
     return {
-      items: records.map((item) => ({
+      items: await Promise.all(records.map(async (item) => ({
         id: item.id,
         runId: item.runId,
         sourceExternalId: item.sourceExternalId,
         changeType: item.changeType,
         reviewStatus: item.reviewStatus,
         currentCatalogItemId: item.currentCatalogItemId,
-        candidate: item.candidateJson ? TeamCatalogCandidateSchema.parse(item.candidateJson) : null,
+        candidate: item.candidateJson ? await this.presentCandidate(item.candidateJson) : null,
         current: item.currentCatalogItem ? {
           nameZh: item.currentCatalogItem.nameZh,
           nameEn: item.currentCatalogItem.nameEn,
           shortName: item.currentCatalogItem.shortName,
           remoteLogoUrl: item.currentCatalogItem.remoteLogoUrl,
-          storedLogoUrl: item.currentCatalogItem.storedLogoUrl,
+          storedLogoUrl: await publicImageUrl(this.storage, item.currentCatalogItem.storedLogoUrl),
           logoChecksum: item.currentCatalogItem.logoChecksum,
           sourceChecksum: item.currentCatalogItem.sourceChecksum
         } : null,
@@ -235,7 +241,7 @@ export class TeamCatalogService {
         candidateSourceChecksum: item.detailChecksum,
         errorCode: item.errorCode,
         errorMessage: item.errorMessage
-      })),
+      }))),
       page: query.page,
       pageSize: query.pageSize,
       total,
@@ -372,7 +378,7 @@ export class TeamCatalogService {
     return [first, { id: direction }];
   }
 
-  private present(record: TeamCatalogRecord, assignedLeagueTeamId: string | null): TeamCatalogItem {
+  private async present(record: TeamCatalogRecord, assignedLeagueTeamId: string | null): Promise<TeamCatalogItem> {
     return {
       id: record.id,
       sourceType: record.sourceType,
@@ -384,7 +390,7 @@ export class TeamCatalogService {
       nameJa: record.nameJa,
       shortName: record.shortName,
       remoteLogoUrl: record.remoteLogoUrl,
-      storedLogoUrl: record.storedLogoUrl,
+      storedLogoUrl: await publicImageUrl(this.storage, record.storedLogoUrl),
       status: record.status,
       sourceUpdatedAt: record.sourceUpdatedAt?.toISOString() ?? null,
       lastSyncedAt: record.lastSyncedAt?.toISOString() ?? null,
@@ -392,6 +398,14 @@ export class TeamCatalogService {
       updatedAt: record.updatedAt.toISOString(),
       isAssigned: assignedLeagueTeamId !== null,
       assignedLeagueTeamId
+    };
+  }
+
+  private async presentCandidate(value: Prisma.JsonValue): Promise<TeamCatalogCandidate> {
+    const candidate = TeamCatalogCandidateSchema.parse(value);
+    return {
+      ...candidate,
+      storedLogoUrl: await publicImageUrl(this.storage, candidate.storedLogoUrl)
     };
   }
 }

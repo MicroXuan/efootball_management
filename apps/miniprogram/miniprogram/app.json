@@ -1,8 +1,8 @@
 {
   "pages": [
+    "pages/leagues/index",
     "pages/players/index",
     "pages/competitions/index",
-    "pages/leagues/index",
     "pages/league-detail/index",
     "pages/season-standings/index",
     "pages/competition-detail/index",

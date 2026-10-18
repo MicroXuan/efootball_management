@@ -28,7 +28,7 @@ const record = {
   validationErrors: [{ code: 'IMAGE_INVALID', path: 'imageUrl', message: '图片无效' }], targetPlayerId: null, targetCardId: null
 };
 
-function fixture({ publishFails = false, resumableRun = false } = {}) {
+function fixture({ publishFails = false, resumableRun = false, mode = 'INCREMENTAL' } = {}) {
   const request = vi.fn(async (path: string) => {
     if (path.includes('/publish')) {
       if (publishFails) throw new ApiError({ status: 409, code: 'IMPORT_BATCH_NOT_READY' });
@@ -37,7 +37,7 @@ function fixture({ publishFails = false, resumableRun = false } = {}) {
     if (path.includes('/records')) return { items: [record], page: 1, pageSize: 20, total: 43000, summary: { create: 100, update: 20, unchanged: 42880, invalid: 0 } };
     if (path.includes('/batches')) return { items: [batch], page: path.includes('page=2') ? 2 : 1, pageSize: 20, total: 43000, summary: { uploaded: 0, validated: 0, ready: 1, published: 0, failed: 0, cancelled: 0 } };
     if (path.includes('/runs')) return {
-      items: [{ ...run, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      items: [{ ...run, mode, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
       page: 1, pageSize: 20, total: 1,
       summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
     };
@@ -47,6 +47,13 @@ function fixture({ publishFails = false, resumableRun = false } = {}) {
 }
 
 describe('PlayerSyncPanel', () => {
+  it('labels sample history as sample synchronization', async () => {
+    const { api } = fixture({ mode: 'SAMPLE' });
+    render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    expect(await screen.findByText(/当前显示.*抽样同步任务/)).toBeInTheDocument();
+  });
+
   it('puts work that needs attention before a collapsed history section', async () => {
     const { api } = fixture();
     render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);

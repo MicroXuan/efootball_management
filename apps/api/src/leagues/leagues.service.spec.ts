@@ -87,7 +87,7 @@ describe('LeaguesService', () => {
     });
     expect(storage.temporaryReadUrl).toHaveBeenCalledWith(
       'cloud://env/league-images--logo.png',
-      3600
+      600
     );
   });
 
