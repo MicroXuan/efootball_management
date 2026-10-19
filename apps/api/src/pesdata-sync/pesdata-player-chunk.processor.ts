@@ -201,8 +201,11 @@ export class PesdataPlayerChunkProcessor {
         const status = completionReason ? 'READY' as const
           : owned.pauseRequestedAt ? 'PAUSED' as const : 'PENDING' as const;
         const heartbeatAt = new Date();
-        await tx.externalSyncRun.update({
-          where: { id: runId },
+        const finalCommitAt = new Date();
+        const committed = await tx.externalSyncRun.updateMany({
+          where: {
+            id: runId, status: 'RUNNING', leaseOwnerToken, leaseExpiresAt: { gt: finalCommitAt }
+          },
           data: {
             status,
             activeLeaseKey: completionReason ? null : 'pesdata',
@@ -223,6 +226,9 @@ export class PesdataPlayerChunkProcessor {
             completionReason
           }
         });
+        if (committed.count !== 1) {
+          throw new PesdataSyncError('PESDATA_SYNC_LEASE_LOST', 'Synchronization lease ownership was lost');
+        }
         return {
           disposition: status === 'PENDING' ? 'CONTINUE' : 'STOP',
           status,

@@ -190,8 +190,11 @@ export class PesdataTeamChunkProcessor {
         const status = completionReason ? 'READY' as const
           : owned.pauseRequestedAt ? 'PAUSED' as const : 'PENDING' as const;
         const heartbeatAt = new Date();
-        await tx.teamCatalogSyncRun.update({
-          where: { id: runId },
+        const finalCommitAt = new Date();
+        const committed = await tx.teamCatalogSyncRun.updateMany({
+          where: {
+            id: runId, status: 'RUNNING', leaseOwnerToken, leaseExpiresAt: { gt: finalCommitAt }
+          },
           data: {
             status,
             activeLeaseKey: completionReason ? null : 'pesdata-team-catalog',
@@ -213,6 +216,9 @@ export class PesdataTeamChunkProcessor {
             completionReason
           }
         });
+        if (committed.count !== 1) {
+          throw new PesdataTeamChunkError('PESDATA_TEAM_SYNC_LEASE_LOST', 'Team synchronization lease ownership was lost');
+        }
         return {
           disposition: status === 'PENDING' ? 'CONTINUE' : 'STOP', status, completionReason
         } satisfies SyncChunkOutcome;
