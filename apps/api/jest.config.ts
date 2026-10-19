@@ -8,6 +8,8 @@ const testMatch = process.env.JEST_SCOPE === 'unit'
 
 const config: Config = {
   extensionsToTreatAsEsm: ['.ts'],
+  globalSetup: '<rootDir>/test/global-test-data-cleanup.mjs',
+  globalTeardown: '<rootDir>/test/global-test-data-cleanup.mjs',
   maxWorkers: 1,
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'

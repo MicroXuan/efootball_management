@@ -21,6 +21,7 @@
     "player-import": "tsx src/player-import/player-import.cli.ts",
     "sync:pesdata": "tsx src/pesdata-sync/pesdata-sync.cli.ts",
     "data-sync:clear": "tsx src/platform-data-sync/platform-data-sync-cleanup.cli.ts",
+    "test-data:clear": "tsx test/run-test-data-cleanup.ts",
     "competition:demo": "tsx src/competitions/competition-demo.cli.ts",
     "league-teams:migrate": "tsx src/league-teams/league-team-backfill.cli.ts"
   },
