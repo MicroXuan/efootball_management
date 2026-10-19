@@ -40,7 +40,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .nickname-editor__input { height:84rpx; margin-top:18rpx; padding:0 22rpx; border:2rpx solid #46545b; border-radius:14rpx; background:#10181c; color:#f4f7f8; font-size:27rpx; }
 .nickname-editor__hint { display:block; margin-top:14rpx; color:#8f9ca2; font-size:19rpx; line-height:1.5; }
 .nickname-editor__actions { display:flex; justify-content:flex-end; gap:14rpx; }
-.nickname-editor__actions .outline-button,.nickname-editor__actions .primary-button { min-width:180rpx; margin-top:22rpx; }
+.nickname-editor__actions .outline-button,.nickname-editor__actions .primary-button { min-width:180rpx; min-height:88rpx; margin-top:22rpx; padding:0 28rpx; box-sizing:border-box; display:flex; align-items:center; justify-content:center; line-height:1; }
 .quick-actions { margin-top:20rpx; padding:26rpx; border:2rpx solid #344047; border-radius:24rpx; background:#151d21; box-shadow:0 16rpx 44rpx rgba(0,0,0,.16); }
 .action-center-entry { min-height:126rpx;margin-top:20rpx;padding:22rpx 24rpx;box-sizing:border-box;display:flex;align-items:center;border:2rpx solid #668b26;border-radius:20rpx;background:linear-gradient(145deg,rgba(182,241,58,.12),#151d21 72%); }
 .action-center-entry__marker { width:54rpx;height:54rpx;flex:none;display:flex;align-items:center;justify-content:center;border-radius:14rpx;background:#b6f13a;color:#111810;font-size:21rpx;font-weight:900; }
