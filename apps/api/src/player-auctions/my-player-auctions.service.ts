@@ -17,8 +17,11 @@ const ROOM_INCLUDE = {
     include: {
       bids: {
         where: { result: 'VALID' as const },
-        include: { leagueTeam: { select: { name: true } } },
-        orderBy: [{ submittedAt: 'asc' as const }, { id: 'asc' as const }]
+        include: {
+          leagueTeam: { select: { teamNumber: true, name: true } },
+          user: { select: { displayName: true } }
+        },
+        orderBy: [{ submittedAt: 'desc' as const }, { id: 'desc' as const }]
       }
     },
     orderBy: [{ displayOrder: 'asc' as const }, { id: 'asc' as const }]
@@ -200,13 +203,21 @@ export class MyPlayerAuctionsService {
     currentPrice: number | null;
     deadlineAt: Date | null;
     deadlineEpoch: number;
-    bids: Array<{ id: string; amount: number; result: string; submittedAt: Date; leagueTeam: { name: string } | null }>;
+    bids: Array<{
+      id: string;
+      amount: number;
+      result: string;
+      submittedAt: Date;
+      leagueTeam: { teamNumber: number | null; name: string } | null;
+      user: { displayName: string } | null;
+    }>;
   }, includeBids: boolean) {
     return {
       id: lot.id,
       displayOrder: lot.displayOrder,
       playerName: lot.playerNameSnapshot,
       playerSnapshot: lot.playerSnapshot,
+      card: AuctionPlayerCardSnapshotSchema.parse((lot.playerSnapshot as { card?: unknown }).card),
       startingPrice: lot.startingPrice,
       minimumIncrement: lot.minimumIncrement,
       status: lot.status,
@@ -214,12 +225,17 @@ export class MyPlayerAuctionsService {
       deadlineAt: lot.deadlineAt?.toISOString() ?? null,
       deadlineEpoch: lot.deadlineEpoch,
       ...(includeBids ? {
-        bids: lot.bids.filter((bid) => bid.result === 'VALID').map((bid) => ({
-          id: bid.id,
-          teamName: bid.leagueTeam?.name ?? '未知球队',
-          amount: bid.amount,
-          submittedAt: bid.submittedAt.toISOString()
-        }))
+        bids: lot.bids
+          .filter((bid) => bid.result === 'VALID')
+          .sort((left, right) => right.submittedAt.getTime() - left.submittedAt.getTime() || right.id.localeCompare(left.id))
+          .map((bid) => ({
+            id: bid.id,
+            teamNumber: bid.leagueTeam?.teamNumber ?? null,
+            teamName: bid.leagueTeam?.name ?? '未知球队',
+            bidderDisplayName: bid.user?.displayName ?? '未知用户',
+            amount: bid.amount,
+            submittedAt: bid.submittedAt.toISOString()
+          }))
       } : {})
     };
   }

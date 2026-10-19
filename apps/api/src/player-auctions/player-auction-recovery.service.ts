@@ -21,16 +21,25 @@ export class PlayerAuctionRecoveryService {
   ) {}
 
   async onBridgeUnavailable(deviceId: string, reason: string) {
-    if (this.unavailableDevices.has(deviceId)) return 0;
     this.unavailableDevices.add(deviceId);
     const batches = await this.prisma.playerAuctionBatch.findMany({
       where: { bidChannel: 'WECHAT_GROUP', status: { in: ['ACTIVE', 'PAUSED'] }, groupBinding: { deviceId } },
       select: { id: true, groupBindingId: true }
     });
+    let transitioned = 0;
     for (const batch of batches) {
-      if (batch.groupBindingId) await this.state.enterRecovery(batch.groupBindingId, reason);
+      if (!batch.groupBindingId) continue;
+      try {
+        await this.state.enterRecovery(batch.groupBindingId, reason);
+        transitioned += 1;
+      } catch (error) {
+        // A second worker tick can retain an ACTIVE/PAUSED snapshot after another
+        // scanner has already moved the batch into recovery. That transition is
+        // idempotently complete, so only suppress this precise stale-state race.
+        if (!(error instanceof PlayerAuctionError) || error.code !== 'AUCTION_STATE_INVALID') throw error;
+      }
     }
-    return batches.length;
+    return transitioned;
   }
 
   bridgeAvailable(deviceId: string) {

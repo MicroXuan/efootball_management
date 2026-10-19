@@ -11,15 +11,31 @@ function harness(teamStatus = 'ACTIVE') {
     id: 'batch-1', leagueId: 'league-1', bidChannel: 'MINIPROGRAM', name: '秋季拍卖',
     status: 'ACTIVE', currentLotId: 'lot-1', league: { id: 'league-1', name: '九星联赛' },
     lots: [{
-      id: 'lot-1', displayOrder: 1, playerNameSnapshot: '车范根', playerSnapshot: { position: 'CF' },
+      id: 'lot-1', displayOrder: 1, playerNameSnapshot: '车范根', playerSnapshot: { card: {
+        id: saleCardId, imageUrl: 'https://img.pesdata.net/player.webp', cardName: '传奇',
+        position: 'CF', overallRating: 96, cardType: 'EPIC'
+      } },
       startingPrice: 50, minimumIncrement: 10, status: 'ACTIVE', currentPrice: 120,
       deadlineAt: new Date('2026-10-09T12:00:20.000Z'), deadlineEpoch: 4,
       bids: [
-        { id: 'bid-valid', leagueTeamId: 'team-1', amount: 120, result: 'VALID', submittedAt: now, leagueTeam: { name: '申花' }, wechatMessageId: 'secret' },
-        { id: 'bid-failed', leagueTeamId: 'team-2', amount: 110, result: 'BELOW_MINIMUM_INCREMENT', submittedAt: now, leagueTeam: { name: '海港' }, wechatMessageId: 'secret-2' }
+        {
+          id: 'bid-valid', leagueTeamId: 'team-1', amount: 120, result: 'VALID', submittedAt: now,
+          leagueTeam: { teamNumber: 1, name: '申花' }, user: { displayName: '梅西' }, wechatMessageId: 'secret'
+        },
+        {
+          id: 'bid-newer', leagueTeamId: 'team-2', amount: 130, result: 'VALID',
+          submittedAt: new Date('2026-10-09T12:00:01.000Z'),
+          leagueTeam: { teamNumber: 2, name: '海港' }, user: { displayName: '小新' }, wechatMessageId: 'secret-new'
+        },
+        {
+          id: 'bid-failed', leagueTeamId: 'team-2', amount: 110, result: 'BELOW_MINIMUM_INCREMENT', submittedAt: now,
+          leagueTeam: { teamNumber: 2, name: '海港' }, user: { displayName: '小新' }, wechatMessageId: 'secret-2'
+        }
       ]
     }, {
-      id: 'lot-2', displayOrder: 2, playerNameSnapshot: '济科', playerSnapshot: {},
+      id: 'lot-2', displayOrder: 2, playerNameSnapshot: '济科', playerSnapshot: { card: {
+        id: saleCardId, imageUrl: null, cardName: '传奇', position: 'AMF', overallRating: 95, cardType: 'LEGENDARY'
+      } },
       startingPrice: 80, minimumIncrement: 10, status: 'QUEUED', currentPrice: null,
       deadlineAt: null, deadlineEpoch: 0, bids: []
     }]
@@ -73,8 +89,16 @@ describe('MyPlayerAuctionsService', () => {
     });
     expect(room.currentLot).not.toBeNull();
     expect(room.currentLot!.bids).toEqual([
-      expect.objectContaining({ id: 'bid-valid', amount: 120, teamName: '申花' })
+      {
+        id: 'bid-newer', teamNumber: 2, teamName: '海港', bidderDisplayName: '小新',
+        amount: 130, submittedAt: '2026-10-09T12:00:01.000Z'
+      },
+      {
+        id: 'bid-valid', teamNumber: 1, teamName: '申花', bidderDisplayName: '梅西',
+        amount: 120, submittedAt: now.toISOString()
+      }
     ]);
+    expect(room.currentLot!.card).toMatchObject({ id: saleCardId, overallRating: 96, position: 'CF' });
     expect(JSON.stringify(room)).not.toContain('wechatMessageId');
     expect(JSON.stringify(room)).not.toContain('bid-failed');
   });
