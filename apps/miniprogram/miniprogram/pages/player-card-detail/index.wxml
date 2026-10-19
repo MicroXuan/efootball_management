@@ -1,5 +1,10 @@
 <view class="detail-page">
-  <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员卡档案" />
+  <view wx:if="{{state === 'login'}}" class="detail-state">
+    <text class="state-title">登录后查看球员详情</text>
+    <text class="state-copy">完成登录后会自动返回这张球员卡。</text>
+    <button class="retry-button efm-retry-button" bindtap="goToLogin">去登录</button>
+  </view>
+  <loading-state wx:elif="{{state === 'loading'}}" label="正在读取球员卡档案" />
 
   <view wx:elif="{{state === 'unavailable'}}" class="detail-state">
     <text class="state-code">卡片不可用</text>

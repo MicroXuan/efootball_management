@@ -23,7 +23,7 @@ let currentDetail: PlayerCardDetail | null = null
 
 Page({
   data: {
-    state: 'loading' as 'loading' | 'loaded' | 'error' | 'unavailable',
+    state: 'loading' as 'login' | 'loading' | 'loaded' | 'error' | 'unavailable',
     errorMessage: '',
     cardId: '',
     card: null as PlayerCardDetailViewModel | null,
@@ -42,7 +42,11 @@ Page({
       return
     }
     this.setData({ cardId: id })
-    void this.loadCard()
+    this.resumeAuthenticatedDetail()
+  },
+
+  onShow() {
+    this.resumeAuthenticatedDetail()
   },
 
   onUnload() {
@@ -57,6 +61,20 @@ Page({
 
   goBack() {
     wx.navigateBack()
+  },
+
+  goToLogin() {
+    const route = `/pages/player-card-detail/index?id=${encodeURIComponent(this.data.cardId)}`
+    wx.navigateTo({ url: `/pages/login/index?redirect=${encodeURIComponent(route)}` })
+  },
+
+  resumeAuthenticatedDetail() {
+    if (!this.data.cardId || this.data.state === 'loaded' || this.data.state === 'loading' && detailRequestToken > 0) return
+    if (!session.getAccessToken()) {
+      this.setData({ state: 'login', errorMessage: '' })
+      return
+    }
+    void this.loadCard()
   },
 
   onSiblingTap(event: SiblingTapEvent) {
@@ -100,6 +118,10 @@ Page({
   },
 
   async loadCard() {
+    if (!session.getAccessToken()) {
+      this.setData({ state: 'login', errorMessage: '' })
+      return
+    }
     const token = ++detailRequestToken
     this.setData({ state: 'loading', errorMessage: '' })
     try {

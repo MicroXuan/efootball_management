@@ -1,4 +1,12 @@
 <view class="catalog-page">
+  <view wx:if="{{!authenticated}}" class="catalog-state">
+    <text class="state-code">登录后可见</text>
+    <text class="state-title">登录后查看球员卡</text>
+    <text class="state-copy">球员库只对已登录用户开放。</text>
+    <button class="retry-button efm-retry-button" bindtap="goToLogin">去登录</button>
+  </view>
+
+  <block wx:else>
   <view class="catalog-controls">
     <view class="search-box">
       <text class="search-icon">⌕</text>
@@ -55,4 +63,5 @@
     <loading-state wx:if="{{loadingMore}}" label="继续加载" />
     <text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部球员卡 —</text>
   </view>
+  </block>
 </view>
