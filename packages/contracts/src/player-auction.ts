@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ExpectedVersionSchema, ResourceIdSchema } from './common.js';
+import { PlayerCardTypeSchema, PlayerPositionSchema } from './player-catalog.js';
 
 const TimestampSchema = z.iso.datetime();
 const PositiveMoneySchema = z.number().int().positive().max(2_147_483_647);
@@ -73,7 +74,7 @@ export const PlayerAuctionTransitionRequestSchema = z.object({
 
 export const PlayerAuctionLotInputSchema = z.object({
   playerId: ResourceIdSchema,
-  playerCardId: ResourceIdSchema.nullable().optional(),
+  playerCardId: ResourceIdSchema,
   displayOrder: z.number().int().positive().max(10_000),
   startingPrice: PositiveMoneySchema,
   minimumIncrement: PositiveMoneySchema
@@ -166,9 +167,20 @@ export const MyPlayerAuctionListItemSchema = z.object({
 
 export const MyPlayerAuctionPublicBidSchema = z.object({
   id: ResourceIdSchema,
+  teamNumber: z.number().int().min(0).max(9_999).nullable(),
   teamName: z.string().trim().min(1).max(128),
+  bidderDisplayName: z.string().trim().min(1).max(32),
   amount: PositiveMoneySchema,
   submittedAt: TimestampSchema
+});
+
+export const AuctionPlayerCardSnapshotSchema = z.object({
+  id: ResourceIdSchema,
+  imageUrl: z.string().url().nullable(),
+  cardName: z.string().max(128),
+  position: PlayerPositionSchema,
+  overallRating: z.number().int().min(1).max(110),
+  cardType: PlayerCardTypeSchema
 });
 
 export const MyPlayerAuctionLotSummarySchema = z.object({
@@ -176,6 +188,7 @@ export const MyPlayerAuctionLotSummarySchema = z.object({
   displayOrder: z.number().int().positive(),
   playerName: z.string().trim().min(1).max(128),
   playerSnapshot: z.record(z.string(), z.unknown()),
+  card: AuctionPlayerCardSnapshotSchema,
   startingPrice: PositiveMoneySchema,
   minimumIncrement: PositiveMoneySchema,
   status: PlayerAuctionLotStatusSchema,
@@ -198,6 +211,43 @@ export const MyPlayerAuctionRoomSchema = z.object({
   currentLot: MyPlayerAuctionLotSummarySchema.nullable(),
   queue: z.array(MyPlayerAuctionLotSummarySchema.omit({ bids: true })),
   sharePath: z.string().startsWith('/pages/auction-room/index?batchId=')
+});
+
+export const MyPlayerAuctionSaleListQuerySchema = z.object({
+  keyword: z.string().trim().min(1).max(80).optional(),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20)
+});
+
+export const MyPlayerAuctionSaleSchema = z.object({
+  id: ResourceIdSchema,
+  batchId: ResourceIdSchema,
+  league: z.object({
+    id: ResourceIdSchema,
+    name: z.string().trim().min(1).max(64)
+  }),
+  player: z.object({
+    id: ResourceIdSchema,
+    cardId: ResourceIdSchema,
+    name: z.string().trim().min(1).max(128),
+    imageUrl: z.string().url().nullable(),
+    position: PlayerPositionSchema,
+    overallRating: z.number().int().min(1).max(110),
+    cardType: PlayerCardTypeSchema
+  }),
+  winner: z.object({
+    teamId: ResourceIdSchema,
+    teamNumber: z.number().int().min(0).max(9_999).nullable(),
+    teamName: z.string().trim().min(1).max(64),
+    bidderDisplayName: z.string().trim().min(1).max(32)
+  }),
+  price: PositiveMoneySchema,
+  confirmedAt: TimestampSchema
+});
+
+export const MyPlayerAuctionSaleListResponseSchema = z.object({
+  items: z.array(MyPlayerAuctionSaleSchema),
+  nextCursor: z.string().nullable()
 });
 
 export const PlayerAuctionReviewSchema = z.object({
@@ -286,6 +336,10 @@ export type PlaceMiniprogramAuctionBidRequest = z.infer<typeof PlaceMiniprogramA
 export type MyPlayerAuctionListQuery = z.infer<typeof MyPlayerAuctionListQuerySchema>;
 export type MyPlayerAuctionListItem = z.infer<typeof MyPlayerAuctionListItemSchema>;
 export type MyPlayerAuctionRoom = z.infer<typeof MyPlayerAuctionRoomSchema>;
+export type AuctionPlayerCardSnapshot = z.infer<typeof AuctionPlayerCardSnapshotSchema>;
+export type MyPlayerAuctionSaleListQuery = z.infer<typeof MyPlayerAuctionSaleListQuerySchema>;
+export type MyPlayerAuctionSale = z.infer<typeof MyPlayerAuctionSaleSchema>;
+export type MyPlayerAuctionSaleListResponse = z.infer<typeof MyPlayerAuctionSaleListResponseSchema>;
 export type CreatePlayerAuctionBatchRequest = z.infer<typeof CreatePlayerAuctionBatchRequestSchema>;
 export type UpdatePlayerAuctionBatchRequest = z.infer<typeof UpdatePlayerAuctionBatchRequestSchema>;
 export type PlayerAuctionTransitionRequest = z.infer<typeof PlayerAuctionTransitionRequestSchema>;

@@ -146,7 +146,7 @@ export class AdminPlayerAuctionsService {
       this.requireDraft(batch);
       if (batch.version !== input.expectedVersion) throw auctionVersionConflict();
       const playerIds = [...new Set(input.lots.map((lot) => lot.playerId))];
-      const cardIds = [...new Set(input.lots.flatMap((lot) => lot.playerCardId ? [lot.playerCardId] : []))];
+      const cardIds = [...new Set(input.lots.map((lot) => lot.playerCardId).filter(Boolean))];
       const [players, cards] = await Promise.all([
         tx.footballPlayer.findMany({ where: { id: { in: playerIds }, publishedAt: { not: null } } }),
         cardIds.length ? tx.playerCard.findMany({ where: { id: { in: cardIds }, status: 'ACTIVE', publishedAt: { not: null } } }) : []
@@ -158,7 +158,7 @@ export class AdminPlayerAuctionsService {
       }
       for (const lot of input.lots) {
         const card = lot.playerCardId ? cardById.get(lot.playerCardId) : undefined;
-        if (lot.playerCardId && (!card || card.playerId !== lot.playerId)) {
+        if (!card || card.playerId !== lot.playerId || card.status !== 'ACTIVE' || !card.publishedAt) {
           throw new PlayerAuctionError('AUCTION_CARD_INVALID', '球员卡不存在、不可用或不属于该球员', 409);
         }
       }
@@ -166,20 +166,21 @@ export class AdminPlayerAuctionsService {
       await tx.playerAuctionLot.createMany({
         data: input.lots.map((lot) => {
           const player = playerById.get(lot.playerId)!;
-          const card = lot.playerCardId ? cardById.get(lot.playerCardId) : undefined;
+          const card = cardById.get(lot.playerCardId)!;
           const playerNameSnapshot = player.nameZh ?? player.nameEn ?? player.shortName ?? player.id;
           return {
             batchId,
             footballPlayerId: player.id,
-            playerCardId: card?.id ?? null,
+            playerCardId: card.id,
             displayOrder: lot.displayOrder,
             playerNameSnapshot,
             playerSnapshot: {
               nameZh: player.nameZh, nameEn: player.nameEn, nationality: player.nationality,
-              club: player.club, card: card ? {
+              club: player.club, card: {
+                id: card.id, imageUrl: card.imageUrl,
                 cardName: card.cardName, position: card.position,
                 overallRating: card.overallRating, cardType: card.cardType
-              } : null
+              }
             },
             startingPrice: lot.startingPrice,
             minimumIncrement: lot.minimumIncrement

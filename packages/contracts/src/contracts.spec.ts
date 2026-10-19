@@ -322,6 +322,8 @@ describe('season fixture contracts', () => {
 });
 import {
   CreatePlayerAuctionBatchRequestSchema,
+  MyPlayerAuctionSaleListQuerySchema,
+  MyPlayerAuctionSaleListResponseSchema,
   PlaceMiniprogramAuctionBidRequestSchema,
   MyPlayerAuctionRoomSchema,
   PlayerAuctionBatchDetailSchema,
@@ -2770,6 +2772,7 @@ describe('player auction contracts', () => {
   const batchId = '33333333-3333-4333-8333-333333333333';
   const lotId = '44444444-4444-4444-8444-444444444444';
   const playerId = '55555555-5555-4555-8555-555555555555';
+  const cardId = '88888888-8888-4888-8888-888888888888';
   const teamId = '66666666-6666-4666-8666-666666666666';
   const bidId = '77777777-7777-4777-8777-777777777777';
   const now = '2026-10-09T12:00:00.000Z';
@@ -2827,22 +2830,64 @@ describe('player auction contracts', () => {
     const request = ReplacePlayerAuctionLotsRequestSchema.parse({
       expectedVersion: 1,
       lots: [
-        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
-        { playerId: teamId, displayOrder: 2, startingPrice: 80, minimumIncrement: 20 }
+        { playerId, playerCardId: cardId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, playerCardId: groupBindingId, displayOrder: 2, startingPrice: 80, minimumIncrement: 20 }
       ]
     });
     assert.equal(request.lots[1]?.displayOrder, 2);
     assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
       expectedVersion: 1,
-      lots: [{ playerId, displayOrder: 1, startingPrice: 0, minimumIncrement: 10 }]
+      lots: [{ playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }));
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [{ playerId, playerCardId: null, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }));
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [{ playerId, playerCardId: cardId, displayOrder: 1, startingPrice: 0, minimumIncrement: 10 }]
     }));
     assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
       expectedVersion: 1,
       lots: [
-        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
-        { playerId: teamId, displayOrder: 1, startingPrice: 80, minimumIncrement: 20 }
+        { playerId, playerCardId: cardId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, playerCardId: groupBindingId, displayOrder: 1, startingPrice: 80, minimumIncrement: 20 }
       ]
     }));
+  });
+
+  it('normalizes confirmed auction sale search and parses immutable sale snapshots', () => {
+    assert.deepEqual(MyPlayerAuctionSaleListQuerySchema.parse({ keyword: '  01-阿哈尔  ', limit: '10' }), {
+      keyword: '01-阿哈尔',
+      limit: 10
+    });
+    const response = MyPlayerAuctionSaleListResponseSchema.parse({
+      items: [{
+        id: bidId,
+        batchId,
+        league: { id: leagueId, name: '九星联赛' },
+        player: {
+          id: playerId,
+          cardId,
+          name: '车范根',
+          imageUrl: 'https://img.pesdata.net/player.webp',
+          position: 'CF',
+          overallRating: 96,
+          cardType: 'EPIC'
+        },
+        winner: {
+          teamId,
+          teamNumber: 1,
+          teamName: '阿哈尔',
+          bidderDisplayName: '梅西'
+        },
+        price: 120,
+        confirmedAt: now
+      }],
+      nextCursor: null
+    });
+    assert.equal(response.items[0]?.winner.teamNumber, 1);
+    assert.equal(response.items[0]?.player.cardId, cardId);
   });
 
   it('requires reasons for adjusted and void reviews', () => {
@@ -3001,13 +3046,28 @@ describe('player auction contracts', () => {
         displayOrder: 1,
         playerName: '车范根',
         playerSnapshot: { position: 'CF' },
+        card: {
+          id: cardId,
+          imageUrl: 'https://img.pesdata.net/player.webp',
+          cardName: '传奇',
+          position: 'CF',
+          overallRating: 96,
+          cardType: 'EPIC'
+        },
         startingPrice: 50,
         minimumIncrement: 10,
         status: 'ACTIVE',
         currentPrice: 120,
         deadlineAt: now,
         deadlineEpoch: 4,
-        bids: [{ id: bidId, teamName: '上海申花', amount: 120, submittedAt: now }]
+        bids: [{
+          id: bidId,
+          teamNumber: 1,
+          teamName: '上海申花',
+          bidderDisplayName: '梅西',
+          amount: 120,
+          submittedAt: now
+        }]
       },
       queue: [],
       sharePath: `/pages/auction-room/index?batchId=${batchId}`

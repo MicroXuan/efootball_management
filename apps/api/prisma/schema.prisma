@@ -2962,21 +2962,24 @@ model PlayerAuctionBid {
 }
 
 model PlayerAuctionReview {
-  id                   String                      @id @default(uuid()) @db.Char(36)
-  lotId                String                      @unique @map("lot_id") @db.Char(36)
-  decision             PlayerAuctionReviewDecision
-  computedWinnerTeamId String?                     @map("computed_winner_team_id") @db.Char(36)
-  computedPrice        Int?                        @map("computed_price") @db.UnsignedInt
-  reviewedWinnerTeamId String?                     @map("reviewed_winner_team_id") @db.Char(36)
-  reviewedPrice        Int?                        @map("reviewed_price") @db.UnsignedInt
-  reviewedByAdminId    String                      @map("reviewed_by_admin_id") @db.Char(36)
-  reason               String?                     @db.VarChar(512)
-  reviewedAt           DateTime                    @default(now()) @map("reviewed_at")
-  createdAt            DateTime                    @default(now()) @map("created_at")
-  lot                  PlayerAuctionLot            @relation(fields: [lotId], references: [id], onDelete: Restrict)
-  computedWinnerTeam   LeagueTeam?                 @relation("PlayerAuctionComputedWinnerTeam", fields: [computedWinnerTeamId], references: [id], onDelete: Restrict)
-  reviewedWinnerTeam   LeagueTeam?                 @relation("PlayerAuctionReviewedWinnerTeam", fields: [reviewedWinnerTeamId], references: [id], onDelete: Restrict)
-  reviewedByAdmin      AdminAccount                @relation("PlayerAuctionReviewAdmin", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
+  id                        String                      @id @default(uuid()) @db.Char(36)
+  lotId                     String                      @unique @map("lot_id") @db.Char(36)
+  decision                  PlayerAuctionReviewDecision
+  computedWinnerTeamId      String?                     @map("computed_winner_team_id") @db.Char(36)
+  computedPrice             Int?                        @map("computed_price") @db.UnsignedInt
+  reviewedWinnerTeamId      String?                     @map("reviewed_winner_team_id") @db.Char(36)
+  reviewedPrice             Int?                        @map("reviewed_price") @db.UnsignedInt
+  winnerTeamNumberSnapshot  Int?                        @map("winner_team_number_snapshot") @db.UnsignedSmallInt
+  winnerTeamNameSnapshot    String?                     @map("winner_team_name_snapshot") @db.VarChar(64)
+  winnerDisplayNameSnapshot String?                     @map("winner_display_name_snapshot") @db.VarChar(32)
+  reviewedByAdminId         String                      @map("reviewed_by_admin_id") @db.Char(36)
+  reason                    String?                     @db.VarChar(512)
+  reviewedAt                DateTime                    @default(now()) @map("reviewed_at")
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+  lot                       PlayerAuctionLot            @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  computedWinnerTeam        LeagueTeam?                 @relation("PlayerAuctionComputedWinnerTeam", fields: [computedWinnerTeamId], references: [id], onDelete: Restrict)
+  reviewedWinnerTeam        LeagueTeam?                 @relation("PlayerAuctionReviewedWinnerTeam", fields: [reviewedWinnerTeamId], references: [id], onDelete: Restrict)
+  reviewedByAdmin           AdminAccount                @relation("PlayerAuctionReviewAdmin", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
 
   @@index([computedWinnerTeamId], map: "player_auction_reviews_computed_team_idx")
   @@index([reviewedWinnerTeamId], map: "player_auction_reviews_reviewed_team_idx")

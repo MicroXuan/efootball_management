@@ -29,7 +29,11 @@ function harness() {
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     footballPlayer: { findMany: jest.fn(async () => [{ id: 'player-1', nameZh: '车范根', nameEn: 'Cha Bum-Kun', shortName: null, nationality: '韩国', club: null }]) },
-    playerCard: { findMany: jest.fn(async () => [{ id: 'card-1', playerId: 'player-1', cardName: '传奇', position: 'CF', overallRating: 96, cardType: 'EPIC', status: 'ACTIVE' }]) },
+    playerCard: { findMany: jest.fn(async () => [{
+      id: 'card-1', playerId: 'player-1', cardName: '传奇', position: 'CF', overallRating: 96,
+      cardType: 'EPIC', status: 'ACTIVE', publishedAt: now,
+      imageUrl: 'https://img.pesdata.net/player.webp'
+    }]) },
     leagueTeam: { findFirst: jest.fn(async () => ({ id: 'team-1', leagueId: 'league-1', name: '申花' })) },
     playerAuctionReview: { create: jest.fn(async ({ data }: any) => ({ id: 'review-1', reviewedAt: now, ...data })) }
   };
@@ -107,7 +111,43 @@ describe('AdminPlayerAuctionsService', () => {
       lots: [{ playerId: 'player-1', playerCardId: 'card-1', displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
     }, 'lots-1');
     expect(tx.playerAuctionLot.createMany).toHaveBeenCalled();
-    expect(batch.lots[0]).toMatchObject({ playerNameSnapshot: '车范根', startingPrice: 50, minimumIncrement: 10 });
+    expect(batch.lots[0]).toMatchObject({
+      playerNameSnapshot: '车范根',
+      playerCardId: 'card-1',
+      startingPrice: 50,
+      minimumIncrement: 10,
+      playerSnapshot: {
+        card: {
+          id: 'card-1',
+          imageUrl: 'https://img.pesdata.net/player.webp',
+          cardName: '传奇',
+          position: 'CF',
+          overallRating: 96,
+          cardType: 'EPIC'
+        }
+      }
+    });
+  });
+
+  it('rejects a lot without a concrete active published card for its player', async () => {
+    const missing = harness();
+    await expect(missing.service.replaceLots('admin-1', 'league-1', 'batch-1', {
+      expectedVersion: 1,
+      lots: [{ playerId: 'player-1', playerCardId: undefined as any, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }, 'lots-missing-card')).rejects.toMatchObject({ code: 'AUCTION_CARD_INVALID' });
+
+    for (const card of [
+      { id: 'card-1', playerId: 'other-player', status: 'ACTIVE', publishedAt: now },
+      { id: 'card-1', playerId: 'player-1', status: 'INACTIVE', publishedAt: now },
+      { id: 'card-1', playerId: 'player-1', status: 'ACTIVE', publishedAt: null }
+    ]) {
+      const invalid = harness();
+      invalid.tx.playerCard.findMany.mockResolvedValueOnce([card]);
+      await expect(invalid.service.replaceLots('admin-1', 'league-1', 'batch-1', {
+        expectedVersion: 1,
+        lots: [{ playerId: 'player-1', playerCardId: 'card-1', displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+      }, `lots-invalid-${card.status}-${String(card.publishedAt)}`)).rejects.toMatchObject({ code: 'AUCTION_CARD_INVALID' });
+    }
   });
 
   it('rejects edits outside draft state and optimistic version conflicts', async () => {
