@@ -10,6 +10,7 @@ import { PESDATA_SYNC_OPTIONS, PesdataSyncService } from './pesdata-sync.service
 import { PESDATA_TEAM_SYNC_OPTIONS, PesdataTeamSyncService } from './pesdata-team-sync.service.js';
 import { AdminModule } from '../admin/admin.module.js';
 import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
+import { PesdataTeamChunkProcessor } from './pesdata-team-chunk.processor.js';
 
 @Module({
   imports: [AdminModule, DatabaseModule, PlayerImportModule, StorageModule],
@@ -39,8 +40,9 @@ import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js
     { provide: PESDATA_TEAM_SYNC_OPTIONS, useValue: {} },
     PesdataSyncService,
     PesdataPlayerChunkProcessor,
+    PesdataTeamChunkProcessor,
     PesdataTeamSyncService
   ],
-  exports: [PesdataSyncService, PesdataPlayerChunkProcessor, PesdataTeamSyncService]
+  exports: [PesdataSyncService, PesdataPlayerChunkProcessor, PesdataTeamSyncService, PesdataTeamChunkProcessor]
 })
 export class PesdataSyncModule {}

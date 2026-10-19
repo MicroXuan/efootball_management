@@ -173,4 +173,19 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
 
     expect(processor.processNextChunk).toHaveBeenCalledTimes(2);
   });
+
+  it('uses the same continuation policy for team chunks', async () => {
+    const outcomes = [
+      { disposition: 'CONTINUE', status: 'PENDING', completionReason: null },
+      { disposition: 'STOP', status: 'READY', completionReason: 'SOURCE_EXHAUSTED' }
+    ];
+    const processor = { processNextChunk: jest.fn(async () => outcomes.shift()!) };
+    const runner = new PlatformDataSyncRunner(prisma, undefined, undefined, undefined, processor as never);
+
+    runner.scheduleTeam('checkpointed-team-run');
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(processor.processNextChunk).toHaveBeenCalledTimes(2);
+  });
 });

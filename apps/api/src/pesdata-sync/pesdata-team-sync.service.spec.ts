@@ -136,7 +136,7 @@ describe('PesdataTeamSyncService', () => {
     });
   });
 
-  it('cancels a paused team-shell run and removes its unpublished items', async () => {
+  it('cancels a paused team-shell run and preserves its review items', async () => {
     const admin = await actor();
     const client = { listTeams: async () => ({ list: [], count: 0 }) };
     const sync = new PesdataTeamSyncService(prisma, client as never, {} as never);
@@ -160,7 +160,7 @@ describe('PesdataTeamSyncService', () => {
       leaseOwnerToken: null,
       currentPhase: 'CANCELLED'
     });
-    await expect(prisma.teamCatalogSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(0);
+    await expect(prisma.teamCatalogSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(1);
   });
 
   it('cancels a failed resumable team-shell run so it cannot be resumed again', async () => {

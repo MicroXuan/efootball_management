@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PesdataSyncService } from '../pesdata-sync/pesdata-sync.service.js';
 import { PesdataPlayerChunkProcessor } from '../pesdata-sync/pesdata-player-chunk.processor.js';
+import { PesdataTeamChunkProcessor } from '../pesdata-sync/pesdata-team-chunk.processor.js';
 import { PesdataTeamSyncService } from '../pesdata-sync/pesdata-team-sync.service.js';
 import { SYNC_RECONCILE_INTERVAL_MS } from './platform-data-sync.constants.js';
 
@@ -18,7 +19,8 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Optional() @Inject(PesdataSyncService) private readonly playerSync?: PesdataSyncService,
     @Optional() @Inject(PesdataTeamSyncService) private readonly teamSync?: PesdataTeamSyncService,
-    @Optional() @Inject(PesdataPlayerChunkProcessor) private readonly playerChunks?: PesdataPlayerChunkProcessor
+    @Optional() @Inject(PesdataPlayerChunkProcessor) private readonly playerChunks?: PesdataPlayerChunkProcessor,
+    @Optional() @Inject(PesdataTeamChunkProcessor) private readonly teamChunks?: PesdataTeamChunkProcessor
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -53,6 +55,14 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
   }
 
   scheduleTeam(runId: string): void {
+    if (this.teamChunks) {
+      this.schedule(
+        `TEAM_SHELLS:${runId}`,
+        () => this.teamChunks!.processNextChunk(runId),
+        (outcome) => outcome.disposition === 'CONTINUE' && this.scheduleTeam(runId)
+      );
+      return;
+    }
     if (!this.teamSync) throw new Error('TEAM_SYNC_SERVICE_UNAVAILABLE');
     this.schedule(`TEAM_SHELLS:${runId}`, () => this.teamSync!.executePlatformRun(runId));
   }
