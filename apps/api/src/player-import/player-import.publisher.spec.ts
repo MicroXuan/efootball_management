@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { config } from 'dotenv';
 import { jest } from '@jest/globals';
 import { Prisma } from '../generated/prisma/client.js';
@@ -86,9 +87,13 @@ describe('PlayerImportPublisher', () => {
   afterEach(async () => {
     await prisma.auditLog.deleteMany({ where: { actorAdminId: adminId } });
     if (!sourceId) return;
-    const cards = await prisma.playerCard.findMany({ where: { sourceId }, select: { id: true, playerId: true } });
+    const cards = await prisma.playerCard.findMany({
+      where: { sourceId },
+      select: { id: true, playerId: true, skills: { select: { skillId: true } } }
+    });
     const cardIds = cards.map(({ id }) => id);
     const playerIds = [...new Set(cards.map(({ playerId }) => playerId))];
+    const skillIds = [...new Set(cards.flatMap(({ skills }) => skills.map(({ skillId }) => skillId)))];
     if (playerIds.length) {
       await prisma.footballPlayerBestCard.deleteMany({ where: { footballPlayerId: { in: playerIds } } });
     }
@@ -100,6 +105,9 @@ describe('PlayerImportPublisher', () => {
     await prisma.cardPack.deleteMany({ where: { sourceId } });
     await prisma.footballPlayerSource.deleteMany({ where: { sourceId } });
     if (playerIds.length) await prisma.footballPlayer.deleteMany({ where: { id: { in: playerIds } } });
+    if (skillIds.length) {
+      await prisma.skill.deleteMany({ where: { id: { in: skillIds }, cards: { none: {} } } });
+    }
     await prisma.dataSource.delete({ where: { id: sourceId } });
   });
 
@@ -170,20 +178,50 @@ describe('PlayerImportPublisher', () => {
     expect(stored.player.bestCard?.playerCardId).toBe(stored.id);
   });
 
-  it('publishes ten cards with one hundred skills within the transaction deadline', async () => {
+  it('publishes ten cards with one hundred skills within thirty seconds', async () => {
     const rows = Array.from({ length: 10 }, (_, cardIndex) => card(`bulk-${cardIndex}`, {
       skills: Array.from({ length: 10 }, (_, skillIndex) => `Bulk Skill ${cardIndex}-${skillIndex}`)
     }));
     const batch = await createBatch(rows);
 
+    const startedAt = performance.now();
     const published = await publisher.publish(actorId, batch.id);
+    const elapsedMs = performance.now() - startedAt;
 
     expect(published.status).toBe('PUBLISHED');
+    expect(elapsedMs).toBeLessThan(30_000);
     await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(10);
     await expect(prisma.playerCardSkill.count({
       where: { playerCard: { sourceId } }
     })).resolves.toBe(100);
+    await expect(prisma.playerCardVersion.count({ where: { playerCard: { sourceId } } })).resolves.toBe(10);
+    await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(1);
   }, 35_000);
+
+  it('publishes fifty cards with five hundred skill links within thirty seconds', async () => {
+    const rows = Array.from({ length: 50 }, (_, cardIndex) => card(`stress-${cardIndex}`, {
+      skills: Array.from({ length: 10 }, (_, skillIndex) => `Stress Skill ${cardIndex}-${skillIndex}`),
+      autoBuildAllocation: { passing: 8, defending: 4 },
+      autoBuildMaxOverall: 98,
+      dtRating: 97,
+      algorithmVersion: 'pesdata-auto-v1'
+    }));
+    const batch = await createBatch(rows);
+
+    const startedAt = performance.now();
+    const published = await publisher.publish(actorId, batch.id);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(published.status).toBe('PUBLISHED');
+    expect(elapsedMs).toBeLessThan(30_000);
+    await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(50);
+    await expect(prisma.playerCardSkill.count({
+      where: { playerCard: { sourceId } }
+    })).resolves.toBe(500);
+    await expect(prisma.playerCardVersion.count({ where: { playerCard: { sourceId } } })).resolves.toBe(50);
+    await expect(prisma.playerCardAutoBuild.count({ where: { playerCard: { sourceId } } })).resolves.toBe(50);
+    await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(1);
+  }, 70_000);
 
   it('uses a sixty-second transaction timeout', async () => {
     let transactionOptions: { timeout?: number } | undefined;
@@ -301,6 +339,60 @@ describe('PlayerImportPublisher', () => {
     expect(stored.cardPackId).toBeNull();
     expect(stored.skills).toEqual([]);
     expect(stored.cardName).toBe('Featured');
+  });
+
+  it('bulk publication preserves mixed create update unchanged and clear semantics', async () => {
+    const originalRows = [
+      card('mixed-field'),
+      card('mixed-skills', { skills: ['Passing', 'Through Passing'] }),
+      card('mixed-pack', { packExternalId: 'mixed-pack-id', packName: 'Mixed Pack' }),
+      card('mixed-unchanged')
+    ];
+    const initial = await createBatch(originalRows);
+    await publisher.publish(actorId, initial.id);
+    const mixed = await createBatch([
+      card('mixed-field', { overallRating: 99 }),
+      card('mixed-skills', { skills: [] }),
+      card('mixed-pack', {
+        packExternalId: undefined,
+        packName: undefined,
+        season: undefined,
+        releaseDate: undefined
+      }),
+      card('mixed-unchanged'),
+      card('mixed-new')
+    ]);
+    const mixedDiffs = await prisma.importRecord.findMany({
+      where: { batchId: mixed.id },
+      orderBy: { rowNumber: 'asc' },
+      select: { externalId: true, diffType: true, fieldDiff: true }
+    });
+
+    expect(mixedDiffs).toEqual([
+      expect.objectContaining({ externalId: 'mixed-field', diffType: 'UPDATE' }),
+      expect.objectContaining({ externalId: 'mixed-skills', diffType: 'UPDATE' }),
+      expect.objectContaining({ externalId: 'mixed-pack', diffType: 'UPDATE' }),
+      { externalId: 'mixed-unchanged', diffType: 'UNCHANGED', fieldDiff: {} },
+      expect.objectContaining({ externalId: 'mixed-new', diffType: 'CREATE' })
+    ]);
+
+    const published = await publisher.publish(actorId, mixed.id);
+
+    expect(published).toMatchObject({ createCount: 1, updateCount: 3, unchangedCount: 1 });
+    await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(5);
+    await expect(prisma.catalogRelease.count({ where: { batch: { sourceId } } })).resolves.toBe(2);
+    await expect(prisma.playerCardVersion.count({ where: { playerCard: { sourceId } } })).resolves.toBe(8);
+    const stored = await prisma.playerCard.findMany({
+      where: { sourceId },
+      include: { skills: true, versions: true }
+    });
+    const byExternalId = new Map(stored.map((entry) => [entry.externalId, entry]));
+    expect(byExternalId.get('mixed-field')).toMatchObject({ overallRating: 99 });
+    expect(byExternalId.get('mixed-field')?.versions).toHaveLength(2);
+    expect(byExternalId.get('mixed-skills')?.skills).toEqual([]);
+    expect(byExternalId.get('mixed-pack')?.cardPackId).toBeNull();
+    expect(byExternalId.get('mixed-unchanged')?.versions).toHaveLength(1);
+    expect(byExternalId.get('mixed-new')?.versions).toHaveLength(1);
   });
 
   it('rejects a stale transaction-external publication snapshot', async () => {

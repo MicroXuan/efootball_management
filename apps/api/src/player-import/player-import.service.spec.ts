@@ -39,6 +39,17 @@ describe('calculateRecordDiff', () => {
     expect(calculateRecordDiff(existing, incoming).type).toBe('UNCHANGED');
   });
 
+  it('treats skill display casing and spacing as the same canonical skill', () => {
+    const existing = { ...validCard, skills: ['passing', 'one touch pass'] };
+    const incoming = { ...validCard, skills: [' Passing ', 'One   Touch Pass'] };
+
+    expect(calculateRecordDiff(existing, incoming)).toEqual({
+      type: 'UNCHANGED',
+      fields: {},
+      errors: []
+    });
+  });
+
   it('returns an exact source-owned field map for updates', () => {
     expect(calculateRecordDiff(validCard, { ...validCard, overallRating: 96 })).toEqual({
       type: 'UPDATE',

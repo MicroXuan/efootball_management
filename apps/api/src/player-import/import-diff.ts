@@ -1,4 +1,5 @@
 import type { NormalizedPlayerCardRecord } from '@efm/contracts';
+import { normalizeSearchText } from './record-normalizer.js';
 
 export type FieldDiff = Record<string, { before: unknown; after: unknown }>;
 export type CalculatedDiff = {
@@ -54,6 +55,21 @@ function equivalent(left: unknown, right: unknown): boolean {
   return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
 }
 
+function equivalentSourceField(
+  field: keyof NormalizedPlayerCardRecord,
+  left: unknown,
+  right: unknown
+): boolean {
+  if (field === 'skills' && Array.isArray(left) && Array.isArray(right)) {
+    return equivalent(
+      left.map((skill) => typeof skill === 'string' ? normalizeSearchText(skill) : skill),
+      right.map((skill) => typeof skill === 'string' ? normalizeSearchText(skill) : skill)
+    );
+  }
+
+  return equivalent(left, right);
+}
+
 export function calculateRecordDiff(
   existing: NormalizedPlayerCardRecord | null,
   incoming: NormalizedPlayerCardRecord
@@ -64,7 +80,7 @@ export function calculateRecordDiff(
 
   const fields: FieldDiff = {};
   for (const field of sourceOwnedFields) {
-    if (!equivalent(existing[field], incoming[field])) {
+    if (!equivalentSourceField(field, existing[field], incoming[field])) {
       fields[field] = { before: existing[field], after: incoming[field] };
     }
   }
