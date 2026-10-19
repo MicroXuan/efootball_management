@@ -1,5 +1,5 @@
 import type { NormalizedPlayerCardRecord } from '@efm/contracts';
-import { Prisma } from '../generated/prisma/client.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import {
   loadPlayerImportPublicationState,
   writePlayerImportPublicationPlan
