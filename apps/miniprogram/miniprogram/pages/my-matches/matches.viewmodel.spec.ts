@@ -1,7 +1,6 @@
 import type { CompetitionParticipantSummary, LeagueSeasonSummary, MyMatchResponse } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import { matchCard, seasonOptions } from './matches.viewmodel'
-import { resultTime } from '../match-result/result.viewmodel'
 
 const participant = (overrides: Partial<CompetitionParticipantSummary> = {}): CompetitionParticipantSummary => ({
   id: 'participant-1', displayName: '历史上海申花', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE',
@@ -49,16 +48,11 @@ describe('read-only season fixture view model', () => {
     expect(matchCard(response(true))).toMatchObject({ resultCopy: '3 : 1', stateCopy: '已结束' })
   })
 
-  it('shows the participant next action and confirmation deadline', () => {
-    expect(matchCard(
-      { ...response(false), action: 'CONFIRM', confirmationDeadlineAt: '2026-10-17T13:30:00.000Z' },
-      Date.parse('2026-10-17T12:00:00.000Z')
-    )).toMatchObject({
-      nextActionCopy: '确认或拒绝比分', deadlineCopy: `确认截止 ${resultTime('2026-10-17T13:30:00.000Z')}`
+  it('omits participant action and deadline presentation even for legacy actionable rows', () => {
+    const card = matchCard({
+      ...response(false), action: 'CONFIRM', confirmationDeadlineAt: '2026-10-17T13:30:00.000Z',
     })
-    expect(matchCard({ ...response(false), action: 'WAIT', myEvidenceRole: 'SUBMITTER', confirmationDeadlineAt: '2026-10-17T13:30:00.000Z',
-      match: { ...response(false).match, resultVersions: [{ submittedByMe: true }] } } as MyMatchResponse, Date.parse('2026-10-18T00:00:00.000Z'))).toMatchObject({
-      nextActionCopy: '上传证据并申请争议'
-    })
+    expect(card).not.toHaveProperty('nextActionCopy')
+    expect(card).not.toHaveProperty('deadlineCopy')
   })
 })

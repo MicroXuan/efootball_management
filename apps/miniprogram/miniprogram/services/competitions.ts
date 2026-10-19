@@ -8,11 +8,8 @@ import type {
   CupRegistrationResponse,
   MyCompetitionListResponse,
   MyMatchListResponse,
-  ParticipantMatchResultDisputeResponse,
   StandingsSnapshotResponse,
   SeasonEntryResponse,
-  SubmitMatchResultRequest,
-  RejectMatchResultRequest,
   ManagerMatchResultRequest,
   ParsedCreateCompetitionRequest,
   UpdateCompetitionRequest,
@@ -140,29 +137,6 @@ export const competitionsApi = {
     return api.request<CompetitionParticipantSummary[]>({
       path: `/cups/${encodeURIComponent(competitionId)}/participants`, skipAuth: true,
     })
-  },
-  submitResult(matchId: string, input: SubmitMatchResultRequest) {
-    return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: input })
-  },
-  confirmResult(matchId: string, resultVersion: number, expectedVersion: number) {
-    return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results/${resultVersion}/confirm`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: { expectedVersion } })
-  },
-  rejectResult(matchId: string, resultVersion: number, input: RejectMatchResultRequest) {
-    return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results/${resultVersion}/reject`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: input })
-  },
-  resultDispute(matchId: string) {
-    return api.request<ParticipantMatchResultDisputeResponse | null>({ path: `/matches/${encodeURIComponent(matchId)}/result-dispute` })
-  },
-  openTimeoutDispute(matchId: string, evidenceUploadId: string, expectedVersion: number) {
-    return api.request<ParticipantMatchResultDisputeResponse>({ path: `/matches/${encodeURIComponent(matchId)}/result-disputes/timeout`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: { evidenceUploadId, expectedVersion } })
-  },
-  attachResultEvidence(matchId: string, evidenceUploadId: string, expectedVersion: number) {
-    return api.request<ParticipantMatchResultDisputeResponse>({ path: `/matches/${encodeURIComponent(matchId)}/result-dispute/evidence`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: { evidenceUploadId, expectedVersion } })
   },
   create(input: ParsedCreateCompetitionRequest) {
     return api.request<CompetitionDetail>({ path: '/admin/competitions', method: 'POST',

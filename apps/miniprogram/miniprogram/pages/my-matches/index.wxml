@@ -21,7 +21,7 @@
     <text class="efm-empty-state__copy">赛程发布后会显示在这里。</text>
   </view>
   <view wx:else class="match-list">
-    <view wx:for="{{items}}" wx:key="matchId" class="match-card" data-id="{{item.matchId}}" bindtap="openMatch" hover-class="match-card-pressed">
+    <view wx:for="{{items}}" wx:key="matchId" class="match-card">
       <view class="match-head"><text>{{item.competition.name}}</text><text class="state-tag">{{item.stateCopy}}</text></view>
       <view class="match-meta"><text>{{item.scheduleMeta}}</text><text>{{item.plannedLabel}}</text></view>
       <view class="fixture-grid">
@@ -39,7 +39,6 @@
           <text wx:if="{{item.away.archived}}" class="archived">已退赛</text>
         </view>
       </view>
-      <view class="match-action"><view><text>{{item.nextActionCopy}}</text><text wx:if="{{item.deadlineCopy}}" class="match-deadline">{{item.deadlineCopy}}</text></view><text class="match-arrow">›</text></view>
     </view>
   </view>
 </view>
