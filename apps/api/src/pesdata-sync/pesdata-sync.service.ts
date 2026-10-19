@@ -16,6 +16,7 @@ import {
   type PesdataSyncResult,
   type StartPesdataSyncInput
 } from './pesdata-sync.types.js';
+import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
 
 const IMPORT_CHUNK_SIZE = 5_000;
 
@@ -67,7 +68,8 @@ export class PesdataSyncService {
     @Inject(PlayerImportService) private readonly importService: PlayerImportService,
     @Inject(PesdataClient) private readonly client: PesdataClient,
     @Optional() @Inject(PESDATA_SYNC_OPTIONS) options: ServiceOptions = {},
-    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService,
+    @Optional() @Inject(PesdataPlayerChunkProcessor) private readonly chunkProcessor?: PesdataPlayerChunkProcessor
   ) {
     this.pageSize = options.pageSize ?? 100;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? SYNC_HEARTBEAT_INTERVAL_MS;
@@ -258,6 +260,26 @@ export class PesdataSyncService {
   }
 
   async executePlatformRun(runId: string): Promise<PesdataSyncResult> {
+    if (this.chunkProcessor) {
+      let outcome = await this.chunkProcessor.processNextChunk(runId);
+      while (outcome.disposition === 'CONTINUE') {
+        outcome = await this.chunkProcessor.processNextChunk(runId);
+      }
+      const completed = await this.prisma.externalSyncRun.findUniqueOrThrow({
+        where: { id: runId }, include: { batchLinks: { orderBy: { chunkIndex: 'asc' } } }
+      });
+      return {
+        runId,
+        status: completed.status === 'READY' ? 'READY' : 'FAILED',
+        sourceTotal: completed.sourceTotal,
+        scannedCount: completed.scannedCount,
+        fetchedCount: completed.fetchedCount,
+        skippedCount: completed.skippedCount,
+        failedCount: completed.failedCount,
+        batchIds: completed.batchLinks.map(({ batchId }) => batchId),
+        dryRun: false
+      };
+    }
     const run = await this.prisma.externalSyncRun.findUnique({
       where: { id: runId },
       include: { items: { orderBy: { createdAt: 'asc' } }, batchLinks: { orderBy: { chunkIndex: 'asc' } } }
