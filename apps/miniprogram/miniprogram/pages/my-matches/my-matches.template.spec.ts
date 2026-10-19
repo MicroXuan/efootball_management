@@ -9,7 +9,13 @@ const pageConfig = JSON.parse(readFileSync(resolve(__dirname, 'index.json'), 'ut
 
 describe('my matches template', () => {
   it('renders a season picker and a symmetric read-only three-column fixture', () => {
+    expect(markup).toContain('全部赛程')
     expect(markup).toContain('bindchange="changeSeason"')
+    expect(markup).toContain('bindconfirm="search"')
+    expect(markup).toContain('data-status="ALL"')
+    expect(markup).toContain('data-status="UPCOMING"')
+    expect(markup).toContain('data-status="FINISHED"')
+    expect(markup).toContain('bindtap="loadMore"')
     expect(markup).toContain('class="fixture-team fixture-home"')
     expect(markup).toContain('class="fixture-center"')
     expect(markup).toContain('class="fixture-team fixture-away"')

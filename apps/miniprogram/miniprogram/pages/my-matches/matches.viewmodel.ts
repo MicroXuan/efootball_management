@@ -1,4 +1,4 @@
-import type { CompetitionParticipantSummary, LeagueSeasonSummary, MyMatchResponse } from '@efm/contracts'
+import type { CompetitionParticipantSummary, LeagueSeasonSummary, SeasonFixtureListItem } from '@efm/contracts'
 
 function badgeText(name: string) {
   return Array.from(name).slice(0, 2).join('') || '队'
@@ -20,15 +20,14 @@ function plannedAt(value: string | null) {
   return value ? `${value.slice(0, 10).replace(/-/g, '.')} ${value.slice(11, 16)}` : '时间待定'
 }
 
-export function matchCard(item: MyMatchResponse) {
-  const side = item.match.homeParticipant.id === item.myParticipantId ? 'HOME' : 'AWAY'
+export function matchCard(item: SeasonFixtureListItem) {
   const result = item.match.officialResult
   return {
     ...item,
     matchId: item.match.id,
-    scheduleMeta: `第 ${item.match.roundNumber} 轮 · ${side === 'HOME' ? '主场' : '客场'}`,
+    scheduleMeta: `第 ${item.match.roundNumber} 轮 · ${item.match.stageDisplayName ?? '赛程'}`,
     plannedLabel: plannedAt(item.match.plannedAt),
-    stateCopy: result ? '已结束' : '待比赛',
+    stateCopy: result ? '已结束' : '未开始',
     resultCopy: result ? `${result.homeScore} : ${result.awayScore}` : '对阵',
     home: participantView(item.match.homeParticipant),
     away: participantView(item.match.awayParticipant)
