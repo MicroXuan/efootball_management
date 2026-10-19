@@ -65,6 +65,11 @@ const positionCodes: PlayerPosition[] = [
   'LWF', 'CF', 'RWF', 'LMF', 'AMF', 'RMF', 'CMF', 'DMF', 'LB', 'CB', 'RB', 'SS', 'GK',
 ]
 
+const positionHotIndex: Record<PlayerPosition, number> = {
+  GK: 0, CB: 1, LB: 2, RB: 3, DMF: 4, CMF: 5, LMF: 6,
+  RMF: 7, AMF: 8, LWF: 9, RWF: 10, SS: 11, CF: 12,
+}
+
 const positionLabels: Record<PlayerPosition, string> = {
   GK: '门将', CB: '中后卫', LB: '左后卫', RB: '右后卫', DMF: '后腰', CMF: '中前卫',
   LMF: '左前卫', RMF: '右前卫', AMF: '前腰', LWF: '左边锋', RWF: '右边锋', SS: '影锋', CF: '中锋',
@@ -136,7 +141,7 @@ export type PlayerCardDetailViewModel = PlayerCardViewModel & {
     key: string
     label: string
     value: number
-    tone: 'elite' | 'standard'
+    tone: AbilityTone
     barWidth: number
   }>
   siblings: Array<{
@@ -162,7 +167,7 @@ export type PlayerCardPresentation = {
     label: string
     value: number
     delta: number
-    tone: 'elite' | 'standard'
+    tone: AbilityTone
     barWidth: number
   }>
   radarMetrics: Array<{ key: string; label: string; value: number | null }>
@@ -172,8 +177,19 @@ export type PlayerCardPresentation = {
     label: string
     rating: number | null
     isPrimary: boolean
-    tone: 'high' | 'medium' | 'low' | 'empty'
+    tone: PositionSuitabilityTone
   }>
+}
+
+export type AbilityTone = 'red' | 'yellow' | 'green' | 'cyan'
+
+export type PositionSuitabilityTone = 'strong' | 'partial' | 'neutral'
+
+export function abilityTone(value: number): AbilityTone {
+  if (value < 70) return 'red'
+  if (value < 80) return 'yellow'
+  if (value < 90) return 'green'
+  return 'cyan'
 }
 
 export type RadarChartGeometry = {
@@ -336,10 +352,31 @@ function attributeRows(
         label: attributeLabels[key] ?? key,
         value,
         delta,
-        tone: value >= 90 ? 'elite' as const : 'standard' as const,
+        tone: abilityTone(value),
         barWidth: Math.min(100, Math.max(0, value)),
       }
     })
+}
+
+function positionSuitabilityTone(
+  detail: PlayerCardDetail,
+  position: PlayerPosition,
+): PositionSuitabilityTone {
+  const source = objectRecord(detail.attributes.sourceMetadata)
+  const raw = Array.isArray(detail.attributes.positionHot)
+    ? detail.attributes.positionHot
+    : Array.isArray(source?.PositionHot)
+      ? source.PositionHot
+      : null
+  const value = raw?.[positionHotIndex[position]]
+  const normalized = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value.trim())
+      : Number.NaN
+  if (normalized === 3) return 'strong'
+  if (normalized === 2) return 'partial'
+  return 'neutral'
 }
 
 function derivedAutomaticBuild(detail: PlayerCardDetail): PlayerCardDetailViewModel['autoBuild'] {
@@ -441,7 +478,7 @@ export function playerCardPresentation(
             ? Math.min(110, Math.max(40, importedNumber + derivedRating - baseDerivedRating))
             : derivedRating ?? null
         : importedNumber ?? derivedRating ?? (code === detail.position ? overallRating : null)
-      const tone = rating === null ? 'empty' : rating >= 80 ? 'high' : rating >= 70 ? 'medium' : 'low'
+      const tone = positionSuitabilityTone(detail, code)
       return { code, label: positionLabels[code], rating, isPrimary: code === detail.position, tone }
     }),
   }
