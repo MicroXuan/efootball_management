@@ -51,6 +51,8 @@ import {
   CupBracketProposalSchema,
   CupBracketViewSchema,
   SeasonCupSummarySchema,
+  SeasonFixtureListQuerySchema,
+  SeasonFixtureListResponseSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -279,6 +281,43 @@ describe('action center contracts', () => {
     };
     assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, false);
     assert.equal(ActionCenterResponseSchema.safeParse({ items: [{ ...item, route: `/pages/match-result/index?id=${matchId}&evil=1` }], actionRequiredCount: 1 }).success, false);
+  });
+});
+
+describe('season fixture contracts', () => {
+  it('defaults to all fixtures with a twenty-item page and normalizes team search', () => {
+    assert.deepEqual(SeasonFixtureListQuerySchema.parse({}), { status: 'ALL', limit: 20 });
+    assert.deepEqual(SeasonFixtureListQuerySchema.parse({ team: '  AC Milan  ', status: 'UPCOMING', limit: '100' }), {
+      team: 'AC Milan', status: 'UPCOMING', limit: 100
+    });
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ status: 'FINISHED', limit: 1, cursor: 'opaque' }).success, true);
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ status: 'PENDING' }).success, false);
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ limit: 0 }).success, false);
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ limit: 101 }).success, false);
+  });
+
+  it('parses competition-match fixture items with a nullable continuation cursor', () => {
+    const participant = (name: string) => ({
+      id: randomUUID(), displayName: name, participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE',
+      teamNumber: 1, teamName: name, teamLogoUrl: null, ownerDisplayName: '经理'
+    });
+    const competition = {
+      id: randomUUID(), seasonId: randomUUID(), competitionType: 'DIVISION_LEAGUE', name: 'S1 分级联赛', description: '',
+      platform: 'MOBILE', serverRegion: 'GLOBAL', participantType: 'TEAM', format: 'ROUND_ROBIN', status: 'IN_PROGRESS',
+      registrationOpensAt: '2026-01-01T00:00:00.000Z', registrationClosesAt: '2026-01-02T00:00:00.000Z',
+      startsAt: '2026-01-03T00:00:00.000Z', endsAt: '2026-12-01T00:00:00.000Z', participantLimit: 30,
+      participantCount: 30, version: 1, activeRuleVersion: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
+    };
+    const match = {
+      id: randomUUID(), competitionId: competition.id, stageId: randomUUID(), stageCode: 'CHAMPION_A',
+      stageDisplayName: '冠军 A 组', roundNumber: 1, matchNumber: 1,
+      homeParticipant: participant('01-阿哈尔'), awayParticipant: participant('02-海牙'), plannedAt: null,
+      status: 'AWAITING_RESULT', resultConfirmationDeadlineAt: null, version: 1, officialResult: null,
+      resultVersions: [], createdAt: '2026-01-03T00:00:00.000Z', updatedAt: '2026-01-03T00:00:00.000Z'
+    };
+    const parsed = SeasonFixtureListResponseSchema.parse({ items: [{ competition, match }], nextCursor: null });
+    assert.equal(parsed.items[0]?.match.id, match.id);
+    assert.equal(parsed.nextCursor, null);
   });
 });
 import {
