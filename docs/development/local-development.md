@@ -133,6 +133,8 @@ pnpm --filter @efm/api exec prisma db seed
 4. 启动本地 API 后重新编译小程序。开发者工具会自动请求 `http://127.0.0.1:3000/v1`，不需要手改地址。
 5. 仓库已在被 Git 忽略的 `project.private.config.json` 中关闭合法域名校验；如果开发者工具覆盖了该设置，请在“详情 → 本地设置”中关闭校验。
 
+体验版和正式版仍会校验服务器域名。请在微信公众平台的“小程序后台 → 开发管理 → 开发设置 → 服务器域名”中，将 `https://img.pesdata.net` 加入 `downloadFile` 合法域名，并保留现有 CloudBase 下载域名。球员市场头像会直接交给 `<image>` 渲染该 HTTPS 地址，不依赖二次下载；此白名单同时保障仓库中其他仍使用 `wx.downloadFile` 的图片场景。
+
 运行时会按环境自动选择连接：
 
 | 运行环境 | API |
