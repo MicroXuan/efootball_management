@@ -24,7 +24,8 @@
     "data-sync:clear": "tsx src/platform-data-sync/platform-data-sync-cleanup.cli.ts",
     "test-data:clear": "tsx test/run-test-data-cleanup.ts",
     "competition:demo": "tsx src/competitions/competition-demo.cli.ts",
-    "league-teams:migrate": "tsx src/league-teams/league-team-backfill.cli.ts"
+    "league-teams:migrate": "tsx src/league-teams/league-team-backfill.cli.ts",
+    "player-builds:repair": "tsx src/player-builds/player-build-repair.cli.ts"
   },
   "dependencies": {
     "@cloudbase/node-sdk": "^3.18.3",
