@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
 import type { PesdataPlayerDetail, PesdataPlayerSummary } from './pesdata.schemas.js';
 import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
+import { PesdataSyncService } from './pesdata-sync.service.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -154,5 +155,56 @@ describe('PesdataPlayerChunkProcessor', () => {
       currentOffset: 0, matchedCount: 0, scannedCount: 0
     });
     await expect(prisma.externalSyncRunBatch.count({ where: { runId: run.id } })).resolves.toBe(0);
+  }, 15_000);
+
+  it('commits the current chunk and then pauses without fetching another page', async () => {
+    let releaseDetail!: () => void;
+    let detailStarted!: () => void;
+    const started = new Promise<void>((resolve) => { detailStarted = resolve; });
+    const blocked = new Promise<void>((resolve) => { releaseDetail = resolve; });
+    let listCalls = 0;
+    const client = {
+      listPlayers: async () => { listCalls += 1; return { list: [summary(40_001)], count: 100 }; },
+      getPlayerDetail: async (id: string) => { detailStarted(); await blocked; return detail(id); }
+    };
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'SAMPLE', status: 'PENDING', activeLeaseKey: 'pesdata', requestedLimit: 100
+    } });
+    const processor = new PesdataPlayerChunkProcessor(prisma, imports, client as never);
+    const controls = new PesdataSyncService(prisma, imports, client as never);
+    const execution = processor.processNextChunk(run.id);
+    await started;
+
+    await expect(controls.pausePlatformRun(adminId, run.id)).resolves.toEqual({
+      runId: run.id, status: 'PAUSING'
+    });
+    releaseDetail();
+    await expect(execution).resolves.toMatchObject({ disposition: 'STOP', status: 'PAUSED' });
+
+    expect(listCalls).toBe(1);
+    await expect(prisma.externalSyncRun.findUniqueOrThrow({ where: { id: run.id } })).resolves.toMatchObject({
+      status: 'PAUSED', matchedCount: 1, currentOffset: 1
+    });
+  }, 15_000);
+
+  it('cancels an inactive run without deleting its ready review batch', async () => {
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'INCREMENTAL', status: 'PAUSED', activeLeaseKey: 'pesdata'
+    } });
+    const batch = await prisma.importBatch.create({ data: {
+      sourceId, fileName: `preserved-${randomUUID()}.json`, format: 'JSON',
+      checksum: randomUUID().replaceAll('-', '').padEnd(64, '0'), status: 'READY', totalCount: 1, createCount: 1, createdBy: adminId,
+      records: { create: {
+        rowNumber: 1, externalId: 'preserved-card', rawJson: {}, normalizedJson: {}, diffType: 'CREATE', fieldDiff: {}, validationErrors: {}
+      } },
+      syncRunLinks: { create: { runId: run.id, chunkIndex: 1 } }
+    } });
+    const controls = new PesdataSyncService(prisma, imports, {
+      listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id)
+    } as never);
+
+    await expect(controls.cancelPlatformRun(adminId, run.id)).resolves.toEqual({ runId: run.id, status: 'CANCELLED' });
+    await expect(prisma.importBatch.findUnique({ where: { id: batch.id } })).resolves.toMatchObject({ status: 'READY' });
+    await expect(prisma.externalSyncRunBatch.count({ where: { runId: run.id, batchId: batch.id } })).resolves.toBe(1);
   }, 15_000);
 });

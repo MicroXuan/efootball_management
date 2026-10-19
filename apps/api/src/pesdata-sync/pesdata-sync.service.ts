@@ -150,6 +150,7 @@ export class PesdataSyncService {
           leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS),
           errorCode: null,
           errorMessage: null,
+          pauseRequestedAt: null,
           finishedAt: null
         } });
         if (changed.count === 1 && this.audit) await this.audit.record(tx, {
@@ -176,34 +177,43 @@ export class PesdataSyncService {
   async pausePlatformRun(
     actorAdminId: string,
     runId: string
-  ): Promise<{ runId: string; status: 'PAUSED' }> {
+  ): Promise<{ runId: string; status: 'PAUSING' | 'PAUSED' }> {
     const now = new Date();
-    const changed = await this.prisma.$transaction(async (tx) => {
+    const status = await this.prisma.$transaction(async (tx) => {
+      const run = await tx.externalSyncRun.findUnique({ where: { id: runId } });
+      if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
+      if (!['PENDING', 'RUNNING'].includes(run.status) || run.activeLeaseKey !== 'pesdata') {
+        throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only an active synchronization run can be paused');
+      }
+      const pausing = run.status === 'RUNNING';
       const updated = await tx.externalSyncRun.updateMany({
-        where: { id: runId, status: { in: ['PENDING', 'RUNNING'] }, activeLeaseKey: 'pesdata' },
-        data: {
+        where: { id: runId, status: run.status, activeLeaseKey: 'pesdata' },
+        data: pausing ? {
+          pauseRequestedAt: now,
+          currentPhase: 'PAUSING',
+          heartbeatAt: now
+        } : {
           status: 'PAUSED',
+          pauseRequestedAt: null,
           currentPhase: 'PAUSED',
           heartbeatAt: now,
           leaseOwnerToken: null,
           leaseExpiresAt: null
         }
       });
-      if (updated.count === 1 && this.audit) await this.audit.record(tx, {
+      if (updated.count !== 1) {
+        throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Synchronization run state changed while pausing');
+      }
+      if (this.audit) await this.audit.record(tx, {
         actorAdminId,
-        action: 'PAUSE_PLAYER_CARD_SYNC',
+        action: pausing ? 'REQUEST_PAUSE_PLAYER_CARD_SYNC' : 'PAUSE_PLAYER_CARD_SYNC',
         resourceType: 'ExternalSyncRun',
         resourceId: runId,
-        metadata: { runId }
+        metadata: { runId, status: pausing ? 'PAUSING' : 'PAUSED' }
       });
-      return updated.count;
+      return pausing ? 'PAUSING' as const : 'PAUSED' as const;
     });
-    if (changed !== 1) {
-      const exists = await this.prisma.externalSyncRun.findUnique({ where: { id: runId }, select: { id: true } });
-      if (!exists) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
-      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only an active synchronization run can be paused');
-    }
-    return { runId, status: 'PAUSED' };
+    return { runId, status };
   }
 
   async cancelPlatformRun(
@@ -212,10 +222,7 @@ export class PesdataSyncService {
   ): Promise<{ runId: string; status: 'CANCELLED' }> {
     const now = new Date();
     const changed = await this.prisma.$transaction(async (tx) => {
-      const run = await tx.externalSyncRun.findUnique({
-        where: { id: runId },
-        include: { batchLinks: { select: { batchId: true } } }
-      });
+      const run = await tx.externalSyncRun.findUnique({ where: { id: runId } });
       if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
       const updated = await tx.externalSyncRun.updateMany({
         where: {
@@ -236,14 +243,6 @@ export class PesdataSyncService {
         }
       });
       if (updated.count !== 1) return 0;
-      await tx.externalSyncItem.deleteMany({ where: { runId } });
-      if (run.batchLinks.length) await tx.importBatch.updateMany({
-        where: {
-          id: { in: run.batchLinks.map(({ batchId }) => batchId) },
-          status: { in: ['UPLOADED', 'VALIDATED', 'READY', 'FAILED'] }
-        },
-        data: { status: 'CANCELLED' }
-      });
       if (this.audit) await this.audit.record(tx, {
         actorAdminId,
         action: 'CANCEL_PLAYER_CARD_SYNC',
