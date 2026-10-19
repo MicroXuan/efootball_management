@@ -78,6 +78,103 @@ describe('PlayerMarketQueryService', () => {
     }));
   });
 
+  it('falls back to an active player card when the saved best-card selection is missing', async () => {
+    const player = {
+      id: 'player-yaya', nameZh: '亚亚·图雷', nameEn: 'Yaya Touré', shortName: null,
+      nationality: "Côte d'Ivoire", club: 'FC Barcelona', createdAt: now, bestCard: null,
+      cards: [{
+        id: 'card-yaya', playerId: 'player-yaya', externalId: '88046292727298', cardName: 'European Clubs Selection Midfielders',
+        imageUrl: 'https://img.pesdata.net/images/playerCard/88046292727298_l.webp', position: 'DMF',
+        overallRating: 86, cardType: 'EPIC', cardPack: { releaseDate: new Date('2026-10-19T00:00:00.000Z') },
+        attributes: { attributesJson: { sourceMetadata: { maxLevel: 64 } } }, autoBuilds: []
+      }]
+    };
+    const prisma = {
+      footballPlayer: { findMany: jest.fn(async () => [player]) },
+      playerCard: { findMany: jest.fn(async () => player.cards) },
+      leaguePlayerOwnership: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
+      leaguePlayerValuation: { findMany: jest.fn(async () => []) },
+      leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
+      transferWindow: { findFirst: jest.fn(async () => null) },
+      playerReleaseRestriction: { findMany: jest.fn(async () => []) }
+    };
+    const access = { requireParticipant: jest.fn(async () => ({
+      leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT'
+    })) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
+
+    await expect(service.listMarket('user-1', 'league-1', {
+      seasonId: 'season-1', ownership: 'ALL', limit: 30
+    })).resolves.toMatchObject({
+      items: [{
+        playerId: 'player-yaya',
+        card: {
+          playerCardId: 'card-yaya',
+          imageUrl: 'https://img.pesdata.net/images/playerCard/88046292727298_l.webp',
+          position: 'DMF',
+          maxOverall: 99
+        }
+      }]
+    });
+    expect(prisma.playerCard.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'ACTIVE', publishedAt: { not: null } })
+    }));
+  });
+
+  it('uses fixed zero-level fallbacks but never replaces an owned current card', async () => {
+    const fallback = {
+      id: 'card-fixed', playerId: 'player-owned', externalId: 'card-fixed', cardName: '固定能力卡',
+      imageUrl: 'https://img.pesdata.net/fixed.webp', position: 'DMF', overallRating: 95,
+      cardType: 'EPIC', cardPack: { releaseDate: new Date('2026-10-19T00:00:00.000Z') },
+      attributes: { attributesJson: { sourceMetadata: { maxLevel: ' 0 ' } } }, autoBuilds: []
+    };
+    const ownedCard = {
+      id: 'card-owned', playerId: 'player-owned', externalId: 'card-owned', cardName: '当前持有卡',
+      imageUrl: 'https://img.pesdata.net/owned.webp', position: 'CMF', overallRating: 82,
+      cardType: 'STANDARD', autoBuilds: [{ maxOverall: 84 }]
+    };
+    const player = {
+      id: 'player-owned', nameZh: '持有球员', nameEn: null, shortName: null,
+      nationality: null, club: null, createdAt: now, bestCard: null
+    };
+    const prisma = {
+      footballPlayer: { findMany: jest.fn(async () => [player]) },
+      playerCard: { findMany: jest.fn(async () => [fallback]) },
+      leaguePlayerOwnership: {
+        findMany: jest.fn(async () => [{
+          id: 'ownership-1', footballPlayerId: player.id, leagueTeamId: 'team-1',
+          currentPlayerCardId: ownedCard.id, currentPlayerCard: ownedCard,
+          maxOverallSnapshot: 84, salaryMinor: 300, version: 1,
+          acquisitionType: 'NORMAL', acquisitionSeasonId: 'season-1',
+          leagueTeam: { id: 'team-1', teamNumber: 1, name: '我的队', logoUrl: null, ownerAlias: '我' }
+        }]),
+        count: jest.fn(async () => 1)
+      },
+      leaguePlayerValuation: { findMany: jest.fn(async () => []) },
+      leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
+      transferWindow: { findFirst: jest.fn(async () => null) },
+      playerReleaseRestriction: { findMany: jest.fn(async () => []) }
+    };
+    const access = { requireParticipant: jest.fn(async () => ({
+      leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT'
+    })) };
+    const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
+
+    await expect(service.listMarket('user-1', 'league-1', {
+      seasonId: 'season-1', ownership: 'ALL', limit: 30
+    })).resolves.toMatchObject({
+      items: [{
+        playerId: player.id,
+        card: {
+          playerCardId: ownedCard.id,
+          imageUrl: ownedCard.imageUrl,
+          position: 'CMF',
+          maxOverall: 84
+        }
+      }]
+    });
+  });
+
   it('applies ownership filtering before cursor pagination', async () => {
     const prisma = {
       footballPlayer: { findMany: jest.fn(async () => []) },
