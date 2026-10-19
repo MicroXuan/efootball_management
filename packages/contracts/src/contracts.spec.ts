@@ -2742,11 +2742,13 @@ describe('player auction contracts', () => {
     assert.equal(PlayerAuctionBidChannelSchema.parse('MINIPROGRAM'), 'MINIPROGRAM');
     assert.throws(() => PlayerAuctionBidChannelSchema.parse('BOTH'));
     assert.equal(CreatePlayerAuctionBatchRequestSchema.parse({
-      groupBindingId,
       name: '小程序拍卖',
-      bidChannel: 'MINIPROGRAM',
-      expectedVersion: 2
+      bidChannel: 'MINIPROGRAM'
     }).bidChannel, 'MINIPROGRAM');
+    assert.throws(() => CreatePlayerAuctionBatchRequestSchema.parse({
+      name: '微信群拍卖',
+      bidChannel: 'WECHAT_GROUP'
+    }));
   });
 
   it('parses miniprogram bid requests', () => {
@@ -2893,7 +2895,7 @@ describe('player auction contracts', () => {
     const detail = PlayerAuctionBatchDetailSchema.parse({
       id: batchId,
       leagueId,
-      groupBindingId,
+      groupBindingId: null,
       bidChannel: 'MINIPROGRAM',
       name: '应用内拍卖',
       status: 'ACTIVE',
@@ -2942,6 +2944,7 @@ describe('player auction contracts', () => {
       }]
     });
     assert.equal(detail.lots[0]?.bids[0]?.source, 'MINIPROGRAM');
+    assert.equal(detail.groupBindingId, null);
     assert.equal(detail.lots[0]?.bids[0]?.wechatSentAt, null);
   });
 

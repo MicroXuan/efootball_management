@@ -28,7 +28,11 @@ describe('PlayerAuctionRecoveryService', () => {
 
   it('authorized recovery performs an explicit full 30-second restart', async () => {
     const now = new Date('2026-10-09T12:00:00.000Z');
-    const batch: any = { id: 'batch-1', bidChannel: 'WECHAT_GROUP', leagueId: 'league-1', groupBindingId: 'group-1', currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED' };
+    const batch: any = {
+      id: 'batch-1', bidChannel: 'WECHAT_GROUP', leagueId: 'league-1', groupBindingId: 'group-1',
+      groupBinding: { deviceId: 'device-1', wechatGroupId: 'room@chatroom' },
+      currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED'
+    };
     const lot: any = { id: 'lot-1', status: 'PAUSED' };
     const tx: any = { playerAuctionBatch: { findUnique: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) }, playerAuctionLot: { findUnique: jest.fn(async () => lot), update: jest.fn(async ({ data }: any) => Object.assign(lot, data)) } };
     const service = new PlayerAuctionRecoveryService(

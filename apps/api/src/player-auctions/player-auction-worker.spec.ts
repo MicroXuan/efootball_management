@@ -31,7 +31,7 @@ function closingHarness({ highestBid = true, includeNext = true, bidChannel = 'W
   const lots = includeNext ? [current, next] : [current];
   const batch: any = {
     id: 'batch-1', bidChannel, leagueId: 'league-1', status: 'ACTIVE', currentLotId: 'lot-1', version: 1,
-    groupBinding: { deviceId: 'device-1', wechatGroupId: 'room@chatroom' }
+    groupBinding: bidChannel === 'WECHAT_GROUP' ? { deviceId: 'device-1', wechatGroupId: 'room@chatroom' } : null
   };
   const messages: any[] = [];
   const tx: any = {

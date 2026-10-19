@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
@@ -37,6 +37,8 @@ it('lists only enabled auction-capable groups', async () => {
   })) } as unknown as AdminApi;
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
 
+  await userEvent.click(await screen.findByRole('combobox', { name: '出价渠道' }));
+  await userEvent.click(await screen.findByText('微信群纯数字出价'));
   await userEvent.click(await screen.findByRole('combobox', { name: '通知微信群' }));
   expect(await screen.findByRole('option', { name: '拍卖专用群' })).toBeInTheDocument();
   expect(screen.getByRole('option', { name: '联赛综合群' })).toBeInTheDocument();
@@ -51,7 +53,7 @@ it('keeps an existing draft on its saved eligible group', async () => {
     createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z'
   };
   const draft = {
-    id: 'batch-1', leagueId, groupBindingId: group.id, name: '十月拍卖', status: 'DRAFT', currentLotId: null,
+    id: 'batch-1', leagueId, groupBindingId: group.id, bidChannel: 'WECHAT_GROUP', name: '十月拍卖', status: 'DRAFT', currentLotId: null,
     version: 1, startedAt: null, completedAt: null, cancelledAt: null,
     createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', lots: []
   };
@@ -75,6 +77,43 @@ it('does not expose the hidden WeChat bot configuration when no auction group is
   })) } as unknown as AdminApi;
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
 
+  await userEvent.click(await screen.findByRole('combobox', { name: '出价渠道' }));
+  await userEvent.click(await screen.findByText('微信群纯数字出价'));
   expect(await screen.findByText('暂无可用的拍卖通知群')).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: '前往微信群机器人配置' })).not.toBeInTheDocument();
+});
+
+it('saves and prepares a miniprogram auction without a WeChat group', async () => {
+  const created = {
+    id: 'batch-1', leagueId, groupBindingId: null, bidChannel: 'MINIPROGRAM', name: '球员拍卖',
+    status: 'DRAFT', currentLotId: null, version: 1, startedAt: null, completedAt: null, cancelledAt: null,
+    createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', lots: []
+  };
+  const withLots = { ...created, version: 2, lots: [{
+    id: 'lot-1', displayOrder: 1, playerId: 'player-1', playerCardId: 'card-1', playerName: '车范根',
+    playerSnapshot: { card: { cardName: '传奇' } }, startingPrice: 50, minimumIncrement: 10,
+    status: 'QUEUED', currentPrice: null, currentHighestBidId: null, deadlineAt: null, deadlineEpoch: 0,
+    pausedRemainingMs: null, version: 1, bids: [], review: null, startedAt: null, closedAt: null, reviewedAt: null
+  }] };
+  const api = { request: vi.fn((path: string, options?: { method?: string; body?: unknown }) => {
+    if (path.endsWith('/wechat-bot')) return Promise.resolve({ bindings: [], devices: [], observedGroups: [], scheduleSourceOptions: [] });
+    if (path.includes('player-candidates')) return Promise.resolve({ items: [{ playerId: 'player-1', playerName: '车范根', ownedByTeamId: null, recommendedPlayerCardId: 'card-1', cards: [{ id: 'card-1', cardName: '传奇', imageUrl: null, position: 'CF', overallRating: 96, maxOverall: 96, salaryMinor: 500, recommended: true }] }] });
+    if (options?.method === 'PUT') return Promise.resolve(withLots);
+    if (path.endsWith('/prepare')) return Promise.resolve({ ...withLots, status: 'READY', version: 3 });
+    return Promise.resolve(created);
+  }) } as unknown as AdminApi;
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /><Route path="/leagues/:leagueId/auctions/:batchId" element={<div>拍卖详情</div>} /></Routes></MemoryRouter>);
+
+  await userEvent.type(await screen.findByLabelText('搜索球员'), '车范根');
+  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+  await userEvent.click(await screen.findByRole('button', { name: /添加车范根/ }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /保存并准备拍卖/ })).not.toHaveClass('ant-btn-loading'));
+  await userEvent.click(screen.getByRole('button', { name: /保存并准备拍卖/ }));
+
+  expect(await screen.findByText('拍卖详情')).toBeInTheDocument();
+  const createCall = (api.request as ReturnType<typeof vi.fn>).mock.calls.find(([path, options]) =>
+    path.endsWith('/player-auctions') && options?.method === 'POST'
+  );
+  expect(createCall?.[1]?.body).toMatchObject({ groupBindingId: null, bidChannel: 'MINIPROGRAM' });
+  expect(screen.queryByText('请选择微信群，并至少添加一位球员')).not.toBeInTheDocument();
 });

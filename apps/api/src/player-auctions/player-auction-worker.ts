@@ -52,6 +52,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
         continue;
       }
       if (lot.batch.bidChannel !== 'WECHAT_GROUP') continue;
+      if (!lot.batch.groupBinding) continue;
       const remainingSeconds = Math.ceil(remainingMs / 1_000);
       const previous = lot.lastCountdownMark ?? 30;
       const crossed = MARKS.filter((mark) => mark < previous && remainingSeconds <= mark);
@@ -134,6 +135,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
         });
       }
       if (batch.bidChannel !== 'WECHAT_GROUP') return true;
+      if (!batch.groupBinding) return false;
       const text = lot.currentHighestBid?.leagueTeam
         ? this.formatter.pendingReview(lot.playerNameSnapshot, lot.currentHighestBid.leagueTeam.name, lot.currentPrice ?? lot.startingPrice)
         : this.formatter.noBid(lot.playerNameSnapshot);

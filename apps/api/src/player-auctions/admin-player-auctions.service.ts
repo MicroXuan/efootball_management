@@ -70,20 +70,24 @@ export class AdminPlayerAuctionsService {
   async create(actorAdminId: string, leagueId: string, input: CreatePlayerAuctionBatchRequest, key: string) {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
     return this.receipts.execute(actorAdminId, `admin.player-auction.create:${leagueId}`, key, async (tx) => {
-      const group = await tx.wechatGroupBinding.findFirst({
-        where: {
-          id: input.groupBindingId,
-          leagueId,
-          enabled: true,
-          capabilities: { some: { capability: 'PLAYER_AUCTION' } }
-        }
-      });
-      if (!group) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
-      if (group.version !== input.expectedVersion) throw auctionVersionConflict();
+      const group = input.bidChannel === 'WECHAT_GROUP'
+        ? await tx.wechatGroupBinding.findFirst({
+          where: {
+            id: input.groupBindingId!,
+            leagueId,
+            enabled: true,
+            capabilities: { some: { capability: 'PLAYER_AUCTION' } }
+          }
+        })
+        : null;
+      if (input.bidChannel === 'WECHAT_GROUP' && !group) {
+        throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
+      }
+      if (group && group.version !== input.expectedVersion) throw auctionVersionConflict();
       const created = await tx.playerAuctionBatch.create({
         data: {
           leagueId,
-          groupBindingId: group.id,
+          groupBindingId: group?.id ?? null,
           bidChannel: input.bidChannel,
           name: input.name,
           createdByAdminId: actorAdminId
@@ -92,7 +96,7 @@ export class AdminPlayerAuctionsService {
       await this.audit.record(tx, {
         actorAdminId, leagueId, action: 'admin.player-auction.create',
         resourceType: 'PlayerAuctionBatch', resourceId: created.id,
-        metadata: { groupBindingId: group.id, bidChannel: input.bidChannel, name: input.name }
+        metadata: { groupBindingId: group?.id ?? null, bidChannel: input.bidChannel, name: input.name }
       });
       return this.view(await this.batch(tx, leagueId, created.id));
     }, input);
@@ -103,11 +107,30 @@ export class AdminPlayerAuctionsService {
     return this.receipts.execute(actorAdminId, `admin.player-auction.update:${batchId}`, key, async (tx) => {
       const batch = await this.batch(tx, leagueId, batchId);
       this.requireDraft(batch);
+      const bidChannel = input.bidChannel ?? batch.bidChannel;
+      let groupBindingId: string | null = null;
+      if (bidChannel === 'WECHAT_GROUP') {
+        groupBindingId = input.groupBindingId ?? batch.groupBindingId;
+        if (!groupBindingId) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群拍卖缺少通知群', 409);
+        const group = await tx.wechatGroupBinding.findFirst({
+          where: {
+            id: groupBindingId,
+            leagueId,
+            enabled: true,
+            capabilities: { some: { capability: 'PLAYER_AUCTION' } }
+          }
+        });
+        if (!group) throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
+        if (input.groupBindingVersion !== undefined && group.version !== input.groupBindingVersion) {
+          throw auctionVersionConflict();
+        }
+      }
       const updated = await tx.playerAuctionBatch.updateMany({
         where: { id: batchId, leagueId, version: input.expectedVersion, status: 'DRAFT' },
         data: {
           name: input.name,
-          ...(input.bidChannel ? { bidChannel: input.bidChannel } : {}),
+          bidChannel,
+          groupBindingId,
           version: { increment: 1 }
         }
       });
@@ -179,18 +202,23 @@ export class AdminPlayerAuctionsService {
       this.requireDraft(batch);
       if (batch.lots.length === 0) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '至少配置一名拍卖球员', 409);
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
-      await tx.$queryRaw`SELECT id FROM wechat_group_bindings WHERE id = ${batch.groupBindingId} FOR UPDATE`;
-      const group = await tx.wechatGroupBinding.findFirst({
-        where: {
-          id: batch.groupBindingId,
-          leagueId,
-          enabled: true,
-          capabilities: { some: { capability: 'PLAYER_AUCTION' } }
-        },
-        select: { id: true }
-      });
-      if (!group) {
-        throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
+      if (batch.bidChannel === 'WECHAT_GROUP') {
+        if (!batch.groupBindingId) {
+          throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群拍卖缺少通知群', 409);
+        }
+        await tx.$queryRaw`SELECT id FROM wechat_group_bindings WHERE id = ${batch.groupBindingId} FOR UPDATE`;
+        const group = await tx.wechatGroupBinding.findFirst({
+          where: {
+            id: batch.groupBindingId,
+            leagueId,
+            enabled: true,
+            capabilities: { some: { capability: 'PLAYER_AUCTION' } }
+          },
+          select: { id: true }
+        });
+        if (!group) {
+          throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群未启用、未开启球员拍卖或不属于当前联赛', 409);
+        }
       }
       const conflict = await tx.playerAuctionBatch.findFirst({
         where: {
@@ -356,7 +384,7 @@ export class AdminPlayerAuctionsService {
   private summary(batch: BatchSummaryInput) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
-      bidChannel: batch.bidChannel, groupDisplayName: batch.groupBinding.displayName,
+      bidChannel: batch.bidChannel, groupDisplayName: batch.groupBinding?.displayName ?? null,
       name: batch.name, status: batch.status,
       lotCount: batch._count?.lots ?? batch.lots?.length ?? 0, currentLotId: batch.currentLotId,
       version: batch.version, createdAt: batch.createdAt.toISOString(), updatedAt: batch.updatedAt.toISOString()

@@ -45,15 +45,25 @@ export const PlayerAuctionBidResultSchema = z.enum([
 export const PlayerAuctionReviewDecisionSchema = z.enum(['CONFIRM', 'ADJUST', 'VOID']);
 
 export const CreatePlayerAuctionBatchRequestSchema = z.object({
-  groupBindingId: ResourceIdSchema,
+  groupBindingId: ResourceIdSchema.nullable().optional(),
   name: z.string().trim().min(1).max(128),
   bidChannel: PlayerAuctionBidChannelSchema.default('WECHAT_GROUP'),
-  expectedVersion: ExpectedVersionSchema
+  expectedVersion: ExpectedVersionSchema.optional()
+}).superRefine((value, context) => {
+  if (value.bidChannel !== 'WECHAT_GROUP') return;
+  if (!value.groupBindingId) {
+    context.addIssue({ code: 'custom', path: ['groupBindingId'], message: 'WeChat auctions require a group binding' });
+  }
+  if (value.expectedVersion === undefined) {
+    context.addIssue({ code: 'custom', path: ['expectedVersion'], message: 'WeChat auctions require the group version' });
+  }
 });
 
 export const UpdatePlayerAuctionBatchRequestSchema = z.object({
   name: z.string().trim().min(1).max(128),
   bidChannel: PlayerAuctionBidChannelSchema.optional(),
+  groupBindingId: ResourceIdSchema.nullable().optional(),
+  groupBindingVersion: ExpectedVersionSchema.optional(),
   expectedVersion: ExpectedVersionSchema
 });
 
@@ -230,9 +240,9 @@ export const PlayerAuctionLotSchema = z.object({
 export const PlayerAuctionBatchListItemSchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
-  groupBindingId: ResourceIdSchema,
+  groupBindingId: ResourceIdSchema.nullable(),
   bidChannel: PlayerAuctionBidChannelSchema,
-  groupDisplayName: z.string().trim().min(1).max(128),
+  groupDisplayName: z.string().trim().min(1).max(128).nullable(),
   name: z.string().trim().min(1).max(128),
   status: PlayerAuctionBatchStatusSchema,
   lotCount: z.number().int().min(0),
@@ -249,7 +259,7 @@ export const PlayerAuctionBatchListResponseSchema = z.object({
 export const PlayerAuctionBatchDetailSchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
-  groupBindingId: ResourceIdSchema,
+  groupBindingId: ResourceIdSchema.nullable(),
   bidChannel: PlayerAuctionBidChannelSchema,
   name: z.string().trim().min(1).max(128),
   status: PlayerAuctionBatchStatusSchema,

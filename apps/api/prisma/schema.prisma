@@ -2862,7 +2862,7 @@ model WechatOutboxMessage {
 model PlayerAuctionBatch {
   id                 String                   @id @default(uuid()) @db.Char(36)
   leagueId           String                   @map("league_id") @db.Char(36)
-  groupBindingId     String                   @map("group_binding_id") @db.Char(36)
+  groupBindingId     String?                  @map("group_binding_id") @db.Char(36)
   bidChannel         PlayerAuctionBidChannel  @default(WECHAT_GROUP) @map("bid_channel")
   name               String                   @db.VarChar(128)
   status             PlayerAuctionBatchStatus @default(DRAFT)
@@ -2877,7 +2877,7 @@ model PlayerAuctionBatch {
   createdAt          DateTime                 @default(now()) @map("created_at")
   updatedAt          DateTime                 @updatedAt @map("updated_at")
   league             League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  groupBinding       WechatGroupBinding       @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
+  groupBinding       WechatGroupBinding?      @relation(fields: [groupBindingId], references: [id], onDelete: Restrict)
   createdByAdmin     AdminAccount             @relation("PlayerAuctionBatchCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   currentLot         PlayerAuctionLot?        @relation("PlayerAuctionCurrentLot", fields: [currentLotId], references: [id], onDelete: Restrict)
   lots               PlayerAuctionLot[]       @relation("PlayerAuctionBatchLots")

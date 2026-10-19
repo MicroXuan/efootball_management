@@ -77,6 +77,29 @@ describe('AdminPlayerAuctionsService', () => {
     });
   });
 
+  it('creates and prepares a miniprogram batch without a WeChat group', async () => {
+    const { service, tx, batch } = harness();
+    batch.bidChannel = 'MINIPROGRAM';
+    batch.groupBindingId = null;
+    batch.groupBinding = null;
+    batch.lots = [{ id: 'lot-1', bids: [], review: null }];
+    await expect(service.create('admin-1', 'league-1', {
+      groupBindingId: null, name: '小程序拍卖', bidChannel: 'MINIPROGRAM'
+    }, 'create-miniprogram')).resolves.toMatchObject({ groupBindingId: null, bidChannel: 'MINIPROGRAM' });
+    expect(tx.wechatGroupBinding.findFirst).not.toHaveBeenCalled();
+    expect(tx.playerAuctionBatch.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ groupBindingId: null, bidChannel: 'MINIPROGRAM' })
+    }));
+
+    tx.playerAuctionBatch.findFirst
+      .mockResolvedValueOnce(batch)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(batch);
+    await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-miniprogram'))
+      .resolves.toMatchObject({ groupBindingId: null, bidChannel: 'MINIPROGRAM' });
+    expect(tx.wechatGroupBinding.findFirst).not.toHaveBeenCalled();
+  });
+
   it('replaces draft lots with validated player/card snapshots in contiguous order', async () => {
     const { service, tx, batch } = harness();
     await service.replaceLots('admin-1', 'league-1', 'batch-1', {
@@ -98,6 +121,20 @@ describe('AdminPlayerAuctionsService', () => {
     await expect(service.update('admin-1', 'league-1', 'batch-1', {
       name: '新名字', bidChannel: 'MINIPROGRAM', expectedVersion: 1
     }, 'update-2')).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('detaches a draft from WeChat when it switches to the miniprogram channel', async () => {
+    const { service, batch, tx } = harness();
+    tx.playerAuctionBatch.findFirst
+      .mockResolvedValueOnce(batch)
+      .mockResolvedValueOnce({ ...batch, bidChannel: 'MINIPROGRAM', groupBindingId: null, groupBinding: null });
+
+    await expect(service.update('admin-1', 'league-1', 'batch-1', {
+      name: '小程序拍卖', bidChannel: 'MINIPROGRAM', groupBindingId: null, expectedVersion: 1
+    }, 'update-miniprogram')).resolves.toMatchObject({ bidChannel: 'MINIPROGRAM', groupBindingId: null });
+    expect(tx.playerAuctionBatch.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ bidChannel: 'MINIPROGRAM', groupBindingId: null })
+    }));
   });
 
   it('prepares only a non-empty batch and rejects another unresolved batch for the league', async () => {

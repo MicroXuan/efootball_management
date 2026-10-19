@@ -27,7 +27,9 @@ export class PlayerAuctionRecoveryService {
       where: { bidChannel: 'WECHAT_GROUP', status: { in: ['ACTIVE', 'PAUSED'] }, groupBinding: { deviceId } },
       select: { id: true, groupBindingId: true }
     });
-    for (const batch of batches) await this.state.enterRecovery(batch.groupBindingId, reason);
+    for (const batch of batches) {
+      if (batch.groupBindingId) await this.state.enterRecovery(batch.groupBindingId, reason);
+    }
     return batches.length;
   }
 
@@ -68,7 +70,9 @@ export class PlayerAuctionRecoveryService {
       where: { bidChannel: 'WECHAT_GROUP', status: 'ACTIVE', lots: { some: { status: 'ACTIVE', deadlineAt: { lte: new Date() } } } },
       select: { groupBindingId: true }
     });
-    for (const group of groups) await this.state.enterRecovery(group.groupBindingId, 'APPLICATION_RESTART_AMBIGUITY');
+    for (const group of groups) {
+      if (group.groupBindingId) await this.state.enterRecovery(group.groupBindingId, 'APPLICATION_RESTART_AMBIGUITY');
+    }
   }
 
   recover(batchId: string, actorUserId: string, announce = true) {
@@ -82,6 +86,9 @@ export class PlayerAuctionRecoveryService {
       const allowed = await this.authorization.can(actorUserId, 'league.auction.manage', { type: 'LEAGUE', id: batch.leagueId });
       if (!allowed) throw new PlayerAuctionError('AUCTION_FORBIDDEN', '没有恢复该联赛拍卖的权限', 403);
       if (batch.bidChannel !== 'WECHAT_GROUP') throw new PlayerAuctionError('AUCTION_RECOVERY_NOT_REQUIRED', '小程序拍卖不依赖微信群桥接恢复', 409);
+      if (!batch.groupBindingId || !batch.groupBinding) {
+        throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群拍卖缺少通知群', 409);
+      }
       await this.locks.lockLeague(tx, batch.leagueId);
       await this.locks.lockGroup(tx, batch.groupBindingId);
       await this.locks.lockBatch(tx, batch.id);
