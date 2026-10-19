@@ -24,6 +24,8 @@ import { normalizeImportRow, normalizeSearchText } from './record-normalizer.js'
 import type { ParsedImportRow, RawImportRow } from './import-adapter.js';
 
 type ValidationError = { code: string; path: string; message: string };
+type ImportStore = PrismaService | Prisma.TransactionClient;
+export type CreateBatchOutcome = { batch: ImportBatchResponse; created: boolean };
 export type PlatformImportRecordQuery = Pick<PlatformPageRequest, 'page' | 'pageSize' | 'query'> & {
   diffType?: ImportDiffType;
 };
@@ -126,7 +128,7 @@ export class PlayerImportService {
   async createBatchWithOutcome(
     actorId: string,
     input: CreateImportBatchRequest
-  ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
+  ): Promise<CreateBatchOutcome> {
     await this.assertCanCreateBatch(actorId);
     return this.createBatchUnchecked(actorId, input);
   }
@@ -134,29 +136,39 @@ export class PlayerImportService {
   async createBatchForPlatformAdmin(
     actorAdminId: string,
     input: CreateImportBatchRequest
-  ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
+  ): Promise<CreateBatchOutcome> {
     await this.requirePlatformAdmin(actorAdminId);
     return this.createBatchUnchecked(actorAdminId, input);
   }
 
+  async createBatchForPlatformAdminInTransaction(
+    tx: Prisma.TransactionClient,
+    actorAdminId: string,
+    input: CreateImportBatchRequest
+  ): Promise<CreateBatchOutcome> {
+    await this.requirePlatformAdmin(actorAdminId);
+    return this.createBatchUnchecked(actorAdminId, input, tx);
+  }
+
   private async createBatchUnchecked(
     actorId: string,
-    input: CreateImportBatchRequest
-  ): Promise<{ batch: ImportBatchResponse; created: boolean }> {
+    input: CreateImportBatchRequest,
+    store: ImportStore = this.prisma
+  ): Promise<CreateBatchOutcome> {
 
-    const source = await this.prisma.dataSource.findUnique({ where: { code: input.sourceCode } });
+    const source = await store.dataSource.findUnique({ where: { code: input.sourceCode } });
     if (!source?.isEnabled) {
       throw new ImportDomainError('IMPORT_SOURCE_UNAVAILABLE', 'Import source is missing or disabled');
     }
 
     const contentChecksum = checksum(input.content);
-    const duplicate = await this.prisma.importBatch.findUnique({
+    const duplicate = await store.importBatch.findUnique({
       where: { sourceId_checksum: { sourceId: source.id, checksum: contentChecksum } },
       include: { source: true, release: true }
     });
     if (duplicate) return { batch: this.batchResponse(duplicate), created: false };
 
-    const batch = await this.prisma.importBatch.create({
+    const batch = await store.importBatch.create({
       data: {
         sourceId: source.id,
         fileName: input.fileName,
@@ -167,7 +179,7 @@ export class PlayerImportService {
     });
 
     if (input.content.length === 0) {
-      await this.failBatch(batch.id, 'EMPTY_IMPORT_CONTENT');
+      await this.failBatch(store, batch.id, 'EMPTY_IMPORT_CONTENT');
       throw new ImportDomainError('EMPTY_IMPORT_CONTENT', 'Import content must not be empty');
     }
 
@@ -175,12 +187,12 @@ export class PlayerImportService {
     try {
       rows = this.adapterFor(input.format).parse(input.content);
     } catch {
-      await this.failBatch(batch.id, 'IMPORT_PARSE_FAILED');
+      await this.failBatch(store, batch.id, 'IMPORT_PARSE_FAILED');
       throw new ImportDomainError('IMPORT_PARSE_FAILED', 'Import content could not be parsed');
     }
 
     if (rows.length > 5000) {
-      await this.failBatch(batch.id, 'IMPORT_ROW_LIMIT_EXCEEDED');
+      await this.failBatch(store, batch.id, 'IMPORT_ROW_LIMIT_EXCEEDED');
       throw new ImportDomainError('IMPORT_ROW_LIMIT_EXCEEDED', 'Import files may contain at most 5,000 rows');
     }
 
@@ -195,7 +207,6 @@ export class PlayerImportService {
         .map(([externalId]) => externalId)
     );
 
-    const records: Array<Awaited<ReturnType<PlayerImportService['reviewRecord']>>> = [];
     for (const item of prepared) {
       if (item.normalized && duplicateIds.has(item.normalized.externalId)) {
         item.errors.push({
@@ -204,8 +215,8 @@ export class PlayerImportService {
           message: 'External ID occurs more than once in this batch'
         });
       }
-      records.push(await this.reviewRecord(source.id, item));
     }
+    const records = await this.reviewRecords(store, source.id, prepared);
 
     const counts = records.reduce(
       (result, record) => ({ ...result, [record.diffType]: result[record.diffType] + 1 }),
@@ -213,24 +224,22 @@ export class PlayerImportService {
     );
     const status = counts.INVALID === 0 ? 'READY' : 'VALIDATED';
 
-    await this.prisma.$transaction(async (tx) => {
-      for (const record of records) {
-        await tx.importRecord.create({
-          data: {
-            batchId: batch.id,
-            rowNumber: record.rowNumber,
-            externalId: record.normalized?.externalId ?? null,
-            contentChecksum: record.normalized ? checksum(JSON.stringify(record.normalized)) : null,
-            rawJson: jsonValue(record.raw),
-            normalizedJson: record.normalized ? jsonValue(record.normalized) : Prisma.JsonNull,
-            diffType: record.diffType,
-            fieldDiff: jsonValue(record.fields),
-            validationErrors: jsonValue(record.errors),
-            targetPlayerId: record.targetPlayerId,
-            targetCardId: record.targetCardId
-          }
-        });
-      }
+    const persist = async (tx: ImportStore) => {
+      await tx.importRecord.createMany({
+        data: records.map((record) => ({
+          batchId: batch.id,
+          rowNumber: record.rowNumber,
+          externalId: record.normalized?.externalId ?? null,
+          contentChecksum: record.normalized ? checksum(JSON.stringify(record.normalized)) : null,
+          rawJson: jsonValue(record.raw),
+          normalizedJson: record.normalized ? jsonValue(record.normalized) : Prisma.JsonNull,
+          diffType: record.diffType,
+          fieldDiff: jsonValue(record.fields),
+          validationErrors: jsonValue(record.errors),
+          targetPlayerId: record.targetPlayerId,
+          targetCardId: record.targetCardId
+        }))
+      });
       await tx.importBatch.update({
         where: { id: batch.id },
         data: {
@@ -242,9 +251,14 @@ export class PlayerImportService {
           invalidCount: counts.INVALID
         }
       });
-    });
+    };
+    if (store === this.prisma) {
+      await this.prisma.$transaction((tx) => persist(tx));
+    } else {
+      await persist(store);
+    }
 
-    return { batch: await this.getBatchUnchecked(batch.id), created: true };
+    return { batch: await this.getBatchUnchecked(batch.id, store), created: true };
   }
 
   async getBatch(actorId: string, batchId: string) {
@@ -405,6 +419,7 @@ export class PlayerImportService {
   }
 
   private async reviewRecord(
+    store: ImportStore,
     sourceId: string,
     item: ReturnType<PlayerImportService['prepareRow']>
   ) {
@@ -413,7 +428,7 @@ export class PlayerImportService {
       return { ...item, ...invalid(), diffType: 'INVALID' as const, targetPlayerId: null, targetCardId: null };
     }
 
-    const existingCard = await this.prisma.playerCard.findUnique({
+    const existingCard = await store.playerCard.findUnique({
       where: { sourceId_externalId: { sourceId, externalId: item.normalized.externalId } },
       include: {
         player: { include: { sources: { where: { sourceId } } } },
@@ -425,7 +440,7 @@ export class PlayerImportService {
 
     let targetPlayerId: string | null = existingCard?.playerId ?? null;
     if (!targetPlayerId && item.normalized.playerExternalId) {
-      const identity = await this.prisma.footballPlayerSource.findUnique({
+      const identity = await store.footballPlayerSource.findUnique({
         where: {
           sourceId_externalId: { sourceId, externalId: item.normalized.playerExternalId }
         }
@@ -440,7 +455,7 @@ export class PlayerImportService {
       const normalizedNameEn = item.normalized.playerNameEn
         ? normalizeSearchText(item.normalized.playerNameEn)
         : undefined;
-      const candidates = await this.prisma.footballPlayer.findMany({
+      const candidates = await store.footballPlayer.findMany({
         where: {
           OR: [
             ...(normalizedNameZh ? [{ normalizedNameZh }] : []),
@@ -469,6 +484,92 @@ export class PlayerImportService {
       targetPlayerId,
       targetCardId: existingCard?.id ?? null
     };
+  }
+
+  private async reviewRecords(
+    store: ImportStore,
+    sourceId: string,
+    items: Array<ReturnType<PlayerImportService['prepareRow']>>
+  ): Promise<Array<Awaited<ReturnType<PlayerImportService['reviewRecord']>>>> {
+    const normalized = items.flatMap((item) => item.normalized ? [item.normalized] : []);
+    const cardExternalIds = [...new Set(normalized.map((item) => item.externalId))];
+    const playerExternalIds = [...new Set(normalized.flatMap((item) => item.playerExternalId ? [item.playerExternalId] : []))];
+    const normalizedNamesZh = [...new Set(normalized.flatMap((item) => item.playerNameZh
+      ? [normalizeSearchText(item.playerNameZh)]
+      : []))];
+    const normalizedNamesEn = [...new Set(normalized.flatMap((item) => item.playerNameEn
+      ? [normalizeSearchText(item.playerNameEn)]
+      : []))];
+
+    const [cards, identities, players] = await Promise.all([
+      cardExternalIds.length === 0 ? [] : store.playerCard.findMany({
+        where: { sourceId, externalId: { in: cardExternalIds } },
+        include: {
+          player: { include: { sources: { where: { sourceId } } } },
+          cardPack: true,
+          attributes: true,
+          skills: { include: { skill: true } }
+        }
+      }),
+      playerExternalIds.length === 0 ? [] : store.footballPlayerSource.findMany({
+        where: { sourceId, externalId: { in: playerExternalIds } }
+      }),
+      normalizedNamesZh.length === 0 && normalizedNamesEn.length === 0 ? [] : store.footballPlayer.findMany({
+        where: { OR: [
+          ...(normalizedNamesZh.length > 0 ? [{ normalizedNameZh: { in: normalizedNamesZh } }] : []),
+          ...(normalizedNamesEn.length > 0 ? [{ normalizedNameEn: { in: normalizedNamesEn } }] : [])
+        ] },
+        select: { id: true, normalizedNameZh: true, normalizedNameEn: true }
+      })
+    ]);
+    const cardsByExternalId = new Map(cards.map((card) => [card.externalId, card]));
+    const identitiesByExternalId = new Map(identities.map((identity) => [identity.externalId, identity.playerId]));
+    const playersByName = new Map<string, Set<string>>();
+    for (const player of players) {
+      for (const name of [player.normalizedNameZh, player.normalizedNameEn]) {
+        if (!name) continue;
+        const matches = playersByName.get(name) ?? new Set<string>();
+        matches.add(player.id);
+        playersByName.set(name, matches);
+      }
+    }
+
+    return items.map((item) => {
+      const invalid = (): CalculatedDiff => ({ type: 'INVALID', fields: {}, errors: item.errors });
+      if (!item.normalized || item.errors.length > 0) {
+        return { ...item, ...invalid(), diffType: 'INVALID' as const, targetPlayerId: null, targetCardId: null };
+      }
+      const existingCard = cardsByExternalId.get(item.normalized.externalId);
+      let targetPlayerId: string | null = existingCard?.playerId ?? null;
+      if (!targetPlayerId && item.normalized.playerExternalId) {
+        targetPlayerId = identitiesByExternalId.get(item.normalized.playerExternalId) ?? null;
+      }
+      if (!targetPlayerId && !item.normalized.playerExternalId) {
+        const candidateIds = new Set<string>();
+        for (const name of [item.normalized.playerNameZh, item.normalized.playerNameEn]) {
+          if (!name) continue;
+          for (const id of playersByName.get(normalizeSearchText(name)) ?? []) candidateIds.add(id);
+        }
+        if (candidateIds.size > 1) {
+          const errors = [{
+            code: 'AMBIGUOUS_PLAYER_MATCH',
+            path: 'playerNameEn',
+            message: 'More than one player matches the normalized name'
+          }];
+          return { ...item, errors, fields: {}, diffType: 'INVALID' as const, targetPlayerId: null, targetCardId: existingCard?.id ?? null };
+        }
+        targetPlayerId = candidateIds.values().next().value ?? null;
+      }
+      const diff = calculateRecordDiff(existingCard ? toExistingRecord(existingCard) : null, item.normalized);
+      return {
+        ...item,
+        errors: diff.errors,
+        fields: diff.fields,
+        diffType: diff.type,
+        targetPlayerId,
+        targetCardId: existingCard?.id ?? null
+      };
+    });
   }
 
   private async requirePermission(actorId: string, permission: string): Promise<void> {
@@ -512,8 +613,8 @@ export class PlayerImportService {
     });
   }
 
-  private async failBatch(batchId: string, reason: string): Promise<void> {
-    await this.prisma.importBatch.update({
+  private async failBatch(store: ImportStore, batchId: string, reason: string): Promise<void> {
+    await store.importBatch.update({
       where: { id: batchId },
       data: { status: 'FAILED', failureReason: reason }
     });
@@ -525,8 +626,8 @@ export class PlayerImportService {
     return batch;
   }
 
-  private async getBatchUnchecked(batchId: string) {
-    const batch = await this.prisma.importBatch.findUnique({
+  private async getBatchUnchecked(batchId: string, store: ImportStore = this.prisma) {
+    const batch = await store.importBatch.findUnique({
       where: { id: batchId },
       include: { source: true, release: true }
     });

@@ -138,6 +138,49 @@ describe('PlayerImportService', () => {
     expect(authorizationCalls).toEqual([]);
   });
 
+  it('creates a 100-row platform batch within the default transaction budget', async () => {
+    const outcome = await service.createBatchForPlatformAdmin(adminId, {
+      sourceCode,
+      fileName: 'platform-100.json',
+      format: 'JSON',
+      content: JSON.stringify(Array.from({ length: 100 }, (_, index) => ({
+        ...validCard,
+        externalId: `platform-100-${index + 1}`
+      })))
+    });
+
+    expect(outcome.batch.totalCount).toBe(100);
+    await expect(prisma.importRecord.count({ where: { batchId: outcome.batch.id } })).resolves.toBe(100);
+  }, 15_000);
+
+  it('creates all 500 import records with exact summary counts', async () => {
+    const rows = Array.from({ length: 497 }, (_, index) => ({
+      ...validCard,
+      externalId: `platform-500-${index + 1}`
+    }));
+    rows.push(
+      { ...validCard, externalId: 'platform-500-duplicate' },
+      { ...validCard, externalId: 'platform-500-duplicate' },
+      { ...validCard, externalId: '', overallRating: 0 }
+    );
+
+    const outcome = await service.createBatchForPlatformAdmin(adminId, {
+      sourceCode,
+      fileName: 'platform-500.json',
+      format: 'JSON',
+      content: JSON.stringify(rows)
+    });
+
+    expect(outcome.batch).toMatchObject({
+      totalCount: 500,
+      createCount: 497,
+      updateCount: 0,
+      unchangedCount: 0,
+      invalidCount: 3
+    });
+    await expect(prisma.importRecord.count({ where: { batchId: outcome.batch.id } })).resolves.toBe(500);
+  }, 30_000);
+
   it('keeps ordinary import creation on user scope authorization', async () => {
     const batch = await createJsonBatch([{ ...validCard, externalId: 'user-card' }]);
 
