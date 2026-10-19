@@ -88,6 +88,7 @@ describe('DataSyncPage', () => {
     const failedRun = {
       id: runId, kind: 'PLAYER_CARDS', mode: 'INCREMENTAL', status: 'FAILED',
       actorAdminId: '22222222-2222-4222-8222-222222222222', currentPhase: 'INTERRUPTED',
+      targetCount: null, matchedCount: 0, chunkIndex: 0, pauseRequested: false, completionReason: null,
       heartbeatAt: '2026-10-07T00:00:00.000Z', leaseExpiresAt: null, resumable: true,
       counters: { sourceTotal: 43000, scanned: 1000, fetched: 900, skipped: 0, added: 0, updated: 0, missing: 0, failed: 1, batches: 1 },
       errorCode: 'PROCESS_INTERRUPTED', errorMessage: 'Synchronization process was interrupted and can be resumed',

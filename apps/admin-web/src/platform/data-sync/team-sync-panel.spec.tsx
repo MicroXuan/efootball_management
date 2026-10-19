@@ -8,6 +8,7 @@ const ids = Array.from({ length: 20 }, (_, index) => `${String(index + 10).padSt
 const run = {
   id: runId, kind: 'TEAM_SHELLS', mode: 'INCREMENTAL', status: 'READY', actorAdminId: '99999999-1111-4111-8111-111111111111',
   currentPhase: 'READY', heartbeatAt: null, leaseExpiresAt: null, resumable: false,
+  targetCount: null, matchedCount: 0, chunkIndex: 0, pauseRequested: false, completionReason: null,
   counters: { sourceTotal: null, scanned: 981, fetched: 0, skipped: 0, added: 900, updated: 80, missing: 1, failed: 1, batches: 0 },
   errorCode: null, errorMessage: null, startedAt: null, completedAt: '2026-10-07T00:00:00.000Z', createdAt: '2026-10-07T00:00:00.000Z', updatedAt: '2026-10-07T00:00:00.000Z'
 };

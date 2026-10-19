@@ -8,6 +8,11 @@ const run: PlatformSyncRunSummary = {
   mode: 'INCREMENTAL',
   status: 'RUNNING',
   actorAdminId: '22222222-2222-4222-8222-222222222222',
+  targetCount: null,
+  matchedCount: 0,
+  chunkIndex: 0,
+  pauseRequested: false,
+  completionReason: null,
   currentPhase: 'FETCHING',
   heartbeatAt: '2026-10-07T00:00:00.000Z',
   leaseExpiresAt: '2026-10-07T00:01:00.000Z',
@@ -72,5 +77,47 @@ describe('SyncRunCard', () => {
     expect(screen.getByRole('button', { name: '继续同步' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '取消任务' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '增量同步' })).toBeDisabled();
+  });
+
+  it('shows exact sample progress and labels source exhaustion as partial completion', () => {
+    render(<SyncRunCard
+      kind="PLAYER_CARDS"
+      run={{
+        ...run,
+        mode: 'SAMPLE',
+        status: 'READY',
+        currentPhase: 'READY',
+        targetCount: 100,
+        matchedCount: 60,
+        completionReason: 'SOURCE_EXHAUSTED',
+        counters: { ...run.counters, scanned: 1_420 }
+      }}
+      pendingReview={3}
+      failedReview={0}
+      published={2}
+      onStart={vi.fn()}
+      onPause={vi.fn()}
+      onResume={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+
+    expect(screen.getByText('部分完成')).toBeInTheDocument();
+    expect(screen.getByText('新增 60/100 · 已检查 1,420')).toBeInTheDocument();
+  });
+
+  it('explains that a running chunk is finishing after pause is requested', () => {
+    render(<SyncRunCard
+      kind="PLAYER_CARDS"
+      run={{ ...run, currentPhase: 'PAUSING', pauseRequested: true }}
+      pendingReview={1}
+      failedReview={0}
+      published={0}
+      onStart={vi.fn()}
+      onPause={vi.fn()}
+      onResume={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+
+    expect(screen.getByText('正在暂停，当前分片完成后停止')).toBeInTheDocument();
   });
 });

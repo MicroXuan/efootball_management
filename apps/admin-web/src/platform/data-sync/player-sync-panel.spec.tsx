@@ -10,6 +10,7 @@ const recordId = '33333333-3333-4333-8333-333333333333';
 const run = {
   id: runId, kind: 'PLAYER_CARDS', mode: 'INCREMENTAL', status: 'READY', actorAdminId: '44444444-4444-4444-8444-444444444444',
   currentPhase: 'READY', heartbeatAt: null, leaseExpiresAt: null, resumable: false,
+  targetCount: null, matchedCount: 0, chunkIndex: 0, pauseRequested: false, completionReason: null,
   counters: { sourceTotal: 43000, scanned: 43000, fetched: 100, skipped: 0, added: 0, updated: 0, missing: 0, failed: 1, batches: 1 },
   errorCode: null, errorMessage: null, startedAt: null, completedAt: '2026-10-07T00:00:00.000Z',
   createdAt: '2026-10-07T00:00:00.000Z', updatedAt: '2026-10-07T00:00:00.000Z'

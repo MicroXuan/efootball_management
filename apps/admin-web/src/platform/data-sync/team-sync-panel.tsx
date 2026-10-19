@@ -201,7 +201,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
               >继续任务</Button>
               {onCancelRun ? <Popconfirm
                 title="确认取消这个同步任务？"
-                description="取消后会清除尚未发布的临时结果，并且不能继续该任务。"
+                description="取消后任务不能继续，但已生成的待确认队壳仍可查看、发布或驳回。"
                 okText="确认取消"
                 cancelText="返回"
                 okButtonProps={{ danger: true }}

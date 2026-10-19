@@ -18,6 +18,7 @@ const phaseCopy: Record<string, { players: string; teams: string }> = {
   INTERRUPTED: { players: '任务中断，可以继续执行', teams: '任务中断，可以继续执行' },
   FAILED: { players: '同步失败，请查看原因', teams: '同步失败，请查看原因' },
   PAUSED: { players: '任务已暂停，可继续执行或取消', teams: '任务已暂停，可继续执行或取消' },
+  PAUSING: { players: '正在暂停，当前分片完成后停止', teams: '正在暂停，当前分片完成后停止' },
   CANCELLED: { players: '任务已取消', teams: '任务已取消' }
 };
 
@@ -46,10 +47,15 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
   const phase = run?.currentPhase
     ? phaseCopy[run.currentPhase]?.[isPlayers ? 'players' : 'teams'] ?? statusCopy[run.status].label
     : run ? statusCopy[run.status].label : null;
+  const partial = Boolean(run?.status === 'READY' && run.completionReason === 'SOURCE_EXHAUSTED'
+    && run.targetCount !== null && run.matchedCount < run.targetCount);
+  const progressCopy = run?.mode === 'SAMPLE' && run.targetCount !== null
+    ? `新增 ${run.matchedCount}/${run.targetCount} · 已检查 ${run.counters.scanned.toLocaleString('en-US')}`
+    : run ? `已处理 ${run.counters.scanned} 条 · 失败 ${run.counters.failed} 条` : null;
   return <Card className={`data-card sync-run-card${active ? ' sync-run-card--active' : ''}`}>
     <div className="sync-run-card__head">
       <div><span className="section-kicker">PESDATA · {dataName}</span><h2>当前同步任务</h2><p>检查 PESDATA 的{dataName}变化，确认后再进入正式目录。</p></div>
-      {run ? <Tag color={statusCopy[run.status].color}>{statusCopy[run.status].label}</Tag> : <Tag>当前无任务</Tag>}
+      {run ? <Tag color={partial ? 'warning' : statusCopy[run.status].color}>{partial ? '部分完成' : statusCopy[run.status].label}</Tag> : <Tag>当前无任务</Tag>}
     </div>
     <div
       className="sync-run-card__pulse"
@@ -66,7 +72,7 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
     </dl>
     {run ? <div className="sync-run-card__status">
       <span>当前进度</span><strong>{phase}</strong>
-      {active ? <small className="sync-run-card__live-count">已处理 {run.counters.scanned} 条 · 失败 {run.counters.failed} 条</small> : null}
+      {progressCopy ? <small className="sync-run-card__live-count">{progressCopy}</small> : null}
       {run.errorMessage ? <small className="sync-run-card__error">{run.errorMessage}</small> : null}
     </div> : <p className="sync-run-card__empty"><strong>当前没有同步任务</strong><span>日常更新请选择“增量同步”；首次验证数据可使用“抽样同步”。</span></p>}
     <Space wrap className="sync-run-card__actions">
@@ -96,7 +102,7 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
       {paused ? <Button type="primary" disabled={busy} loading={busy} onClick={() => void onResume()}>继续同步</Button> : null}
       {paused ? <Popconfirm
         title="确认取消当前任务？"
-        description="取消后将释放任务，并清除本次尚未发布的临时同步结果；该操作不能继续。"
+        description="取消后任务不能继续，但已经生成的待确认数据仍可查看、发布或驳回。"
         okText="取消任务"
         cancelText="返回"
         okButtonProps={{ danger: true }}
