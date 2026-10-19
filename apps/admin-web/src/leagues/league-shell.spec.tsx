@@ -67,6 +67,7 @@ describe('role-aware administration navigation', () => {
     const navigation = await screen.findByRole('navigation', { name: '联赛工作区导航' });
     expect(navigation).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '微信群机器人' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '赛果争议' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '赛季管理' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: '财务与交易' })).toBeInTheDocument();
     const title = screen.getByRole('heading', { name: 'CELL 联赛' });

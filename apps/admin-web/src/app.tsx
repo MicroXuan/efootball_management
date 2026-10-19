@@ -32,7 +32,6 @@ const AuctionListPage = lazy(() => import('./auctions/auction-list-page').then((
 const AuctionEditorPage = lazy(() => import('./auctions/auction-editor-page').then((module) => ({ default: module.AuctionEditorPage })));
 const AuctionDetailPage = lazy(() => import('./auctions/auction-detail-page').then((module) => ({ default: module.AuctionDetailPage })));
 const PlayerMarketReviewPage = lazy(() => import('./player-market/player-market-review-page').then((module) => ({ default: module.PlayerMarketReviewPage })));
-const ResultDisputesPage = lazy(() => import('./leagues/result-disputes-page').then((module) => ({ default: module.ResultDisputesPage })));
 
 function DefaultRoute() {
   const { identity } = useAdminSession();
@@ -69,7 +68,6 @@ export function App() {
               <Route path="teams" element={deferred(<TeamsPage api={adminApi} />)} />
               <Route path="seasons" element={deferred(<SeasonsPage api={adminApi} />)} />
               <Route path="allocation" element={deferred(<AllocationPage api={adminApi} />)} />
-              <Route path="result-disputes" element={deferred(<ResultDisputesPage api={adminApi} />)} />
               <Route path="cups" element={deferred(<CupsPage api={adminApi} />)} />
               <Route path="teams/:teamId" element={deferred(<TeamDetailPage api={adminApi} />)} />
               <Route path="teams/:teamId/roster" element={deferred(<RosterPage api={adminApi} />)} />
