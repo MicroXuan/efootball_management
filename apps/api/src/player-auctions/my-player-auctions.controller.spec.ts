@@ -16,6 +16,7 @@ describe('MyPlayerAuctionsController', () => {
   it('scopes reads and bids to the authenticated user and requires idempotency', async () => {
     const service = {
       list: jest.fn(async () => ({ items: [] })),
+      listSales: jest.fn(async () => ({ items: [], nextCursor: null })),
       detail: jest.fn(async () => ({ batchId })),
       placeBid: jest.fn(async () => ({ id: 'bid-1' }))
     };
@@ -23,10 +24,12 @@ describe('MyPlayerAuctionsController', () => {
     const input = { amount: 120, lotId, deadlineEpoch: 4 };
 
     await controller.list(user, { status: 'active' });
+    await controller.sales(user, { keyword: '车范根', limit: 20 });
     await controller.detail(user, batchId);
     await controller.bid(user, batchId, input, 'request-1');
 
     expect(service.list).toHaveBeenCalledWith(user.id, { status: 'active' });
+    expect(service.listSales).toHaveBeenCalledWith(user.id, { keyword: '车范根', limit: 20 });
     expect(service.detail).toHaveBeenCalledWith(user.id, batchId);
     expect(service.placeBid).toHaveBeenCalledWith(user.id, batchId, input, 'request-1');
     expect(() => controller.bid(user, batchId, input, ' ')).toThrow('必须提供 Idempotency-Key 请求头');

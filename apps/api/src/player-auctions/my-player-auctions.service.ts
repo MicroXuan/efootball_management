@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { MyPlayerAuctionListQuery, PlaceMiniprogramAuctionBidRequest } from '@efm/contracts';
+import {
+  AuctionPlayerCardSnapshotSchema,
+  type MyPlayerAuctionListQuery,
+  type MyPlayerAuctionSaleListQuery,
+  type MyPlayerAuctionSaleListResponse,
+  type PlaceMiniprogramAuctionBidRequest
+} from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionBidService } from './player-auction-bid.service.js';
@@ -95,6 +101,83 @@ export class MyPlayerAuctionsService {
       queue: batch.lots.filter((lot) => lot.id !== current?.id).map((lot) => this.lotView(lot, false)),
       sharePath: this.sharePath(batch.id)
     };
+  }
+
+  async listSales(userId: string, query: MyPlayerAuctionSaleListQuery): Promise<MyPlayerAuctionSaleListResponse> {
+    const teams = await this.prisma.leagueTeam.findMany({
+      where: { ownerUserId: userId, status: 'ACTIVE' },
+      select: { leagueId: true }
+    });
+    const leagueIds = [...new Set(teams.map((team) => team.leagueId))];
+    if (leagueIds.length === 0) return { items: [], nextCursor: null };
+
+    const keyword = query.keyword?.trim();
+    const numericTeamNumber = keyword && /^\d+$/.test(keyword) ? Number(keyword) : undefined;
+    const rows = await this.prisma.playerAuctionReview.findMany({
+      where: {
+        decision: { in: ['CONFIRM', 'ADJUST'] },
+        reviewedWinnerTeamId: { not: null },
+        reviewedPrice: { not: null },
+        winnerTeamNameSnapshot: { not: null },
+        winnerDisplayNameSnapshot: { not: null },
+        lot: { batch: { leagueId: { in: leagueIds } } },
+        ...(keyword ? {
+          OR: [
+            { lot: { playerNameSnapshot: { contains: keyword } } },
+            { winnerTeamNameSnapshot: { contains: keyword } },
+            { winnerDisplayNameSnapshot: { contains: keyword } },
+            ...(numericTeamNumber === undefined ? [] : [{ winnerTeamNumberSnapshot: numericTeamNumber }])
+          ]
+        } : {})
+      },
+      include: {
+        lot: {
+          include: {
+            batch: { include: { league: { select: { id: true, name: true } } } },
+            playerCard: { select: { id: true, imageUrl: true, cardName: true, position: true, overallRating: true, cardType: true } }
+          }
+        }
+      },
+      orderBy: [{ reviewedAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {})
+    });
+
+    const hasMore = rows.length > query.limit;
+    const page = rows.slice(0, query.limit);
+    const items = page.flatMap((review) => {
+      const snapshot = review.lot.playerSnapshot as { card?: unknown };
+      const parsedSnapshot = AuctionPlayerCardSnapshotSchema.safeParse(snapshot.card);
+      const fallbackCard = review.lot.playerCard;
+      const card = parsedSnapshot.success ? parsedSnapshot.data : fallbackCard;
+      if (
+        !card || !review.reviewedWinnerTeamId || review.reviewedPrice === null ||
+        !review.winnerTeamNameSnapshot || !review.winnerDisplayNameSnapshot || !review.lot.playerCardId
+      ) return [];
+      return [{
+        id: review.id,
+        batchId: review.lot.batch.id,
+        league: review.lot.batch.league,
+        player: {
+          id: review.lot.footballPlayerId,
+          cardId: review.lot.playerCardId,
+          name: review.lot.playerNameSnapshot,
+          imageUrl: card.imageUrl,
+          position: card.position,
+          overallRating: card.overallRating,
+          cardType: card.cardType
+        },
+        winner: {
+          teamId: review.reviewedWinnerTeamId,
+          teamNumber: review.winnerTeamNumberSnapshot,
+          teamName: review.winnerTeamNameSnapshot,
+          bidderDisplayName: review.winnerDisplayNameSnapshot
+        },
+        price: review.reviewedPrice,
+        confirmedAt: review.reviewedAt.toISOString()
+      }];
+    });
+    return { items, nextCursor: hasMore ? page.at(-1)?.id ?? null : null };
   }
 
   async placeBid(

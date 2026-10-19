@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   MyPlayerAuctionListQuerySchema,
+  MyPlayerAuctionSaleListQuerySchema,
   PlaceMiniprogramAuctionBidRequestSchema,
   ResourceIdSchema,
   type MyPlayerAuctionListQuery,
+  type MyPlayerAuctionSaleListQuery,
   type PlaceMiniprogramAuctionBidRequest
 } from '@efm/contracts';
 import { CurrentUser, type CurrentUser as AuthenticatedUser } from '../common/auth/current-user.decorator.js';
@@ -12,12 +14,12 @@ import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
 
-@Controller('me/player-auctions')
+@Controller('me')
 @UseGuards(JwtAuthGuard)
 export class MyPlayerAuctionsController {
   constructor(@Inject(MyPlayerAuctionsService) private readonly auctions: MyPlayerAuctionsService) {}
 
-  @Get()
+  @Get('player-auctions')
   list(
     @CurrentUser() user: AuthenticatedUser,
     @Query(new ZodValidationPipe(MyPlayerAuctionListQuerySchema)) query: MyPlayerAuctionListQuery
@@ -25,7 +27,15 @@ export class MyPlayerAuctionsController {
     return this.auctions.list(user.id, query);
   }
 
-  @Get(':batchId')
+  @Get('player-auction-sales')
+  sales(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(MyPlayerAuctionSaleListQuerySchema)) query: MyPlayerAuctionSaleListQuery
+  ) {
+    return this.auctions.listSales(user.id, query);
+  }
+
+  @Get('player-auctions/:batchId')
   detail(
     @CurrentUser() user: AuthenticatedUser,
     @Param('batchId', new ZodValidationPipe(ResourceIdSchema)) batchId: string
@@ -33,7 +43,7 @@ export class MyPlayerAuctionsController {
     return this.auctions.detail(user.id, batchId);
   }
 
-  @Post(':batchId/bids')
+  @Post('player-auctions/:batchId/bids')
   bid(
     @CurrentUser() user: AuthenticatedUser,
     @Param('batchId', new ZodValidationPipe(ResourceIdSchema)) batchId: string,

@@ -334,13 +334,20 @@ export class AdminPlayerAuctionsService {
       let reviewedTeamId = lot.currentHighestBid?.leagueTeamId ?? null;
       let reviewedPrice = lot.currentPrice;
       if (input.decision === 'ADJUST') {
-        const team = await tx.leagueTeam.findFirst({ where: { id: input.reviewedTeamId, leagueId, status: 'ACTIVE' } });
-        if (!team) throw new PlayerAuctionError('AUCTION_REVIEW_TEAM_INVALID', '调整后的球队不属于当前联赛', 409);
-        reviewedTeamId = team.id;
+        reviewedTeamId = input.reviewedTeamId;
         reviewedPrice = input.reviewedPrice;
       } else if (input.decision === 'VOID') {
         reviewedTeamId = null;
         reviewedPrice = null;
+      }
+      const reviewedTeam = reviewedTeamId
+        ? await tx.leagueTeam.findFirst({
+            where: { id: reviewedTeamId, leagueId, status: 'ACTIVE' },
+            include: { owner: { select: { displayName: true } } }
+          })
+        : null;
+      if (reviewedTeamId && !reviewedTeam) {
+        throw new PlayerAuctionError('AUCTION_REVIEW_TEAM_INVALID', '成交球队不属于当前联赛', 409);
       }
       const review = await tx.playerAuctionReview.create({
         data: {
@@ -350,6 +357,9 @@ export class AdminPlayerAuctionsService {
           computedPrice: lot.currentPrice,
           reviewedWinnerTeamId: reviewedTeamId,
           reviewedPrice,
+          winnerTeamNumberSnapshot: reviewedTeam?.teamNumber ?? null,
+          winnerTeamNameSnapshot: reviewedTeam?.name ?? null,
+          winnerDisplayNameSnapshot: reviewedTeam?.owner.displayName ?? null,
           reviewedByAdminId: actorAdminId,
           reason: input.reason ?? null
         },

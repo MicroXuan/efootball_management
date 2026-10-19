@@ -34,7 +34,10 @@ function harness() {
       cardType: 'EPIC', status: 'ACTIVE', publishedAt: now,
       imageUrl: 'https://img.pesdata.net/player.webp'
     }]) },
-    leagueTeam: { findFirst: jest.fn(async () => ({ id: 'team-1', leagueId: 'league-1', name: '申花' })) },
+    leagueTeam: { findFirst: jest.fn(async () => ({
+      id: 'team-1', leagueId: 'league-1', teamNumber: 1, name: '申花',
+      owner: { displayName: '梅西' }
+    })) },
     playerAuctionReview: { create: jest.fn(async ({ data }: any) => ({ id: 'review-1', reviewedAt: now, ...data })) }
   };
   const receipts: any = { execute: jest.fn(async (_a: string, _o: string, _k: string, work: any) => work(tx)) };
@@ -250,9 +253,37 @@ describe('AdminPlayerAuctionsService', () => {
       decision: 'ADJUST', expectedVersion: 3, reviewedTeamId: 'team-1', reviewedPrice: 130, reason: '人工核对'
     }, 'review-1');
     expect(tx.playerAuctionReview.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-      computedWinnerTeamId: 'team-1', computedPrice: 120, reviewedPrice: 130
+      computedWinnerTeamId: 'team-1', computedPrice: 120, reviewedPrice: 130,
+      winnerTeamNumberSnapshot: 1,
+      winnerTeamNameSnapshot: '申花',
+      winnerDisplayNameSnapshot: '梅西'
     }) }));
     expect(result.review.computedPrice).toBe(120);
+  });
+
+  it('snapshots the confirmed winner identity independently from later team edits', async () => {
+    const { service, tx, batch } = harness();
+    batch.status = 'ACTIVE';
+    batch.lots = [{
+      id: 'lot-1', batchId: 'batch-1', status: 'PENDING_REVIEW', version: 3,
+      currentPrice: 120, currentHighestBid: { leagueTeamId: 'team-1', leagueTeam: { name: '新队名' } }
+    }];
+
+    await service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
+      decision: 'CONFIRM', expectedVersion: 3
+    }, 'review-confirm');
+
+    expect(tx.leagueTeam.findFirst).toHaveBeenCalledWith({
+      where: { id: 'team-1', leagueId: 'league-1', status: 'ACTIVE' },
+      include: { owner: { select: { displayName: true } } }
+    });
+    expect(tx.playerAuctionReview.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        winnerTeamNumberSnapshot: 1,
+        winnerTeamNameSnapshot: '申花',
+        winnerDisplayNameSnapshot: '梅西'
+      })
+    }));
   });
 
   it('confirms a no-bid result without changing the automatically active next lot', async () => {

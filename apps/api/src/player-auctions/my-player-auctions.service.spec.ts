@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
 
 const now = new Date('2026-10-09T12:00:00.000Z');
+const saleCardId = '22222222-2222-4222-8222-222222222222';
 
 function harness(teamStatus = 'ACTIVE') {
   const team: any = { id: 'team-1', name: '申花', leagueId: 'league-1', status: teamStatus };
@@ -25,11 +26,36 @@ function harness(teamStatus = 'ACTIVE') {
   };
   const prisma: any = {
     $queryRaw: jest.fn(async () => [{ databaseNow: now }]),
-    leagueTeam: { findFirst: jest.fn(async () => teamStatus === 'ACTIVE' ? team : null) },
+    leagueTeam: {
+      findFirst: jest.fn(async () => teamStatus === 'ACTIVE' ? team : null),
+      findMany: jest.fn(async () => teamStatus === 'ACTIVE' ? [team] : [])
+    },
     playerAuctionBatch: {
       findFirst: jest.fn(async () => batch),
       findMany: jest.fn(async () => [batch])
-    }
+    },
+    playerAuctionReview: { findMany: jest.fn(async () => [{
+      id: '11111111-1111-4111-8111-111111111111',
+      decision: 'CONFIRM',
+      reviewedWinnerTeamId: 'team-1',
+      reviewedPrice: 120,
+      winnerTeamNumberSnapshot: 1,
+      winnerTeamNameSnapshot: '旧申花',
+      winnerDisplayNameSnapshot: '旧梅西',
+      reviewedAt: now,
+      reviewedWinnerTeam: { teamNumber: 99, name: '新申花', owner: { displayName: '新梅西' } },
+      lot: {
+        footballPlayerId: 'player-1',
+        playerCardId: saleCardId,
+        playerNameSnapshot: '车范根',
+        playerSnapshot: { card: {
+          id: saleCardId, imageUrl: 'https://img.pesdata.net/player.webp', cardName: '传奇',
+          position: 'CF', overallRating: 96, cardType: 'EPIC'
+        } },
+        batch: { id: 'batch-1', league: { id: 'league-1', name: '九星联赛' } },
+        playerCard: null
+      }
+    }]) }
   };
   const bids: any = { placeMiniprogramBid: jest.fn(async () => ({ id: 'bid-new', result: 'VALID' })) };
   return { service: new MyPlayerAuctionsService(prisma, bids), prisma, bids, batch };
@@ -63,5 +89,47 @@ describe('MyPlayerAuctionsService', () => {
     const input = { amount: 130, lotId: 'lot-1', deadlineEpoch: 4 };
     await service.placeBid('user-1', 'batch-1', input, 'request-1');
     expect(bids.placeMiniprogramBid).toHaveBeenCalledWith('user-1', 'batch-1', input, 'request-1');
+  });
+
+  it('lists only immutable confirmed sales in active-team leagues with stable search pagination', async () => {
+    const { service, prisma } = harness();
+    const result = await service.listSales('user-1', { keyword: '  01  ', limit: 1 });
+
+    expect(prisma.playerAuctionReview.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        decision: { in: ['CONFIRM', 'ADJUST'] },
+        reviewedWinnerTeamId: { not: null },
+        reviewedPrice: { not: null },
+        lot: { batch: { leagueId: { in: ['league-1'] } } },
+        OR: expect.arrayContaining([
+          { winnerTeamNameSnapshot: { contains: '01' } },
+          { winnerDisplayNameSnapshot: { contains: '01' } },
+          { winnerTeamNumberSnapshot: 1 }
+        ])
+      }),
+      orderBy: [{ reviewedAt: 'desc' }, { id: 'desc' }],
+      take: 2
+    }));
+    expect(result).toEqual({
+      items: [{
+        id: '11111111-1111-4111-8111-111111111111',
+        batchId: 'batch-1',
+        league: { id: 'league-1', name: '九星联赛' },
+        player: {
+          id: 'player-1', cardId: saleCardId, name: '车范根',
+          imageUrl: 'https://img.pesdata.net/player.webp', position: 'CF', overallRating: 96, cardType: 'EPIC'
+        },
+        winner: { teamId: 'team-1', teamNumber: 1, teamName: '旧申花', bidderDisplayName: '旧梅西' },
+        price: 120,
+        confirmedAt: now.toISOString()
+      }],
+      nextCursor: null
+    });
+  });
+
+  it('returns no sale history when the user has no active league team', async () => {
+    const { service, prisma } = harness('ARCHIVED');
+    await expect(service.listSales('user-1', { limit: 20 })).resolves.toEqual({ items: [], nextCursor: null });
+    expect(prisma.playerAuctionReview.findMany).not.toHaveBeenCalled();
   });
 });
