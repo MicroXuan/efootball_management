@@ -1,6 +1,6 @@
 import type { ValuationSubmissionStatus, ValuationWorkspace } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { countdownCopy, submissionStateCopy, validateValuationInput, valuationInputState, valuationLoadError, valuationPlayerView, valuationSummary } from './valuation.viewmodel'
+import { countdownCopy, submissionStateCopy, validateValuationInput, valuationInputState, valuationLoadError, valuationPlayerView, valuationSummary, valuationWorkspaceEditable } from './valuation.viewmodel'
 
 const workspace = (status: ValuationSubmissionStatus | null = 'DRAFT'): ValuationWorkspace => ({
   window: { id: 'window-1', name: '季前申报', state: 'OPEN', startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-10-04T12:00:00.000Z', rule: { id: 'rule-1', version: 1, minimumValueMinor: 100, maximumValueMinor: 10000, maximumIncreaseBps: 2000, maximumDecreaseBps: 1000 } },
@@ -43,5 +43,20 @@ describe('valuation management view model', () => {
       message: '当前没有开放的身价窗口',
       retryable: false,
     })
+  })
+
+  it('reopens a published workspace only when the current roster contains an unsubmitted player', () => {
+    const supplemented = workspace('PUBLISHED')
+    expect(valuationWorkspaceEditable(supplemented)).toBe(true)
+    expect(submissionStateCopy(supplemented)).toBe('已发布，新增球员待补报')
+
+    supplemented.players[1] = {
+      ...supplemented.players[1]!,
+      baseValueMinor: 500,
+      currentValueMinor: 500,
+      draftValueMinor: 500,
+    }
+    expect(valuationWorkspaceEditable(supplemented)).toBe(false)
+    expect(submissionStateCopy(supplemented)).toBe('已自动生效')
   })
 })

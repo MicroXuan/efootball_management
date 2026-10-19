@@ -1386,7 +1386,7 @@ model ValuationRosterSnapshot {
   footballPlayer   FootballPlayer            @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
   submissionItems  ValuationSubmissionItem[]
 
-  @@unique([windowId, ownershipId], map: "valuation_roster_snapshots_ownership_unique")
+  @@unique([windowId, leagueTeamId, ownershipId], map: "valuation_roster_snapshots_team_ownership_unique")
   @@unique([windowId, leagueTeamId, footballPlayerId], map: "valuation_roster_snapshots_player_unique")
   @@index([leagueTeamId, createdAt], map: "valuation_roster_snapshots_team_idx")
   @@index([footballPlayerId], map: "valuation_roster_snapshots_player_idx")
