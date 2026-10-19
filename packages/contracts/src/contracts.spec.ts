@@ -2213,12 +2213,11 @@ describe('tiered league contracts', () => {
       team: { leagueTeamId: '33333333-3333-4333-8333-333333333333', name: '上海海港', shortName: '海港', logoUrl: null },
       division: { stageId: '44444444-4444-4444-8444-444444444444', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
       currentRank: { rank: 2, points: 13, played: 6, tiePending: false },
-      nextMatch: { id: '55555555-5555-4555-8555-555555555555', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
       capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true }
     });
 
     assert.equal(workspace.currentRank?.rank, 2);
-    assert.equal(workspace.nextMatch?.opponentName, '申花');
+    assert.equal('nextMatch' in workspace, false);
   });
 
   it('rejects invalid stage codes, seeds, duplicate overrides, and empty reasons', () => {

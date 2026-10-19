@@ -447,13 +447,6 @@ export const LeagueWorkspaceResponseSchema = z.object({
     played: z.number().int().nonnegative(),
     tiePending: z.boolean()
   }).nullable(),
-  nextMatch: z.object({
-    id: ResourceIdSchema,
-    roundNumber: z.number().int().positive(),
-    plannedAt: TimestampSchema.nullable(),
-    opponentName: z.string().trim().min(1).max(64),
-    side: z.enum(['HOME', 'AWAY'])
-  }).nullable(),
   capabilities: z.object({
     canViewStandings: z.boolean(),
     canViewAssets: z.boolean(),
