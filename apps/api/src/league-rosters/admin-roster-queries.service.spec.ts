@@ -91,4 +91,40 @@ describe('AdminRosterQueriesService candidate filters', () => {
       salaryMinor: 500
     });
   });
+
+  it('prices an epic card with zero progression points at its published overall', async () => {
+    const prisma = {
+      leagueSalaryRuleVersion: {
+        findFirst: async () => ({
+          tiers: [{ minOverall: 0, maxOverall: 92, salaryMinor: 100 }]
+        })
+      },
+      footballPlayer: {
+        findMany: async () => [{
+          id: '33333333-3333-4333-8333-333333333333',
+          nameZh: '克拉伦斯·西多夫', nameEn: 'Clarence Seedorf', shortName: null,
+          bestCard: null,
+          leagueOwnerships: [],
+          cards: [{
+            id: '44444444-4444-4444-8444-444444444444',
+            cardName: "European Clubs Selection Midfielders 19 Oct '26", imageUrl: null,
+            position: 'CMF', overallRating: 87, cardType: 'EPIC', cardPackId: packId,
+            attributes: { attributesJson: { sourceMetadata: { Level: '-', maxLevel: '0' } } },
+            autoBuilds: []
+          }]
+        }]
+      }
+    };
+    const service = new AdminRosterQueriesService(prisma as never, {
+      requireVisible: async () => leagueId
+    } as never);
+
+    const result = await service.candidates(leagueId, { keyword: '西多夫' });
+
+    expect(result.items[0]?.cards[0]).toMatchObject({
+      overallRating: 87,
+      maxOverall: 87,
+      salaryMinor: 100
+    });
+  });
 });

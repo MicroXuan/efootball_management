@@ -13,8 +13,8 @@ export function LeagueShell() {
   const activeKey = location.pathname.includes('/result-disputes') ? 'result-disputes' : location.pathname.includes('/player-market') ? 'player-market' : location.pathname.includes('/auctions') ? 'auctions' : location.pathname.includes('/wechat-bot') ? 'wechat-bot' : location.pathname.includes('/cups') ? 'cups' : location.pathname.includes('/allocation') ? 'allocation' : location.pathname.includes('/valuation-reviews') ? 'valuation-reviews' : location.pathname.includes('/valuation-windows') ? 'valuation-windows' : location.pathname.includes('/seasons') ? 'seasons' : location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams';
   return <div className="league-workspace">
     <div className="page-heading">
-      <div><span className="section-kicker">联赛工作区</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1><p>管理球队、赛季、赛果与联赛规则。</p></div>
-      <nav aria-label="联赛工作区导航"><Tabs activeKey={activeKey} items={[
+      <div className="league-heading-copy"><span className="section-kicker">联赛工作区</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1><p>管理球队、赛季、赛果与联赛规则。</p></div>
+      <nav className="league-heading-nav" aria-label="联赛工作区导航"><Tabs activeKey={activeKey} items={[
         { key: 'teams', label: <Link aria-current={activeKey === 'teams' ? 'page' : undefined} to={`/leagues/${leagueId}/teams`}><AdminIcon name="teams" />用户与球队</Link> },
         { key: 'seasons', label: <Link aria-current={activeKey === 'seasons' ? 'page' : undefined} to={`/leagues/${leagueId}/seasons`}><AdminIcon name="seasons" />赛季管理</Link> },
         { key: 'allocation', label: <Link aria-current={activeKey === 'allocation' ? 'page' : undefined} to={`/leagues/${leagueId}/allocation`}><AdminIcon name="allocation" />分组与赛程</Link> },

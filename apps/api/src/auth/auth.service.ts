@@ -5,6 +5,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { TokenService } from './token.service.js';
 import { WECHAT_GATEWAY } from './wechat.gateway.js';
 import type { WechatGateway } from './wechat.gateway.js';
+import { generateFootballNickname } from './football-nickname.js';
 
 export type AuthRequestContext = {
   ipAddress?: string;
@@ -99,7 +100,7 @@ export class AuthService {
             wechatOpenId: identity.openId,
             wechatUnionId: identity.unionId ?? null,
             publicUserNo,
-            displayName: '实况玩家'
+            displayName: generateFootballNickname()
           }
         });
   }

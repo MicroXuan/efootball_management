@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   EnrollLeagueTeamsRequest,
   ParsedCreateLeagueSeasonRequest,
+  SeasonTransitionRequest,
   SetCurrentSeasonRequest,
   UpdateLeagueSeasonRequest
 } from '@efm/contracts';
@@ -15,7 +16,7 @@ import { synchronizeSeasonValuationSnapshots } from '../player-valuations/valuat
 
 const SEASON_INCLUDE = {
   _count: { select: { entries: true } },
-  entries: { where: { status: 'APPROVED' }, select: { id: true } }
+  entries: { where: { status: 'APPROVED' }, select: { id: true, leagueTeamId: true } }
 } satisfies Prisma.LeagueSeasonInclude;
 type SeasonRecord = Prisma.LeagueSeasonGetPayload<{ include: typeof SEASON_INCLUDE }>;
 
@@ -187,6 +188,46 @@ export class AdminLeagueSeasonsService {
     );
   }
 
+  async transitionRegistration(
+    actorAdminId: string,
+    leagueId: string,
+    seasonId: string,
+    action: 'open-registration' | 'close-registration',
+    input: SeasonTransitionRequest,
+    key: string
+  ) {
+    await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
+    return this.receipts.execute(
+      actorAdminId,
+      `admin.league-season.${action}:${seasonId}`,
+      key,
+      async (transaction) => {
+        const season = await this.seasonInLeague(transaction, leagueId, seasonId);
+        const fromStatus = action === 'open-registration' ? 'DRAFT' : 'REGISTRATION_OPEN';
+        const toStatus = action === 'open-registration' ? 'REGISTRATION_OPEN' : 'ALLOCATION_REVIEW';
+        if (season.status !== fromStatus) {
+          throw new AdminError('SEASON_TRANSITION_INVALID', 'Season is not in the required state', 409);
+        }
+        const result = await transaction.leagueSeason.updateMany({
+          where: { id: seasonId, leagueId, version: input.expectedVersion, status: fromStatus },
+          data: { status: toStatus, version: { increment: 1 } }
+        });
+        if (result.count !== 1) throw this.versionConflict();
+        const updated = await this.getRecord(transaction, seasonId);
+        await this.audit.record(transaction, {
+          actorAdminId,
+          leagueId,
+          action: `admin.league-season.${action}`,
+          resourceType: 'LeagueSeason',
+          resourceId: seasonId,
+          metadata: { fromStatus, toStatus }
+        });
+        return this.summary(updated);
+      },
+      input
+    );
+  }
+
   async enrollTeams(
     actorAdminId: string,
     leagueId: string,
@@ -201,6 +242,13 @@ export class AdminLeagueSeasonsService {
       key,
       async (transaction) => {
         const season = await this.seasonInLeague(transaction, leagueId, seasonId);
+        if (season.status !== 'DRAFT' && season.status !== 'REGISTRATION_OPEN') {
+          throw new AdminError(
+            'SEASON_ROSTER_LOCKED',
+            'Teams cannot be added after the roster has been confirmed',
+            409
+          );
+        }
         const league = await transaction.league.findFirst({
           where: { id: leagueId, isDeleted: false }
         });
@@ -313,6 +361,7 @@ export class AdminLeagueSeasonsService {
       status: season.status,
       entryCount: season._count.entries,
       approvedEntryCount: season.entries.length,
+      enrolledLeagueTeamIds: season.entries.flatMap((entry) => entry.leagueTeamId ? [entry.leagueTeamId] : []),
       version: season.version,
       createdAt: season.createdAt.toISOString(),
       updatedAt: season.updatedAt.toISOString()

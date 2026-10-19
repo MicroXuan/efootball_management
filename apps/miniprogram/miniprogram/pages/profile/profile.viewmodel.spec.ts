@@ -42,6 +42,8 @@ describe('read-only profile view model', () => {
     expect(markup).toContain('class="avatar avatar-fallback">⚽</view>')
     expect(markup).not.toContain('member-region')
     expect(markup).not.toContain('profile.region')
+    expect(markup).toContain('type="nickname"')
+    expect(markup).toContain('bindtap="startEditingName"')
   })
 
   it('shows the user number before any league team is bound', () => {

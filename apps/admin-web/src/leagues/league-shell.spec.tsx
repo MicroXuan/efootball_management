@@ -69,6 +69,10 @@ describe('role-aware administration navigation', () => {
     expect(screen.queryByRole('link', { name: '微信群机器人' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '赛季管理' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: '财务与交易' })).toBeInTheDocument();
+    const title = screen.getByRole('heading', { name: 'CELL 联赛' });
+    expect(title.closest('.league-heading-copy')).toBeInTheDocument();
+    expect(title.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(navigation).toHaveClass('league-heading-nav');
     for (const name of [
       '用户与球队', '赛季管理', '分组与赛程', '杯赛中心', '工资规则',
       '转会窗口', '身价窗口', '身价审核', '球员申请', '财务与交易',

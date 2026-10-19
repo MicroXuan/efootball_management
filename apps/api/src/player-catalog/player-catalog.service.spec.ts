@@ -204,4 +204,23 @@ describe('PlayerCatalogService', () => {
       },
     });
   });
+
+  it('returns a fixed build for a published epic card with zero progression points', async () => {
+    await importAndPublish([card(4, {
+      overallRating: 87,
+      cardType: 'EPIC',
+      attributes: { sourceMetadata: { Level: '-', maxLevel: '0' } }
+    })]);
+    const [summary] = (await catalog.search({ keyword: sourceCode, limit: 20 })).items;
+
+    await expect(catalog.getCard(summary!.id)).resolves.toMatchObject({
+      overallRating: 87,
+      autoBuild: {
+        allocation: {},
+        maxOverall: 87,
+        dtRating: null,
+        algorithmVersion: 'pesdata-final-card-v1'
+      }
+    });
+  });
 });

@@ -10,6 +10,7 @@ import { profileView, type ProfileView } from './profile.viewmodel'
 import { completeProfileLogin } from './profile-login'
 
 type TeamTapEvent = { currentTarget: { dataset: { id?: string } } }
+type NicknameInputEvent = { detail: { value: string } }
 
 function errorCopy(error: unknown): string {
   return error instanceof ApiError ? error.message : '加载失败，请检查网络后重试'
@@ -21,8 +22,12 @@ Page({
     errorMessage: '',
     loginLoading: false,
     loggedIn: false,
+    currentUser: null as CurrentUserResponse | null,
     features: featureFlags,
     profile: profileView(null, []) as ProfileView,
+    editingName: false,
+    displayNameDraft: '',
+    nameSaving: false,
     actionCenter: { attentionCount: 0, actionRequiredCount: 0, auctionCount: 0 },
   },
 
@@ -55,6 +60,7 @@ Page({
         state: 'loaded',
         errorMessage: '',
         loggedIn: true,
+        currentUser: user,
         profile: profileView(user, teams.items),
         actionCenter: { attentionCount, actionRequiredCount: actionCenter.actionRequiredCount, auctionCount: sourceCounts.AUCTION },
       })
@@ -70,6 +76,46 @@ Page({
   copyUserNo() {
     const value = this.data.profile.publicUserNoCopy
     if (value) wx.setClipboardData({ data: value })
+  },
+
+  startEditingName() {
+    this.setData({ editingName: true, displayNameDraft: this.data.profile.displayName, errorMessage: '' })
+  },
+
+  cancelEditingName() {
+    if (!this.data.nameSaving) this.setData({ editingName: false, displayNameDraft: '', errorMessage: '' })
+  },
+
+  onDisplayNameInput(event: NicknameInputEvent) {
+    this.setData({ displayNameDraft: event.detail.value })
+  },
+
+  async saveDisplayName() {
+    const displayName = this.data.displayNameDraft.trim()
+    const currentUser = this.data.currentUser
+    if (!currentUser || this.data.nameSaving) return
+    if (!displayName || displayName.length > 32) {
+      this.setData({ errorMessage: '昵称需要填写 1—32 个字符' })
+      return
+    }
+    this.setData({ nameSaving: true, errorMessage: '' })
+    try {
+      const updated = await api.request<CurrentUserResponse>({
+        path: '/me', method: 'PATCH',
+        data: { displayName, avatarUrl: currentUser.avatarUrl, region: currentUser.region },
+      })
+      this.setData({
+        currentUser: updated,
+        profile: { ...this.data.profile, displayName: updated.displayName },
+        editingName: false,
+        displayNameDraft: '',
+      })
+      wx.showToast({ title: '昵称已更新', icon: 'success' })
+    } catch (error) {
+      this.setData({ errorMessage: errorCopy(error) })
+    } finally {
+      this.setData({ nameSaving: false })
+    }
   },
 
   openFavorites() {

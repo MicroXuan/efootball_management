@@ -130,10 +130,38 @@ pnpm --filter @efm/api exec prisma db seed
 1. 在微信开发者工具选择“导入项目”。
 2. 目录选择仓库中的 `apps/miniprogram`，AppID 选择已注册的小程序。
 3. 确认 `miniprogramRoot` 为 `miniprogram/`。
-4. 模拟器调试时，`miniprogram/config/api.ts` 的 `apiBaseUrl` 保持 `http://127.0.0.1:3000/v1`。
-5. 本地 HTTP 调试可在开发者工具的“详情 → 本地设置”中临时关闭合法域名校验；该选项仅用于开发。
+4. 启动本地 API 后重新编译小程序。开发者工具会自动请求 `http://127.0.0.1:3000/v1`，不需要手改地址。
+5. 仓库已在被 Git 忽略的 `project.private.config.json` 中关闭合法域名校验；如果开发者工具覆盖了该设置，请在“详情 → 本地设置”中关闭校验。
 
-真机无法把 `127.0.0.1` 解释为 Mac。真机联调应改成同一局域网可访问的 Mac 地址，或直接填写已部署的 HTTPS API 域名，然后重新编译。正式发布前还需要在微信公众平台把该 HTTPS 域名加入 `request` 合法域名。
+运行时会按环境自动选择连接：
+
+| 运行环境 | API |
+| --- | --- |
+| 微信开发者工具中的开发版 | 本机 `http://127.0.0.1:3000/v1` |
+| 真机开发版、体验版 | CloudBase 测试服务 `efm-dev` |
+| 正式版 | CloudBase 生产服务 `efm-api-production` |
+
+### 本地代码与体验版共用测试数据库
+
+如果需要让“本地 API 代码”和体验版读写同一批测试数据，本机 `.env` 必须连接 `efm-dev` 使用的测试数据库，而不是本地 Docker MySQL：
+
+```dotenv
+DATABASE_URL=mysql://<test-user>:<test-password>@<test-external-host>:<port>/<test-database>
+WECHAT_GATEWAY_MODE=http
+WECHAT_APP_ID=<小程序 AppID>
+WECHAT_APP_SECRET=<小程序 AppSecret>
+STORAGE_PROVIDER=cloudbase
+CLOUDBASE_ENV_ID=cloud1-d0g1gwk2aefd9f1e8
+CLOUDBASE_SECRET_ID=<仅保存在本机的 SecretId>
+CLOUDBASE_SECRET_KEY=<仅保存在本机的 SecretKey>
+PUBLIC_API_BASE_URL=http://127.0.0.1:3000
+```
+
+测试数据库的外网连接串从 CloudBase 控制台的 MySQL 直连服务获取，只能写入本机 `.env`，不得提交到仓库。本地 API 与 `efm-dev` 必须使用相同的小程序 AppID，开发者工具登录后才能映射到与体验版相同的微信用户。共享数据中包含 CloudBase 文件 ID，因此本地 API 也应使用同一 CloudBase 存储环境，避免把只有本机能访问的文件地址写入共享数据库。启动前先确认本地代码所需迁移已经部署到该测试库；不要对共享测试库运行演示 seed、清理脚本或开发态迁移命令。
+
+首次从体验版切到开发者工具时，建议在开发者工具中清除缓存并重新登录，避免继续携带由 `efm-dev` 签发、但本地 API 无法验证的旧 token。
+
+真机无法把 `127.0.0.1` 解释为 Mac，因此真机开发版会自动继续走 `efm-dev`，不会访问本机 API。
 
 ## 7. 手工验收路径
 

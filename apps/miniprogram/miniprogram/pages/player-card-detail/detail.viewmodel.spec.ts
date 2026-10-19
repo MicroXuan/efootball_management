@@ -237,6 +237,22 @@ describe('player card detail view model', () => {
     })
   })
 
+  it('shows an epic card with zero progression points as a valid unchanged build', () => {
+    const view = toCardDetailViewModel(detail({
+      cardType: 'EPIC',
+      overallRating: 87,
+      attributes: { sourceMetadata: { Level: '-', maxLevel: '0' } },
+    }))
+
+    expect(view.autoBuild).toEqual({
+      available: true,
+      maxOverall: 87,
+      dtRating: null,
+      allocationRows: [],
+      unavailableReason: '',
+    })
+  })
+
   it('builds complete radar and position visuals from legacy PESDATA source metadata', () => {
     const sourceMetadata = {
       Speed: 87,

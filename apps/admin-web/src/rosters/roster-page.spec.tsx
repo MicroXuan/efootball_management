@@ -5,13 +5,39 @@ import type { AdminApi } from '../lib/api';
 import { RosterPage } from './roster-page';
 
 it('disables operations that are not enabled by the active transfer window', async () => {
-  const request = vi.fn().mockResolvedValue({ teamId: '22222222-2222-4222-8222-222222222222', teamName: '巴塞罗那', seasonId: '33333333-3333-4333-8333-333333333333', entries: [], summary: { rosterCount: 0, salaryMinor: 0, salaryCapMinor: 2000 }, operations: { BUY: true, SELL: false, TRANSFER: false, CARD_UPGRADE: true }, activeWindowName: '冬季窗口' });
+  const seasonId = '33333333-3333-4333-8333-333333333333';
+  const request = vi.fn(async (path: string) => path.includes('roster-seasons')
+    ? [{ id: seasonId, displayName: '2026 秋季赛' }]
+    : path.endsWith('/teams')
+      ? { items: [], nextCursor: null }
+      : { teamId: '22222222-2222-4222-8222-222222222222', teamName: '巴塞罗那', seasonId, entries: [], summary: { rosterCount: 0, salaryMinor: 0, salaryCapMinor: 2000 }, operations: { BUY: true, SELL: false, TRANSFER: false, CARD_UPGRADE: true }, activeWindowName: '冬季窗口' }) as unknown as AdminApi['request'];
   const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
   render(<MemoryRouter initialEntries={['/leagues/11111111-1111-4111-8111-111111111111/teams/22222222-2222-4222-8222-222222222222/roster?seasonId=33333333-3333-4333-8333-333333333333']}><Routes><Route path="/leagues/:leagueId/teams/:teamId/roster" element={<RosterPage api={api} />} /></Routes></MemoryRouter>);
   expect(await screen.findByText('冬季窗口')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '购买球员' })).toBeEnabled();
   expect(screen.getByRole('button', { name: '出售/解约' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '转会' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: '选择赛季' })).toBeInTheDocument();
+  expect(screen.getByText('2026 秋季赛')).toBeInTheDocument();
+  expect(screen.queryByText(seasonId)).not.toBeInTheDocument();
+});
+
+it('explains which league settings block player purchases and links to each fix', async () => {
+  const leagueId = '11111111-1111-4111-8111-111111111111';
+  const seasonId = '33333333-3333-4333-8333-333333333333';
+  const request = vi.fn(async (path: string) => path.includes('roster-seasons')
+    ? [{ id: seasonId, displayName: 'S1 新赛季' }]
+    : path.endsWith('/teams')
+      ? { items: [], nextCursor: null }
+      : { teamId: '22222222-2222-4222-8222-222222222222', teamName: '阿哈哈', seasonId, entries: [], summary: { rosterCount: 0, salaryMinor: 0, salaryCapMinor: 0 }, operations: { BUY: false, SELL: false, TRANSFER: false, CARD_UPGRADE: false }, activeWindowName: null }) as unknown as AdminApi['request'];
+  const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/teams/22222222-2222-4222-8222-222222222222/roster?seasonId=${seasonId}`]}><Routes><Route path="/leagues/:leagueId/teams/:teamId/roster" element={<RosterPage api={api} />} /></Routes></MemoryRouter>);
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('尚未配置生效的工资规则');
+  expect(screen.getByRole('alert')).toHaveTextContent('当前没有开放的购买窗口');
+  expect(screen.getByRole('link', { name: '配置工资规则' })).toHaveAttribute('href', `/leagues/${leagueId}/salary-rules`);
+  expect(screen.getByRole('link', { name: '设置转会窗口' })).toHaveAttribute('href', `/leagues/${leagueId}/transfer-windows`);
+  expect(screen.getByRole('button', { name: '购买球员' })).toBeDisabled();
 });
 
 it('shows clear Chinese player states and sends a reasoned lifecycle update', async () => {

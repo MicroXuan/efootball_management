@@ -13,7 +13,7 @@ const season = (id: string, number: number, displayName: string) => ({
   registrationOpensAt: now, registrationClosesAt: '2026-09-02T00:00:00.000Z',
   startsAt: '2026-09-03T00:00:00.000Z', endsAt: '2026-10-03T00:00:00.000Z',
   superCapacity: 23, championCapacity: 18, promotionCount: 4, status: 'DRAFT' as const,
-  entryCount: 0, approvedEntryCount: 0, version: 1, createdAt: now, updatedAt: now
+  entryCount: 0, approvedEntryCount: 0, enrolledLeagueTeamIds: [] as string[], version: 1, createdAt: now, updatedAt: now
 });
 const league = {
   id: leagueId, name: 'CELL 联赛', shortName: 'CELL', description: '', logoUrl: null,
@@ -94,7 +94,7 @@ it('renames a current non-draft season without exposing locked timeline fields',
   ));
 });
 
-it('does not preselect every existing team when enrolling teams', async () => {
+it('keeps the season form hidden until the top-level create action is used', async () => {
   const request = vi.fn(async (path: string) => {
     if (path === `/v1/leagues/${leagueId}`) return league;
     if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
@@ -105,16 +105,19 @@ it('does not preselect every existing team when enrolling teams', async () => {
     <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
   </Routes></MemoryRouter>);
 
-  const checkbox = await screen.findByRole('checkbox', { name: /上海申花/ });
-  expect(checkbox).not.toBeChecked();
-  expect(screen.getByRole('button', { name: '加入当前赛季' })).toBeDisabled();
+  await screen.findByRole('heading', { name: 'S1' });
+  expect(screen.queryByLabelText('赛季名称')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '新建赛季' }));
+  expect(screen.getByRole('dialog', { name: '新建赛季' })).toBeInTheDocument();
+  expect(screen.getByLabelText('赛季名称')).toBeInTheDocument();
 });
 
-it('makes the current season and its entry action prominent', async () => {
-  const request = vi.fn(async (path: string) => {
+it('makes the current season transition the primary action', async () => {
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
     if (path === `/v1/leagues/${leagueId}`) return league;
-    if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
+    if (path === `/v1/admin/leagues/${leagueId}/seasons` && !options?.method) return { items: [season(firstId, 1, 'S1')], nextCursor: null };
     if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
+    if (path.endsWith(`/${firstId}/open-registration`)) return { ...season(firstId, 1, 'S1'), status: 'REGISTRATION_OPEN', version: 2 };
     throw new Error(`unexpected ${path}`);
   });
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/seasons`]}><Routes>
@@ -122,8 +125,47 @@ it('makes the current season and its entry action prominent', async () => {
   </Routes></MemoryRouter>);
 
   expect(await screen.findByRole('heading', { name: 'S1' })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '进入当前赛季' })).toHaveAttribute('href', '#current-season-teams');
+  await userEvent.click(screen.getByRole('button', { name: '开放报名' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${firstId}/open-registration`,
+    expect.objectContaining({ method: 'POST', body: { expectedVersion: 1 } })
+  ));
   expect(screen.getByRole('list', { name: '赛季进程' })).toBeInTheDocument();
+});
+
+it('shows only teams not yet enrolled inside the add-team dialog', async () => {
+  const secondTeam = { ...team, id: '66666666-6666-4666-8666-666666666666', name: '北京国安', shortName: '国安', teamNumber: 2 };
+  const current = { ...season(firstId, 1, 'S1'), approvedEntryCount: 1, enrolledLeagueTeamIds: [team.id] };
+  const request = vi.fn(async (path: string) => {
+    if (path === `/v1/leagues/${leagueId}`) return { ...league, currentSeason: { ...league.currentSeason, approvedEntryCount: 1 } };
+    if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [current], nextCursor: null };
+    if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team, secondTeam], nextCursor: null };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/seasons`]}><Routes>
+    <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole('button', { name: '添加球队' }));
+  const dialog = screen.getByRole('dialog', { name: '添加球队' });
+  expect(within(dialog).queryByText(/上海申花/)).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('checkbox', { name: /北京国安/ })).not.toBeChecked();
+});
+
+it('does not offer more team enrollment after the roster is confirmed', async () => {
+  const confirmed = { ...season(firstId, 1, 'S1'), status: 'ALLOCATION_REVIEW' as const };
+  const request = vi.fn(async (path: string) => {
+    if (path === `/v1/leagues/${leagueId}`) return { ...league, currentSeason: { ...league.currentSeason, status: 'ALLOCATION_REVIEW' as const } };
+    if (path === `/v1/admin/leagues/${leagueId}/seasons`) return { items: [confirmed], nextCursor: null };
+    if (path === `/v1/admin/leagues/${leagueId}/teams`) return { items: [team], nextCursor: null };
+    throw new Error(`unexpected ${path}`);
+  });
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/seasons`]}><Routes>
+    <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  expect(await screen.findByText('名单已确认，不能继续添加球队')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '添加球队' })).not.toBeInTheDocument();
 });
 
 it('offers a clear next action when no current season exists', async () => {
@@ -137,5 +179,6 @@ it('offers a clear next action when no current season exists', async () => {
     <Route path="/leagues/:leagueId/seasons" element={<SeasonsPage api={{ request } as unknown as AdminApi} />} />
   </Routes></MemoryRouter>);
 
-  expect(await screen.findByRole('link', { name: '创建首个赛季' })).toHaveAttribute('href', '#season-editor');
+  await userEvent.click(await screen.findByRole('button', { name: '创建首个赛季' }));
+  expect(screen.getByRole('dialog', { name: '新建赛季' })).toBeInTheDocument();
 });

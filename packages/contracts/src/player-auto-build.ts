@@ -47,7 +47,12 @@ export function derivePesdataAutoBuild(input: {
   maxLevel: number | string | null | undefined;
   cardType: PlayerCardType;
 }): DerivedPlayerAutoBuild | null {
-  if (input.cardType === 'TRENDING') {
+  const maxLevel = typeof input.maxLevel === 'number'
+    ? input.maxLevel
+    : typeof input.maxLevel === 'string' && input.maxLevel.trim()
+      ? Number(input.maxLevel)
+      : Number.NaN;
+  if (input.cardType === 'TRENDING' || maxLevel === 0) {
     return {
       allocation: {},
       maxOverall: input.overallRating,
@@ -55,13 +60,7 @@ export function derivePesdataAutoBuild(input: {
       algorithmVersion: PESDATA_FINAL_CARD_BUILD_VERSION
     };
   }
-
-  const maxLevel = typeof input.maxLevel === 'number'
-    ? input.maxLevel
-    : typeof input.maxLevel === 'string' && input.maxLevel.trim()
-      ? Number(input.maxLevel)
-      : Number.NaN;
-  if (!Number.isFinite(maxLevel) || maxLevel <= 0) return null;
+  if (!Number.isFinite(maxLevel) || maxLevel < 0) return null;
 
   const baseWeights = automaticBuildWeights[input.position];
   const weights = [...baseWeights];

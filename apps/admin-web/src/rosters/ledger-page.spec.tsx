@@ -92,3 +92,27 @@ it('loads and saves all seasonal settlement amount fields with team and season s
     })
   }));
 });
+
+it('uses season names instead of editable foreign-key ids for finance entries', async () => {
+  const user = userEvent.setup();
+  const leagueId = '11111111-1111-4111-8111-111111111111';
+  const teamId = '33333333-3333-4333-8333-333333333333';
+  const seasonId = '55555555-5555-4555-8555-555555555555';
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/roster-seasons')) return [{ id: seasonId, displayName: 'CELL-S20赛季' }];
+    if (path.endsWith('/teams')) return { items: [{ id: teamId, name: '阿森纳' }], nextCursor: null };
+    if (path.endsWith('/transaction-fee-rules')) return { items: [] };
+    if (path.endsWith('/transactions')) return { items: [], nextCursor: null };
+    return { items: [{ id: '22222222-2222-4222-8222-222222222222', leagueId, leagueTeamId: teamId, teamName: '阿森纳', seasonId, rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', amountMinor: 800, note: '赛季税费', createdAt: '2026-09-29T00:00:00.000Z' }], nextCursor: null };
+  }) as unknown as AdminApi['request'];
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/ledger`]}><Routes>
+    <Route path="/leagues/:leagueId/ledger" element={<LedgerPage api={{ request } as unknown as AdminApi} />} />
+  </Routes></MemoryRouter>);
+
+  expect(await screen.findByText('赛季税费')).toBeInTheDocument();
+  expect(screen.getByText('CELL-S20赛季')).toBeInTheDocument();
+  expect(screen.queryByText(seasonId)).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '新增财务项目' }));
+  expect(screen.getByRole('combobox', { name: '赛季' })).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: /赛季 ID/ })).not.toBeInTheDocument();
+});

@@ -591,13 +591,15 @@ export function playerCardDetailWithAutomaticBuild(detail: PlayerCardDetail): Pl
   if (detail.autoBuild) return detail
   const derived = derivedAutomaticBuild(detail)
   if (!derived.available || derived.maxOverall === null) return detail
+  const source = objectRecord(detail.attributes.sourceMetadata)
+  const progressionPoints = sourceNumber(source, 'maxLevel')
   return {
     ...detail,
     autoBuild: {
       allocation: Object.fromEntries(derived.allocationRows.map(({ key, points }) => [key, points])),
       maxOverall: derived.maxOverall,
       dtRating: derived.dtRating,
-      algorithmVersion: detail.cardType === 'TRENDING'
+      algorithmVersion: detail.cardType === 'TRENDING' || progressionPoints === 0
         ? 'pesdata-final-card-v1'
         : 'pesdata-position-auto-v1',
     },

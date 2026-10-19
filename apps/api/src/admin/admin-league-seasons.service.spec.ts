@@ -151,4 +151,55 @@ describe('AdminLeagueSeasonsService', () => {
       expectedSeasonVersion: 4
     }, 'enroll-2')).rejects.toMatchObject({ code: 'LEAGUE_TEAM_INVALID' });
   });
+
+  it('opens registration and closes it into roster confirmation', async () => {
+    const { service, transaction, audit } = harness();
+    const base = {
+      id: 'season-20', leagueId: 'league-1', seasonNumber: 20, displayName: 'S20',
+      previousSeasonId: null, isFirstSeason: false,
+      registrationOpensAt: new Date('2026-01-01T00:00:00.000Z'),
+      registrationClosesAt: new Date('2026-01-02T00:00:00.000Z'),
+      startsAt: new Date('2026-01-03T00:00:00.000Z'), endsAt: new Date('2026-02-03T00:00:00.000Z'),
+      superCapacity: 23, championCapacity: 18, promotionCount: 4,
+      status: 'DRAFT' as const, version: 4,
+      createdAt: new Date('2025-12-01T00:00:00.000Z'), updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdById: null, createdByAdminId: 'admin-1'
+    };
+    transaction.leagueSeason.findFirst
+      .mockResolvedValueOnce(base)
+      .mockResolvedValueOnce({ ...base, status: 'REGISTRATION_OPEN', version: 5, _count: { entries: 0 }, entries: [] })
+      .mockResolvedValueOnce({ ...base, status: 'REGISTRATION_OPEN', version: 5 })
+      .mockResolvedValueOnce({ ...base, status: 'ALLOCATION_REVIEW', version: 6, _count: { entries: 0 }, entries: [] });
+
+    await expect(service.transitionRegistration(
+      'admin-1', 'league-1', 'season-20', 'open-registration', { expectedVersion: 4 }, 'open-1'
+    )).resolves.toMatchObject({ status: 'REGISTRATION_OPEN', version: 5 });
+    await expect(service.transitionRegistration(
+      'admin-1', 'league-1', 'season-20', 'close-registration', { expectedVersion: 5 }, 'close-1'
+    )).resolves.toMatchObject({ status: 'ALLOCATION_REVIEW', version: 6 });
+
+    expect(transaction.leagueSeason.updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({ status: 'DRAFT', version: 4 }),
+      data: expect.objectContaining({ status: 'REGISTRATION_OPEN' })
+    }));
+    expect(transaction.leagueSeason.updateMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({ status: 'REGISTRATION_OPEN', version: 5 }),
+      data: expect.objectContaining({ status: 'ALLOCATION_REVIEW' })
+    }));
+    expect(audit.record).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects adding teams after the roster has been confirmed', async () => {
+    const { service, transaction } = harness();
+    transaction.leagueSeason.findFirst.mockResolvedValue({
+      id: 'season-20', leagueId: 'league-1', status: 'ALLOCATION_REVIEW', version: 6
+    });
+
+    await expect(service.enrollTeams('admin-1', 'league-1', 'season-20', {
+      leagueTeamIds: ['team-1'],
+      expectedSeasonVersion: 6
+    }, 'enroll-after-close')).rejects.toMatchObject({ code: 'SEASON_ROSTER_LOCKED' });
+
+    expect(transaction.seasonEntry.createMany).not.toHaveBeenCalled();
+  });
 });

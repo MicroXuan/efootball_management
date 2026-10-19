@@ -35,10 +35,21 @@
       <view wx:else class="avatar avatar-fallback">⚽</view>
       <view class="identity-copy">
         <text class="member-name">{{profile.displayName}}</text>
+        <button class="member-name-edit" bindtap="startEditingName">编辑昵称</button>
       </view>
       <view class="number-block" bindtap="copyUserNo">
         <text class="number-label">用户编号</text><text class="public-number">{{profile.publicUserNoDisplay}}</text>
         <text wx:if="{{profile.publicUserNoCopy}}" class="copy-hint">点击复制</text>
+      </view>
+    </view>
+
+    <view wx:if="{{editingName}}" class="nickname-editor">
+      <text class="nickname-editor__label">玩家昵称</text>
+      <input class="nickname-editor__input" type="nickname" maxlength="32" value="{{displayNameDraft}}" bindinput="onDisplayNameInput" placeholder="输入或选择微信昵称" />
+      <text class="nickname-editor__hint">微信昵称需要你主动选择，系统不会静默读取。</text>
+      <view class="nickname-editor__actions">
+        <button class="outline-button" disabled="{{nameSaving}}" bindtap="cancelEditingName">取消</button>
+        <button class="primary-button" loading="{{nameSaving}}" disabled="{{nameSaving}}" bindtap="saveDisplayName">保存昵称</button>
       </view>
     </view>
 
