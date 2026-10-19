@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma } from '../generated/prisma/client.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { PesdataClient, PesdataClientError } from './pesdata-client.js';
 import { PesdataCrestLoader } from './pesdata-crest-loader.js';

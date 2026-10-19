@@ -118,7 +118,7 @@ describe('PesdataSyncService', () => {
     });
   });
 
-  it('cancels a paused player run and removes its unpublished checkpoint data', async () => {
+  it('cancels a paused player run and preserves its reviewable checkpoint data', async () => {
     const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
     const sync = new PesdataSyncService(prisma, importService, client as never);
     const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
@@ -140,7 +140,7 @@ describe('PesdataSyncService', () => {
       leaseOwnerToken: null,
       currentPhase: 'CANCELLED'
     });
-    await expect(prisma.externalSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(0);
+    await expect(prisma.externalSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(1);
   });
 
   it('cancels a failed resumable player run so it cannot be resumed again', async () => {

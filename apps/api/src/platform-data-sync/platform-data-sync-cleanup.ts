@@ -1,4 +1,4 @@
-import { PrismaService } from '../database/prisma.service.js';
+import type { PrismaService } from '../database/prisma.service.js';
 
 export type PlatformSyncCleanupCounts = {
   playerRuns: number;
