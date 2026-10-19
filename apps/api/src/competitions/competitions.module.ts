@@ -25,12 +25,9 @@ import { CupBracketsService } from './cup-brackets.service.js';
 import { CupProgressionService } from './cup-progression.service.js';
 import { CupBracketQueriesService } from './cup-bracket-queries.service.js';
 import { StorageModule } from '../storage/storage.module.js';
-import { ResultEvidenceController } from './result-evidence.controller.js';
 import { ResultEvidenceStorageService } from './result-evidence-storage.service.js';
 import { MatchResultEventsService } from './match-result-events.service.js';
 import { MatchResultDisputesService } from './match-result-disputes.service.js';
-import { MatchResultDeadlineWorker } from './match-result-deadline.worker.js';
-import { AdminMatchResultDisputesController } from './admin-match-result-disputes.controller.js';
 import { AdminMatchResultDisputesService } from './admin-match-result-disputes.service.js';
 import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worker.js';
 
@@ -45,9 +42,7 @@ import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worke
     ResultsController,
     MyCompetitionsController,
     AdminCupCompetitionsController,
-    CupCompetitionsController,
-    ResultEvidenceController,
-    AdminMatchResultDisputesController
+    CupCompetitionsController
   ],
   providers: [
     CompetitionsService,
@@ -65,7 +60,6 @@ import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worke
     ResultEvidenceStorageService,
     MatchResultEventsService,
     MatchResultDisputesService,
-    MatchResultDeadlineWorker,
     AdminMatchResultDisputesService,
     ResultEvidenceRetentionWorker,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
