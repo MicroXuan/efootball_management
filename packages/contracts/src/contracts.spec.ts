@@ -213,13 +213,12 @@ describe('match result dispute contracts', () => {
 describe('action center contracts', () => {
   it('accepts all current reminders beyond the combined recent-history limit', () => {
     const items = Array.from({ length: 201 }, () => {
-      const matchId = randomUUID();
       return {
-        id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
-        source: 'MATCH_RESULT', section: 'ACTION_REQUIRED',
+        id: `application:${randomUUID()}`, version: '2026-10-15T12:00:00.000Z',
+        source: 'TRANSACTION', section: 'ACTION_REQUIRED',
         league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
-        title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
-        occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
+        title: '购买申请需要重新报价', detail: '球员：劳塔罗', statusLabel: '需重新报价',
+        occurredAt: '2026-10-15T12:00:00.000Z', route: '/pages/player-market/index?view=mine'
       };
     });
     const response = ActionCenterResponseSchema.parse({ items, actionRequiredCount: 201 });
@@ -269,7 +268,7 @@ describe('action center contracts', () => {
     }));
   });
 
-  it('accepts a match-result reminder only with its internal match deep link', () => {
+  it('rejects legacy match-result reminders', () => {
     const matchId = randomUUID();
     const item = {
       id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
@@ -278,7 +277,7 @@ describe('action center contracts', () => {
       title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
       occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
     };
-    assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, true);
+    assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, false);
     assert.equal(ActionCenterResponseSchema.safeParse({ items: [{ ...item, route: `/pages/match-result/index?id=${matchId}&evil=1` }], actionRequiredCount: 1 }).success, false);
   });
 });

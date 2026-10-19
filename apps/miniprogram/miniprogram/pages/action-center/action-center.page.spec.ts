@@ -35,7 +35,7 @@ function item(id: string, leagueId: string): ActionCenterItem {
   return {
     id,
     version: '2026-10-15T12:00:00.000Z',
-    source: 'MATCH_RESULT',
+    source: 'TRANSACTION',
     section: 'STATUS_UPDATE',
     league: { id: leagueId, name: leagueId },
     seasonId: 'season-1',
@@ -44,7 +44,7 @@ function item(id: string, leagueId: string): ActionCenterItem {
     detail: id,
     statusLabel: '审核中',
     occurredAt: '2026-10-15T12:00:00.000Z',
-    route: `/pages/match-result/index?id=${id}`,
+    route: `/pages/player-market/index?id=${id}`,
   }
 }
 
