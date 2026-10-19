@@ -69,6 +69,11 @@ describe('PlatformDataSyncService queries', () => {
         status: index === 0 ? 'FAILED' : 'READY',
         errorCode: index === 0 ? 'PROCESS_INTERRUPTED' : null,
         currentPhase: index === 0 ? 'INTERRUPTED' : 'READY',
+        requestedLimit: index === 0 ? 100 : null,
+        sourceTotal: index === 0 ? 60 : null,
+        matchedCount: index === 0 ? 60 : 0,
+        chunkIndex: index === 0 ? 29 : 0,
+        completionReason: index === 0 ? 'SOURCE_EXHAUSTED' : null,
         scannedCount: index === 0 ? 55 : 0,
         createdAt: new Date(Date.UTC(2026, 9, 7, 0, index))
       } })
@@ -177,8 +182,43 @@ describe('PlatformDataSyncService queries', () => {
 
     expect(history).toMatchObject({ page: 2, pageSize: 20, total: baselineRunTotal + 25 });
     expect(history.items).toHaveLength(Math.min(20, Math.max(0, baselineRunTotal + 25 - 20)));
-    expect(interrupted).toMatchObject({ errorCode: 'PROCESS_INTERRUPTED', resumable: true });
+    expect(interrupted).toMatchObject({
+      errorCode: 'PROCESS_INTERRUPTED',
+      resumable: true,
+      targetCount: 100,
+      matchedCount: 60,
+      chunkIndex: 29,
+      pauseRequested: false,
+      completionReason: 'SOURCE_EXHAUSTED',
+      counters: { sourceTotal: 60 }
+    });
   });
+
+  it('maps persisted checkpoint progress for player runs', async () => {
+    const playerRun = await prisma.externalSyncRun.create({ data: {
+      sourceId,
+      actorId: adminId,
+      mode: 'SAMPLE',
+      status: 'READY',
+      requestedLimit: 100,
+      sourceTotal: 60,
+      matchedCount: 60,
+      chunkIndex: 29,
+      completionReason: 'SOURCE_EXHAUSTED',
+      scannedCount: 1_450,
+      fetchedCount: 60,
+      skippedCount: 1_390
+    } });
+
+    await expect(service().getPlayerRun(adminId, playerRun.id)).resolves.toMatchObject({
+      targetCount: 100,
+      matchedCount: 60,
+      chunkIndex: 29,
+      pauseRequested: false,
+      completionReason: 'SOURCE_EXHAUSTED',
+      counters: { sourceTotal: 60 }
+    });
+  }, 15_000);
 
   it('searches player review records by normalized player name on the server', async () => {
     const imports = new PlayerImportService(prisma, userAuthorization as never, adminAuthorization as never);

@@ -57,6 +57,11 @@ export const PlatformSyncRunSummarySchema = z.object({
   mode: PlatformSyncModeSchema,
   status: PlatformSyncStatusSchema,
   actorAdminId: ResourceIdSchema,
+  targetCount: NonNegativeCountSchema.nullable(),
+  matchedCount: NonNegativeCountSchema,
+  chunkIndex: NonNegativeCountSchema,
+  pauseRequested: z.boolean(),
+  completionReason: z.enum(['TARGET_REACHED', 'SOURCE_EXHAUSTED']).nullable(),
   currentPhase: z.string().trim().min(1).max(64).nullable(),
   heartbeatAt: TimestampSchema.nullable(),
   leaseExpiresAt: TimestampSchema.nullable(),
@@ -196,7 +201,7 @@ export const QueuedSyncRunSchema = z.object({
 
 export const ControlledSyncRunSchema = z.object({
   runId: ResourceIdSchema,
-  status: z.enum(['PAUSED', 'CANCELLED'])
+  status: z.enum(['PAUSING', 'PAUSED', 'CANCELLED'])
 });
 
 export type PlatformSyncKind = z.infer<typeof PlatformSyncKindSchema>;

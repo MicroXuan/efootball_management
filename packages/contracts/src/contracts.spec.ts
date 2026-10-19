@@ -27,6 +27,8 @@ import {
   LeagueSummarySchema,
   PlatformPresentationSchema,
   PlatformPageRequestSchema,
+  PlatformSyncRunSummarySchema,
+  ControlledSyncRunSchema,
   GenerateSeasonAllocationRequestSchema,
   GenerateStageScheduleRequestSchema,
   SeasonAllocationDecisionSchema,
@@ -413,6 +415,64 @@ describe('player market contracts', () => {
 });
 
 describe('platform data sync contracts', () => {
+  it('parses checkpointed sample progress and partial completion', () => {
+    const timestamp = new Date().toISOString();
+    const result = PlatformSyncRunSummarySchema.parse({
+      id: randomUUID(),
+      kind: 'PLAYER_CARDS',
+      mode: 'SAMPLE',
+      status: 'READY',
+      actorAdminId: randomUUID(),
+      targetCount: 100,
+      matchedCount: 60,
+      chunkIndex: 29,
+      pauseRequested: false,
+      completionReason: 'SOURCE_EXHAUSTED',
+      currentPhase: null,
+      heartbeatAt: null,
+      leaseExpiresAt: null,
+      resumable: false,
+      counters: {
+        sourceTotal: 60,
+        scanned: 1_450,
+        fetched: 60,
+        skipped: 1_390,
+        added: 60,
+        updated: 0,
+        missing: 0,
+        failed: 0,
+        batches: 3
+      },
+      errorCode: null,
+      errorMessage: null,
+      startedAt: timestamp,
+      completedAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    assert.deepEqual({
+      targetCount: result.targetCount,
+      matchedCount: result.matchedCount,
+      chunkIndex: result.chunkIndex,
+      pauseRequested: result.pauseRequested,
+      completionReason: result.completionReason
+    }, {
+      targetCount: 100,
+      matchedCount: 60,
+      chunkIndex: 29,
+      pauseRequested: false,
+      completionReason: 'SOURCE_EXHAUSTED'
+    });
+  });
+
+  it('accepts a pausing control response', () => {
+    assert.equal(ControlledSyncRunSchema.parse({
+      runId: randomUUID(),
+      status: 'PAUSING'
+    }).status, 'PAUSING');
+  });
+
   it('derives the salary ability from the PESDATA automatic build total', () => {
     assert.deepEqual(derivePesdataPositionAutoBuild({
       position: 'DMF',
