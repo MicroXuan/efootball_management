@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
-import { PrismaService } from '../database/prisma.service.js';
+import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../database/prisma.service.js';
 import { CompetitionError } from './competition.errors.js';
 import type { MutationResult, MutationWork } from './competition.types.js';
 
@@ -45,8 +45,8 @@ export class MutationReceiptService {
         });
         return result;
       }, {
+        ...PRISMA_TRANSACTION_OPTIONS,
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
-        timeout: 30_000
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

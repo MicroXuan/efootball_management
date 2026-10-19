@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AdminResolveMatchResultDisputeRequestSchema, AdminMatchResultDisputeResponseSchema, type AdminResolveMatchResultDisputeRequest } from '@efm/contracts';
-import { PrismaService } from '../database/prisma.service.js';
+import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../database/prisma.service.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { ResultsService } from './results.service.js';
 import { MatchResultDisputesService } from './match-result-disputes.service.js';
@@ -135,7 +135,10 @@ export class AdminMatchResultDisputesService {
       return this.results.applyAdministratorResult(transaction, dispute.matchId, {
         ...parsed, homeScore: scores.homeScore, awayScore: scores.awayScore
       }, { adminId, leagueId }, now, parsed.decisionType);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    }, {
+      ...PRISMA_TRANSACTION_OPTIONS,
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted
+    });
   }
 
   private async requireDispute(client: CompetitionTransaction | PrismaService, leagueId: string, id: string) {

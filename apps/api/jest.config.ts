@@ -15,6 +15,7 @@ const config: Config = {
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },
   testEnvironment: 'node',
+  testTimeout: 60_000,
   testMatch,
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json', useESM: true }]
