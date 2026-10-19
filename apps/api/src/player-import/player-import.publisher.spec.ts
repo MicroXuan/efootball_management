@@ -1,15 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
-import { PlayerImportPublisher } from './player-import.publisher.js';
+import {
+  executePlayerImportPublication,
+  PLAYER_IMPORT_PUBLICATION_TIMEOUT_MS,
+  PlayerImportPublisher,
+  preparePlayerImportPublication
+} from './player-import.publisher.js';
 import { PlayerImportService } from './player-import.service.js';
-import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
 
 config({ path: '../../.env', quiet: true });
 
 describe('PlayerImportPublisher', () => {
+  jest.setTimeout(70_000);
   const prisma = new PrismaService();
   const userAuthorizationCalls: Array<[string, string]> = [];
   const authorization = { can: async (id: string, permission: string) => {
@@ -22,8 +28,7 @@ describe('PlayerImportPublisher', () => {
     return { id };
   } };
   const service = new PlayerImportService(prisma, authorization as never, adminAuthorization as never);
-  const builds = new PlayerBuildsService(prisma);
-  const publisher = new PlayerImportPublisher(prisma, authorization as never, builds, adminAuthorization as never);
+  const publisher = new PlayerImportPublisher(prisma, authorization as never, adminAuthorization as never);
   const actorId = randomUUID();
   const adminId = randomUUID();
   let sourceId: string;
@@ -165,6 +170,95 @@ describe('PlayerImportPublisher', () => {
     expect(stored.player.bestCard?.playerCardId).toBe(stored.id);
   });
 
+  it('publishes ten cards with one hundred skills within the transaction deadline', async () => {
+    const rows = Array.from({ length: 10 }, (_, cardIndex) => card(`bulk-${cardIndex}`, {
+      skills: Array.from({ length: 10 }, (_, skillIndex) => `Bulk Skill ${cardIndex}-${skillIndex}`)
+    }));
+    const batch = await createBatch(rows);
+
+    const published = await publisher.publish(actorId, batch.id);
+
+    expect(published.status).toBe('PUBLISHED');
+    await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(10);
+    await expect(prisma.playerCardSkill.count({
+      where: { playerCard: { sourceId } }
+    })).resolves.toBe(100);
+  }, 35_000);
+
+  it('uses a sixty-second transaction timeout', async () => {
+    let transactionOptions: { timeout?: number } | undefined;
+    const timestamp = new Date('2026-10-19T12:00:00.000Z');
+    const batchId = randomUUID();
+    const timeoutSourceId = randomUUID();
+    const ready = {
+      id: batchId, sourceId: timeoutSourceId, fileName: 'timeout.json',
+      format: 'JSON' as const, checksum: 'a'.repeat(64), status: 'READY' as const,
+      totalCount: 0, createCount: 0, updateCount: 0, unchangedCount: 0, invalidCount: 0,
+      failureReason: null, createdBy: actorId, publishedAt: null, createdAt: timestamp, updatedAt: timestamp,
+      source: { id: timeoutSourceId, code: 'timeout-option' }, release: null, records: []
+    };
+    const published = {
+      ...ready,
+      status: 'PUBLISHED' as const,
+      publishedAt: timestamp,
+      release: {
+        id: randomUUID(), sequence: 1, batchId: ready.id, publishedBy: actorId,
+        createdCount: 0, updatedCount: 0, unchangedCount: 0, publishedAt: timestamp
+      }
+    };
+    const fakePrisma = {
+      importBatch: { findUnique: async () => ready },
+      $transaction: async (_callback: unknown, options: { timeout?: number }) => {
+        transactionOptions = options;
+        return published;
+      }
+    };
+    const timeoutPublisher = new PlayerImportPublisher(
+      fakePrisma as never,
+      authorization as never,
+      adminAuthorization as never
+    );
+
+    await timeoutPublisher.publish(actorId, ready.id);
+
+    expect(transactionOptions).toEqual({ timeout: 60_000 });
+    expect(PLAYER_IMPORT_PUBLICATION_TIMEOUT_MS).toBe(60_000);
+  });
+
+  it('returns a specific retry-safe error when the publication transaction expires', async () => {
+    const timeout = new Prisma.PrismaClientKnownRequestError('transaction expired', {
+      code: 'P2028',
+      clientVersion: 'test',
+      meta: { operation: 'query', timeout: 60_000 }
+    });
+    const timestamp = new Date('2026-10-19T12:00:00.000Z');
+    const timeoutBatchId = randomUUID();
+    const timeoutSourceId = randomUUID();
+    const ready = {
+      id: timeoutBatchId, sourceId: timeoutSourceId, fileName: 'timeout.json',
+      format: 'JSON' as const, checksum: 'b'.repeat(64), status: 'READY' as const,
+      totalCount: 0, createCount: 0, updateCount: 0, unchangedCount: 0, invalidCount: 0,
+      failureReason: null, createdBy: actorId, publishedAt: null, createdAt: timestamp, updatedAt: timestamp,
+      records: []
+    };
+    const timedOutPublisher = new PlayerImportPublisher(
+      {
+        importBatch: { findUnique: async () => ready },
+        $transaction: async () => { throw timeout; }
+      } as never,
+      authorization as never,
+      adminAuthorization as never
+    );
+
+    await expect(timedOutPublisher.publishForPlatformAdmin(adminId, timeoutBatchId)).rejects.toMatchObject({
+      status: 503,
+      response: {
+        code: 'IMPORT_PUBLISH_TIMEOUT',
+        message: '批次发布超时，数据已回滚，可安全重试'
+      }
+    });
+  });
+
   it('updates only reviewed source fields and preserves omitted cards', async () => {
     const initial = await createBatch([card('keep'), card('update')]);
     await publisher.publish(actorId, initial.id);
@@ -181,6 +275,58 @@ describe('PlayerImportPublisher', () => {
     expect(kept?.status).toBe('ACTIVE');
     expect(changed?.overallRating).toBe(97);
     expect(changed?.cardName).toBe('Featured');
+  });
+
+  it('updates only reviewed source fields and clears reviewed pack and skills', async () => {
+    const initial = await createBatch([card('clear-reviewed', {
+      skills: ['Passing', 'Through Passing'],
+      packExternalId: 'pack-clear-reviewed',
+      packName: 'Clear Pack'
+    })]);
+    await publisher.publish(actorId, initial.id);
+    const update = await createBatch([card('clear-reviewed', {
+      skills: [],
+      packExternalId: undefined,
+      packName: undefined,
+      season: undefined,
+      releaseDate: undefined
+    })]);
+
+    await publisher.publish(actorId, update.id);
+
+    const stored = await prisma.playerCard.findUniqueOrThrow({
+      where: { sourceId_externalId: { sourceId, externalId: 'clear-reviewed' } },
+      include: { skills: true }
+    });
+    expect(stored.cardPackId).toBeNull();
+    expect(stored.skills).toEqual([]);
+    expect(stored.cardName).toBe('Featured');
+  });
+
+  it('rejects a stale transaction-external publication snapshot', async () => {
+    const batch = await createBatch([card('stale-snapshot')]);
+    const prepared = await preparePlayerImportPublication(prisma, batch.id);
+    const stored = await prisma.importRecord.findFirstOrThrow({ where: { batchId: batch.id } });
+    await prisma.importRecord.update({
+      where: { id: stored.id },
+      data: {
+        normalizedJson: {
+          ...(stored.normalizedJson as Record<string, Prisma.JsonValue>),
+          overallRating: 96
+        }
+      }
+    });
+
+    await expect(prisma.$transaction((tx) => executePlayerImportPublication(tx, {
+      actorId,
+      batchId: batch.id,
+      platformAdmin: false,
+      preparedRecords: prepared.preparedRecords,
+      snapshotKey: prepared.snapshotKey
+    }), { timeout: 60_000 })).rejects.toMatchObject({ code: 'IMPORT_BATCH_NOT_READY' });
+
+    await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(0);
+    await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(0);
   });
 
   it('rejects invalid and cancelled batches', async () => {
@@ -219,6 +365,39 @@ describe('PlayerImportPublisher', () => {
 
     await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(0);
     await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(0);
+    await expect(prisma.importBatch.findUnique({ where: { id: batch.id }, select: { status: true } }))
+      .resolves.toEqual({ status: 'READY' });
+  });
+
+  it('rolls back every formal row when bulk writing fails', async () => {
+    const batch = await createBatch([card('bulk-rollback-a'), card('bulk-rollback-b')]);
+    const prepared = await preparePlayerImportPublication(prisma, batch.id);
+    let writeCount = 0;
+
+    await expect(prisma.$transaction(async (tx) => {
+      const failingTx = new Proxy(tx, {
+        get(target, key, receiver) {
+          if (key !== '$executeRaw') return Reflect.get(target, key, receiver);
+          return async (...args: unknown[]) => {
+            writeCount += 1;
+            if (writeCount === 4) throw new Error('forced bulk write failure');
+            return (target.$executeRaw as (...values: unknown[]) => Promise<number>).apply(target, args);
+          };
+        }
+      });
+      return executePlayerImportPublication(failingTx, {
+        actorId,
+        batchId: batch.id,
+        platformAdmin: false,
+        preparedRecords: prepared.preparedRecords,
+        snapshotKey: prepared.snapshotKey
+      });
+    }, { timeout: 60_000 })).rejects.toThrow('forced bulk write failure');
+
+    expect(writeCount).toBe(4);
+    await expect(prisma.catalogRelease.count({ where: { batchId: batch.id } })).resolves.toBe(0);
+    await expect(prisma.playerCard.count({ where: { sourceId } })).resolves.toBe(0);
+    await expect(prisma.footballPlayerSource.count({ where: { sourceId } })).resolves.toBe(0);
     await expect(prisma.importBatch.findUnique({ where: { id: batch.id }, select: { status: true } }))
       .resolves.toEqual({ status: 'READY' });
   });
@@ -263,7 +442,7 @@ describe('PlayerImportPublisher', () => {
 
   it('commits platform publication and rejection audits in their domain transactions', async () => {
     const audit = new AuditLogService(prisma);
-    const auditedPublisher = new PlayerImportPublisher(prisma, authorization as never, builds, adminAuthorization as never, audit);
+    const auditedPublisher = new PlayerImportPublisher(prisma, authorization as never, adminAuthorization as never, audit);
     const auditedService = new PlayerImportService(prisma, authorization as never, adminAuthorization as never, audit);
     const publishBatch = await createBatch([card('audited-publish')]);
     const rejectBatch = await createBatch([card('audited-reject')]);
@@ -285,7 +464,7 @@ describe('PlayerImportPublisher', () => {
 
   it('rolls back platform publication and rejection when their audit write fails', async () => {
     const failingAudit = { record: async () => { throw new Error('audit unavailable'); } };
-    const auditedPublisher = new PlayerImportPublisher(prisma, authorization as never, builds, adminAuthorization as never, failingAudit as never);
+    const auditedPublisher = new PlayerImportPublisher(prisma, authorization as never, adminAuthorization as never, failingAudit as never);
     const auditedService = new PlayerImportService(prisma, authorization as never, adminAuthorization as never, failingAudit as never);
     const publishBatch = await createBatch([card('audit-rollback-publish')]);
     const rejectBatch = await createBatch([card('audit-rollback-reject')]);
