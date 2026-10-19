@@ -56,10 +56,13 @@ type BidFeedbackDetails = {
 
 export function bidFeedback(result: PlayerAuctionBidResult | 'AUCTION_EPOCH_CHANGED' | string, details: BidFeedbackDetails = {}) {
   if (result === 'VALID' && details.teamName && details.amount) {
-    return `【${details.teamName}】出价有效：⭐${details.amount}⭐，倒计时重置为 30 秒。`
+    return `【${details.teamName}】出价有效：${details.amount}，倒计时重置为 30 秒。`
   }
-  if ((result === 'BELOW_STARTING_PRICE' || result === 'BELOW_MINIMUM_INCREMENT') && details.requiredMinimum) {
-    return `当前最低有效价为 ⭐${details.requiredMinimum}⭐。`
+  if (result === 'BELOW_MINIMUM_INCREMENT' && details.requiredMinimum) {
+    return `其他用户已先提交该价格，当前最低有效价为 ${details.requiredMinimum}。`
+  }
+  if (result === 'BELOW_STARTING_PRICE' && details.requiredMinimum) {
+    return `当前最低有效价为 ${details.requiredMinimum}。`
   }
   const messages: Record<Exclude<PlayerAuctionBidResult, 'VALID' | 'BELOW_STARTING_PRICE' | 'BELOW_MINIMUM_INCREMENT'> | 'AUCTION_EPOCH_CHANGED', string> = {
     AUCTION_EPOCH_CHANGED: '拍卖状态已变化，正在刷新。',
@@ -78,12 +81,13 @@ export function bidFeedback(result: PlayerAuctionBidResult | 'AUCTION_EPOCH_CHAN
   return messages[result as keyof typeof messages] ?? '出价未完成，请刷新状态后重试。'
 }
 
-export function minimumPriceShortcuts(minimum: number | null, increment: number): Array<{ amount: number; label: string }> {
+export function minimumPriceShortcuts(minimum: number | null, _increment?: number): Array<{ amount: number; label: string }> {
   if (minimum === null) return []
   return [
     { amount: minimum, label: '最低价' },
-    { amount: minimum + increment, label: '加 1 档' },
-    { amount: minimum + increment * 2, label: '加 2 档' },
+    { amount: minimum + 10, label: '+10' },
+    { amount: minimum + 50, label: '+50' },
+    { amount: minimum + 100, label: '+100' },
   ]
 }
 
@@ -94,8 +98,26 @@ export function bidDraftState(amount: string, minimum: number | null) {
     return { valid: false, hint: '请输入有效的正整数价格' }
   }
   if (minimum === null) return { valid: false, hint: '最低有效价暂不可用，请等待刷新' }
-  if (numericAmount < minimum) return { valid: false, hint: `不得低于最低有效价 ⭐${minimum}⭐` }
-  return { valid: true, hint: `本次将出价 ⭐${numericAmount}⭐` }
+  if (numericAmount < minimum) return { valid: false, hint: `不得低于最低有效价 ${minimum}` }
+  return { valid: true, hint: `本次将出价 ${numericAmount}` }
+}
+
+export function playerCardDetailPath(cardId: string) {
+  return `/pages/player-card-detail/index?id=${encodeURIComponent(cardId)}`
+}
+
+export function formatBidTime(value: string, offsetMinutes = -new Date().getTimezoneOffset()) {
+  const shifted = new Date(Date.parse(value) + offsetMinutes * 60_000)
+  return [shifted.getUTCHours(), shifted.getUTCMinutes(), shifted.getUTCSeconds()]
+    .map((part) => String(part).padStart(2, '0')).join(':')
+}
+
+export function publicBidRows(bids: NonNullable<MyPlayerAuctionRoom['currentLot']>['bids']) {
+  return bids.map((bid) => ({
+    ...bid,
+    identity: `${bid.teamNumber === null ? '—' : bid.teamNumber}号 · ${bid.teamName} · ${bid.bidderDisplayName}`,
+    timeLabel: formatBidTime(bid.submittedAt),
+  }))
 }
 
 export function projectAuctionQueue(queue: MyPlayerAuctionRoom['queue']) {

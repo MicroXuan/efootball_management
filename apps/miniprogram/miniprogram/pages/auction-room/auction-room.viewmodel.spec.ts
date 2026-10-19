@@ -8,6 +8,8 @@ import {
   countdownCue,
   countdownSeconds,
   minimumPriceShortcuts,
+  playerCardDetailPath,
+  publicBidRows,
   projectAuctionQueue,
   reconnectState,
   roomShare,
@@ -19,6 +21,7 @@ const lot = (overrides: Partial<NonNullable<MyPlayerAuctionRoom['currentLot']>> 
   displayOrder: 1,
   playerName: '车范根',
   playerSnapshot: {},
+  card: { id: '99999999-9999-4999-8999-999999999999', imageUrl: 'https://example.com/card.webp', cardName: '史诗', position: 'CF' as const, overallRating: 96, cardType: 'EPIC' as const },
   startingPrice: 50,
   minimumIncrement: 10,
   status: 'ACTIVE' as const,
@@ -82,22 +85,29 @@ describe('auction room view model', () => {
   })
 
   it('formats valid and rejected bid feedback without trusting client identity or time', () => {
-    expect(bidFeedback('VALID', { teamName: '上海申花', amount: 120 })).toBe('【上海申花】出价有效：⭐120⭐，倒计时重置为 30 秒。')
-    expect(bidFeedback('BELOW_MINIMUM_INCREMENT', { requiredMinimum: 130 })).toBe('当前最低有效价为 ⭐130⭐。')
+    expect(bidFeedback('VALID', { teamName: '上海申花', amount: 120 })).toBe('【上海申花】出价有效：120，倒计时重置为 30 秒。')
+    expect(bidFeedback('BELOW_MINIMUM_INCREMENT', { requiredMinimum: 130 })).toBe('其他用户已先提交该价格，当前最低有效价为 130。')
     expect(bidFeedback('DEADLINE_PASSED')).toBe('该球员拍卖已结束，正在刷新下一位。')
     expect(bidFeedback('AUCTION_EPOCH_CHANGED' as PlayerAuctionBidResult)).toBe('拍卖状态已变化，正在刷新。')
     expect(bidFeedback('NO_ACTIVE_TEAM')).toBe('你在当前联赛没有有效球队，无法出价。')
   })
 
   it('builds labelled shortcuts and validates the draft before direct submission', () => {
-    expect(minimumPriceShortcuts(120, 10)).toEqual([
+    expect(minimumPriceShortcuts(120)).toEqual([
       { amount: 120, label: '最低价' },
-      { amount: 130, label: '加 1 档' },
-      { amount: 140, label: '加 2 档' },
+      { amount: 130, label: '+10' },
+      { amount: 170, label: '+50' },
+      { amount: 220, label: '+100' },
     ])
     expect(bidDraftState('', 120)).toEqual({ valid: false, hint: '请选择快捷价格或输入整数金额' })
-    expect(bidDraftState('110', 120)).toEqual({ valid: false, hint: '不得低于最低有效价 ⭐120⭐' })
-    expect(bidDraftState('120', 120)).toEqual({ valid: true, hint: '本次将出价 ⭐120⭐' })
+    expect(bidDraftState('110', 120)).toEqual({ valid: false, hint: '不得低于最低有效价 120' })
+    expect(bidDraftState('120', 120)).toEqual({ valid: true, hint: '本次将出价 120' })
+  })
+
+  it('builds the card route and display-ready bid identity rows', () => {
+    expect(playerCardDetailPath('card / 1')).toBe('/pages/player-card-detail/index?id=card%20%2F%201')
+    expect(publicBidRows([{ id: 'bid-1', teamNumber: 7, teamName: '申花', bidderDisplayName: '小宣', amount: 170, submittedAt: '2026-10-10T12:34:56.000Z' }])[0])
+      .toMatchObject({ identity: '7号 · 申花 · 小宣', amount: 170 })
   })
 
   it('builds native share metadata', () => {

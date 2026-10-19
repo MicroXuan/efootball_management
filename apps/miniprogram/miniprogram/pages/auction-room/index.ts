@@ -13,7 +13,9 @@ import {
   bidFeedback,
   countdownSeconds,
   minimumPriceShortcuts,
+  playerCardDetailPath,
   projectAuctionQueue,
+  publicBidRows,
   reconnectState,
   roomShare,
   type RoomSnapshot,
@@ -40,6 +42,8 @@ Page({
     reconnectLabel: '正在重新连接',
     amount: '',
     shortcuts: [] as Array<{ amount: number; label: string }>,
+    bidRows: [] as ReturnType<typeof publicBidRows>,
+    playerFallback: '球',
     upcoming: [] as MyPlayerAuctionRoom['queue'],
     completed: [] as MyPlayerAuctionRoom['queue'],
     canSubmit: false,
@@ -108,13 +112,14 @@ Page({
     const room = this.snapshot.room
     const countdown = countdownSeconds(room, Date.now(), this.snapshot.serverOffsetMs)
     const queue = projectAuctionQueue(room.queue)
-    const increment = room.currentLot?.minimumIncrement ?? 1
     const amount = this.snapshot.draftAmount
     const draft = bidDraftState(amount, room.minimumValidPrice)
     this.setData({
       state: 'loaded', room, teamName: room.team.name, reconnecting: false, statusMessage: '',
       countdown: countdown ?? '—', amount,
-      shortcuts: minimumPriceShortcuts(room.minimumValidPrice, increment),
+      shortcuts: minimumPriceShortcuts(room.minimumValidPrice),
+      bidRows: publicBidRows(room.currentLot?.bids ?? []),
+      playerFallback: room.currentLot?.playerName.slice(0, 2) || '球',
       upcoming: queue.upcoming, completed: queue.completed,
       canSubmit: room.canBid && !this.data.submitting && !this.data.reconnecting && draft.valid,
       amountHint: draft.hint,
@@ -134,6 +139,11 @@ Page({
     if (this.snapshot) this.snapshot.draftAmount = String(amount)
     const draft = bidDraftState(String(amount), this.snapshot?.room.minimumValidPrice ?? null)
     this.setData({ amount: String(amount), amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting && draft.valid })
+  },
+
+  openPlayerCard() {
+    const cardId = this.snapshot?.room.currentLot?.card.id
+    if (cardId) wx.navigateTo({ url: playerCardDetailPath(cardId) })
   },
 
   async submitBid() {
