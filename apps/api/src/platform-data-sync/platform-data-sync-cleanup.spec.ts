@@ -5,7 +5,7 @@ import { clearPlatformSyncData } from './platform-data-sync-cleanup.js';
 
 config({ path: '../../.env', quiet: true });
 
-const isIsolatedTestDatabase = /(?:localhost|127\.0\.0\.1|_test\b|test_)/i.test(process.env.DATABASE_URL ?? '');
+const isIsolatedTestDatabase = process.env.RUN_DESTRUCTIVE_SYNC_CLEANUP_TEST === '1';
 
 (isIsolatedTestDatabase ? describe : describe.skip)('platform sync data cleanup', () => {
   const prisma = new PrismaService();

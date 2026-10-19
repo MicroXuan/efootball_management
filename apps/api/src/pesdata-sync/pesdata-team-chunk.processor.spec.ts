@@ -86,7 +86,7 @@ describe('PesdataTeamChunkProcessor', () => {
     } })).resolves.toBe(1);
   }, 20_000);
 
-  it('does not count a shell already pending in another run toward a sample target', async () => {
+  it('does not duplicate a shell already pending in another run during incremental sync', async () => {
     const suffix = randomUUID();
     const pendingId = `pending-${suffix}`;
     const freshId = `fresh-${suffix}`;
@@ -99,19 +99,20 @@ describe('PesdataTeamChunkProcessor', () => {
     } });
     const detailIds: string[] = [];
     const client = {
-      listTeams: async () => ({ list: [team(pendingId), team(freshId)], count: 2 }),
+      listTeams: async ({ start }: { start: number }) => ({ list: start === 0 ? [team(pendingId), team(freshId)] : [], count: 2 }),
       getTeamDetail: async (id: string) => { detailIds.push(id); return team(id); }
     };
     const run = await prisma.teamCatalogSyncRun.create({ data: {
-      actorAdminId: adminId, mode: 'SAMPLE', status: 'PENDING',
-      activeLeaseKey: 'pesdata-team-catalog', requestedLimit: 1
+      actorAdminId: adminId, mode: 'INCREMENTAL', status: 'PENDING', activeLeaseKey: 'pesdata-team-catalog'
     } });
     const processor = new PesdataTeamChunkProcessor(prisma, client as never, { load: async () => ({}) } as never);
 
-    await expect(processor.processNextChunk(run.id)).resolves.toMatchObject({
-      disposition: 'STOP', status: 'READY', completionReason: 'TARGET_REACHED'
-    });
+    let outcome = await processor.processNextChunk(run.id);
+    while (outcome.disposition === 'CONTINUE') outcome = await processor.processNextChunk(run.id);
     expect(detailIds).toEqual([freshId]);
     await expect(prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: run.id } })).resolves.toMatchObject({ matchedCount: 1 });
+    await expect(prisma.teamCatalogSyncItem.count({ where: {
+      runId: run.id, sourceExternalId: pendingId, reviewStatus: 'PENDING'
+    } })).resolves.toBe(0);
   }, 15_000);
 });

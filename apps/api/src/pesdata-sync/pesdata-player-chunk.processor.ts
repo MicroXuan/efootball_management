@@ -51,12 +51,17 @@ export class PesdataPlayerChunkProcessor {
     }
 
     const run = await this.prisma.externalSyncRun.findUniqueOrThrow({ where: { id: runId } });
+    let heartbeatFailure: PesdataSyncError | null = null;
     const heartbeat = setInterval(() => {
       const heartbeatAt = new Date();
       void this.prisma.externalSyncRun.updateMany({
-        where: { id: runId, status: 'RUNNING', leaseOwnerToken },
+        where: { id: runId, status: 'RUNNING', leaseOwnerToken, leaseExpiresAt: { gt: heartbeatAt } },
         data: { heartbeatAt, leaseExpiresAt: new Date(heartbeatAt.getTime() + SYNC_LEASE_MS) }
-      }).catch(() => undefined);
+      }).then(({ count }) => {
+        if (count !== 1) heartbeatFailure = new PesdataSyncError('PESDATA_SYNC_LEASE_LOST', 'Synchronization lease ownership was lost');
+      }).catch(() => {
+        heartbeatFailure = new PesdataSyncError('PESDATA_SYNC_HEARTBEAT_FAILED', 'Synchronization lease could not be renewed');
+      });
     }, SYNC_HEARTBEAT_INTERVAL_MS);
     heartbeat.unref?.();
     try {
@@ -147,10 +152,12 @@ export class PesdataPlayerChunkProcessor {
       const skippedIds = scannedIds.filter((externalId) => !candidateIds.has(externalId));
       const nextOffset = run.currentOffset + page.list.length;
       const sourceExhausted = page.list.length === 0;
+      if (heartbeatFailure) throw heartbeatFailure;
 
       return await this.prisma.$transaction(async (tx) => {
+        const commitStartedAt = new Date();
         const owned = await tx.externalSyncRun.findFirst({
-          where: { id: runId, status: 'RUNNING', leaseOwnerToken },
+          where: { id: runId, status: 'RUNNING', leaseOwnerToken, leaseExpiresAt: { gt: commitStartedAt } },
           select: { pauseRequestedAt: true, matchedCount: true, requestedLimit: true, chunkIndex: true }
         });
         if (!owned) throw new PesdataSyncError('PESDATA_SYNC_LEASE_LOST', 'Synchronization lease ownership was lost');

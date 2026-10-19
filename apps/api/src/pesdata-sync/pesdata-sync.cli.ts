@@ -4,9 +4,8 @@ import { NestFactory } from '@nestjs/core';
 import { z } from 'zod';
 import { AppModule } from '../app.module.js';
 import { PrismaService } from '../database/prisma.service.js';
-import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
+import { PlatformDataSyncRunner } from '../platform-data-sync/platform-data-sync.runner.js';
 import { PesdataSyncService } from './pesdata-sync.service.js';
-import { PesdataTeamChunkProcessor } from './pesdata-team-chunk.processor.js';
 import type { PesdataSyncMode } from './pesdata-sync.types.js';
 import { PesdataTeamSyncService, type TeamSyncMode } from './pesdata-team-sync.service.js';
 
@@ -106,6 +105,7 @@ async function run(): Promise<void> {
   try {
     const service = app.get(PesdataSyncService);
     const prisma = app.get(PrismaService);
+    const runner = app.get(PlatformDataSyncRunner);
     let result: unknown;
     if ('resource' in args) {
       const teamService = app.get(PesdataTeamSyncService);
@@ -114,9 +114,8 @@ async function run(): Promise<void> {
         : await teamService.createPlatformRun(args.actorId, {
           mode: args.mode, ...(args.limit === undefined ? {} : { limit: args.limit })
         });
-      const processor = app.get(PesdataTeamChunkProcessor);
-      let outcome = await processor.processNextChunk(queued.runId);
-      while (outcome.disposition === 'CONTINUE') outcome = await processor.processNextChunk(queued.runId);
+      runner.scheduleTeam(queued.runId);
+      await waitForRun(async () => (await prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).status);
       result = await prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } });
     } else if (args.command === 'start' && args.dryRun) {
       result = await service.start(args.actorId, {
@@ -128,9 +127,8 @@ async function run(): Promise<void> {
         : await service.createPlatformRun(args.actorId, {
           mode: args.mode, ...(args.limit !== undefined ? { limit: args.limit } : {})
         });
-      const processor = app.get(PesdataPlayerChunkProcessor);
-      let outcome = await processor.processNextChunk(queued.runId);
-      while (outcome.disposition === 'CONTINUE') outcome = await processor.processNextChunk(queued.runId);
+      runner.schedulePlayer(queued.runId);
+      await waitForRun(async () => (await prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).status);
       result = await prisma.externalSyncRun.findUniqueOrThrow({
         where: { id: queued.runId }, include: { batchLinks: { orderBy: { chunkIndex: 'asc' } } }
       });
@@ -138,6 +136,14 @@ async function run(): Promise<void> {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } finally {
     await app.close();
+  }
+}
+
+async function waitForRun(readStatus: () => Promise<string>): Promise<void> {
+  for (;;) {
+    const status = await readStatus();
+    if (['READY', 'FAILED', 'CANCELLED', 'PAUSED'].includes(status)) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
   }
 }
 

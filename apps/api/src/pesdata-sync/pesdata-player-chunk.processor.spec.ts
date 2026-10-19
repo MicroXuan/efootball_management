@@ -186,6 +186,30 @@ describe('PesdataPlayerChunkProcessor', () => {
     await expect(prisma.externalSyncRunBatch.count({ where: { runId: run.id } })).resolves.toBe(0);
   }, 15_000);
 
+  it('fences a worker whose lease expires before its chunk can commit', async () => {
+    let releaseDetail!: () => void;
+    let detailStarted!: () => void;
+    const started = new Promise<void>((resolve) => { detailStarted = resolve; });
+    const blocked = new Promise<void>((resolve) => { releaseDetail = resolve; });
+    const client = {
+      listPlayers: async () => ({ list: [summary(35_001)], count: 1 }),
+      getPlayerDetail: async (id: string) => { detailStarted(); await blocked; return detail(id); }
+    };
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'SAMPLE', status: 'PENDING', activeLeaseKey: 'pesdata', requestedLimit: 1
+    } });
+    const processor = new PesdataPlayerChunkProcessor(prisma, imports, client as never);
+    const execution = processor.processNextChunk(run.id);
+    await started;
+    await prisma.externalSyncRun.update({
+      where: { id: run.id }, data: { leaseExpiresAt: new Date(Date.now() - 1_000) }
+    });
+    releaseDetail();
+
+    await expect(execution).rejects.toMatchObject({ code: 'PESDATA_SYNC_LEASE_LOST' });
+    await expect(prisma.externalSyncRunBatch.count({ where: { runId: run.id } })).resolves.toBe(0);
+  }, 15_000);
+
   it('commits the current chunk and then pauses without fetching another page', async () => {
     let releaseDetail!: () => void;
     let detailStarted!: () => void;
