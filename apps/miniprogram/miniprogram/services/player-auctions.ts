@@ -1,6 +1,7 @@
 import type {
   MyPlayerAuctionListItem,
   MyPlayerAuctionRoom,
+  MyPlayerAuctionSaleListResponse,
   PlaceMiniprogramAuctionBidRequest,
   PlayerAuctionBidResult,
 } from '@efm/contracts'
@@ -21,6 +22,19 @@ export type PlayerAuctionBidSubmission = {
 }
 
 const id = (value: string) => encodeURIComponent(value)
+
+export function playerAuctionSalesPath(query: { keyword?: string; cursor?: string; limit?: number } = {}) {
+  const params = [
+    query.keyword?.trim() ? ['keyword', query.keyword.trim()] : undefined,
+    query.cursor ? ['cursor', query.cursor] : undefined,
+    ['limit', String(query.limit ?? 20)],
+  ].filter((entry): entry is string[] => Boolean(entry))
+  return `/me/player-auction-sales?${params.map(([key, value]) => `${encodeURIComponent(key!)}=${encodeURIComponent(value!)}`).join('&')}`
+}
+
+export function listMyPlayerAuctionSales(query: { keyword?: string; cursor?: string; limit?: number } = {}) {
+  return api.request<MyPlayerAuctionSaleListResponse>({ path: playerAuctionSalesPath(query) })
+}
 
 export function createPlayerAuctionBidSubmission(
   input: PlaceMiniprogramAuctionBidRequest,

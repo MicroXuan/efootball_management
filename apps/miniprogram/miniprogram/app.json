@@ -25,7 +25,8 @@
     "pages/wechat-bot-binding/index",
     "pages/player-card-detail/index",
     "pages/player-auctions/index",
-    "pages/auction-room/index"
+    "pages/auction-room/index",
+    "pages/auction-sales/index"
   ],
   "window": {
     "navigationBarTextStyle": "white",

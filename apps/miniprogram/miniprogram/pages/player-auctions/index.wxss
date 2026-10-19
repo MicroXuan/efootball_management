@@ -2,6 +2,8 @@ page { background: #0e1417; color: #f4f7f8; }
 .page-shell { min-height: 100vh; box-sizing: border-box; padding: calc(env(safe-area-inset-top) + 28rpx) 28rpx 100rpx; background: radial-gradient(circle at 92% 2%, rgba(182,241,58,.08), transparent 30%), #0e1417; }
 .page-head,.league-group,.state-card { margin-top: 22rpx; padding: 30rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
 .page-head { margin-top: 0; }
+.page-head__row { display:flex;align-items:center;justify-content:space-between;gap:20rpx; }
+.sales-entry { min-width:164rpx;min-height:70rpx;margin:0;padding:0 18rpx;border:2rpx solid #546b37;border-radius:16rpx;background:#202c25;color:#d9efac;font-size:19rpx;font-weight:850; }
 .page-kicker,.state-kicker { display:block;color:#aab5ba;font-size:18rpx;font-weight:750;letter-spacing:4rpx; }
 .page-title,.state-title { display:block;margin-top:12rpx;font-size:42rpx;font-weight:900; }
 .page-copy,.state-copy { display:block;margin-top:14rpx;color:#aab5ba;font-size:21rpx;line-height:1.6; }
