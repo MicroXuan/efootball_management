@@ -4,6 +4,9 @@ export interface TestArtifactCleanupResult {
   publisherSources: number;
   publisherCards: number;
   arbitrationLeagues: number;
+  adminE2eLeagues: number;
+  adminE2eUsers: number;
+  orphanRosterAdmins: number;
   testUsers: number;
   testAdmins: number;
 }
@@ -111,6 +114,85 @@ export async function cleanupKnownTestArtifacts(
       await tx.league.deleteMany({ where: { id: { in: leagueIds } } });
     }
 
+    const adminE2eLeagueCandidates = await tx.league.findMany({
+      where: {
+        OR: [
+          { name: '测试联赛 A', shortName: '联赛A' },
+          { name: '测试联赛 B', shortName: '联赛B' }
+        ],
+        seasons: { none: {} },
+        teams: { none: {} },
+        adminCreator: {
+          username: { startsWith: 'platform-' },
+          displayName: '平台管理员'
+        }
+      },
+      select: { id: true, createdByAdminId: true, _count: true }
+    });
+    const adminE2eLeagues = adminE2eLeagueCandidates.filter(({ _count }) =>
+      Object.entries(_count).every(([relation, count]) =>
+        count === 0 || relation === 'adminRoles' || relation === 'auditLogs'
+      )
+    );
+    const adminE2eLeagueIds = adminE2eLeagues.map(({ id }) => id);
+    const adminE2eCreatorIds = adminE2eLeagues.flatMap(({ createdByAdminId }) =>
+      createdByAdminId ? [createdByAdminId] : []
+    );
+    const adminE2eRoles = adminE2eLeagueIds.length === 0 ? [] : await tx.adminLeagueRole.findMany({
+      where: {
+        leagueId: { in: adminE2eLeagueIds },
+        admin: { username: { startsWith: 'manager-' }, displayName: '联赛管理员' }
+      },
+      select: { adminId: true }
+    });
+    const adminE2eAdminIds = [...new Set([
+      ...adminE2eCreatorIds,
+      ...adminE2eRoles.map(({ adminId }) => adminId)
+    ])];
+    const adminE2eAdmins = adminE2eAdminIds.length === 0 ? [] : await tx.adminAccount.findMany({
+      where: { id: { in: adminE2eAdminIds } },
+      select: { id: true, _count: true }
+    });
+    const deletableAdminE2eAdminIds = adminE2eAdmins
+      .filter(({ _count }) => Object.entries(_count).every(([relation, count]) =>
+        count === 0 || [
+          'leagueRoles',
+          'grantedLeagueRoles',
+          'auditLogs',
+          'createdLeagues',
+          'mutationReceipts'
+        ].includes(relation)
+      ))
+      .map(({ id }) => id);
+    const adminE2eUsers = await tx.user.findMany({
+      where: { displayName: '六位编号用户', wechatOpenId: { startsWith: 'openid-' } },
+      select: { id: true, _count: true }
+    });
+    const adminE2eUserIds = adminE2eUsers
+      .filter(({ _count }) => Object.values(_count).every((count) => count === 0))
+      .map(({ id }) => id);
+
+    if (adminE2eLeagueIds.length > 0) {
+      await tx.auditLog.deleteMany({
+        where: {
+          OR: [
+            { leagueId: { in: adminE2eLeagueIds } },
+            { actorAdminId: { in: deletableAdminE2eAdminIds } }
+          ]
+        }
+      });
+      await tx.adminMutationReceipt.deleteMany({
+        where: { adminId: { in: deletableAdminE2eAdminIds } }
+      });
+      await tx.adminSession.deleteMany({ where: { adminId: { in: deletableAdminE2eAdminIds } } });
+      await tx.adminLeagueRole.deleteMany({ where: { leagueId: { in: adminE2eLeagueIds } } });
+      await tx.league.deleteMany({ where: { id: { in: adminE2eLeagueIds } } });
+      await tx.adminAccount.deleteMany({ where: { id: { in: deletableAdminE2eAdminIds } } });
+    }
+    if (adminE2eUserIds.length > 0) {
+      await tx.user.deleteMany({ where: { id: { in: adminE2eUserIds } } });
+    }
+
     const publisherUsers = await tx.user.findMany({
       where: { displayName: '发布测试员', wechatOpenId: { startsWith: 'publisher-test-' } },
       select: { id: true }
@@ -119,8 +201,19 @@ export async function cleanupKnownTestArtifacts(
       where: { displayName: '发布管理员', username: { startsWith: 'publisher-admin-' } },
       select: { id: true }
     });
+    const rosterAdmins = await tx.adminAccount.findMany({
+      where: { displayName: 'Roster Admin', username: { startsWith: 'roster-' } },
+      select: { id: true, _count: true }
+    });
+    const orphanRosterAdminIds = rosterAdmins
+      .filter(({ _count }) => Object.values(_count).every((count) => count === 0))
+      .map(({ id }) => id);
     const testUserIds = [...new Set([...disputeUserIds, ...publisherUsers.map(({ id }) => id)])];
-    const testAdminIds = [...new Set([...disputeAdminIds, ...publisherAdmins.map(({ id }) => id)])];
+    const testAdminIds = [...new Set([
+      ...disputeAdminIds,
+      ...publisherAdmins.map(({ id }) => id),
+      ...orphanRosterAdminIds
+    ])];
 
     if (testUserIds.length > 0) {
       await tx.auditLog.deleteMany({ where: { actorUserId: { in: testUserIds } } });
@@ -138,6 +231,9 @@ export async function cleanupKnownTestArtifacts(
       publisherSources: sourceIds.length,
       publisherCards: cardIds.length,
       arbitrationLeagues: leagueIds.length,
+      adminE2eLeagues: adminE2eLeagueIds.length,
+      adminE2eUsers: adminE2eUserIds.length,
+      orphanRosterAdmins: orphanRosterAdminIds.length,
       testUsers: testUserIds.length,
       testAdmins: testAdminIds.length
     };
