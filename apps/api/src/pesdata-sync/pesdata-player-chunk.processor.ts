@@ -7,7 +7,7 @@ import { PesdataClient, PesdataClientError } from './pesdata-client.js';
 import { mapPesdataPlayer, pesdataValueChecksum, PesdataMappingError } from './pesdata-mapper.js';
 import type { PesdataPlayerSummary } from './pesdata.schemas.js';
 import { PesdataSyncError, type SyncChunkOutcome } from './pesdata-sync.types.js';
-import { SYNC_LEASE_MS } from '../platform-data-sync/platform-data-sync.constants.js';
+import { SYNC_HEARTBEAT_INTERVAL_MS, SYNC_LEASE_MS } from '../platform-data-sync/platform-data-sync.constants.js';
 
 function externalIdOf(summary: PesdataPlayerSummary): string {
   const value = String(summary.playerId).trim();
@@ -51,6 +51,14 @@ export class PesdataPlayerChunkProcessor {
     }
 
     const run = await this.prisma.externalSyncRun.findUniqueOrThrow({ where: { id: runId } });
+    const heartbeat = setInterval(() => {
+      const heartbeatAt = new Date();
+      void this.prisma.externalSyncRun.updateMany({
+        where: { id: runId, status: 'RUNNING', leaseOwnerToken },
+        data: { heartbeatAt, leaseExpiresAt: new Date(heartbeatAt.getTime() + SYNC_LEASE_MS) }
+      }).catch(() => undefined);
+    }, SYNC_HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref?.();
     try {
       const page = await this.client.listPlayers({
         start: run.currentOffset,
@@ -63,8 +71,8 @@ export class PesdataPlayerChunkProcessor {
         if (!unique.has(externalId)) unique.set(externalId, summary);
       }
       const externalIds = [...unique.keys()];
-      const [seenInRun, catalogCards, pendingRecords] = externalIds.length === 0
-        ? [[], [], []] as const
+      const [seenInRun, catalogCards, pendingRecords, historicalItems] = externalIds.length === 0
+        ? [[], [], [], []] as const
         : await Promise.all([
           this.prisma.externalSyncItem.findMany({
             where: { runId, externalId: { in: externalIds } }, select: { externalId: true }
@@ -78,6 +86,13 @@ export class PesdataPlayerChunkProcessor {
               batch: { sourceId: run.sourceId, status: { in: ['UPLOADED', 'VALIDATED', 'READY', 'PUBLISHED'] } }
             },
             select: { externalId: true }
+          }),
+          this.prisma.externalSyncItem.findMany({
+            where: {
+              runId: { not: runId }, externalId: { in: externalIds }, status: 'FETCHED'
+            },
+            select: { externalId: true, summaryChecksum: true, updatedAt: true },
+            orderBy: { updatedAt: 'desc' }
           })
         ]);
       const alreadySeen = new Set(seenInRun.map(({ externalId }) => externalId));
@@ -85,12 +100,20 @@ export class PesdataPlayerChunkProcessor {
         ...catalogCards.map(({ externalId }) => externalId),
         ...pendingRecords.flatMap(({ externalId }) => externalId ? [externalId] : [])
       ]);
+      const latestSuccessfulChecksum = new Map<string, string>();
+      for (const item of historicalItems) {
+        if (!latestSuccessfulChecksum.has(item.externalId)) {
+          latestSuccessfulChecksum.set(item.externalId, item.summaryChecksum);
+        }
+      }
       const remainingTarget = run.mode === 'SAMPLE' && run.requestedLimit !== null
         ? Math.max(0, run.requestedLimit - run.matchedCount)
         : Number.POSITIVE_INFINITY;
       const candidates = [...unique.entries()]
         .filter(([externalId]) => !alreadySeen.has(externalId))
         .filter(([externalId]) => run.mode !== 'SAMPLE' || !unavailable.has(externalId))
+        .filter(([externalId, summary]) => run.mode !== 'INCREMENTAL'
+          || latestSuccessfulChecksum.get(externalId) !== pesdataValueChecksum(summary))
         .slice(0, remainingTarget);
       const candidateIds = new Set(candidates.map(([externalId]) => externalId));
       const fetched: Array<{
@@ -123,7 +146,7 @@ export class PesdataPlayerChunkProcessor {
       const scannedIds = [...unique.keys()].filter((externalId) => !alreadySeen.has(externalId));
       const skippedIds = scannedIds.filter((externalId) => !candidateIds.has(externalId));
       const nextOffset = run.currentOffset + page.list.length;
-      const sourceExhausted = page.list.length === 0 || nextOffset >= page.count;
+      const sourceExhausted = page.list.length === 0;
 
       return await this.prisma.$transaction(async (tx) => {
         const owned = await tx.externalSyncRun.findFirst({
@@ -131,7 +154,6 @@ export class PesdataPlayerChunkProcessor {
           select: { pauseRequestedAt: true, matchedCount: true, requestedLimit: true, chunkIndex: true }
         });
         if (!owned) throw new PesdataSyncError('PESDATA_SYNC_LEASE_LOST', 'Synchronization lease ownership was lost');
-        let batchId: string | null = null;
         if (fetched.length > 0) {
           const chunkIndex = owned.chunkIndex + 1;
           const outcome = await this.imports.createBatchForPlatformAdminInTransaction(tx, run.actorId, {
@@ -140,7 +162,7 @@ export class PesdataPlayerChunkProcessor {
             format: 'JSON',
             content: JSON.stringify(fetched.map(({ normalized }) => normalized))
           });
-          batchId = outcome.batch.id;
+          const batchId = outcome.batch.id;
           await tx.externalSyncRunBatch.upsert({
             where: { runId_batchId: { runId, batchId } },
             update: { chunkIndex },
@@ -190,7 +212,7 @@ export class PesdataPlayerChunkProcessor {
             skippedCount: { increment: skippedIds.length },
             failedCount: { increment: failures.length },
             currentOffset: nextOffset,
-            chunkIndex: { increment: batchId ? 1 : 0 },
+            chunkIndex: { increment: 1 },
             completionReason
           }
         });
@@ -210,6 +232,8 @@ export class PesdataPlayerChunkProcessor {
         }
       });
       throw error;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 }

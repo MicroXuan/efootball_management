@@ -183,7 +183,9 @@ export class PlatformDataSyncService {
           by: ['reviewStatus'], orderBy: { reviewStatus: 'asc' }, _count: { reviewStatus: true }
         }),
         this.prisma.externalSyncRun.findFirst({
-          where: { status: { in: ['READY', 'FAILED', 'CANCELLED'] } }, orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }]
+          where: { status: { in: ['READY', 'FAILED', 'CANCELLED'] } },
+          include: { _count: { select: { batchLinks: true } } },
+          orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }]
         }),
         this.prisma.teamCatalogSyncRun.findFirst({
           where: { status: { in: ['READY', 'FAILED', 'CANCELLED'] } }, orderBy: [{ completedAt: 'desc' }, { id: 'desc' }]
@@ -192,14 +194,14 @@ export class PlatformDataSyncService {
     const teamCounts = new Map(teamGroups.map((entry) => [entry.reviewStatus, entry._count.reviewStatus]));
     return PlatformDataSyncOverviewSchema.parse({
       players: {
-        activeRun: playerActive ? this.playerRun(playerActive) : null,
+        activeRun: playerActive ? this.playerRun(playerActive) : playerLast ? this.playerRun(playerLast) : null,
         pendingReview: playerPending,
         failedReview: playerFailed,
         published: playerPublished,
         lastCompletedAt: playerLast?.finishedAt?.toISOString() ?? null
       },
       teams: {
-        activeRun: teamActive ? this.teamRun(teamActive) : null,
+        activeRun: teamActive ? this.teamRun(teamActive) : teamLast ? this.teamRun(teamLast) : null,
         pendingReview: teamCounts.get('PENDING') ?? 0,
         failedReview: teamCounts.get('FAILED') ?? 0,
         published: teamCounts.get('PUBLISHED') ?? 0,

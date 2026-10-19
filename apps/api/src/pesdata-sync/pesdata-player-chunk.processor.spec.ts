@@ -5,6 +5,7 @@ import { PlayerImportService } from '../player-import/player-import.service.js';
 import type { PesdataPlayerDetail, PesdataPlayerSummary } from './pesdata.schemas.js';
 import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
 import { PesdataSyncService } from './pesdata-sync.service.js';
+import { pesdataValueChecksum } from './pesdata-mapper.js';
 
 config({ path: '../../.env', quiet: true });
 
@@ -106,6 +107,34 @@ describe('PesdataPlayerChunkProcessor', () => {
       status: 'READY', matchedCount: 60, completionReason: 'SOURCE_EXHAUSTED'
     });
   }, 30_000);
+
+  it('skips unchanged summaries during incremental synchronization without fetching details', async () => {
+    const unchanged = summary(15_001);
+    const previous = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'INCREMENTAL', status: 'READY'
+    } });
+    await prisma.externalSyncItem.create({ data: {
+      runId: previous.id, externalId: '15001', summaryChecksum: pesdataValueChecksum(unchanged), status: 'FETCHED'
+    } });
+    let detailCalls = 0;
+    const client = {
+      listPlayers: async ({ start }: { start: number }) => ({ list: start === 0 ? [unchanged] : [], count: 1 }),
+      getPlayerDetail: async (id: string) => { detailCalls += 1; return detail(id); }
+    };
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'INCREMENTAL', status: 'PENDING', activeLeaseKey: 'pesdata'
+    } });
+    const processor = new PesdataPlayerChunkProcessor(prisma, imports, client as never);
+
+    let outcome = await processor.processNextChunk(run.id);
+    while (outcome.disposition === 'CONTINUE') outcome = await processor.processNextChunk(run.id);
+
+    expect(detailCalls).toBe(0);
+    await expect(prisma.externalSyncRun.findUniqueOrThrow({ where: { id: run.id } })).resolves.toMatchObject({
+      status: 'READY', scannedCount: 1, fetchedCount: 0, skippedCount: 1,
+      chunkIndex: 2, completionReason: 'SOURCE_EXHAUSTED'
+    });
+  }, 20_000);
 
   it('clamps the final chunk to the remaining target and exposes its review batch immediately', async () => {
     let detailCalls = 0;

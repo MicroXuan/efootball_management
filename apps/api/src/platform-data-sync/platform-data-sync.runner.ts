@@ -25,16 +25,22 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     await this.reconcileStaleRuns();
+    await this.schedulePendingRuns();
+    this.reconcileTimer = setInterval(() => {
+      void this.reconcileStaleRuns()
+        .then(() => this.schedulePendingRuns())
+        .catch(() => undefined);
+    }, SYNC_RECONCILE_INTERVAL_MS);
+    this.reconcileTimer.unref?.();
+  }
+
+  private async schedulePendingRuns(): Promise<void> {
     const [players, teams] = await Promise.all([
       this.prisma.externalSyncRun.findMany({ where: { status: 'PENDING', activeLeaseKey: { not: null } }, select: { id: true } }),
       this.prisma.teamCatalogSyncRun.findMany({ where: { status: 'PENDING', activeLeaseKey: { not: null } }, select: { id: true } })
     ]);
     for (const { id } of players) this.schedulePlayer(id);
     for (const { id } of teams) this.scheduleTeam(id);
-    this.reconcileTimer = setInterval(() => {
-      void this.reconcileStaleRuns().catch(() => undefined);
-    }, SYNC_RECONCILE_INTERVAL_MS);
-    this.reconcileTimer.unref?.();
   }
 
   onModuleDestroy(): void {

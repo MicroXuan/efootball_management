@@ -36,11 +36,7 @@ PESDATA_MAX_RETRIES=5
 
 后台入口仅对 `PLATFORM_ADMIN` 开放；普通联赛管理员看不到菜单，也不能调用 `/v1/admin/data-sync/*`。
 
-CLI 是后台不可用时的应急手段，不是日常操作入口。球员卡 CLI 沿用目录导入权限模型，命令中的 `--actor` 是拥有以下权限的用户 UUID（不是 `admin_accounts.id`）：
-
-- `catalog.import.create`
-- `catalog.import.read`
-- `catalog.import.publish`
+CLI 是后台不可用时的应急手段，不是日常操作入口。除只读 `--dry-run` 外，命令中的 `--actor` 是 `admin_accounts.id` 中有效的平台管理员 UUID，与后台分片任务使用相同的权限和执行路径。
 
 本地可查询平台管理员：
 
@@ -48,7 +44,7 @@ CLI 是后台不可用时的应急手段，不是日常操作入口。球员卡 
 export EFM_LOCAL_ACTOR_ID="$(docker compose exec -T mysql mysql \
   --user=efm --password=efm_local --database=efootball_management \
   --batch --skip-column-names \
-  -e "SELECT u.id FROM users u JOIN user_role_bindings b ON b.user_id=u.id JOIN roles r ON r.id=b.role_id WHERE r.code='PLATFORM_ADMIN' LIMIT 1")"
+  -e "SELECT id FROM admin_accounts WHERE platform_role='PLATFORM_ADMIN' AND status='ACTIVE' LIMIT 1")"
 test -n "$EFM_LOCAL_ACTOR_ID"
 ```
 

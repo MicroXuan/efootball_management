@@ -42,7 +42,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
 
   const section = overview?.[activeTab] ?? null;
   const refreshKey = section
-    ? `${section.activeRun?.id ?? 'idle'}:${section.activeRun?.status ?? 'idle'}:${section.lastCompletedAt ?? 'never'}`
+    ? `${section.activeRun?.id ?? 'idle'}:${section.activeRun?.status ?? 'idle'}:${section.activeRun?.chunkIndex ?? 0}:${section.activeRun?.matchedCount ?? 0}:${section.activeRun?.counters.scanned ?? 0}:${section.lastCompletedAt ?? 'never'}`
     : 'loading';
   const { refreshAfterMutation } = useSyncRun({ status: section?.activeRun?.status ?? null, refresh: loadOverview });
   const start = async (mode: 'sample' | 'incremental' | 'full') => {

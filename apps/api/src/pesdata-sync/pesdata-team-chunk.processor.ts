@@ -7,7 +7,7 @@ import { PesdataCrestLoader } from './pesdata-crest-loader.js';
 import { pesdataValueChecksum } from './pesdata-mapper.js';
 import { mapPesdataTeam } from './pesdata-team-mapper.js';
 import type { SyncChunkOutcome } from './pesdata-sync.types.js';
-import { SYNC_LEASE_MS } from '../platform-data-sync/platform-data-sync.constants.js';
+import { SYNC_HEARTBEAT_INTERVAL_MS, SYNC_LEASE_MS } from '../platform-data-sync/platform-data-sync.constants.js';
 
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -42,26 +42,40 @@ export class PesdataTeamChunkProcessor {
       throw new PesdataTeamChunkError('PESDATA_TEAM_SYNC_CONFLICT', 'Team synchronization chunk is not available to claim');
     }
     const run = await this.prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: runId } });
+    const heartbeat = setInterval(() => {
+      const heartbeatAt = new Date();
+      void this.prisma.teamCatalogSyncRun.updateMany({
+        where: { id: runId, status: 'RUNNING', leaseOwnerToken },
+        data: { heartbeatAt, leaseExpiresAt: new Date(heartbeatAt.getTime() + SYNC_LEASE_MS) }
+      }).catch(() => undefined);
+    }, SYNC_HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref?.();
     try {
       const page = await this.client.listTeams({ start: run.currentOffset, limit: run.chunkSize, order: 'ASC' });
       const unique = new Map(page.list.map((item) => [item.teamId, item]));
       const externalIds = [...unique.keys()];
-      const [seenItems, currentItems] = externalIds.length === 0 ? [[], []] as const : await Promise.all([
+      const [seenItems, currentItems, pendingItems] = externalIds.length === 0 ? [[], [], []] as const : await Promise.all([
         this.prisma.teamCatalogSyncItem.findMany({
           where: { runId, sourceExternalId: { in: externalIds } }, select: { sourceExternalId: true }
         }),
         this.prisma.teamCatalogItem.findMany({
           where: { sourceType: 'PESDATA', sourceExternalId: { in: externalIds } }
+        }),
+        this.prisma.teamCatalogSyncItem.findMany({
+          where: { runId: { not: runId }, sourceExternalId: { in: externalIds }, reviewStatus: 'PENDING' },
+          select: { sourceExternalId: true }
         })
       ]);
       const seen = new Set(seenItems.map(({ sourceExternalId }) => sourceExternalId));
       const currentByExternalId = new Map(currentItems.flatMap((item) => item.sourceExternalId ? [[item.sourceExternalId, item] as const] : []));
+      const pendingExternalIds = new Set(pendingItems.map(({ sourceExternalId }) => sourceExternalId));
       const remainingTarget = run.mode === 'SAMPLE' && run.requestedLimit !== null
         ? Math.max(0, run.requestedLimit - run.matchedCount)
         : Number.POSITIVE_INFINITY;
       const candidates = [...unique.entries()]
         .filter(([externalId]) => !seen.has(externalId))
-        .filter(([externalId]) => run.mode !== 'SAMPLE' || !currentByExternalId.has(externalId))
+        .filter(([externalId]) => run.mode !== 'SAMPLE'
+          || (!currentByExternalId.has(externalId) && !pendingExternalIds.has(externalId)))
         .slice(0, remainingTarget);
       const staged: Array<{
         sourceExternalId: string;
@@ -206,6 +220,8 @@ export class PesdataTeamChunkProcessor {
         }
       });
       throw error;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 }

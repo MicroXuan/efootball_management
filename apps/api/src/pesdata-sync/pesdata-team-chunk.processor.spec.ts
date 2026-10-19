@@ -85,4 +85,33 @@ describe('PesdataTeamChunkProcessor', () => {
       runId: run.id, sourceExternalId: missing.sourceExternalId!, changeType: 'SOURCE_MISSING'
     } })).resolves.toBe(1);
   }, 20_000);
+
+  it('does not count a shell already pending in another run toward a sample target', async () => {
+    const suffix = randomUUID();
+    const pendingId = `pending-${suffix}`;
+    const freshId = `fresh-${suffix}`;
+    const previous = await prisma.teamCatalogSyncRun.create({ data: {
+      actorAdminId: adminId, mode: 'SAMPLE', status: 'READY'
+    } });
+    await prisma.teamCatalogSyncItem.create({ data: {
+      runId: previous.id, sourceExternalId: pendingId, summaryChecksum: 'a'.repeat(64),
+      changeType: 'ADDED', reviewStatus: 'PENDING'
+    } });
+    const detailIds: string[] = [];
+    const client = {
+      listTeams: async () => ({ list: [team(pendingId), team(freshId)], count: 2 }),
+      getTeamDetail: async (id: string) => { detailIds.push(id); return team(id); }
+    };
+    const run = await prisma.teamCatalogSyncRun.create({ data: {
+      actorAdminId: adminId, mode: 'SAMPLE', status: 'PENDING',
+      activeLeaseKey: 'pesdata-team-catalog', requestedLimit: 1
+    } });
+    const processor = new PesdataTeamChunkProcessor(prisma, client as never, { load: async () => ({}) } as never);
+
+    await expect(processor.processNextChunk(run.id)).resolves.toMatchObject({
+      disposition: 'STOP', status: 'READY', completionReason: 'TARGET_REACHED'
+    });
+    expect(detailIds).toEqual([freshId]);
+    await expect(prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: run.id } })).resolves.toMatchObject({ matchedCount: 1 });
+  }, 15_000);
 });
