@@ -12,6 +12,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { TeamSalaryCapService } from './team-salary-cap.service.js';
+import { findActiveSalaryRule, matchSalaryTier } from './salary-quote.js';
 
 export function defaultSalaryTiers() {
   return [
@@ -26,8 +27,7 @@ export function defaultSalaryTiers() {
 }
 
 function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
-  const tier = tiers.find(({ minOverall, maxOverall }) =>
-    overall >= minOverall && overall <= maxOverall);
+  const tier = matchSalaryTier(tiers, overall);
   if (!tier) {
     throw new LeagueRosterError(
       'SALARY_TIER_NOT_CONFIGURED',
@@ -156,11 +156,7 @@ export class SalaryRulesService {
     at = new Date()
   ) {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
-    const rule = await client.leagueSalaryRuleVersion.findFirst({
-      where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
-      orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
-      include: { tiers: { orderBy: { minOverall: 'asc' } } }
-    });
+    const rule = await findActiveSalaryRule(client, leagueId, at);
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_CONFIGURED', 'No salary rule is active', 422);
     }
