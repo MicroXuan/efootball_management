@@ -20,6 +20,6 @@ export class SeasonCalendarController {
     @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string,
     @Query(new ZodValidationPipe(AgendaQuerySchema)) query: z.infer<typeof AgendaQuerySchema>
   ) {
-    return SeasonAgendaResponseSchema.parse(await this.calendar.list(user.id, leagueId, seasonId, query.month));
+    return SeasonAgendaResponseSchema.parse(await this.calendar.listForUser(user.id, leagueId, seasonId, query.month));
   }
 }
