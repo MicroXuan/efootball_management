@@ -34,6 +34,7 @@ const AuctionEditorPage = lazy(() => import('./auctions/auction-editor-page').th
 const AuctionDetailPage = lazy(() => import('./auctions/auction-detail-page').then((module) => ({ default: module.AuctionDetailPage })));
 const NominationShortlistPage = lazy(() => import('./auctions/nomination-shortlist-page').then((module) => ({ default: module.NominationShortlistPage })));
 const PlayerMarketReviewPage = lazy(() => import('./player-market/player-market-review-page').then((module) => ({ default: module.PlayerMarketReviewPage })));
+const DisappearanceReviewPage = lazy(() => import('./rosters/disappearance-review-page').then((module) => ({ default: module.DisappearanceReviewPage })));
 
 function DefaultRoute() {
   const { identity } = useAdminSession();
@@ -81,6 +82,7 @@ export function App() {
               <Route path="nomination-windows/:windowId/candidates" element={deferred(<NominationShortlistPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
               <Route path="player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
+              <Route path="disappearance-requests" element={deferred(<DisappearanceReviewPage api={adminApi} />)} />
               <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />
               <Route path="auctions" element={deferred(<AuctionListPage api={adminApi} />)} />
               <Route path="auctions/new" element={deferred(<AuctionEditorPage api={adminApi} />)} />

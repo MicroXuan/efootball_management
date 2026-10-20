@@ -733,39 +733,36 @@ export class RosterTransactionsService {
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
 
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_LIFECYCLE_UPDATE', input.idempotencyKey,
-      async (tx) => {
-        await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
-        await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
-        const locked = await tx.leaguePlayerOwnership.findUniqueOrThrow({
-          where: { id: input.ownershipId }
-        });
-        if (locked.version !== input.expectedVersion) {
-          throw new LeagueRosterError('VERSION_CONFLICT', 'Roster entry has changed', 409, {
-            currentVersion: locked.version
-          });
-        }
-        if (!['ACTIVE', 'DISAPPEARED', 'RETIRED'].includes(locked.status)) {
-          throw new LeagueRosterError(
-            'ROSTER_LIFECYCLE_CHANGE_NOT_ALLOWED',
-            'Released or transferred entries cannot be restored directly',
-            409
-          );
-        }
-        const ownership = await tx.leaguePlayerOwnership.update({
-          where: { id: locked.id },
-          data: { status: input.status, version: { increment: 1 } }
-        });
-        await this.audit.record(tx, {
-          actorAdminId: adminId,
-          leagueId: locked.leagueId,
-          action: 'ROSTER_PLAYER_LIFECYCLE_UPDATED',
-          resourceType: 'LEAGUE_PLAYER_OWNERSHIP',
-          resourceId: locked.id,
-          reason: input.reason,
-          metadata: { previousStatus: locked.status, status: input.status }
-        });
-        return this.ownershipResult(ownership);
-      }, input);
+      (tx) => this.updateLifecycleStatusWithClient(tx, input, adminId), input);
+  }
+
+  async updateLifecycleStatusWithClient(
+    tx: Prisma.TransactionClient,
+    input: Pick<UpdateRosterLifecycleRequest, 'seasonId' | 'ownershipId' | 'status' | 'reason' | 'expectedVersion'>,
+    adminId: string
+  ) {
+    const season = await tx.leagueSeason.findUnique({ where: { id: input.seasonId }, select: { leagueId: true } });
+    if (!season) throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and roster entry differ', 409);
+    const current = await tx.leaguePlayerOwnership.findUnique({ where: { id: input.ownershipId } });
+    if (!current || current.leagueId !== season.leagueId) throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Season and roster entry differ', 409);
+    await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
+    await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
+    const locked = await tx.leaguePlayerOwnership.findUniqueOrThrow({ where: { id: input.ownershipId } });
+    if (locked.version !== input.expectedVersion) {
+      throw new LeagueRosterError('VERSION_CONFLICT', 'Roster entry has changed', 409, { currentVersion: locked.version });
+    }
+    if (!['ACTIVE', 'DISAPPEARED', 'RETIRED'].includes(locked.status)) {
+      throw new LeagueRosterError('ROSTER_LIFECYCLE_CHANGE_NOT_ALLOWED', 'Released or transferred entries cannot be restored directly', 409);
+    }
+    const ownership = await tx.leaguePlayerOwnership.update({
+      where: { id: locked.id }, data: { status: input.status, version: { increment: 1 } }
+    });
+    await this.audit.record(tx, {
+      actorAdminId: adminId, leagueId: locked.leagueId, action: 'ROSTER_PLAYER_LIFECYCLE_UPDATED',
+      resourceType: 'LEAGUE_PLAYER_OWNERSHIP', resourceId: locked.id, reason: input.reason,
+      metadata: { previousStatus: locked.status, status: input.status }
+    });
+    return this.ownershipResult(ownership);
   }
 
   private async loadScope(seasonId: string, leagueTeamId: string) {
