@@ -716,6 +716,7 @@ describe('league economy contracts', () => {
       teamId: ids.team,
       seasonId: ids.season,
       activeTransferWindowId: ids.window,
+      nextTransferWindowStartAt: null,
       teamName: '海港竞技',
       teamNumber: 7,
       divisionName: '冠军 A 组',
@@ -731,6 +732,8 @@ describe('league economy contracts', () => {
       missingValuationCount: 1,
       activePlayerCount: 3,
       activeSalaryMinor: 1200,
+      salaryCapMinor: 1500,
+      salaryCapConfirmed: false,
       players: []
     });
     assert.equal(assets.valuationCompleteness, 'INCOMPLETE');

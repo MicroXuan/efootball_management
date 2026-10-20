@@ -42,6 +42,7 @@ export const TeamAssetOverviewSchema = z.object({
   teamId: ResourceIdSchema,
   seasonId: ResourceIdSchema.nullable(),
   activeTransferWindowId: ResourceIdSchema.nullable(),
+  nextTransferWindowStartAt: TimestampSchema.nullable(),
   teamName: z.string().min(1),
   teamNumber: z.number().int().nonnegative().nullable(),
   divisionName: z.string().min(1).nullable(),
@@ -57,7 +58,46 @@ export const TeamAssetOverviewSchema = z.object({
   missingValuationCount: z.number().int().nonnegative(),
   activePlayerCount: z.number().int().nonnegative(),
   activeSalaryMinor: ValuationMoneyMinorSchema,
+  salaryCapMinor: ValuationMoneyMinorSchema.nullable(),
+  salaryCapConfirmed: z.boolean(),
   players: z.array(TeamAssetPlayerSchema)
+});
+
+export const PublicLeagueTeamDirectorySchema = z.object({
+  items: z.array(z.object({
+    teamId: ResourceIdSchema,
+    teamNumber: z.number().int().nonnegative().nullable(),
+    teamName: z.string().min(1),
+    teamLogoUrl: z.string().nullable(),
+    ownerAlias: z.string().min(1),
+    activePlayerCount: z.number().int().nonnegative()
+  }))
+});
+
+export const PublicTeamAssetPlayerSchema = TeamAssetPlayerSchema.pick({
+  playerId: true, playerName: true, cardName: true, cardImageUrl: true, position: true,
+  nationality: true, club: true, age: true, heightCm: true, preferredFoot: true,
+  atRating: true, acquiredAt: true, salaryMinor: true, rosterStatus: true,
+  currentValueMinor: true, lastEffectiveAt: true
+});
+
+export const PublicTeamAssetsSchema = z.object({
+  leagueId: ResourceIdSchema,
+  teamId: ResourceIdSchema,
+  teamName: z.string().min(1),
+  teamNumber: z.number().int().nonnegative().nullable(),
+  teamLogoUrl: z.string().nullable(),
+  ownerAlias: z.string().min(1),
+  activePlayerCount: z.number().int().nonnegative(),
+  activeSalaryMinor: ValuationMoneyMinorSchema,
+  salaryCapMinor: ValuationMoneyMinorSchema.nullable(),
+  salaryCapConfirmed: z.boolean(),
+  knownPlayerValueMinor: ValuationMoneyMinorSchema,
+  shellValueMinor: ValuationMoneyMinorSchema,
+  totalKnownValueMinor: ValuationMoneyMinorSchema,
+  valuationCompleteness: ValuationCompletenessSchema,
+  missingValuationCount: z.number().int().nonnegative(),
+  players: z.array(PublicTeamAssetPlayerSchema)
 });
 
 export const PlayerValuationHistoryPointSchema = z.object({
@@ -184,6 +224,8 @@ export const CreateTransactionFeeRuleRequestSchema = z.object({
 
 export type ValuationCompleteness = z.infer<typeof ValuationCompletenessSchema>;
 export type TeamAssetOverview = z.infer<typeof TeamAssetOverviewSchema>;
+export type PublicLeagueTeamDirectory = z.infer<typeof PublicLeagueTeamDirectorySchema>;
+export type PublicTeamAssets = z.infer<typeof PublicTeamAssetsSchema>;
 export type PlayerValuationHistoryResponse = z.infer<typeof PlayerValuationHistoryResponseSchema>;
 export type LeagueTransactionListItem = z.infer<typeof LeagueTransactionListItemSchema>;
 export type LeagueTransactionListResponse = z.infer<typeof LeagueTransactionListResponseSchema>;

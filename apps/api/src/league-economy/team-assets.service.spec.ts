@@ -8,6 +8,7 @@ function harness() {
   const team = {
     id: 'team-1', leagueId: 'league-1', ownerUserId: 'user-1', teamNumber: 7,
     name: '海港竞技', ownerAlias: '梅西（小宣）', logoUrl: null, shellValueMinor: 5000,
+    salaryCapMinor: 1500, salaryCapConfirmedAt: null, status: 'ACTIVE',
     league: { currentSeasonId: 'season-1' },
     owner: { displayName: '小宣', publicUserNo: '100069', avatarUrl: null }
   };
@@ -49,8 +50,8 @@ function harness() {
     }]
   };
   const prisma = {
-    leagueTeam: { findUnique: jest.fn(async () => team) },
-    leaguePlayerOwnership: { findMany: jest.fn(async () => ownerships) },
+    leagueTeam: { findUnique: jest.fn(async () => team), findMany: jest.fn(async () => [team]) },
+    leaguePlayerOwnership: { findMany: jest.fn(async (args?: { where?: { status?: string } }) => args?.where?.status === 'ACTIVE' ? ownerships.filter((ownership) => ownership.status === 'ACTIVE') : ownerships), groupBy: jest.fn(async () => [{ leagueTeamId: 'team-1', _count: { _all: 2 }, _sum: { salaryMinor: 1200 } }]) },
     leaguePlayerValuation: { findMany: jest.fn(async () => [
       { footballPlayerId: 'player-1', currentValueMinor: 8000, effectiveAt: at },
       { footballPlayerId: 'player-3', currentValueMinor: 9999, effectiveAt: at }
@@ -109,6 +110,26 @@ describe('TeamAssetsService', () => {
     const { service } = harness();
     await expect(service.getTeamAssets('other-user', 'team-1'))
       .rejects.toMatchObject({ code: 'TEAM_ASSET_OWNER_REQUIRED' });
+  });
+
+  it('lets a league participant browse a public team and roster without owner-only fields', async () => {
+    const { service } = harness();
+    const directory = await service.listPublicTeams('other-user', 'league-1');
+    expect(directory.items[0]).toMatchObject({ teamId: 'team-1', teamNumber: 7, activePlayerCount: 2 });
+    expect(JSON.stringify(directory)).not.toContain('publicUserNo');
+    const assets = await service.getPublicTeamAssets('other-user', 'league-1', 'team-1');
+    expect(assets).toMatchObject({ salaryCapMinor: 1500, salaryCapConfirmed: false, activeSalaryMinor: 1200 });
+    expect(assets.players).toHaveLength(2);
+    for (const privateField of ['ownershipId', 'ownershipVersion', 'ownerPublicUserNo', 'activeTransferWindowId', 'canRelease']) {
+      expect(JSON.stringify(assets)).not.toContain(privateField);
+    }
+  });
+
+  it('denies a non-participant and a target from another league', async () => {
+    const { service, prisma } = harness();
+    prisma.seasonEntry.findFirst.mockResolvedValueOnce(null);
+    await expect(service.listPublicTeams('outsider', 'league-1')).rejects.toMatchObject({ code: 'LEAGUE_PARTICIPANT_REQUIRED' });
+    await expect(service.getPublicTeamAssets('user-1', 'league-2', 'team-1')).rejects.toMatchObject({ status: 404 });
   });
 
   it('rejects an owner without an approved league entry', async () => {

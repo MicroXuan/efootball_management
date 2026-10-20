@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type { PlayerValuationHistoryResponse, TeamAssetOverview } from '@efm/contracts';
+import type { PlayerValuationHistoryResponse, PublicLeagueTeamDirectory, PublicTeamAssets, TeamAssetOverview } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
@@ -82,6 +82,12 @@ export class TeamAssetsService {
         orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
       })
       : null;
+    const nextReleaseWindow = !releaseWindow && team.league.currentSeasonId
+      ? await this.prisma.transferWindow.findFirst({
+        where: { seasonId: team.league.currentSeasonId, allowSell: true, startsAt: { gt: now } },
+        orderBy: [{ startsAt: 'asc' }, { id: 'asc' }]
+      })
+      : null;
     const valuations = await this.prisma.leaguePlayerValuation.findMany({
       where: {
         leagueId: team.leagueId,
@@ -102,6 +108,7 @@ export class TeamAssetsService {
       teamId: team.id,
       seasonId: team.league.currentSeasonId,
       activeTransferWindowId: releaseWindow?.id ?? null,
+      nextTransferWindowStartAt: nextReleaseWindow?.startsAt.toISOString() ?? null,
       teamName: team.name,
       teamNumber: team.teamNumber,
       divisionName: entry.competitionParticipants[0]?.stageMemberships[0]?.stage.displayName ?? null,
@@ -117,6 +124,8 @@ export class TeamAssetsService {
       missingValuationCount,
       activePlayerCount: active.length,
       activeSalaryMinor: active.reduce((total, ownership) => total + ownership.salaryMinor, 0),
+      salaryCapMinor: team.salaryCapMinor,
+      salaryCapConfirmed: Boolean(team.salaryCapConfirmedAt),
       players: ownerships.map((ownership) => {
         const attributes = this.attributes(ownership.currentPlayerCard.attributes?.attributesJson);
         const valuation = valuationByPlayer.get(ownership.footballPlayerId);
@@ -151,6 +160,100 @@ export class TeamAssetsService {
         };
       })
     };
+  }
+
+  async listPublicTeams(userId: string, leagueId: string): Promise<PublicLeagueTeamDirectory> {
+    await this.requireLeagueParticipant(userId, leagueId);
+    const teams = await this.prisma.leagueTeam.findMany({
+      where: { leagueId, status: 'ACTIVE', league: { isDeleted: false } },
+      select: { id: true, teamNumber: true, name: true, logoUrl: true, ownerAlias: true },
+      orderBy: [{ teamNumber: 'asc' }, { id: 'asc' }]
+    });
+    const counts = await this.prisma.leaguePlayerOwnership.groupBy({
+      by: ['leagueTeamId'],
+      where: { leagueTeamId: { in: teams.map(({ id }) => id) }, status: 'ACTIVE' },
+      _count: { _all: true }
+    });
+    const countByTeam = new Map(counts.map((row) => [row.leagueTeamId, row._count._all]));
+    return { items: teams.map((team) => ({
+      teamId: team.id,
+      teamNumber: team.teamNumber,
+      teamName: team.name,
+      teamLogoUrl: team.logoUrl,
+      ownerAlias: team.ownerAlias,
+      activePlayerCount: countByTeam.get(team.id) ?? 0
+    })) };
+  }
+
+  async getPublicTeamAssets(userId: string, leagueId: string, teamId: string): Promise<PublicTeamAssets> {
+    await this.requireLeagueParticipant(userId, leagueId);
+    const visibleLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
+    if (visibleLeagueId !== leagueId) throw this.visibility.notFound();
+    const team = await this.prisma.leagueTeam.findUnique({ where: { id: teamId } });
+    if (!team || team.leagueId !== leagueId || team.status !== 'ACTIVE') throw this.visibility.notFound();
+    const ownerships = await this.prisma.leaguePlayerOwnership.findMany({
+      where: { leagueTeamId: teamId, status: 'ACTIVE' },
+      include: {
+        footballPlayer: true,
+        currentPlayerCard: { include: { attributes: true, autoBuilds: { orderBy: [{ calculatedAt: 'desc' }, { createdAt: 'desc' }], take: 1 } } }
+      },
+      orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
+    });
+    const valuations = await this.prisma.leaguePlayerValuation.findMany({
+      where: { leagueId, footballPlayerId: { in: ownerships.map(({ footballPlayerId }) => footballPlayerId) } }
+    });
+    const valueByPlayer = new Map(valuations.map((value) => [value.footballPlayerId, value]));
+    const knownPlayerValueMinor = ownerships.reduce((total, ownership) =>
+      total + (valueByPlayer.get(ownership.footballPlayerId)?.currentValueMinor ?? 0), 0);
+    const missingValuationCount = ownerships.filter((ownership) => !valueByPlayer.has(ownership.footballPlayerId)).length;
+    return {
+      leagueId,
+      teamId,
+      teamName: team.name,
+      teamNumber: team.teamNumber,
+      teamLogoUrl: team.logoUrl,
+      ownerAlias: team.ownerAlias,
+      activePlayerCount: ownerships.length,
+      activeSalaryMinor: ownerships.reduce((total, ownership) => total + ownership.salaryMinor, 0),
+      salaryCapMinor: team.salaryCapMinor,
+      salaryCapConfirmed: Boolean(team.salaryCapConfirmedAt),
+      knownPlayerValueMinor,
+      shellValueMinor: team.shellValueMinor,
+      totalKnownValueMinor: team.shellValueMinor + knownPlayerValueMinor,
+      valuationCompleteness: missingValuationCount === 0 ? 'COMPLETE' : 'INCOMPLETE',
+      missingValuationCount,
+      players: ownerships.map((ownership) => {
+        const attributes = this.attributes(ownership.currentPlayerCard.attributes?.attributesJson);
+        const valuation = valueByPlayer.get(ownership.footballPlayerId);
+        return {
+          playerId: ownership.footballPlayerId,
+          playerName: ownership.footballPlayer.nameZh ?? ownership.footballPlayer.nameEn ?? ownership.footballPlayer.shortName ?? '未命名球员',
+          cardName: ownership.currentPlayerCard.cardName,
+          cardImageUrl: ownership.currentPlayerCard.imageUrl,
+          position: ownership.currentPlayerCard.position ?? null,
+          nationality: ownership.footballPlayer.nationality,
+          club: ownership.footballPlayer.club,
+          age: this.integer(attributes.age),
+          heightCm: this.integer(attributes.heightCm ?? attributes.height),
+          preferredFoot: this.text(attributes.preferredFoot ?? attributes.foot),
+          atRating: ownership.currentPlayerCard.autoBuilds[0]?.maxOverall ?? null,
+          acquiredAt: ownership.acquiredAt.toISOString(),
+          salaryMinor: ownership.salaryMinor,
+          rosterStatus: ownership.status,
+          currentValueMinor: valuation?.currentValueMinor ?? null,
+          lastEffectiveAt: valuation?.effectiveAt.toISOString() ?? null
+        };
+      })
+    };
+  }
+
+  private async requireLeagueParticipant(userId: string, leagueId: string) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const participation = await this.prisma.seasonEntry.findFirst({
+      where: { ownerUserId: userId, status: 'APPROVED', season: { leagueId } },
+      select: { id: true }
+    });
+    if (!participation) throw this.error('LEAGUE_PARTICIPANT_REQUIRED', '只有联赛参赛用户可以查看球队', 403);
   }
 
   async getPlayerValuationHistory(

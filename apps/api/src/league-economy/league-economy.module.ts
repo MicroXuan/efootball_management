@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MyTeamAssetsController } from './my-team-assets.controller.js';
+import { PublicTeamAssetsController } from './public-team-assets.controller.js';
 import { TeamAssetsService } from './team-assets.service.js';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminModule } from '../admin/admin.module.js';
@@ -13,7 +14,7 @@ import { AdminFinanceSettlementsController } from './admin-finance-settlements.c
 
 @Module({
   imports: [JwtModule.register({}), AdminAuthModule, AdminModule],
-  controllers: [MyTeamAssetsController, MyLeagueTransactionsController, AdminTransactionFeesController, AdminFinanceController, AdminFinanceSettlementsController],
+  controllers: [MyTeamAssetsController, PublicTeamAssetsController, MyLeagueTransactionsController, AdminTransactionFeesController, AdminFinanceController, AdminFinanceSettlementsController],
   providers: [TeamAssetsService, TransactionFeesService, TeamFinanceService],
   exports: [TeamAssetsService, TransactionFeesService, TeamFinanceService]
 })
