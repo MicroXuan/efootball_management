@@ -8,6 +8,7 @@ describe('team finance template', () => {
   it('links to the separate personal ledger from the season heading', () => {
     expect(markup).toContain('bindtap="openPersonalLedger"')
     expect(markup).toContain('个人记账本')
+    expect(markup).not.toContain('class="live-badge"')
     expect(markup).not.toContain('<text class="period">{{finance.periodCopy}}</text>')
     expect(markup).not.toContain('class="personal-card"')
   })

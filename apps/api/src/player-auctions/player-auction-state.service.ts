@@ -76,6 +76,19 @@ export class PlayerAuctionStateService {
     if (expectedVersion !== undefined && batch.version !== expectedVersion) throw new PlayerAuctionError('VERSION_CONFLICT', '拍卖配置已更新，请刷新后重试', 409);
     const lot = await tx.playerAuctionLot.findFirst({ where: { batchId, status: 'QUEUED' }, orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] });
     if (!lot) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '没有可开始的拍卖球员', 409);
+    const queuedLots = await tx.playerAuctionLot.findMany({
+      where: { batchId, status: 'QUEUED' },
+      select: { footballPlayerId: true }
+    });
+    const ownership = await tx.leaguePlayerOwnership.findFirst({
+      where: {
+        leagueId: batch.leagueId,
+        footballPlayerId: { in: queuedLots.map((queuedLot) => queuedLot.footballPlayerId) },
+        status: 'ACTIVE'
+      },
+      select: { footballPlayerId: true }
+    });
+    if (ownership) throw new PlayerAuctionError('AUCTION_PLAYER_ALREADY_OWNED', '球员已归属本联赛球队，不能开始拍卖', 409);
     await this.locks.lockLot(tx, lot.id);
     const now = await this.locks.now(tx);
     const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);

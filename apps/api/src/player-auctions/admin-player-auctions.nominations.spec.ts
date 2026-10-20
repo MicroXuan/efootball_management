@@ -27,14 +27,14 @@ function harness() {
     footballPlayer: { findMany: jest.fn(async () => [{ id: 'player-1', nameZh: '瓦拉内', nameEn: null, shortName: null, nationality: '法国', club: '曼联' }]) },
     playerCard: { findMany: jest.fn(async () => [{ id: 'card-1', playerId: 'player-1', cardName: '传奇', position: 'CB', overallRating: 96, cardType: 'EPIC', status: 'ACTIVE', publishedAt: now, imageUrl: null }]) },
     playerNomination: { findMany: jest.fn(async () => [{ id: 'nomination-1', footballPlayerId: 'player-1' }]) },
-    leaguePlayerOwnership: { findMany: jest.fn(async () => []) },
+    leaguePlayerOwnership: { findMany: jest.fn(async () => []), findFirst: jest.fn(async () => null) },
     wechatGroupBinding: { findFirst: jest.fn(async () => null) }
   };
   const receipts: any = { execute: jest.fn(async (_admin: string, _operation: string, _key: string, work: (client: any) => Promise<any>) => work(tx)) };
   const authorization: any = { requireLeagueAccess: jest.fn(async () => undefined) };
   const audit: any = { record: jest.fn(async () => undefined) };
   const state: any = {};
-  const service = new AdminPlayerAuctionsService(tx, authorization, receipts, audit, state);
+  const service = new AdminPlayerAuctionsService(tx, authorization, receipts, audit, state, { closeDueLot: jest.fn() } as never, { acquireAuctionWithClient: jest.fn() } as never);
   return { service, batch, tx };
 }
 

@@ -21,6 +21,18 @@ it('searches a player, adds pricing, and exposes keyboard ordering controls', as
   expect(screen.getByText('50 资金')).toBeInTheDocument();
 });
 
+it('shows a league-owned player but does not allow adding it to an auction', async () => {
+  const api = { request: vi.fn((path: string) => path.includes('player-candidates')
+    ? Promise.resolve({ items: [{ playerId: 'player-1', playerName: '伊克拉斯·桑龙', ownedByTeamId: 'team-4', recommendedPlayerCardId: 'card-1', cards: [{ id: 'card-1', cardName: '精选', imageUrl: null, position: 'LMF', overallRating: 82, maxOverall: 82, salaryMinor: 100, recommended: true }] }] })
+    : Promise.resolve({ bindings: [], devices: [], observedGroups: [], scheduleSourceOptions: [] })) } as unknown as AdminApi;
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/new`]}><Routes><Route path="/leagues/:leagueId/auctions/new" element={<AuctionEditorPage api={api} />} /></Routes></MemoryRouter>);
+
+  await userEvent.type(await screen.findByLabelText('搜索球员'), '伊克拉斯');
+  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+  expect(await screen.findByText('已归属本联赛球队')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '添加伊克拉斯·桑龙' })).toBeDisabled();
+});
+
 it('lists only enabled auction-capable groups', async () => {
   const binding = (id: string, displayName: string, enabled: boolean, capabilities: string[]) => ({
     id, deviceId: 'device-1', leagueId, wechatGroupId: `${id}@chatroom`, displayName, enabled, version: 1,

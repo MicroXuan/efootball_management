@@ -13,8 +13,10 @@ import { PrismaService } from '../database/prisma.service.js';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
+import { RosterTransactionsService } from '../league-rosters/roster-transactions.service.js';
 import { PlayerAuctionError, auctionVersionConflict } from './player-auction.errors.js';
 import { PlayerAuctionStateService } from './player-auction-state.service.js';
+import { PlayerAuctionWorker } from './player-auction-worker.js';
 
 const DETAIL_INCLUDE = {
   groupBinding: { select: { displayName: true } },
@@ -49,7 +51,9 @@ export class AdminPlayerAuctionsService {
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(PlayerAuctionStateService) private readonly state: PlayerAuctionStateService
+    @Inject(PlayerAuctionStateService) private readonly state: PlayerAuctionStateService,
+    @Inject(PlayerAuctionWorker) private readonly worker: PlayerAuctionWorker,
+    @Inject(RosterTransactionsService) private readonly rosterTransactions: RosterTransactionsService
   ) {}
 
   async list(actorAdminId: string, leagueId: string) {
@@ -64,7 +68,19 @@ export class AdminPlayerAuctionsService {
 
   async detail(actorAdminId: string, leagueId: string, batchId: string) {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
-    return this.view(await this.batch(this.prisma, leagueId, batchId));
+    let batch = await this.batch(this.prisma, leagueId, batchId);
+    const currentLotId = batch.currentLotId;
+    const current = batch.bidChannel === 'MINIPROGRAM' && batch.status === 'ACTIVE'
+      ? batch.lots.find((lot) => lot.id === currentLotId)
+      : null;
+    if (current?.status === 'ACTIVE' && current.deadlineAt) {
+      const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
+      if (rows[0]?.databaseNow && current.deadlineAt <= rows[0].databaseNow) {
+        await this.worker.closeDueLot(current.id, current.deadlineEpoch);
+        batch = await this.batch(this.prisma, leagueId, batchId);
+      }
+    }
+    return this.view(batch);
   }
 
   async create(actorAdminId: string, leagueId: string, input: CreatePlayerAuctionBatchRequest, key: string) {
@@ -163,6 +179,7 @@ export class AdminPlayerAuctionsService {
         }
       }
       await this.requireEligibleNominations(tx, leagueId, input.lots);
+      await this.requireUnownedPlayers(tx, leagueId, playerIds);
       await tx.playerAuctionLot.deleteMany({ where: { batchId } });
       await tx.playerAuctionLot.createMany({
         data: input.lots.map((lot) => {
@@ -206,6 +223,7 @@ export class AdminPlayerAuctionsService {
       if (batch.lots.length === 0) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '至少配置一名拍卖球员', 409);
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
       await this.requireEligibleNominations(tx, leagueId, batch.lots.map((lot) => ({ nominationId: lot.nominationId, playerId: lot.footballPlayerId })));
+      await this.requireUnownedPlayers(tx, leagueId, batch.lots.map((lot) => lot.footballPlayerId));
       if (batch.bidChannel === 'WECHAT_GROUP') {
         if (!batch.groupBindingId) {
           throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群拍卖缺少通知群', 409);
@@ -352,6 +370,19 @@ export class AdminPlayerAuctionsService {
       if (reviewedTeamId && !reviewedTeam) {
         throw new PlayerAuctionError('AUCTION_REVIEW_TEAM_INVALID', '成交球队不属于当前联赛', 409);
       }
+      if (reviewedTeamId && reviewedPrice !== null) {
+        if (!lot.playerCardId) throw new PlayerAuctionError('AUCTION_CARD_INVALID', '拍卖球员缺少可入队的球员卡', 409);
+        const league = await tx.league.findUnique({ where: { id: leagueId }, select: { currentSeasonId: true } });
+        if (!league?.currentSeasonId) throw new PlayerAuctionError('AUCTION_SEASON_REQUIRED', '联赛尚无当前赛季，无法完成拍卖入队', 409);
+        await this.rosterTransactions.acquireAuctionWithClient(tx, {
+          seasonId: league.currentSeasonId,
+          targetLeagueTeamId: reviewedTeamId,
+          playerCardId: lot.playerCardId,
+          amountMinor: reviewedPrice,
+          idempotencyKey: `auction:${lot.id}`,
+          reason: `拍卖成交：${batchId} / ${lot.id}`
+        }, actorAdminId);
+      }
       const review = await tx.playerAuctionReview.create({
         data: {
           lotId,
@@ -412,6 +443,17 @@ export class AdminPlayerAuctionsService {
       select: { footballPlayerId: true }
     });
     if (ownerships.length) throw new PlayerAuctionError('AUCTION_NOMINATION_INELIGIBLE', '提名球员已被签约，不能导入或准备拍卖', 409);
+  }
+
+  private async requireUnownedPlayers(client: AuctionClient, leagueId: string, playerIds: string[]) {
+    if (!playerIds.length) return;
+    const ownership = await client.leaguePlayerOwnership.findFirst({
+      where: { leagueId, footballPlayerId: { in: [...new Set(playerIds)] }, status: 'ACTIVE' },
+      select: { footballPlayerId: true }
+    });
+    if (ownership) {
+      throw new PlayerAuctionError('AUCTION_PLAYER_ALREADY_OWNED', '球员已归属本联赛球队，不能加入拍卖', 409);
+    }
   }
 
   private summary(batch: BatchSummaryInput) {

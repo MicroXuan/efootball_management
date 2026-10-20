@@ -124,11 +124,29 @@ export function projectAuctionQueue(queue: MyPlayerAuctionRoom['queue']) {
   const upcoming = queue.filter((lot) => lot.status === 'QUEUED')
   const completed = queue.filter((lot) => ['PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID'].includes(lot.status)).map((lot) => ({
     ...lot,
-    resultLabel: lot.status === 'VOID' ? '已作废' : lot.winner ? '已成交' : '流拍',
+    resultLabel: lot.status === 'VOID' ? '已作废' : lot.status === 'PENDING_REVIEW' && lot.winner ? '成交待审核' : lot.winner ? '已确认' : '流拍',
     winnerLabel: lot.winner ? `${lot.winner.teamNumber === null ? '—' : lot.winner.teamNumber}号 · ${lot.winner.teamName} · ${lot.winner.bidderDisplayName}` : '',
     priceLabel: lot.winner ? `${lot.winner.price} 资金` : '',
   }))
   return { upcoming, completed }
+}
+
+export function salePresentation(previous: MyPlayerAuctionRoom | undefined, room: MyPlayerAuctionRoom) {
+  const saleLot = room.queue
+    .filter((lot) => ['PENDING_REVIEW', 'REVIEWED'].includes(lot.status) && lot.winner)
+    .sort((left, right) => right.displayOrder - left.displayOrder)[0]
+  if (!saleLot?.winner) return { sale: null, celebrate: false }
+  const sale = {
+    id: saleLot.id,
+    playerName: saleLot.playerName,
+    winnerLabel: `${saleLot.winner.teamNumber === null ? '—' : saleLot.winner.teamNumber}号 · ${saleLot.winner.teamName} · ${saleLot.winner.bidderDisplayName}`,
+    priceLabel: `${saleLot.winner.price} 资金`,
+    approved: saleLot.status === 'REVIEWED',
+  }
+  return {
+    sale,
+    celebrate: previous?.currentLot?.id === saleLot.id && previous.currentLot.status === 'ACTIVE',
+  }
 }
 
 export function roomShare(room: MyPlayerAuctionRoom) {
