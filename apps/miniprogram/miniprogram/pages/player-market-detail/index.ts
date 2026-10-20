@@ -9,6 +9,7 @@ import {
 } from '../../services/player-market'
 import { applicationCard } from '../player-market/player-market.viewmodel'
 import { detailAction, marketErrorAction, playerMarketDetailView } from './player-market-detail.viewmodel'
+import { activeForcedOfferCopy } from './forced-offer-copy'
 
 type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string; playerId?: string }
 type InputEvent = { detail: { value: string } }
@@ -23,6 +24,7 @@ Page({
     myApplication: null as ReturnType<typeof applicationCard> | null,
     showComposer: false, amount: '', amountHint: '', submitting: false,
     recoveryLabel: '', recoveryRoute: '',
+    forcedCopyText: '',
   },
 
   onLoad(options: LoadOptions) {
@@ -54,6 +56,7 @@ Page({
         amount: detail.myApplication ? String(detail.myApplication.amountMinor) : String(player.minimumAmountMinor),
         amountHint: detail.action === 'FORCE_SIGN' ? `强报不得低于官方身价 ${player.minimumAmountMinor}` : '请输入本次申请金额',
         showComposer: false, errorMessage: '', recoveryLabel: '', recoveryRoute: '',
+        forcedCopyText: activeForcedOfferCopy(detail.myApplication, detail.playerEnglishName) ?? '',
       })
     } catch (error) {
       this.setData({ state: 'error', errorMessage: error instanceof ApiError ? error.message : '球员详情加载失败，请稍后重试' })
@@ -89,7 +92,7 @@ Page({
     }
     this.setData({ submitting: true, errorMessage: '' })
     try {
-      await submitPlayerApplication(this.data.leagueId, {
+      const submitted = await submitPlayerApplication(this.data.leagueId, {
         seasonId: this.data.seasonId,
         transferWindowId: detail.activeTransferWindowId,
         footballPlayerId: detail.playerId,
@@ -101,6 +104,7 @@ Page({
           : {}),
       }, createPlayerMarketMutationKey('submit'))
       await this.loadDetail(false)
+      this.setData({ forcedCopyText: activeForcedOfferCopy(submitted, detail.playerEnglishName) ?? '' })
       wx.showToast({ title: '申请已提交', icon: 'success' })
     } catch (error) {
       await this.handleMutationError(error)
@@ -120,8 +124,9 @@ Page({
     if (!application || this.data.submitting || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return
     this.setData({ submitting: true, errorMessage: '' })
     try {
-      await amendPlayerApplication(application.id, { amountMinor, expectedVersion: application.version }, createPlayerMarketMutationKey('amend'))
+      const amended = await amendPlayerApplication(application.id, { amountMinor, expectedVersion: application.version }, createPlayerMarketMutationKey('amend'))
       await this.loadDetail(false)
+      this.setData({ forcedCopyText: activeForcedOfferCopy(amended, this.detail?.playerEnglishName ?? null) ?? '' })
       wx.showToast({ title: '报价已更新', icon: 'success' })
     } catch (error) {
       await this.handleMutationError(error)
@@ -163,5 +168,11 @@ Page({
   runRecovery() {
     if (this.data.recoveryRoute) wx.navigateTo({ url: this.data.recoveryRoute })
     else void this.loadDetail()
+  },
+  copyForcedOffer() {
+    if (!this.data.forcedCopyText) return
+    wx.setClipboardData({ data: this.data.forcedCopyText,
+      success: () => wx.showToast({ title: '文案已复制', icon: 'success' }),
+      fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }) })
   },
 })

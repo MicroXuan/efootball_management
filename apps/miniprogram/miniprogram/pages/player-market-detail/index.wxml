@@ -14,6 +14,12 @@
       <text class="muted">{{myApplication.typeLabel}} · 公开队列 {{myApplication.queuePosition || '—'}}</text>
       <view class="button-grid efm-equal-tabs"><button class="primary-button" bindtap="editApplication" disabled="{{submitting || !myApplication.canEdit}}">修改报价</button><button class="danger-button" bindtap="withdrawApplication" loading="{{submitting}}" disabled="{{submitting || !myApplication.canEdit}}">撤回申请</button></view>
     </view>
+    <view wx:if="{{forcedCopyText}}" class="forced-copy-panel">
+      <text class="eyebrow">微信群文案</text><text class="section-title">分享本次强报报价</text>
+      <text class="forced-copy-text">{{forcedCopyText}}</text>
+      <text class="muted">仅复制到剪贴板，需要你自行粘贴到微信群；此报价不会修改官方身价。</text>
+      <button class="primary-button" bindtap="copyForcedOffer">复制强报文案</button>
+    </view>
 
     <view wx:else class="action-panel">
       <text class="eyebrow">交易操作</text><text class="section-title">{{player.label}}</text>

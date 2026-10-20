@@ -223,7 +223,7 @@ describe('PlayerMarketQueryService', () => {
     const service = new PlayerMarketQueryService(prisma as never, access as never, () => now);
 
     await expect(service.detail('user-1', 'league-1', 'player-101', 'season-1'))
-      .resolves.toMatchObject({ playerId: 'player-101', playerName: '第 101 名球员' });
+      .resolves.toMatchObject({ playerId: 'player-101', playerName: '第 101 名球员', playerEnglishName: null });
     expect(prisma.footballPlayer.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'player-101', publishedAt: { not: null } }
     }));

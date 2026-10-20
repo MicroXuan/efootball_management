@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { detailAction, marketErrorAction, playerMarketDetailView } from './player-market-detail.viewmodel'
 
 const detail = (overrides: Partial<PlayerMarketPlayerDetail> = {}): PlayerMarketPlayerDetail => ({
-  playerId: 'player-1', playerName: 'Michele Di Gregorio', nationality: 'Italy', club: 'Juventus',
+  playerId: 'player-1', playerName: 'Michele Di Gregorio', playerEnglishName: 'Michele Di Gregorio', nationality: 'Italy', club: 'Juventus',
   activeTransferWindowId: 'window-1',
   currentOwner: { teamId: 'team-8', teamNumber: 8, name: '成都蓉城', logoUrl: null, ownerAlias: 'Jeremy' },
   ownershipId: 'ownership-1', ownershipVersion: 3, officialValueMinor: 500, valuationVersion: 2,

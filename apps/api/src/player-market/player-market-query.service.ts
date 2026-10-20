@@ -153,6 +153,7 @@ export class PlayerMarketQueryService {
     const applications = await this.listApplications(userId, leagueId, { seasonId, playerId, scope: 'PUBLIC', limit: 100 });
     return {
       ...summary,
+      playerEnglishName: player.nameEn,
       activeTransferWindowId: result.activeTransferWindowId,
       myApplication: applications.items.find((item) => item.applicantTeam.teamId === scope.leagueTeamId) ?? null,
       publicApplications: applications.items
