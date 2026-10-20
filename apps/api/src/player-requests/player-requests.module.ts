@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { PlayerMarketModule } from '../player-market/player-market.module.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { DisappearanceService } from './disappearance.service.js';
@@ -14,7 +15,7 @@ import { AdminTransferProposalsController } from './admin-transfer-proposals.con
 import { TransferReviewService } from './transfer-review.service.js';
 
 @Module({
-  imports: [PlayerMarketModule, AdminAuthModule, AdminModule, LeagueRostersModule],
+  imports: [JwtModule.register({}), PlayerMarketModule, AdminAuthModule, AdminModule, LeagueRostersModule],
   controllers: [MyPlayerRequestsController, MyDisappearanceSubmitController, AdminDisappearanceController, MyTransferProposalsController, MyTransferCandidatesController, AdminTransferProposalsController],
   providers: [DisappearanceService, DisappearanceReviewService, TransferProposalService, TransferReviewService, MutationReceiptService],
   exports: [DisappearanceService]
