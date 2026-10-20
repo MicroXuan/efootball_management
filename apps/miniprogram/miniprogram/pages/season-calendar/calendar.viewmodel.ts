@@ -1,50 +1,52 @@
-import type { SeasonAgendaResponse } from '@efm/contracts'
+import type { SeasonAgendaItem, SeasonAgendaResponse } from '@efm/contracts'
 
-const kinds = { FIXTURE: '比赛', TRANSFER: '转会期', VALUATION: '身价期', NOMINATION: '提名期' }
-const statuses = { UPCOMING: '未开始', ACTIVE: '进行中', ENDED: '已结束' }
-
-function date(value: Date) {
-  return `${value.getFullYear()}.${String(value.getMonth() + 1).padStart(2, '0')}.${String(value.getDate()).padStart(2, '0')}`
-}
-
-function time(value: Date) {
-  return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
-}
+const labels = { TRANSFER: '转会', FORCED_OFFER: '强报', VALUATION: '身价', NOMINATION: '提名', MANUAL: '事项' } as const
+const statusLabels = { UPCOMING: '未开始', ACTIVE: '进行中', ENDED: '已结束' } as const
+const beijingOffset = 8 * 60 * 60 * 1000
 
 export function monthFromDate(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
+  return new Date(value.getTime() + beijingOffset).toISOString().slice(0, 7)
 }
 
 export function moveMonth(month: string, delta: number) {
-  const [year, monthNumber] = month.split('-').map(Number)
-  return monthFromDate(new Date(year, monthNumber - 1 + delta, 1))
+  const [year, number] = month.split('-').map(Number)
+  return new Date(Date.UTC(year!, number! - 1 + delta, 1)).toISOString().slice(0, 7)
 }
 
-export function timezoneLabel(value: Date) {
-  const offset = -value.getTimezoneOffset()
-  const sign = offset < 0 ? '-' : '+'
-  return `设备本地时间 · UTC${sign}${Math.floor(Math.abs(offset) / 60)}${Math.abs(offset) % 60 ? `:${String(Math.abs(offset) % 60).padStart(2, '0')}` : ''}`
+function shortDate(value: string) {
+  return `${Number(value.slice(5, 7))}月${Number(value.slice(8, 10))}日`
 }
 
-export function agendaGroups(response: SeasonAgendaResponse) {
-  const groups = new Map<string, Array<{
-    id: string; kind: string; title: string; range: string; status: string; statusTone: string; targetPath: string | null
-  }>>()
-  for (const item of response.items) {
-    const start = new Date(item.startsAt)
-    const end = new Date(item.endsAt)
-    const day = date(start)
-    const rows = groups.get(day) ?? []
-    rows.push({
-      id: item.id,
-      kind: kinds[item.kind],
-      title: item.title,
-      range: `${day} ${time(start)} — ${date(end)} ${time(end)}`,
-      status: statuses[item.status],
-      statusTone: item.status === 'ACTIVE' ? 'active' : item.status === 'UPCOMING' ? 'upcoming' : 'ended',
-      targetPath: item.targetPath
-    })
-    groups.set(day, rows)
+function beijingDateTime(value: string) {
+  const shifted = new Date(new Date(value).getTime() + beijingOffset).toISOString()
+  return `${shortDate(shifted.slice(0, 10))} ${shifted.slice(11, 16)}`
+}
+
+function itemRange(item: SeasonAgendaItem) {
+  if (item.kind === 'MANUAL') return `${shortDate(item.firstDate)}${item.lastDate === item.firstDate ? '' : ` — ${shortDate(item.lastDate)}`} · 全天`
+  return `${beijingDateTime(item.startsAt)} — ${beijingDateTime(item.endsAt)} · 北京时间`
+}
+
+export function buildMonthCalendar(response: SeasonAgendaResponse) {
+  const [year, month] = response.month.split('-').map(Number)
+  const first = new Date(Date.UTC(year!, month! - 1, 1))
+  const leading = (first.getUTCDay() + 6) % 7
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(Date.UTC(year!, month! - 1, index + 1 - leading)).toISOString().slice(0, 10)
+    return {
+      date,
+      dayNumber: Number(date.slice(8, 10)),
+      inMonth: date.startsWith(response.month),
+      markers: response.items.filter((item) => item.firstDate <= date && item.lastDate >= date)
+        .map((item) => ({ id: `${item.kind}:${item.id}`, label: labels[item.kind], tone: item.kind.toLowerCase().replace('_', '-') }))
+    }
+  })
+  return {
+    weeks: Array.from({ length: 6 }, (_, index) => ({ id: index, days: days.slice(index * 7, index * 7 + 7) })),
+    summary: response.items.map((item) => ({
+      id: `${item.kind}:${item.id}`, kind: labels[item.kind], title: item.title,
+      range: itemRange(item), description: item.description,
+      status: statusLabels[item.status], tone: item.kind.toLowerCase().replace('_', '-')
+    }))
   }
-  return Array.from(groups, ([day, items]) => ({ day, items }))
 }
