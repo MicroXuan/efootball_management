@@ -100,6 +100,8 @@ export type WorkspaceModuleKey =
   | 'assets'
   | 'transactions'
   | 'playerMarket'
+  | 'playerAuctions'
+  | 'nominations'
   | 'finance'
   | 'valuations'
   | 'cups'
@@ -122,12 +124,16 @@ export type WorkspaceModuleGroup = {
   modules: WorkspaceModule[]
 }
 
-export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceModule[] {
+export function workspaceModules(workspace: LeagueWorkspaceResponse, auctionEnabled = true): WorkspaceModule[] {
   const standard = (input: Omit<WorkspaceModule, 'stateLabel' | 'tone'>): WorkspaceModule => ({
     ...input,
     stateLabel: input.enabled ? '可查看' : '暂不可用',
     tone: input.enabled ? 'active' : 'locked',
   })
+  const auctionModule: WorkspaceModule = {
+    key: 'playerAuctions', marker: '拍', label: '球员拍卖', description: '进入小程序拍卖大厅',
+    stateLabel: '可查看', enabled: true, tone: 'active',
+  }
   return [
     standard({
       key: 'standings', marker: '排', label: '积分榜', description: '排名、积分与赛果',
@@ -135,7 +141,7 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
     }),
     standard({
       key: 'assets', marker: '资', label: '球队资产', description: '阵容、工资与总价值',
-      enabled: workspace.capabilities.canViewAssets,
+      enabled: workspace.capabilities.canViewAssets, wide: true,
     }),
     standard({
       key: 'transactions', marker: '交', label: '交易记录', description: '买卖双方与手续费', enabled: true,
@@ -143,6 +149,11 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse): WorkspaceM
     {
       key: 'playerMarket', marker: '市', label: '球员市场', description: '查归属、申请购买与强报',
       stateLabel: '公开透明', enabled: true, tone: 'active', wide: false,
+    },
+    ...(auctionEnabled ? [auctionModule] : []),
+    {
+      key: 'nominations', marker: '提', label: '球员提名', description: '选择想上拍的球员',
+      stateLabel: '可查看', enabled: true, tone: 'active',
     },
     standard({
       key: 'finance', marker: '财', label: '球队财务', description: '赛季流水与实时总额',
@@ -180,8 +191,8 @@ export function workspaceModuleGroups(modules: readonly WorkspaceModule[]): Work
   })
   return [
     group('competition', '比赛', ['standings', 'cups']),
-    group('team', '球队', ['assets', 'valuations']),
-    group('transactions', '交易', ['playerMarket', 'transactions', 'finance']),
+    group('team', '球队', ['assets', 'finance', 'valuations']),
+    group('transactions', '交易', ['playerMarket', 'playerAuctions', 'nominations', 'transactions']),
     group('personal', '个人', ['favorites']),
   ]
 }
@@ -202,6 +213,8 @@ export function workspaceModuleRoute(
     assets: `/pages/team-assets/index?teamId=${teamId}`,
     transactions: `/pages/league-transactions/index?leagueId=${leagueId}`,
     playerMarket: `/pages/player-market/index?leagueId=${leagueId}&seasonId=${seasonId}&teamId=${teamId}`,
+    playerAuctions: '/pages/player-auctions/index',
+    nominations: `/pages/player-nominations/index?leagueId=${leagueId}&seasonId=${seasonId}`,
     finance: `/pages/team-finance/index?teamId=${teamId}&seasonId=${seasonId}`,
     valuations: `/pages/valuation-manage/index?teamId=${teamId}`,
     cups: `/pages/competitions/index?seasonId=${seasonId}&leagueName=${encodeURIComponent(leagueName || '当前联赛')}`,

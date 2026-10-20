@@ -5,14 +5,15 @@ import { describe, expect, it } from 'vitest'
 const markup = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.wxml'), 'utf8')
 
 describe('league detail module cards', () => {
-  it('keeps transaction reminders without embedding the action center in a league', () => {
+  it('keeps league navigation free of task reminders', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
 
     expect(markup).not.toContain('当前联赛待办')
     expect(markup).not.toContain('class="workspace-todo"')
     expect(markup).not.toContain('bindtap="openActionCenter"')
-    expect(markup).toContain("marketAttentionCount ? marketAttentionCount + ' 项提醒' : module.stateLabel")
-    expect(markup).toContain("auctionAttentionCount ? auctionAttentionCount + ' 项提醒' : '实时开放'")
+    expect(markup).not.toContain('项提醒')
+    expect(markup).not.toContain('directory-entry')
+    expect(page).not.toContain('loadTransactionAttention')
     expect(page).not.toContain('openActionCenter')
     expect(page).not.toContain('leagueAttentionCount')
   })
@@ -24,22 +25,24 @@ describe('league detail module cards', () => {
     expect(page).toContain('statusBarHeight: wx.getSystemInfoSync().statusBarHeight')
   })
 
-  it('renders player auctions in the same grid as the standard workspace modules', () => {
+  it('renders auctions and nominations through the standard module cards', () => {
     const gridStart = markup.indexOf('<view class="workspace-groups">')
-    const auctionPosition = markup.indexOf('球员拍卖')
-    const gridMarkup = markup.slice(gridStart, auctionPosition + '球员拍卖'.length)
+    const gridMarkup = markup.slice(gridStart)
 
     expect(gridStart).toBeGreaterThan(-1)
     expect(gridMarkup).toContain('workspaceModuleGroups')
     expect(gridMarkup).toContain('module-grid')
     expect(gridMarkup).toContain('module-tile')
+    expect(gridMarkup).toContain('wx:for="{{group.modules}}"')
     expect(markup).not.toContain('class="auction-entry"')
+    expect(markup).not.toContain('class="module-tile is-auction"')
+    expect(markup).not.toContain('bindtap="openPlayerNominations"')
   })
 
-  it('places the player market and player auction beside each other as compact transaction entries', () => {
-    expect(markup).toContain("group.key === 'transactions' && module.key === 'playerMarket' && playerAuctionEnabled")
-    expect(markup).toContain('class="module-tile is-auction"')
-    expect(markup).not.toContain('class="module-tile is-auction is-wide"')
+  it('uses always-open group headings and one-tap cards', () => {
+    expect(markup).toContain('class="workspace-group__head"')
+    expect(markup).toContain('bindtap="onWorkspaceModuleTap"')
+    expect(markup).not.toMatch(/class="workspace-group__head"[^>]*bindtap=/)
   })
 
   it('prioritizes member actions and removes duplicated season navigation', () => {
@@ -75,13 +78,14 @@ describe('league detail module cards', () => {
     expect(markup).not.toContain('切换⌄')
   })
 
-  it('opens the current and historical season schedule from the all-fixtures card', () => {
+  it('opens fixtures and calendar from separate sibling controls', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
 
     expect(markup).toContain('class="workspace-metric workspace-metric--schedule"')
-    expect(markup).toContain('bindtap="openFixtures"')
+    expect(markup).toMatch(/class="schedule-link[^"\n]*"[^>]*bindtap="openFixtures"/)
+    expect(markup).toMatch(/class="schedule-link[^"\n]*"[^>]*bindtap="openSeasonCalendar"/)
     expect(markup).toContain('全部赛程')
-    expect(markup).toContain('按队伍和状态查找比赛')
+    expect(markup).toContain('赛季日程')
     expect(markup).not.toContain('下一场')
     expect(markup).toContain('{{workspaceView.rankNotice}}')
     expect(page).not.toContain("upcomingOnly=1")
@@ -94,6 +98,6 @@ describe('league detail module cards', () => {
     expect(markup).not.toContain('class="workspace-title">{{workspaceView.teamName}}')
     expect(markup).toContain('class="workspace-title">赛季工作台</text>')
     expect(markup).toContain('class="workspace-metric workspace-metric--rank"')
-    expect(markup).toContain('class="workspace-schedule-action"')
+    expect(markup).toContain('class="workspace-schedule-links"')
   })
 })

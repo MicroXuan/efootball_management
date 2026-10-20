@@ -47,11 +47,8 @@
       </view>
       <view class="workspace-metrics">
         <view class="workspace-metric workspace-metric--rank"><text class="workspace-metric__label">当前排名</text><view class="workspace-rank-row"><text class="workspace-rank">{{workspaceView.rank}}</text><text wx:if="{{workspaceView.rankNotice}}" class="workspace-rank-notice">{{workspaceView.rankNotice}}</text></view><text class="workspace-metric__meta">{{workspaceView.rankMeta}}</text></view>
-        <view class="workspace-metric workspace-metric--schedule" bindtap="openFixtures" role="button"><text class="workspace-metric__label">赛程中心</text><view class="workspace-schedule-action"><text class="workspace-next">全部赛程</text><text class="workspace-schedule-arrow">›</text></view><text class="workspace-metric__meta">按队伍和状态查找比赛</text></view>
+        <view class="workspace-metric workspace-metric--schedule"><text class="workspace-metric__label">赛程中心</text><view class="workspace-schedule-links"><button class="schedule-link" bindtap="openFixtures">全部赛程 <text>›</text></button><button class="schedule-link" bindtap="openSeasonCalendar">赛季日程 <text>›</text></button></view></view>
       </view>
-      <view class="directory-entry" bindtap="openSeasonCalendar" role="button"><text>赛季日程</text><text>比赛 · 转会 · 身价 · 提名 ›</text></view>
-      <view class="directory-entry" bindtap="openPlayerNominations" role="button"><text>球员提名</text><text>选择想拍卖的球员 ›</text></view>
-      <view class="directory-entry" bindtap="openTeamDirectory" role="button"><text>联赛球队阵容</text><text>查看全部球队 ›</text></view>
       <view class="workspace-groups">
         <view wx:for="{{workspaceModuleGroups}}" wx:key="key" wx:for-item="group" class="workspace-group">
           <view class="workspace-group__head"><text>{{group.label}}</text></view>
@@ -70,23 +67,12 @@
               >
                 <view class="module-topline">
                   <text class="module-marker">{{module.marker}}</text>
-                  <text class="module-state">{{module.key === 'playerMarket' ? (marketAttentionCount ? marketAttentionCount + ' 项提醒' : module.stateLabel) : module.stateLabel}}</text>
+                  <text class="module-state">{{module.stateLabel}}</text>
                 </view>
                 <text class="module-title">{{module.label}}</text>
                 <view class="module-footer">
                   <text class="module-description">{{module.description}}</text>
                   <text class="module-arrow">{{module.enabled ? '→' : '锁定'}}</text>
-                </view>
-              </view>
-              <view wx:if="{{group.key === 'transactions' && module.key === 'playerMarket' && playerAuctionEnabled}}" class="module-tile is-auction" bindtap="openPlayerAuctions" role="button">
-                <view class="module-topline">
-                  <text class="module-marker">拍</text>
-                  <text class="module-state">{{auctionAttentionCount ? auctionAttentionCount + ' 项提醒' : '实时开放'}}</text>
-                </view>
-                <text class="module-title">球员拍卖</text>
-                <view class="module-footer">
-                  <text class="module-description">进入小程序拍卖大厅</text>
-                  <text class="module-arrow">→</text>
                 </view>
               </view>
             </block>

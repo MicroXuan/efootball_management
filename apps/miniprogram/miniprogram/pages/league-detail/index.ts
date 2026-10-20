@@ -3,8 +3,6 @@ import { ApiError } from '../../services/api'
 import { leaguesApi } from '../../services/leagues'
 import { leagueTeamsApi } from '../../services/league-teams'
 import { session } from '../../services/session'
-import { loadActionCenter, readActionCenterVersions } from '../../services/action-center'
-import { actionCenterSourceAttention } from '../action-center/action-center.viewmodel'
 import {
   entryStatusCopy,
   leagueDetailErrorMessage,
@@ -51,8 +49,6 @@ Page({
     workspaceView: null as ReturnType<typeof workspaceSummary> | null,
     workspaceModuleGroups: [] as WorkspaceModuleGroup[],
     playerAuctionEnabled: false,
-    marketAttentionCount: 0,
-    auctionAttentionCount: 0,
   },
 
   onLoad(options: LoadOptions) {
@@ -108,12 +104,10 @@ Page({
     const season = this.data.selectedSeason
     if (!season) {
       this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), workspace: null, workspaceView: null, workspaceModuleGroups: [] })
-      this.clearTransactionAttention()
       return
     }
     if (!this.data.loggedIn) {
       this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), workspace: null, workspaceView: null, workspaceModuleGroups: [] })
-      this.clearTransactionAttention()
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
@@ -123,35 +117,11 @@ Page({
       this.setData({
         workspace,
         workspaceView: workspaceSummary(workspace),
-        workspaceModuleGroups: workspaceModuleGroups(workspaceModules(workspace)),
+        workspaceModuleGroups: workspaceModuleGroups(workspaceModules(workspace, this.data.playerAuctionEnabled)),
       })
     } else {
       this.setData({ workspace: null, workspaceView: null, workspaceModuleGroups: [] })
     }
-    await this.loadTransactionAttention()
-  },
-
-  async loadTransactionAttention() {
-    try {
-      const response = await loadActionCenter()
-      const readVersions = readActionCenterVersions()
-      const sourceCounts = actionCenterSourceAttention(response, readVersions, this.data.leagueId)
-      this.setData({
-        marketAttentionCount: sourceCounts.TRANSACTION + sourceCounts.FORCED_TRANSFER,
-        auctionAttentionCount: sourceCounts.AUCTION,
-      })
-    } catch {
-      this.clearTransactionAttention()
-    }
-  },
-
-  clearTransactionAttention() {
-    this.setData({ marketAttentionCount: 0, auctionAttentionCount: 0 })
-  },
-
-  openPlayerAuctions() {
-    if (!this.data.playerAuctionEnabled) return
-    wx.navigateTo({ url: '/pages/player-auctions/index' })
   },
 
   openFixtures() {
@@ -162,26 +132,16 @@ Page({
     })
   },
 
-  openTeamDirectory() {
-    if (!this.data.workspace) return
-    wx.navigateTo({ url: `/pages/league-team-directory/index?leagueId=${encodeURIComponent(this.data.leagueId)}` })
-  },
-
   openSeasonCalendar() {
     const seasonId = this.data.selectedSeason?.id
     if (!seasonId) return
     wx.navigateTo({ url: `/pages/season-calendar/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(seasonId)}` })
   },
 
-  openPlayerNominations() {
-    const seasonId = this.data.selectedSeason?.id
-    if (!seasonId) return
-    wx.navigateTo({ url: `/pages/player-nominations/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(seasonId)}` })
-  },
-
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return
+    if (event.currentTarget.dataset.key === 'playerAuctions' && !this.data.playerAuctionEnabled) return
     const route = workspaceModuleRoute(
       event.currentTarget.dataset.key ?? '',
       workspace,
