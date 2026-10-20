@@ -333,11 +333,18 @@ export class RosterTransactionsService {
     await this.authorization.requireLeagueManager(adminId, current.leagueId);
     await this.authorizeManualFee(adminId, input.manualTransactionFeeMinor);
     return this.receipts.execute(adminId, 'ROSTER_PLAYER_TRANSFER', input.idempotencyKey,
-      async (tx) => {
+      (tx) => this.transferWithClient(tx, input, adminId, at), input);
+  }
+
+  async transferWithClient(tx: Prisma.TransactionClient, input: TransferPlayerRequest, adminId: string, at = new Date()) {
+        const current = await tx.leaguePlayerOwnership.findUniqueOrThrow({ where: { id: input.ownershipId } });
+        const targetScope = await this.loadScopeWithClient(tx, input.seasonId, input.targetLeagueTeamId);
+        if (current.leagueId !== targetScope.leagueId) {
+          throw new LeagueRosterError('ROSTER_SCOPE_MISMATCH', 'Transfer teams belong to different leagues', 409);
+        }
         await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
         await this.locks.lockTeams(tx, [current.leagueTeamId, input.targetLeagueTeamId]);
         await this.locks.lockOwnership(tx, current.leagueId, current.footballPlayerId);
-        await this.loadScopeWithClient(tx, input.seasonId, input.targetLeagueTeamId);
         await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'TRANSFER', at);
         const locked = await tx.leaguePlayerOwnership.findUniqueOrThrow({
           where: { id: input.ownershipId }
@@ -474,7 +481,6 @@ export class RosterTransactionsService {
           }),
           sourceSummary: { ...sourceRoster, salaryCapMinor: sourceSalaryCapMinor }
         };
-      }, input);
   }
 
   async upgradeCard(raw: UpgradePlayerCardRequest, adminId: string, at = new Date()) {

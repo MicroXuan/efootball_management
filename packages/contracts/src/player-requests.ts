@@ -84,6 +84,18 @@ export const TransferProposalSchema = z.object({
   reviewedAt: z.iso.datetime().nullable()
 });
 export const TransferProposalListSchema = z.object({ items: z.array(TransferProposalSchema) });
+export const ReviewTransferProposalSchema = z.object({
+  decision: z.enum(['APPROVE', 'REJECT']),
+  reason: z.string().trim().min(1).max(512),
+  expectedVersion: ExpectedVersionSchema
+});
+export const AdminTransferProposalSchema = TransferProposalSchema.extend({
+  counterpartyConfirmed: z.boolean(),
+  events: z.array(z.object({ id: ResourceIdSchema, fromStatus: TransferProposalStatusSchema.nullable(), toStatus: TransferProposalStatusSchema,
+    reason: z.string().nullable(), createdAt: z.iso.datetime() }))
+});
+export const AdminTransferProposalListSchema = z.object({ items: z.array(AdminTransferProposalSchema) });
 export type SubmitTransferProposal = z.infer<typeof SubmitTransferProposalSchema>;
 export type RespondTransferProposal = z.infer<typeof RespondTransferProposalSchema>;
 export type TransferProposal = z.infer<typeof TransferProposalSchema>;
+export type ReviewTransferProposal = z.infer<typeof ReviewTransferProposalSchema>;
