@@ -56,7 +56,7 @@ export const SalaryRuleVersionSchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
   version: z.number().int().positive(),
-  salaryCapMinor: MoneyMinorSchema,
+  salaryCapMinor: NonNegativeMoneyMinorSchema,
   tiers: SalaryTierListSchema,
   status: SalaryRuleStatusSchema,
   effectiveAt: TimestampSchema,
@@ -68,7 +68,7 @@ export const SalaryRuleVersionListResponseSchema = z.object({
 });
 
 const CreateSalaryRuleVersionFieldsSchema = z.object({
-  salaryCapMinor: MoneyMinorSchema,
+  salaryCapMinor: NonNegativeMoneyMinorSchema,
   tiers: SalaryTierListSchema,
   effectiveAt: TimestampSchema,
   expectedCurrentVersion: z.number().int().nonnegative()
@@ -87,7 +87,7 @@ export const PreviewSalaryRuleRequestSchema = CreateSalaryRuleVersionFieldsSchem
   tiers: true
 });
 export const SalaryRulePreviewResponseSchema = z.object({
-  salaryCapMinor: MoneyMinorSchema,
+  salaryCapMinor: NonNegativeMoneyMinorSchema,
   teams: z.array(z.object({
     leagueTeamId: ResourceIdSchema,
     teamName: z.string().min(1),

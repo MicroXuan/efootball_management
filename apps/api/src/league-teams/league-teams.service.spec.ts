@@ -414,6 +414,69 @@ describe('LeagueTeamsService', () => {
     })).resolves.toBe(1);
   });
 
+  it('confirms and changes a team cap with versioning and an audit trail', async () => {
+    const { user } = await createUser('工资帽用户');
+    const league = await createLeague('工资帽联赛');
+    const shell = await createShell('工资帽球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '工资帽经理',
+      teamNumber: 33,
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
+    }, randomUUID());
+
+    const changed = await service.update(actorId, league.id, team.id, {
+      salaryCapMinor: 10_000,
+      salaryCapConfirmed: true,
+      reason: '逐队设置本赛季工资帽',
+      expectedVersion: team.version
+    }, randomUUID());
+
+    expect(changed).toMatchObject({ salaryCapMinor: 10_000, salaryCapConfirmed: true, version: team.version + 1 });
+    await expect(prisma.leagueTeam.findUniqueOrThrow({ where: { id: team.id } }))
+      .resolves.toMatchObject({ salaryCapMinor: 10_000, salaryCapConfirmedAt: expect.any(Date) });
+    await expect(prisma.auditLog.findFirst({ where: { resourceId: team.id, action: 'TEAM_SALARY_CAP_UPDATED' } }))
+      .resolves.toMatchObject({ reason: '逐队设置本赛季工资帽', metadata: expect.objectContaining({ oldSalaryCapMinor: 14_000, newSalaryCapMinor: 10_000 }) });
+    await expect(service.update(actorId, league.id, team.id, {
+      salaryCapMinor: 9_000, salaryCapConfirmed: true, reason: '过期版本', expectedVersion: team.version
+    }, randomUUID())).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('marks a team over cap when an admin lowers its cap below active salary', async () => {
+    const { user } = await createUser('超帽用户');
+    const league = await createLeague('超帽联赛');
+    const shell = await createShell('超帽球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id, ownerAlias: '经理', teamNumber: 34, catalogTeamId: shell.id, salaryCapMinor: 14_000
+    }, randomUUID());
+    const source = await prisma.dataSource.create({ data: { code: `cap-${randomUUID()}`, name: '工资帽测试' } });
+    const player = await prisma.footballPlayer.create({ data: { nameEn: 'Cap Fixture' } });
+    const rule = await prisma.leagueSalaryRuleVersion.create({
+      data: { leagueId: league.id, version: 1, salaryCapMinor: 14_000, effectiveAt: new Date('2026-01-01T00:00:00.000Z'), createdByAdminId: actorId }
+    });
+    const card = await prisma.playerCard.create({
+      data: { sourceId: source.id, externalId: `cap-card-${randomUUID()}`, playerId: player.id, cardName: 'Cap card', position: 'CB', overallRating: 90, cardType: 'STANDARD' }
+    });
+    try {
+      await prisma.leaguePlayerOwnership.create({
+        data: { leagueId: league.id, leagueTeamId: team.id, footballPlayerId: player.id, currentPlayerCardId: card.id, maxOverallSnapshot: 90, salaryRuleVersionId: rule.id, salaryMinor: 12_000 }
+      });
+      const updated = await service.update(actorId, league.id, team.id, {
+        salaryCapMinor: 10_000, salaryCapConfirmed: true, reason: '降低限额', expectedVersion: team.version
+      }, randomUUID());
+      expect(updated).toMatchObject({ salaryTotalMinor: 12_000, salaryCapMinor: 10_000, rosterStatus: 'OVER_CAP' });
+      await expect(prisma.auditLog.findFirst({ where: { resourceId: team.id, action: 'TEAM_SALARY_CAP_UPDATED' } }))
+        .resolves.toMatchObject({ metadata: expect.objectContaining({ projectedRosterStatus: 'OVER_CAP', salaryTotalMinor: 12_000 }) });
+    } finally {
+      await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueTeamId: team.id } });
+      await prisma.playerCard.delete({ where: { id: card.id } });
+      await prisma.footballPlayer.delete({ where: { id: player.id } });
+      await prisma.dataSource.delete({ where: { id: source.id } });
+      await prisma.leagueSalaryRuleVersion.delete({ where: { id: rule.id } });
+    }
+  });
+
   it('archives and restores a team without changing its identity or historical records', async () => {
     const { user } = await createUser('退出球队用户');
     const league = await createLeague('退出球队联赛');

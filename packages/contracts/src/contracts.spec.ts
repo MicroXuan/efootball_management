@@ -1658,6 +1658,28 @@ describe('league team administration contracts', () => {
     }));
   });
 
+  it('requires a reason and explicit confirmation for a team salary cap change', () => {
+    assert.deepEqual(UpdateLeagueTeamRequestSchema.parse({
+      salaryCapMinor: 15_000,
+      salaryCapConfirmed: true,
+      reason: '赛季工资帽调整',
+      expectedVersion: 2
+    }), {
+      salaryCapMinor: 15_000,
+      salaryCapConfirmed: true,
+      reason: '赛季工资帽调整',
+      expectedVersion: 2
+    });
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
+      salaryCapMinor: 0,
+      salaryCapConfirmed: true,
+      reason: '无效工资帽',
+      expectedVersion: 2
+    }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({ salaryCapMinor: 15_000, expectedVersion: 2 }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({ salaryCapConfirmed: true, expectedVersion: 2 }));
+  });
+
   it('requires a reason and version for team lifecycle changes', () => {
     assert.deepEqual(LeagueTeamLifecycleRequestSchema.parse({
       expectedVersion: 2,

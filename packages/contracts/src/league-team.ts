@@ -32,8 +32,21 @@ export const CreateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.exten
 
 export const UpdateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.partial().extend({
   shellValueMinor: NonNegativeMoneyMinorSchema.max(4_294_967_295).optional(),
+  salaryCapMinor: NonNegativeMoneyMinorSchema.positive().max(4_294_967_295).optional(),
+  salaryCapConfirmed: z.literal(true).optional(),
+  reason: z.string().trim().min(1).max(512).optional(),
   expectedVersion: ExpectedVersionSchema
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.salaryCapMinor !== undefined && value.salaryCapConfirmed !== true) {
+    context.addIssue({ code: 'custom', path: ['salaryCapConfirmed'], message: 'Salary cap changes require confirmation' });
+  }
+  if (value.salaryCapConfirmed === true && !value.reason) {
+    context.addIssue({ code: 'custom', path: ['reason'], message: 'Salary cap confirmation requires a reason' });
+  }
+  if (value.salaryCapConfirmed === true && value.salaryCapMinor === undefined) {
+    context.addIssue({ code: 'custom', path: ['salaryCapMinor'], message: 'Salary cap confirmation requires an amount' });
+  }
+});
 
 export const LeagueTeamLifecycleRequestSchema = z.object({
   expectedVersion: ExpectedVersionSchema,
@@ -89,6 +102,8 @@ export const LeagueTeamSummarySchema = z.object({
   activePlayerCount: z.number().int().min(0).max(25),
   salaryTotalMinor: NonNegativeMoneyMinorSchema,
   salaryCapMinor: NonNegativeMoneyMinorSchema,
+  salaryCapConfirmed: z.boolean().optional(),
+  salaryCapConfirmedAt: TimestampSchema.nullable().optional(),
   shellValueMinor: NonNegativeMoneyMinorSchema,
   version: z.number().int().positive(),
   createdAt: TimestampSchema,

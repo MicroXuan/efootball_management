@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Form, InputNumber, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, InputNumber, Space, Table, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -20,7 +20,7 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
   const { leagueId = '' } = useParams();
   const [items, setItems] = useState<z.infer<typeof SalaryRuleVersionSchema>[]>([]);
   const [tiers, setTiers] = useState<Tier[]>(initialTiers);
-  const [cap, setCap] = useState(2000);
+  const [legacyCap, setLegacyCap] = useState(0);
   const [preview, setPreview] = useState<z.infer<typeof SalaryRulePreviewResponseSchema> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,7 +29,7 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
       const result = await api.request(`/v1/admin/leagues/${leagueId}/salary-rules`, { schema: SalaryRuleVersionListResponseSchema });
       setItems(result.items);
       const current = result.items[0];
-      if (current) { setCap(current.salaryCapMinor); setTiers(current.tiers); }
+      if (current) { setLegacyCap(current.salaryCapMinor); setTiers(current.tiers); }
     } catch { setError('工资规则加载失败'); }
   }, [api, leagueId]);
   useEffect(() => { void load(); }, [load]);
@@ -42,7 +42,7 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
   const runPreview = async () => {
     setBusy(true); setError(null);
     try {
-      setPreview(await api.request(`/v1/admin/leagues/${leagueId}/salary-rules/preview`, { method: 'POST', schema: SalaryRulePreviewResponseSchema, body: { salaryCapMinor: cap, tiers } }));
+      setPreview(await api.request(`/v1/admin/leagues/${leagueId}/salary-rules/preview`, { method: 'POST', schema: SalaryRulePreviewResponseSchema, body: { salaryCapMinor: legacyCap, tiers } }));
     } catch { setError('工资影响预览失败，请检查档位是否连续'); }
     finally { setBusy(false); }
   };
@@ -51,19 +51,17 @@ export function SalaryRulesPage({ api = adminApi, initialTiers = defaultTiers }:
     try {
       await api.request(`/v1/admin/leagues/${leagueId}/salary-rules`, {
         method: 'POST', schema: SalaryRuleVersionSchema,
-        body: { salaryCapMinor: cap, tiers, effectiveAt: new Date().toISOString(), expectedCurrentVersion: items[0]?.version ?? 0 }
+        body: { salaryCapMinor: legacyCap, tiers, effectiveAt: new Date().toISOString(), expectedCurrentVersion: items[0]?.version ?? 0 }
       });
       setPreview(null); await load();
     } catch { setError('发布失败，规则版本可能已经变化，请重新加载'); }
     finally { setBusy(false); }
   };
   return <div className="workspace-grid">
-    <Card className="form-card" title="工资帽与自动加点总评档位">
+    <Card className="form-card" title="工资档位与自动加点总评">
       {error ? <Alert role="alert" type="warning" showIcon title={error} /> : null}
       {!items.length ? <Alert type="info" showIcon title="尚未发布工资规则" /> : <Typography.Text type="secondary">当前版本 v{items[0]?.version}</Typography.Text>}
-      <Form layout="vertical">
-        <Form.Item label="工资帽"><InputNumber aria-label="工资帽" min={1} precision={0} value={cap} onChange={(value) => setCap(value ?? 0)} /></Form.Item>
-      </Form>
+      <p>这里仅设置球员工资档位；每支球队的工资帽在球队详情中单独确认和修改。</p>
       <Table<Tier> pagination={false} rowKey={(row) => `${row.minOverall}-${row.maxOverall}`} dataSource={tiers} columns={[
         { title: '自动加点总评范围', render: (_, row) => `${row.minOverall}–${row.maxOverall}` },
         { title: '工资', render: (_, row, index) => <InputNumber aria-label={`总评 ${row.minOverall}-${row.maxOverall} 工资`} min={1} precision={0} value={row.salaryMinor} onChange={(value) => updateTier(index, value)} /> }

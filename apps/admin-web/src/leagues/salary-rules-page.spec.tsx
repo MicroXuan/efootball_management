@@ -12,11 +12,11 @@ it('previews team salary impact before publishing a rule version', async () => {
   const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/salary-rules`]}><Routes><Route path="/leagues/:leagueId/salary-rules" element={<SalaryRulesPage api={api} initialTiers={tiers} />} /></Routes></MemoryRouter>);
   await screen.findByText('尚未发布工资规则');
-  expect(screen.getByText('工资帽与自动加点总评档位')).toBeInTheDocument();
+  expect(screen.getByText('工资档位与自动加点总评')).toBeInTheDocument();
   expect(screen.getByText('自动加点总评范围')).toBeInTheDocument();
-  await userEvent.clear(screen.getByLabelText('工资帽'));
-  await userEvent.type(screen.getByLabelText('工资帽'), '2000');
+  expect(screen.queryByLabelText('工资帽')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '预览影响' }));
+  expect(request).toHaveBeenNthCalledWith(2, `/v1/admin/leagues/${leagueId}/salary-rules/preview`, expect.objectContaining({ body: expect.objectContaining({ salaryCapMinor: 0 }) }));
   expect(await screen.findByText('巴塞罗那')).toBeInTheDocument();
   expect(screen.getByText('+300')).toBeInTheDocument();
 });

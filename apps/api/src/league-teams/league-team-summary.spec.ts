@@ -44,7 +44,9 @@ describe('LeagueTeamsService roster summary', () => {
       catalogTeamId: '44444444-4444-4444-8444-444444444444',
       activePlayerCount: 3,
       salaryTotalMinor: 1_200,
-      salaryCapMinor: 1_500
+      salaryCapMinor: 1_500,
+      salaryCapConfirmed: false,
+      salaryCapConfirmedAt: null
     });
   });
 

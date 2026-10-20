@@ -22,6 +22,8 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
   const [submitting, setSubmitting] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<'archive' | 'restore' | null>(null);
   const [lifecycleReason, setLifecycleReason] = useState('');
+  const [salaryCapDraft, setSalaryCapDraft] = useState<number | null>(null);
+  const [salaryCapReason, setSalaryCapReason] = useState('');
   const [form] = Form.useForm<Fields>();
   const mutationKey = useMutationKey();
   const load = useCallback(async () => {
@@ -29,6 +31,8 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
     try {
       const next = await api.request(`/v1/admin/leagues/${leagueId}/teams/${teamId}`, { schema: LeagueTeamDetailSchema });
       setDetail(next);
+      setSalaryCapDraft(next.salaryCapMinor || null);
+      setSalaryCapReason('');
       form.setFieldsValue({ teamNumber: next.teamNumber ?? 0, ownerAlias: next.ownerAlias, shellValueMinor: next.shellValueMinor });
     } catch { setError('球队详情加载失败'); }
     finally { setLoading(false); }
@@ -77,6 +81,26 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
       } else setError(lifecycleAction === 'archive' ? '退出联赛失败，请稍后重试' : '恢复球队失败，请稍后重试');
     } finally { setSubmitting(false); }
   };
+  const saveSalaryCap = async () => {
+    if (!detail || !salaryCapDraft || !Number.isSafeInteger(salaryCapDraft) || !salaryCapReason.trim() || submitting) return;
+    setSubmitting(true); setError(null);
+    try {
+      const updated = await api.request(`/v1/admin/leagues/${leagueId}/teams/${teamId}`, {
+        method: 'PATCH', headers: { 'Idempotency-Key': mutationKey.current() }, schema: LeagueTeamDetailSchema,
+        body: {
+          salaryCapMinor: salaryCapDraft,
+          salaryCapConfirmed: true,
+          reason: salaryCapReason.trim(),
+          expectedVersion: detail.version
+        }
+      });
+      setDetail(updated); setSalaryCapDraft(updated.salaryCapMinor); setSalaryCapReason(''); mutationKey.reset();
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') {
+        await load(); mutationKey.reset(); setError('数据已被其他管理员更新，已为你加载最新版本');
+      } else setError('工资帽保存失败，请稍后重试');
+    } finally { setSubmitting(false); }
+  };
   if (loading && !detail) return <div className="loading-block"><Spin /></div>;
   return <div className="team-detail-page">
     <nav className="team-detail-breadcrumb" aria-label="球队详情面包屑"><Link to={`/leagues/${leagueId}/teams`}>球队列表</Link><span> / 球队详情</span></nav>
@@ -87,12 +111,29 @@ export function TeamDetailPage({ api = adminApi }: { api?: AdminApi }) {
           { key: 'owner', label: '所属用户', children: `${detail.ownerDisplayName} · ${detail.ownerPublicUserNo}` },
           { key: 'identity', label: '球队身份', children: `${detail.teamNumber}-${detail.name}（${detail.ownerAlias}）` },
           { key: 'roster', label: '阵容', children: `${detail.activePlayerCount}/25` },
-          { key: 'salary', label: '工资', children: `${detail.salaryTotalMinor} / ${detail.salaryCapMinor}` },
+          { key: 'salary', label: '工资', children: detail.salaryCapConfirmed
+            ? `${detail.salaryTotalMinor} / ${detail.salaryCapMinor}`
+            : `${detail.salaryTotalMinor} / 待管理员确认` },
           { key: 'shell', label: '队壳价值', children: detail.shellValueMinor },
           { key: 'lifecycle', label: '联赛状态', children: detail.status === 'ARCHIVED' ? <Tag>已退赛</Tag> : <Tag color="success">现役</Tag> }
         ]} />
         <Button danger={detail.status !== 'ARCHIVED'} onClick={() => setLifecycleAction(detail.status === 'ARCHIVED' ? 'restore' : 'archive')}>
           {detail.status === 'ARCHIVED' ? '恢复球队' : '退出联赛'}
+        </Button>
+      </Card>
+      <Card className="detail-card team-detail-card" title={<h2>球队工资帽</h2>}>
+        <p>当前工资 {detail.salaryTotalMinor}；工资帽 {detail.salaryCapConfirmed ? detail.salaryCapMinor : '待管理员确认'}。仅管理员可以确认或修改，操作会记录原因。</p>
+        <InputNumber aria-label="设置球队工资帽" min={1} max={4_294_967_295} precision={0} value={salaryCapDraft} onChange={(value) => { setSalaryCapDraft(value); mutationKey.reset(); }} style={{ width: '100%' }} />
+        <Input.TextArea aria-label="工资帽调整原因" maxLength={512} value={salaryCapReason} onChange={(event) => { setSalaryCapReason(event.target.value); mutationKey.reset(); }} placeholder="填写确认或调整原因" style={{ marginTop: 12 }} />
+        {salaryCapDraft && Number.isSafeInteger(salaryCapDraft) ? <Alert
+          type={detail.salaryTotalMinor > salaryCapDraft ? 'warning' : 'info'}
+          showIcon
+          title={`保存后预计状态：${detail.salaryTotalMinor > salaryCapDraft ? '超帽' : '合规'}`}
+          description={detail.salaryTotalMinor > salaryCapDraft ? `现有工资超出新帽 ${detail.salaryTotalMinor - salaryCapDraft}，后续增薪操作将受限制。` : '现有工资未超过新帽。'}
+          style={{ marginTop: 12, marginBottom: 12 }}
+        /> : null}
+        <Button type="primary" loading={submitting} disabled={!salaryCapDraft || !Number.isSafeInteger(salaryCapDraft) || !salaryCapReason.trim() || submitting} onClick={() => void saveSalaryCap()}>
+          {detail.salaryCapConfirmed ? '保存工资帽' : '确认工资帽'}
         </Button>
       </Card>
       {detail.status !== 'ARCHIVED' ? <><Card
