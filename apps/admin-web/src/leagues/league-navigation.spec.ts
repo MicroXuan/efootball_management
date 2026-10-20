@@ -8,6 +8,7 @@ describe('resolveLeagueNavigation', () => {
     ['/leagues/l1/auctions/b1/edit', 'auctions', null],
     ['/leagues/l1/transfer-proposals', 'reviews', 'transfer-proposals'],
     ['/leagues/l1/salary-rules', 'finance', 'salary-rules'],
+    ['/leagues/l1/forced-offer-windows', 'windows', 'forced-offer-windows'],
     ['/leagues/l1/something-new', 'teams', null],
   ])('maps %s to %s / %s', (pathname, topKey, childKey) => {
     expect(resolveLeagueNavigation(pathname)).toEqual({ topKey, childKey });
@@ -25,7 +26,7 @@ describe('leagueNavigationItems', () => {
     expect(items.find(({ key }) => key === 'allocation')?.path).toBe('/leagues/l1/allocation');
     expect(items.find(({ key }) => key === 'cups')?.path).toBe('/leagues/l1/cups');
     expect(items.find(({ key }) => key === 'windows')?.children?.map(({ key }) => key)).toEqual([
-      'transfer-windows', 'valuation-windows', 'nomination-windows',
+      'transfer-windows', 'valuation-windows', 'nomination-windows', 'forced-offer-windows',
     ]);
     expect(items.find(({ key }) => key === 'reviews')?.children?.map(({ key }) => key)).toEqual([
       'player-market', 'valuation-reviews', 'disappearance-requests', 'transfer-proposals',

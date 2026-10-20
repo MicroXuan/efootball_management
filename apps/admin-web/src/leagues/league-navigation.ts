@@ -16,6 +16,7 @@ const routeGroups: Record<string, { topKey: string; childKey: string | null }> =
   'transfer-windows': { topKey: 'windows', childKey: 'transfer-windows' },
   'valuation-windows': { topKey: 'windows', childKey: 'valuation-windows' },
   'nomination-windows': { topKey: 'windows', childKey: 'nomination-windows' },
+  'forced-offer-windows': { topKey: 'windows', childKey: 'forced-offer-windows' },
   'player-market': { topKey: 'reviews', childKey: 'player-market' },
   'valuation-reviews': { topKey: 'reviews', childKey: 'valuation-reviews' },
   'disappearance-requests': { topKey: 'reviews', childKey: 'disappearance-requests' },
@@ -44,6 +45,7 @@ export function leagueNavigationItems(leagueId: string, includeWechatBot: boolea
       child('transfer-windows', '转会窗口'),
       child('valuation-windows', '身价窗口'),
       child('nomination-windows', '提名期'),
+      child('forced-offer-windows', '强报期'),
     ] },
     { key: 'reviews', label: '审核', path: `${root}/player-market`, children: [
       child('player-market', '球员申请'),

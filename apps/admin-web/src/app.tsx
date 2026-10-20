@@ -23,6 +23,7 @@ const AllocationPage = lazy(() => import('./leagues/allocation-page').then((modu
 const CupsPage = lazy(() => import('./leagues/cups-page').then((module) => ({ default: module.CupsPage })));
 const SalaryRulesPage = lazy(() => import('./leagues/salary-rules-page').then((module) => ({ default: module.SalaryRulesPage })));
 const TransferWindowsPage = lazy(() => import('./leagues/transfer-windows-page').then((module) => ({ default: module.TransferWindowsPage })));
+const ForcedOfferWindowsPage = lazy(() => import('./leagues/forced-offer-windows-page').then((module) => ({ default: module.ForcedOfferWindowsPage })));
 const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => ({ default: module.RosterPage })));
 const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
 const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
@@ -77,6 +78,7 @@ export function App() {
               <Route path="teams/:teamId/roster" element={deferred(<RosterPage api={adminApi} />)} />
               <Route path="salary-rules" element={deferred(<SalaryRulesPage api={adminApi} />)} />
               <Route path="transfer-windows" element={deferred(<TransferWindowsPage api={adminApi} />)} />
+              <Route path="forced-offer-windows" element={deferred(<ForcedOfferWindowsPage api={adminApi} />)} />
               <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
               <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
               <Route path="nomination-windows" element={deferred(<NominationWindowsPage api={adminApi} />)} />

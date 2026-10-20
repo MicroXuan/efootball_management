@@ -3,7 +3,7 @@ import { buildReviewGroups, reviewBlocker } from './player-market-review.model';
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 const application = (overrides: Partial<PlayerAcquisitionApplication> = {}): PlayerAcquisitionApplication => ({
-  id: id(1), leagueId: id(2), seasonId: id(3), transferWindowId: id(4),
+  id: id(1), leagueId: id(2), seasonId: id(3), transferWindowId: id(4), forcedOfferWindowId: null,
   type: 'NORMAL_PURCHASE', applicantTeam: { teamId: id(5), teamNumber: 5, name: '海港竞技', logoUrl: null, ownerAlias: '小宣' },
   playerId: id(6), playerName: '测试球员', playerCard: { playerCardId: id(7), cardName: '精选', imageUrl: null, position: 'CF', maxOverall: 96, salaryMinor: 500 },
   sourceTeam: null, ownershipId: null, ownershipVersionSnapshot: null, amountMinor: 1200,
