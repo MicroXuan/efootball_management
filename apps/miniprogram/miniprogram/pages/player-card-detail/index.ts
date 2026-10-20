@@ -17,11 +17,12 @@ import {
 type DetailOptions = { id?: string }
 type SiblingTapEvent = { currentTarget: { dataset: { id?: string } } }
 
-let detailRequestToken = 0
-let detailUnloaded = false
-let currentDetail: PlayerCardDetail | null = null
-
 Page({
+  detailRequestToken: 0,
+  detailUnloaded: false,
+  requestInFlight: false,
+  currentDetail: null as PlayerCardDetail | null,
+
   data: {
     state: 'loading' as 'login' | 'loading' | 'loaded' | 'error' | 'unavailable',
     errorMessage: '',
@@ -35,7 +36,10 @@ Page({
   },
 
   onLoad(options: DetailOptions) {
-    detailUnloaded = false
+    this.detailUnloaded = false
+    this.requestInFlight = false
+    this.detailRequestToken = 0
+    this.currentDetail = null
     const id = options.id ? decodeURIComponent(options.id) : ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
       this.setData({ state: 'unavailable', errorMessage: '球员卡编号无效' })
@@ -50,9 +54,9 @@ Page({
   },
 
   onUnload() {
-    detailUnloaded = true
-    currentDetail = null
-    detailRequestToken += 1
+    this.detailUnloaded = true
+    this.currentDetail = null
+    this.detailRequestToken += 1
   },
 
   retry() {
@@ -69,7 +73,7 @@ Page({
   },
 
   resumeAuthenticatedDetail() {
-    if (!this.data.cardId || this.data.state === 'loaded' || this.data.state === 'loading' && detailRequestToken > 0) return
+    if (!this.data.cardId || this.data.state === 'loaded' || this.requestInFlight) return
     if (!session.getAccessToken()) {
       this.setData({ state: 'login', errorMessage: '' })
       return
@@ -83,13 +87,13 @@ Page({
   },
 
   toggleAutomaticBuild() {
-    if (!currentDetail || !this.data.card) return
+    if (!this.currentDetail || !this.data.card) return
     if (!this.data.card.autoBuild.available) {
       wx.showToast({ title: this.data.card.autoBuild.unavailableReason, icon: 'none' })
       return
     }
     const autoApplied = !this.data.autoApplied
-    const presentation = playerCardPresentation(currentDetail, autoApplied)
+    const presentation = playerCardPresentation(this.currentDetail, autoApplied)
     const buildPanel = automaticBuildPanelState(this.data.card.autoBuild.available, autoApplied)
     this.setData({ autoApplied, presentation, buildPanel })
   },
@@ -122,14 +126,15 @@ Page({
       this.setData({ state: 'login', errorMessage: '' })
       return
     }
-    const token = ++detailRequestToken
+    const token = ++this.detailRequestToken
+    this.requestInFlight = true
     this.setData({ state: 'loading', errorMessage: '' })
     try {
       const detail = await catalogApi.getPlayerCard(this.data.cardId)
-      if (detailUnloaded || token !== detailRequestToken) return
+      if (this.detailUnloaded || token !== this.detailRequestToken) return
       const presentationDetail = playerCardDetailWithAutomaticBuild(detail)
       const card = toCardDetailViewModel(presentationDetail)
-      currentDetail = presentationDetail
+      this.currentDetail = presentationDetail
       this.setData({
         state: 'loaded',
         card,
@@ -139,7 +144,7 @@ Page({
       })
       void this.loadFavoriteStatus(card.playerId)
     } catch (error) {
-      if (detailUnloaded || token !== detailRequestToken) return
+      if (this.detailUnloaded || token !== this.detailRequestToken) return
       if (error instanceof ApiError && error.statusCode === 404) {
         this.setData({ state: 'unavailable', errorMessage: '这张球员卡未发布或已下架' })
       } else {
@@ -148,14 +153,17 @@ Page({
           errorMessage: error instanceof ApiError ? error.message : '详情加载失败，请检查网络后重试',
         })
       }
+    } finally {
+      if (token === this.detailRequestToken) this.requestInFlight = false
     }
   },
 
   async loadFavoriteStatus(playerId: string) {
     if (!session.getAccessToken()) return
+    const token = this.detailRequestToken
     try {
       const response = await favoritesApi.statuses([playerId])
-      if (!detailUnloaded) this.setData({ isFavorite: response.favoritePlayerIds.includes(playerId) })
+      if (!this.detailUnloaded && token === this.detailRequestToken) this.setData({ isFavorite: response.favoritePlayerIds.includes(playerId) })
     } catch {
       // 收藏状态不阻断公开卡片详情。
     }
