@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Form, Input, InputNumber, Select, Space, Table, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { LeagueSeasonSummarySchema, NominationWindowListResponseSchema, NominationWindowSchema, type NominationWindow } from '@efm/contracts';
 import { z } from 'zod';
 import { adminApi, ApiError, type AdminApi } from '../lib/api';
@@ -67,7 +67,7 @@ export function NominationWindowsPage({ api = adminApi }: { api?: AdminApi }) {
         { title: '开始', dataIndex: 'startsAt', render: (value: string) => formatDateTime(value) },
         { title: '结束', dataIndex: 'endsAt', render: (value: string) => formatDateTime(value) },
         { title: '每队名额', dataIndex: 'perTeamLimit' },
-        { title: '操作', render: (_, row) => <Button type="link" onClick={() => { setEditing(row); setFields({ startsAt: row.startsAt.slice(0, 16), endsAt: row.endsAt.slice(0, 16), perTeamLimit: row.perTeamLimit }); key.reset(); }}>编辑</Button> }
+        { title: '操作', render: (_, row) => <Space><Button type="link" onClick={() => { setEditing(row); setFields({ startsAt: row.startsAt.slice(0, 16), endsAt: row.endsAt.slice(0, 16), perTeamLimit: row.perTeamLimit }); key.reset(); }}>编辑</Button><Link to={`/leagues/${leagueId}/nomination-windows/${row.id}/candidates`}>查看提名名单</Link></Space> }
       ]} />
     </Card>
     <Card title={editing ? '修改提名期' : '新增提名期'}>

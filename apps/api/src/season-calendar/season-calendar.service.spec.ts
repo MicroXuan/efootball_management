@@ -35,7 +35,7 @@ describe('SeasonCalendarService', () => {
       ['VALUATION', 'ENDED'], ['NOMINATION', 'ENDED'], ['TRANSFER', 'ACTIVE'], ['FIXTURE', 'UPCOMING']
     ]);
     expect(result.items[3]).toMatchObject({ title: '阿哈尔 vs 阿贾克斯', targetPath: expect.stringContaining('/pages/my-matches/index') });
-    expect(result.items[1]).toMatchObject({ title: '球员提名期', targetPath: null });
+    expect(result.items[1]).toMatchObject({ title: '球员提名期', targetPath: expect.stringContaining('/pages/player-nominations/index') });
     expect(prisma.competitionMatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ stage: expect.objectContaining({ status: 'PUBLISHED' }) })
     }));

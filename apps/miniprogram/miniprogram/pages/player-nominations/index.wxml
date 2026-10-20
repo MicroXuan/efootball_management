@@ -1,0 +1,12 @@
+<view class="nomination-page">
+  <view class="hero"><text class="eyebrow">赛季提名</text><text class="title">想拍谁，由球队提名</text><text class="sub">管理员汇总候选后再安排拍卖；提名本身不代表获得球员。</text></view>
+  <view wx:if="{{state === 'loading'}}" class="state">正在加载提名期…</view>
+  <view wx:elif="{{state === 'error'}}" class="state"><text>{{errorMessage}}</text><button bindtap="loadPage">重试</button></view>
+  <block wx:else>
+    <view class="window-card"><text class="label">本队提名余额</text><text class="count">{{workspace.remainingSlots}} / {{workspace.window.perTeamLimit}}</text><text class="window-status">{{open ? '提名进行中' : '当前不在提名期'}}</text><text class="sub">截止：{{workspace.window.endsAt}}</text></view>
+    <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
+    <view class="section"><text class="section-title">我的提名</text><text wx:if="{{!workspace.nominations.length}}" class="empty">还没有提名球员</text><view wx:for="{{workspace.nominations}}" wx:key="id" class="nomination-row"><text>{{item.playerName}}</text><button wx:if="{{open}}" data-nomination-id="{{item.id}}" bindtap="withdraw" disabled="{{busy}}">撤回</button></view></view>
+    <view wx:if="{{open}}" class="section"><text class="section-title">搜索自由球员</text><view class="search"><input placeholder="输入球员姓名" value="{{keyword}}" bindinput="onKeywordInput"/><button bindtap="searchPlayers" loading="{{searching}}">搜索</button></view><view wx:for="{{players}}" wx:key="playerId" class="player-row"><view><text class="player-name">{{item.playerName}}</text><text class="player-meta">{{item.club}} · {{item.nationality}}</text></view><button data-player-id="{{item.playerId}}" bindtap="nominate" disabled="{{busy || workspace.remainingSlots < 1}}">提名</button></view></view>
+    <view wx:else class="state">提名窗口未开放或已结束，当前只能查看名单。</view>
+  </block>
+</view>

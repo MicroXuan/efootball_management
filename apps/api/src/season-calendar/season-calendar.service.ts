@@ -84,7 +84,7 @@ export class SeasonCalendarService {
         id: window.id, kind: 'NOMINATION' as const, title: '球员提名期',
         startsAt: window.startsAt.toISOString(), endsAt: window.endsAt.toISOString(),
         status: this.status(window.startsAt, window.endsAt, now),
-        targetPath: null
+        targetPath: `/pages/player-nominations/index?leagueId=${encodeURIComponent(leagueId)}&seasonId=${encodeURIComponent(seasonId)}&windowId=${encodeURIComponent(window.id)}`
       }))
     ];
     items.sort((left, right) => left.startsAt.localeCompare(right.startsAt) || left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id));

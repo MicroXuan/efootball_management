@@ -6,6 +6,7 @@ import { AdminError } from '../admin/admin.errors.js';
 import { AdminScopeGuard } from '../admin/admin-scope.guard.js';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { NominationWindowService } from './nomination-window.service.js';
+import { NominationService } from './nomination.service.js';
 
 @Controller('admin/leagues/:leagueId/seasons/:seasonId/nomination-windows')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
@@ -30,5 +31,16 @@ export class AdminNominationController {
   private key(key: string | undefined) {
     if (!key?.trim()) throw new AdminError('IDEMPOTENCY_KEY_REQUIRED', '必须提供 Idempotency-Key 请求头', 400);
     return key;
+  }
+}
+
+@Controller('admin/leagues/:leagueId/nomination-windows/:windowId/candidates')
+@UseGuards(AdminAuthGuard, AdminScopeGuard)
+export class AdminNominationCandidatesController {
+  constructor(@Inject(NominationService) private readonly nominations: NominationService) {}
+
+  @Get()
+  list(@CurrentAdmin() admin: CurrentAdminIdentity, @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string, @Param('windowId', new ZodValidationPipe(ResourceIdSchema)) windowId: string) {
+    return this.nominations.candidates(admin.id, leagueId, windowId);
   }
 }

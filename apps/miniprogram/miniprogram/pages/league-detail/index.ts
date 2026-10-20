@@ -173,6 +173,12 @@ Page({
     wx.navigateTo({ url: `/pages/season-calendar/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(seasonId)}` })
   },
 
+  openPlayerNominations() {
+    const seasonId = this.data.selectedSeason?.id
+    if (!seasonId) return
+    wx.navigateTo({ url: `/pages/player-nominations/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(seasonId)}` })
+  },
+
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return

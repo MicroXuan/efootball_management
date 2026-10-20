@@ -32,6 +32,7 @@ const WechatBotPage = lazy(() => import('./leagues/wechat-bot-page').then((modul
 const AuctionListPage = lazy(() => import('./auctions/auction-list-page').then((module) => ({ default: module.AuctionListPage })));
 const AuctionEditorPage = lazy(() => import('./auctions/auction-editor-page').then((module) => ({ default: module.AuctionEditorPage })));
 const AuctionDetailPage = lazy(() => import('./auctions/auction-detail-page').then((module) => ({ default: module.AuctionDetailPage })));
+const NominationShortlistPage = lazy(() => import('./auctions/nomination-shortlist-page').then((module) => ({ default: module.NominationShortlistPage })));
 const PlayerMarketReviewPage = lazy(() => import('./player-market/player-market-review-page').then((module) => ({ default: module.PlayerMarketReviewPage })));
 
 function DefaultRoute() {
@@ -77,6 +78,7 @@ export function App() {
               <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
               <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
               <Route path="nomination-windows" element={deferred(<NominationWindowsPage api={adminApi} />)} />
+              <Route path="nomination-windows/:windowId/candidates" element={deferred(<NominationShortlistPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
               <Route path="player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
               <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />

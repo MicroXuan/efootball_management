@@ -901,6 +901,7 @@ model LeagueTeam {
   playerApplications         PlayerAcquisitionApplication[] @relation("PlayerApplicationApplicantTeam")
   sourcedPlayerApplications  PlayerAcquisitionApplication[] @relation("PlayerApplicationSourceTeam")
   playerReleaseRestrictions  PlayerReleaseRestriction[]
+  playerNominations          PlayerNomination[]
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
   @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
@@ -1145,10 +1146,29 @@ model NominationWindow {
   updatedAt        DateTime      @updatedAt @map("updated_at")
   season           LeagueSeason  @relation(fields: [seasonId], references: [id], onDelete: Restrict)
   createdByAdmin   AdminAccount  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  nominations      PlayerNomination[]
 
   @@index([seasonId, startsAt, endsAt], map: "nomination_windows_season_timeline_idx")
   @@index([createdByAdminId], map: "nomination_windows_creator_idx")
   @@map("nomination_windows")
+}
+
+model PlayerNomination {
+  id               String           @id @default(uuid()) @db.Char(36)
+  windowId         String           @map("window_id") @db.Char(36)
+  leagueTeamId     String           @map("league_team_id") @db.Char(36)
+  footballPlayerId String           @map("football_player_id") @db.Char(36)
+  withdrawnAt      DateTime?        @map("withdrawn_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  window           NominationWindow @relation(fields: [windowId], references: [id], onDelete: Restrict)
+  leagueTeam       LeagueTeam       @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  footballPlayer   FootballPlayer   @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+
+  @@unique([windowId, leagueTeamId, footballPlayerId], map: "player_nominations_unique")
+  @@index([windowId, withdrawnAt, footballPlayerId], map: "player_nominations_candidates_idx")
+  @@index([leagueTeamId, windowId], map: "player_nominations_team_idx")
+  @@map("player_nominations")
 }
 
 model LeaguePlayerOwnership {
@@ -1672,6 +1692,7 @@ model FootballPlayer {
   playerAuctionLots            PlayerAuctionLot[]
   playerApplications           PlayerAcquisitionApplication[]
   playerReleaseRestrictions    PlayerReleaseRestriction[]
+  playerNominations            PlayerNomination[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
   @@index([normalizedNameEn], map: "football_players_name_en_idx")
