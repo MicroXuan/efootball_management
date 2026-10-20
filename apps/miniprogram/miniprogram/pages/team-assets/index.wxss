@@ -56,6 +56,20 @@ page { background: #0e1417; color: #f4f7f8; }
 .release-button { display: flex; align-items: center; justify-content: center; min-width: 134rpx; min-height: 66rpx; margin: 0; border: 2rpx solid #85504c; border-radius: 14rpx; color: #ffaaa3; background: #30201f; font-size: 20rpx; font-weight: 850; }
 .release-button[disabled] { opacity: .45; }
 .release-disabled { padding: 16rpx 22rpx; border-top: 2rpx solid #2d393f; color: #6f7c82; background: #11181c; font-size: 17rpx; text-align: right; }
+.transfer-list-link { margin: 18rpx 0 0; border: 2rpx solid #3b5130; border-radius: 16rpx; color: #d4ff83; background: #1b281c; font-size: 21rpx; font-weight: 750; }
+.asset-actions { display: flex; gap: 12rpx; padding: 15rpx 20rpx 20rpx; border-top: 2rpx solid #2d393f; }
+.asset-action { flex: 1; min-width: 0; min-height: 66rpx; margin: 0; padding: 0 8rpx; border: 2rpx solid #526c36; border-radius: 13rpx; color: #cfff8b; background: #202d1d; font-size: 19rpx; font-weight: 750; }
+.asset-action--strong { border-color: #8b6942; color: #ffd191; background: #30271d; }
+.asset-action[disabled] { opacity: .45; }
+.transfer-shade { position: fixed; z-index: 20; inset: 0; display: flex; align-items: flex-end; background: rgba(0,0,0,.72); }
+.transfer-composer { width: 100%; padding: 34rpx 30rpx 70rpx; border-top: 2rpx solid #50603d; border-radius: 28rpx 28rpx 0 0; background: #151d21; box-sizing: border-box; }
+.transfer-title { display: block; color: #dfffad; font-size: 30rpx; font-weight: 850; }
+.transfer-hint { display: block; margin: 12rpx 0 28rpx; color: #9ba7aa; font-size: 19rpx; line-height: 1.5; }
+.transfer-label { display: block; margin: 16rpx 0 9rpx; color: #b6c0c4; font-size: 20rpx; }
+.transfer-field { display: block; height: 76rpx; padding: 0 18rpx; border: 2rpx solid #3a484e; border-radius: 14rpx; color: #f4f7f8; background: #0e1417; font-size: 22rpx; line-height: 76rpx; }
+.transfer-buttons { display: flex; gap: 16rpx; margin-top: 30rpx; }
+.transfer-buttons button { flex: 1; margin: 0; color: #dce4e7; background: #2c383e; font-size: 21rpx; }
+.transfer-buttons .transfer-submit { color: #172009; background: #b6f13a; font-weight: 800; }
 .panel { padding: 28rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
 .empty-panel { margin-top: 16rpx; text-align: center; }
 .empty-title { display: block; font-size: 25rpx; font-weight: 800; }

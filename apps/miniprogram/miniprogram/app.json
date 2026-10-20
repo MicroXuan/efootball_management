@@ -20,6 +20,7 @@
     "pages/player-nominations/index",
     "pages/valuation-manage/index",
     "pages/team-assets/index",
+    "pages/transfer-proposals/index",
     "pages/league-transactions/index",
     "pages/team-finance/index",
     "pages/player-market/index",

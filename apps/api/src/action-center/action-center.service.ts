@@ -57,7 +57,7 @@ export class ActionCenterService {
     const seasonIds = teams.flatMap(({ league }) => league.currentSeasonId ? [league.currentSeasonId] : []);
     const leagueIds = [...new Set(teams.map(({ leagueId }) => leagueId))];
     const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [currentApplications, recentApplications, auctions] = await Promise.all([
+    const [currentApplications, recentApplications, auctions, disappearances, transfers] = await Promise.all([
       seasonIds.length === 0
         ? Promise.resolve([] as ApplicationRow[])
         : this.prisma.playerAcquisitionApplication.findMany({
@@ -109,7 +109,18 @@ export class ActionCenterService {
           currentLot: { select: { playerNameSnapshot: true } }
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }]
-      }) as Promise<AuctionRow[]>
+      }) as Promise<AuctionRow[]>,
+      this.prisma.disappearanceRequest.findMany({
+        where: { requesterTeamId: { in: teamIds }, OR: [{ status: 'PENDING' }, { updatedAt: { gte: recentCutoff } }] },
+        include: { league: { select: { id: true, name: true } }, ownership: { include: { footballPlayer: true } }, requesterTeam: true },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }]
+      }),
+      this.prisma.transferProposal.findMany({
+        where: { OR: [{ sourceTeamId: { in: teamIds } }, { targetTeamId: { in: teamIds } }],
+          AND: [{ OR: [{ status: { in: ['PENDING_COUNTERPARTY', 'PENDING_ADMIN'] } }, { updatedAt: { gte: recentCutoff } }] }] },
+        include: { league: { select: { id: true, name: true } }, ownership: { include: { footballPlayer: true } }, sourceTeam: true, targetTeam: true },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }]
+      })
     ]);
 
     const applications = [...new Map(
@@ -124,6 +135,28 @@ export class ActionCenterService {
       ...auctions.flatMap((auction) => {
         const team = teamByLeague.get(auction.leagueId);
         return team ? [this.auctionItem(auction, team)] : [];
+      }),
+      ...disappearances.map((request): ActionCenterItem => ({
+        id: `disappearance:${request.id}`, version: request.updatedAt.toISOString(), source: 'TRANSACTION',
+        section: request.status === 'PENDING' ? 'STATUS_UPDATE' : 'RECENT',
+        league: request.league, seasonId: request.seasonId, teamId: request.requesterTeamId,
+        title: request.status === 'PENDING' ? '球员消失申请待审核' : request.status === 'APPROVED' ? '球员已移入已消失' : '球员消失申请已处理',
+        detail: `${request.ownership.footballPlayer.nameZh ?? request.ownership.footballPlayer.nameEn ?? '球员'} · ${request.requesterTeam.name}`,
+        statusLabel: request.status === 'PENDING' ? '待管理员审核' : request.status === 'APPROVED' ? '已批准' : '已结束',
+        occurredAt: request.updatedAt.toISOString(),
+        route: `/pages/team-assets/index?teamId=${encodeURIComponent(request.requesterTeamId)}`
+      })),
+      ...transfers.map((proposal): ActionCenterItem => {
+        const counterpartyTeamId = proposal.initiatorTeamId === proposal.sourceTeamId ? proposal.targetTeamId : proposal.sourceTeamId;
+        const isCounterparty = teamIds.includes(counterpartyTeamId);
+        const required = proposal.status === 'PENDING_COUNTERPARTY' && isCounterparty;
+        return { id: `transfer-proposal:${proposal.id}`, version: proposal.updatedAt.toISOString(), source: 'TRANSACTION',
+          section: required ? 'ACTION_REQUIRED' : ['PENDING_COUNTERPARTY', 'PENDING_ADMIN'].includes(proposal.status) ? 'STATUS_UPDATE' : 'RECENT',
+          league: proposal.league, seasonId: proposal.seasonId, teamId: isCounterparty ? counterpartyTeamId : proposal.initiatorTeamId,
+          title: required ? '待确认协商转会' : proposal.status === 'PENDING_ADMIN' ? '协商转会待管理员审核' : '协商转会状态更新',
+          detail: `${proposal.ownership.footballPlayer.nameZh ?? proposal.ownership.footballPlayer.nameEn ?? '球员'} · ${proposal.sourceTeam.name} → ${proposal.targetTeam.name}`,
+          statusLabel: proposal.status === 'PENDING_COUNTERPARTY' ? '待对方确认' : proposal.status === 'PENDING_ADMIN' ? '待终审' : proposal.status === 'APPROVED' ? '已批准' : '已结束',
+          occurredAt: proposal.updatedAt.toISOString(), route: `/pages/transfer-proposals/index?seasonId=${encodeURIComponent(proposal.seasonId)}` };
       })
     ].sort((left, right) => {
       const priority = { ACTION_REQUIRED: 0, STATUS_UPDATE: 1, RECENT: 2 } as const;

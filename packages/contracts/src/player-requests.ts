@@ -98,4 +98,5 @@ export const AdminTransferProposalListSchema = z.object({ items: z.array(AdminTr
 export type SubmitTransferProposal = z.infer<typeof SubmitTransferProposalSchema>;
 export type RespondTransferProposal = z.infer<typeof RespondTransferProposalSchema>;
 export type TransferProposal = z.infer<typeof TransferProposalSchema>;
+export type TransferCandidate = z.infer<typeof TransferCandidateSchema>;
 export type ReviewTransferProposal = z.infer<typeof ReviewTransferProposalSchema>;

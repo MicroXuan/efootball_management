@@ -28,6 +28,7 @@
       <view class="metric"><text>{{assets.playerValueCopy}}</text><label>球员总身价</label></view>
       <view class="metric"><text>{{assets.shellCopy}}</text><label>队壳价值</label></view>
     </view>
+    <button wx:if="{{assets.viewerTeamId && assets.seasonId}}" class="transfer-list-link" bindtap="openTransferList">查看我的协商转会 →</button>
     <view wx:if="{{errorMessage}}" class="release-error">{{errorMessage}}</view>
 
     <view class="roster-head">
@@ -83,6 +84,27 @@
           <text>{{item.releaseEnabled ? '下放后立即释放 1 个阵容名额' : item.releaseDisabledCopy}}</text>
           <button class="release-button" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmRelease" loading="{{releasingOwnershipId === item.ownershipId}}" disabled="{{!item.releaseEnabled || !!releasingOwnershipId}}">下放</button>
         </view>
+        <view wx:if="{{assets.isOwner && selectedStatus === 'ACTIVE'}}" class="asset-actions">
+          <button class="asset-action" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmDisappearance" disabled="{{!item.disappearanceEnabled || submittingRequest}}">{{item.pendingDisappearance ? '消失申请待审核' : '申请标记消失'}}</button>
+          <button class="asset-action" data-player-id="{{item.playerId}}" data-player-name="{{item.playerName}}" bindtap="openTransfer" disabled="{{!item.transferVisible || submittingRequest}}">发起转会</button>
+        </view>
+        <view wx:if="{{!assets.isOwner && selectedStatus === 'ACTIVE' && item.transferVisible}}" class="asset-actions">
+          <button class="asset-action" data-player-id="{{item.playerId}}" data-player-name="{{item.playerName}}" bindtap="openTransfer" disabled="{{submittingRequest}}">协商转会</button>
+          <button wx:if="{{item.forcedVisible}}" class="asset-action asset-action--strong" data-player-id="{{item.playerId}}" bindtap="openForcedOffer">发起强报</button>
+        </view>
+      </view>
+    </view>
+    <view wx:if="{{transferCandidate}}" class="transfer-shade">
+      <view class="transfer-composer">
+        <text class="transfer-title">协商转会 · {{transferPlayerName}}</text>
+        <text class="transfer-hint">双方确认后仍需管理员终审；申请阶段不会转移球员或扣除资金。</text>
+        <text class="transfer-label">转入球队</text>
+        <picker range="{{transferTargets}}" range-key="teamName" value="{{transferTargetIndex}}" bindchange="onTransferTargetChange"><view class="transfer-field">{{transferTargets[transferTargetIndex].teamName}} ⌄</view></picker>
+        <text class="transfer-label">本次协商报价</text>
+        <input class="transfer-field" type="number" value="{{transferAmount}}" placeholder="输入报价" bindinput="onTransferAmountInput" />
+        <text class="transfer-label">备注（选填）</text>
+        <input class="transfer-field" value="{{transferReason}}" maxlength="512" placeholder="补充协商说明" bindinput="onTransferReasonInput" />
+        <view class="transfer-buttons"><button bindtap="closeTransfer" disabled="{{submittingRequest}}">取消</button><button class="transfer-submit" bindtap="submitTransfer" loading="{{submittingRequest}}" disabled="{{!transferAmount || submittingRequest}}">发送给对方确认</button></view>
       </view>
     </view>
   </block>

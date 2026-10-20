@@ -1,6 +1,6 @@
 import type { PublicTeamAssets, TeamAssetOverview } from '@efm/contracts'
 import { expect, it } from 'vitest'
-import { teamAssetsView } from './team-assets.viewmodel'
+import { forcedOfferRoute, teamAssetsView } from './team-assets.viewmodel'
 
 it('presents team identity, owner, totals and three roster groups', () => {
   const player = (rosterStatus: 'ACTIVE'|'DISAPPEARED'|'RETIRED', playerId: string) => ({ ownershipId: `ownership-${playerId}`, ownershipVersion: 2, playerId, playerName: playerId, cardName: '卡片', cardImageUrl: null, position: 'CF', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null, atRating: null, acquiredAt: '2026-10-01T00:00:00.000Z', salaryMinor: 100, rosterStatus, currentValueMinor: rosterStatus === 'ACTIVE' ? 1000 : null, lastEffectiveAt: null, canRelease: rosterStatus === 'ACTIVE', releaseDisabledReason: rosterStatus === 'ACTIVE' ? null : 'OWNERSHIP_NOT_ACTIVE', forcedTransferBadge: playerId === '一线' })
@@ -82,6 +82,14 @@ it('shows an unset cap honestly and keeps a public team roster read-only', () =>
   const view = teamAssetsView(value)
   expect(view).toMatchObject({ isOwner: false, salaryCopy: '800 / 待管理员设置', overCap: false })
   expect(view.active[0]).toMatchObject({ releaseEnabled: false })
+  expect(view.active[0]).toMatchObject({ disappearanceEnabled: false, transferVisible: false, forcedVisible: false })
+  const participantView = teamAssetsView(value, { teamId: 'team-1', seasonId: 'season-1' })
+  expect(participantView.active[0]).toMatchObject({ transferVisible: true, forcedVisible: true })
+  expect(participantView.viewerTeamId).toBe('team-1')
+  expect(forcedOfferRoute(participantView, 'player-1')).toContain('teamId=team-1&playerId=player-1')
+  expect(forcedOfferRoute(view, 'player-1')).toBeNull()
+  const ownPublicView = teamAssetsView(value, { teamId: 'team-2', seasonId: 'season-1' })
+  expect(ownPublicView.active[0]).toMatchObject({ transferVisible: false, forcedVisible: false })
   expect(view.tabs).toEqual([{ key: 'ACTIVE', label: '一线阵容', count: 1 }])
 })
 
