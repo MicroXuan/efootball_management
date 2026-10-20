@@ -5,15 +5,16 @@ import { describe, expect, it } from 'vitest'
 const markup = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.wxml'), 'utf8')
 
 describe('league detail module cards', () => {
-  it('surfaces current-league attention without duplicating business forms', () => {
+  it('keeps transaction reminders without embedding the action center in a league', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
 
-    expect(markup).toContain('class="workspace-todo"')
-    expect(markup).toContain('bindtap="openActionCenter"')
-    expect(markup).toContain('{{leagueAttentionCount}} 项待关注')
+    expect(markup).not.toContain('当前联赛待办')
+    expect(markup).not.toContain('class="workspace-todo"')
+    expect(markup).not.toContain('bindtap="openActionCenter"')
     expect(markup).toContain("marketAttentionCount ? marketAttentionCount + ' 项提醒' : module.stateLabel")
     expect(markup).toContain("auctionAttentionCount ? auctionAttentionCount + ' 项提醒' : '实时开放'")
-    expect(page).toContain('/pages/action-center/index?leagueId=')
+    expect(page).not.toContain('openActionCenter')
+    expect(page).not.toContain('leagueAttentionCount')
   })
 
   it('keeps the compact hero below the runtime status bar', () => {
@@ -74,14 +75,25 @@ describe('league detail module cards', () => {
     expect(markup).not.toContain('切换⌄')
   })
 
-  it('opens the current and historical season schedule from the next-match card', () => {
+  it('opens the current and historical season schedule from the all-fixtures card', () => {
     const page = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.ts'), 'utf8')
 
     expect(markup).toContain('class="workspace-metric workspace-metric--schedule"')
-    expect(markup).toContain('bindtap="openUpcomingMatches"')
+    expect(markup).toContain('bindtap="openFixtures"')
+    expect(markup).toContain('全部赛程')
+    expect(markup).toContain('按队伍和状态查找比赛')
+    expect(markup).not.toContain('下一场')
     expect(markup).toContain('{{workspaceView.rankNotice}}')
     expect(page).not.toContain("upcomingOnly=1")
+    expect(page).not.toContain('loadActionCenterSummary')
     expect(page).toContain('leagueId=')
     expect(page).toContain('seasonId=')
+  })
+
+  it('shows the team identity once and gives rank and fixtures distinct dashboard cards', () => {
+    expect(markup).not.toContain('class="workspace-title">{{workspaceView.teamName}}')
+    expect(markup).toContain('class="workspace-title">赛季工作台</text>')
+    expect(markup).toContain('class="workspace-metric workspace-metric--rank"')
+    expect(markup).toContain('class="workspace-schedule-action"')
   })
 })

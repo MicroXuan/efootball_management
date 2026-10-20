@@ -75,5 +75,18 @@ export function valuationInputState(value: string, player: ValuationWorkspacePla
 export function submissionStateCopy(workspace: ValuationWorkspace): string {
   const status = workspace.submission?.status
   if (!status) return '尚未申报'
+  if ((status === 'PUBLISHED' || status === 'APPROVED') && valuationWorkspaceEditable(workspace)) {
+    return '已发布，新增球员待补报'
+  }
   return ({ DRAFT: '草稿已保存', PUBLISHED: '已自动生效', PENDING_REVIEW: '待管理员整批审核', APPROVED: '审核通过', REJECTED: '已驳回，可修改后重新提交' } as const)[status]
+}
+
+export function valuationWorkspaceEditable(workspace: ValuationWorkspace): boolean {
+  if (workspace.window.state !== 'OPEN') return false
+  const status = workspace.submission?.status
+  if (status === 'PENDING_REVIEW') return false
+  if (status === 'PUBLISHED' || status === 'APPROVED') {
+    return workspace.players.some((player) => player.draftValueMinor === null)
+  }
+  return true
 }

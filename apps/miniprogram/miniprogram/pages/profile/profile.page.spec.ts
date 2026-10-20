@@ -8,13 +8,14 @@ type ProfilePage = {
   openMyMatches(): void
   openPlayerAuctions(): void
   openFavorites(): void
+  startEditingName(): void
 }
 
 let page: ProfilePage
 
 beforeAll(async () => {
   vi.stubGlobal('Page', (definition: ProfilePage) => { page = definition })
-  vi.stubGlobal('wx', { navigateTo: vi.fn(), getSystemInfoSync: vi.fn(() => ({ statusBarHeight: 0 })) })
+  vi.stubGlobal('wx', { navigateTo: vi.fn(), getSystemInfoSync: vi.fn(() => ({ statusBarHeight: 0 })), showToast: vi.fn() })
   await import('./index')
 })
 
@@ -48,5 +49,15 @@ describe('profile quick actions', () => {
     page[method]()
 
     expect(wx.navigateTo).toHaveBeenCalledWith({ url })
+  })
+
+  it('opens nickname editing with the current generated name', () => {
+    const setData = vi.fn()
+    page.startEditingName.call({
+      data: { profile: { displayName: '疾风中场' } },
+      setData,
+    })
+
+    expect(setData).toHaveBeenCalledWith({ editingName: true, displayNameDraft: '疾风中场', errorMessage: '' })
   })
 })

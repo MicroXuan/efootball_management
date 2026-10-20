@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { jest } from '@jest/globals';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
@@ -56,6 +57,39 @@ describe('LeaguesService', () => {
     defaultChampionCapacity: 18,
     defaultPromotionCount: 4
   };
+
+  it('returns a browser-readable URL for a public CloudBase league logo', async () => {
+    const findMany = jest.fn(async () => [{
+      id: 'league-cloud-logo',
+      name: '体验联赛',
+      shortName: '体验',
+      description: '',
+      logoUrl: 'cloud://env/league-images--logo.png',
+      status: 'ACTIVE',
+      edition: 'NATIONAL',
+      resultEvidenceRequired: false,
+      defaultSuperCapacity: 23,
+      defaultChampionCapacity: 18,
+      defaultPromotionCount: 4,
+      currentSeason: null,
+      version: 1,
+      createdAt: new Date('2026-10-17T00:00:00.000Z'),
+      updatedAt: new Date('2026-10-17T00:00:00.000Z')
+    }]);
+    const storage = {
+      temporaryReadUrl: jest.fn(async () => 'https://temporary.example/league-logo.png')
+    };
+    const Service = LeaguesService as unknown as new (...args: unknown[]) => LeaguesService;
+    const publicService = new Service({ league: { findMany } }, {}, {}, {}, storage);
+
+    await expect(publicService.listPublic({ limit: 20 })).resolves.toMatchObject({
+      items: [{ logoUrl: 'https://temporary.example/league-logo.png' }]
+    });
+    expect(storage.temporaryReadUrl).toHaveBeenCalledWith(
+      'cloud://env/league-images--logo.png',
+      600
+    );
+  });
 
   it('creates default rules and a scoped league manager binding', async () => {
     const created = await service.create(actorId, input, `create-${suffix}`);

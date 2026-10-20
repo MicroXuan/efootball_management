@@ -19,7 +19,6 @@ const workspaceFixture = (overrides: Partial<LeagueWorkspaceResponse> = {}): Lea
   team: { leagueTeamId: 'team-1', name: '海港', shortName: '海港', logoUrl: null },
   division: { stageId: 'stage-a', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
   currentRank: { rank: 2, points: 13, played: 6, tiePending: true },
-  nextMatch: { id: 'match-1', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
   capabilities: {
     canViewStandings: true,
     canViewAssets: true,
@@ -91,8 +90,8 @@ describe('league detail view model', () => {
 
   it('presents enrolled workspace data and stable empty states', () => {
     const workspace = workspaceFixture()
-    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2', rankNotice: '同分待定', nextMatch: '第 7 轮 · 对阵 申花', nextMatchTime: '时间待定' })
-    expect(workspaceSummary({ ...workspace, division: null, currentRank: null, nextMatch: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', nextMatch: '暂无待进行比赛' })
+    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2', rankNotice: '同分待定', scheduleTitle: '全部赛程', scheduleHint: '按队伍和状态查找比赛' })
+    expect(workspaceSummary({ ...workspace, division: null, currentRank: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', scheduleTitle: '全部赛程' })
   })
 
   it('exposes the complete Chinese league operations matrix without hiding a closed valuation window', () => {

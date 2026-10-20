@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { PlayerCardSummary } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
 import {
@@ -29,6 +31,14 @@ const card = (overrides: Partial<PlayerCardSummary> = {}): PlayerCardSummary => 
 })
 
 describe('player list view model', () => {
+  it('gates catalog requests behind a session and preserves the tab return route', () => {
+    const source = readFileSync(resolve(process.cwd(), 'miniprogram/pages/players/index.ts'), 'utf8')
+    const catalog = readFileSync(resolve(process.cwd(), 'miniprogram/services/catalog.ts'), 'utf8')
+    expect(source).toContain('session.getAccessToken()')
+    expect(source).toContain("const route = '/pages/players/index'")
+    expect(catalog).not.toContain('skipAuth: true')
+  })
+
   it('omits empty filters and encodes a Chinese keyword exactly once', () => {
     expect(buildPlayerQuery({ keyword: '', position: undefined, limit: 20 }))
       .toBe('/players?limit=20')

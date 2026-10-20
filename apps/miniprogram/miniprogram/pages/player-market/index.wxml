@@ -27,7 +27,7 @@
     <view class="result-summary"><text>按球员展示</text><text>已加载 {{players.length}} 名</text></view>
     <view wx:for="{{players}}" wx:key="playerId" class="player-card" data-player-id="{{item.playerId}}" bindtap="openPlayer">
       <view class="player-artwork">
-        <entity-artwork src="{{item.portraitUrl}}" fallback="{{item.portraitFallback}}" shape="portrait" />
+        <entity-artwork src="{{item.portraitUrl}}" fallback="{{item.portraitFallback}}" shape="portrait" directHttps="{{true}}" />
         <view class="artwork-rating"><text class="rating">{{item.overallLabel}}</text><text>{{item.position}}</text></view>
       </view>
       <view class="player-main"><view class="name-row"><text class="player-name">{{item.playerName}}</text><text wx:if="{{item.forcedTransferBadge}}" class="forced-badge">强报</text></view><text class="player-meta">{{item.nationality || '国籍未知'}} · {{item.club || '俱乐部未知'}}</text><text class="price">官方身价 {{item.officialValueLabel}}</text></view>

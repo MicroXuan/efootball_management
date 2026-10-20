@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import type { PlatformSyncStatus } from '@efm/contracts';
 
-const ACTIVE_STATUSES = new Set<PlatformSyncStatus>(['PENDING', 'RUNNING']);
+const ACTIVE_STATUSES = new Set<PlatformSyncStatus>(['PENDING', 'RUNNING', 'PAUSED']);
 
 export function useSyncRun({ status, refresh, intervalMs = 2_500 }: {
   status: PlatformSyncStatus | null;

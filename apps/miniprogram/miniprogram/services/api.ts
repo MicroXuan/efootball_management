@@ -1,5 +1,5 @@
 import type { AuthTokenResponse } from '@efm/contracts'
-import { apiBasePath, cloudbaseEnvironmentId, cloudbaseServiceName } from '../config/api'
+import { apiRuntimeConfig, type ApiRuntimeConfig } from '../config/api'
 import { session } from './session'
 
 type ApiErrorEnvelope = {
@@ -47,22 +47,53 @@ export class ApiError extends Error {
 
 let refreshPromise: Promise<void> | undefined
 
-function rawRequest<T>(options: ApiRequestOptions, accessToken?: string): Promise<RawResponse<T>> {
+export function rawRequestWithConfig<T>(
+  runtimeConfig: ApiRuntimeConfig,
+  options: ApiRequestOptions,
+  accessToken?: string,
+): Promise<RawResponse<T>> {
+  const tunnelsPatch = runtimeConfig.transport === 'http' && options.method === 'PATCH'
+  const header = {
+    'content-type': 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...options.headers,
+    ...(tunnelsPatch ? { 'X-HTTP-Method-Override': 'PATCH' } : {}),
+  }
+
+  if (runtimeConfig.transport === 'http') {
+    const method = options.method === 'PATCH' ? 'POST' : options.method ?? 'GET'
+    return new Promise((resolve, reject) => {
+      wx.request({
+        url: `${runtimeConfig.baseUrl}${options.path}`,
+        method,
+        data: options.data,
+        header,
+        success: (response) => resolve({
+          statusCode: response.statusCode,
+          data: response.data as T,
+        }),
+        fail: () => reject(new ApiError('NETWORK_ERROR', '网络连接失败，请确认本地 API 已启动', 0)),
+      })
+    })
+  }
+
   const cloud = wx.cloud as unknown as CloudContainerApi
   return cloud.callContainer<T>({
-    config: { env: cloudbaseEnvironmentId },
-    path: `${apiBasePath}${options.path}`,
+    config: { env: runtimeConfig.environmentId },
+    path: `${runtimeConfig.basePath}${options.path}`,
     method: options.method ?? 'GET',
     data: options.data,
     header: {
-      'X-WX-SERVICE': cloudbaseServiceName,
-      'content-type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...options.headers,
+      'X-WX-SERVICE': runtimeConfig.serviceName,
+      ...header,
     },
   }).catch(() => {
     throw new ApiError('NETWORK_ERROR', '网络连接失败，请稍后重试', 0)
   })
+}
+
+function rawRequest<T>(options: ApiRequestOptions, accessToken?: string): Promise<RawResponse<T>> {
+  return rawRequestWithConfig<T>(apiRuntimeConfig, options, accessToken)
 }
 
 function toApiError(response: RawResponse<unknown>): ApiError {

@@ -30,7 +30,12 @@ export function derivePlayerAutoBuild(input: {
   maxLevel: number | string | null | undefined
   cardType?: PlayerCardType
 }) {
-  if (input.cardType === 'TRENDING') {
+  const maxLevel = typeof input.maxLevel === 'number'
+    ? input.maxLevel
+    : typeof input.maxLevel === 'string' && input.maxLevel.trim()
+      ? Number(input.maxLevel)
+      : Number.NaN
+  if (input.cardType === 'TRENDING' || maxLevel === 0) {
     return {
       allocation: {},
       maxOverall: input.overallRating,
@@ -38,12 +43,7 @@ export function derivePlayerAutoBuild(input: {
       algorithmVersion: finalCardBuildVersion,
     }
   }
-  const maxLevel = typeof input.maxLevel === 'number'
-    ? input.maxLevel
-    : typeof input.maxLevel === 'string' && input.maxLevel.trim()
-      ? Number(input.maxLevel)
-      : Number.NaN
-  if (!Number.isFinite(maxLevel) || maxLevel <= 0) return null
+  if (!Number.isFinite(maxLevel) || maxLevel < 0) return null
 
   const baseWeights = automaticBuildWeights[input.position]
   const weights = [...baseWeights]

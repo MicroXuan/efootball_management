@@ -124,6 +124,24 @@ describe('PESDATA player mapping', () => {
     expect(row.algorithmVersion).toBe('pesdata-final-card-v1');
   });
 
+  it('maps an epic card with zero progression points to its published overall', () => {
+    const row = mapPesdataPlayer({
+      ...detail,
+      overall: 87,
+      cardType: 3,
+      maxLevel: 0,
+      autoBuildAllocation: undefined,
+      autoBuildMaxOverall: undefined,
+      dtRating: undefined,
+      algorithmVersion: undefined
+    });
+
+    expect(row.autoBuildAllocation).toEqual({});
+    expect(row.autoBuildMaxOverall).toBe(87);
+    expect(row.dtRating).toBeUndefined();
+    expect(row.algorithmVersion).toBe('pesdata-final-card-v1');
+  });
+
   it('produces stable checksums independent of object key order', () => {
     expect(pesdataValueChecksum({ a: 1, b: { c: 2 } })).toBe(
       pesdataValueChecksum({ b: { c: 2 }, a: 1 })

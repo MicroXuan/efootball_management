@@ -58,6 +58,20 @@ export class PlatformDataSyncController {
     @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
   ) { return this.sync.resumePlayerRun(admin.id, runId); }
 
+  @Post('players/runs/:runId/pause')
+  @HttpCode(202)
+  pausePlayerRun(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
+  ) { return this.sync.pausePlayerRun(admin.id, runId); }
+
+  @Post('players/runs/:runId/cancel')
+  @HttpCode(202)
+  cancelPlayerRun(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
+  ) { return this.sync.cancelPlayerRun(admin.id, runId); }
+
   @Get('players/runs/:runId/batches')
   listPlayerBatches(
     @CurrentAdmin() admin: CurrentAdminIdentity,
@@ -116,6 +130,20 @@ export class PlatformDataSyncController {
     @CurrentAdmin() admin: CurrentAdminIdentity,
     @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
   ) { return this.sync.resumeTeamRun(admin.id, runId); }
+
+  @Post('teams/runs/:runId/pause')
+  @HttpCode(202)
+  pauseTeamRun(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
+  ) { return this.sync.pauseTeamRun(admin.id, runId); }
+
+  @Post('teams/runs/:runId/cancel')
+  @HttpCode(202)
+  cancelTeamRun(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
+  ) { return this.sync.cancelTeamRun(admin.id, runId); }
 
   @Get('teams/runs/:runId/items')
   listTeamItems(

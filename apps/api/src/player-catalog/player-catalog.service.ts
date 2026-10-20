@@ -1,12 +1,13 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type {
-  CardPackDetail,
-  CardPackListResponse,
-  PlayerCardDetail,
-  PlayerCardSummary,
-  PlayerDetail,
-  PlayerSearchQuery,
-  PlayerSearchResponse
+import {
+  derivePesdataAutoBuild,
+  type CardPackDetail,
+  type CardPackListResponse,
+  type PlayerCardDetail,
+  type PlayerCardSummary,
+  type PlayerDetail,
+  type PlayerSearchQuery,
+  type PlayerSearchResponse
 } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import type { PlayerCardVersion } from '../generated/prisma/client.js';
@@ -24,6 +25,12 @@ function numericRecord(value: unknown): Record<string, number> {
   return Object.fromEntries(Object.entries(value).filter(
     (entry): entry is [string, number] => Number.isInteger(entry[1]) && Number(entry[1]) >= 0
   ));
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function compareSnapshot(
@@ -114,6 +121,14 @@ export class PlayerCatalogService {
       where: { playerCardId: id },
       orderBy: [{ calculatedAt: 'desc' }, { createdAt: 'desc' }]
     });
+    const attributes = objectRecord(card.attributesJson);
+    const sourceMetadata = objectRecord(attributes?.sourceMetadata);
+    const derivedAutoBuild = autoBuild ? null : derivePesdataAutoBuild({
+      position: card.position,
+      overallRating: card.overallRating,
+      maxLevel: sourceMetadata?.maxLevel as number | string | null | undefined,
+      cardType: card.cardType
+    });
     return {
       ...this.summary(card),
       nationality: card.nationality,
@@ -125,12 +140,14 @@ export class PlayerCatalogService {
         nameEn: code
       })),
       attributes: card.attributesJson as Record<string, number>,
-      autoBuild: autoBuild ? {
-        allocation: numericRecord(autoBuild.allocationJson),
-        maxOverall: autoBuild.maxOverall,
-        dtRating: autoBuild.dtRating,
-        algorithmVersion: autoBuild.algorithmVersion
-      } : null,
+      autoBuild: autoBuild
+        ? {
+            allocation: numericRecord(autoBuild.allocationJson),
+            maxOverall: autoBuild.maxOverall,
+            dtRating: autoBuild.dtRating,
+            algorithmVersion: autoBuild.algorithmVersion
+          }
+        : derivedAutoBuild,
       otherCards: all
         .filter((version) =>
           version.playerId === card.playerId

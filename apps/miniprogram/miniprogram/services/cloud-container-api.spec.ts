@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { api } from './api'
+import { api, rawRequestWithConfig } from './api'
 
 describe('CloudBase container API transport', () => {
   const callContainer = vi.fn()
@@ -26,10 +26,66 @@ describe('CloudBase container API transport', () => {
       method: 'GET',
       data: undefined,
       header: {
-        'X-WX-SERVICE': 'efm-api-staging',
+        'X-WX-SERVICE': 'efm-dev',
         'content-type': 'application/json',
       },
     })
     expect(request).not.toHaveBeenCalled()
+  })
+
+  it('uses wx.request for the local DevTools API', async () => {
+    request.mockImplementation(({ success }: WechatMiniprogram.RequestOption) => {
+      success?.({
+        statusCode: 200,
+        data: { status: 'local' },
+        header: {},
+        cookies: [],
+        profile: {} as WechatMiniprogram.RequestProfile,
+        errMsg: 'request:ok',
+      })
+      return {} as WechatMiniprogram.RequestTask
+    })
+
+    await expect(rawRequestWithConfig<{ status: string }>(
+      { transport: 'http', baseUrl: 'http://127.0.0.1:3000/v1' },
+      { path: '/health', skipAuth: true },
+    )).resolves.toEqual({ statusCode: 200, data: { status: 'local' } })
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'http://127.0.0.1:3000/v1/health',
+      method: 'GET',
+      data: undefined,
+      header: { 'content-type': 'application/json' },
+    }))
+    expect(callContainer).not.toHaveBeenCalled()
+  })
+
+  it('tunnels PATCH through a method override for wx.request', async () => {
+    request.mockImplementation(({ success }: WechatMiniprogram.RequestOption) => {
+      success?.({
+        statusCode: 200,
+        data: { status: 'updated' },
+        header: {},
+        cookies: [],
+        profile: {} as WechatMiniprogram.RequestProfile,
+        errMsg: 'request:ok',
+      })
+      return {} as WechatMiniprogram.RequestTask
+    })
+
+    await rawRequestWithConfig(
+      { transport: 'http', baseUrl: 'http://127.0.0.1:3000/v1' },
+      { path: '/profile', method: 'PATCH', data: { displayName: '本地用户' } },
+      'access-token',
+    )
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST',
+      header: {
+        Authorization: 'Bearer access-token',
+        'X-HTTP-Method-Override': 'PATCH',
+        'content-type': 'application/json',
+      },
+    }))
   })
 })

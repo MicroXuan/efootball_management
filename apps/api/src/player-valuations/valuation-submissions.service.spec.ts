@@ -50,7 +50,10 @@ function harness(proposedValueMinor = 1100) {
       update: jest.fn(async () => item),
       upsert: jest.fn(async () => item)
     },
-    leaguePlayerValuation: { upsert: jest.fn(async () => undefined) },
+    leaguePlayerValuation: {
+      findMany: jest.fn(async () => [{ footballPlayerId: 'player-1', currentValueMinor: 1000 }]),
+      upsert: jest.fn(async () => undefined)
+    },
     playerValuationHistory: { create: jest.fn(async () => undefined) }
   };
   const prisma = {
@@ -176,5 +179,90 @@ describe('ValuationSubmissionsService', () => {
     expect(tx.valuationSubmission.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ attemptNumber: 2 })
     });
+  });
+
+  it('starts a new draft attempt when a published team signs another player', async () => {
+    const { service, tx, snapshots, snapshot, submission, item } = harness();
+    const newSnapshotId = '33333333-3333-4333-8333-333333333333';
+    const newSnapshot = {
+      ...snapshot,
+      id: newSnapshotId,
+      ownershipId: 'ownership-2',
+      footballPlayerId: 'player-2',
+      baseValueMinor: null
+    };
+    snapshots.ensureWindowSnapshot.mockResolvedValueOnce([snapshot, newSnapshot] as never);
+    tx.valuationSubmission.findFirst.mockResolvedValueOnce({
+      ...submission,
+      status: 'PUBLISHED',
+      version: 2,
+      items: [item]
+    });
+
+    const result = await service.saveDraft('user-1', 'team-1', {
+      windowId,
+      expectedVersion: 2,
+      items: [
+        { snapshotId, proposedValueMinor: 1100 },
+        { snapshotId: newSnapshotId, proposedValueMinor: 900 }
+      ]
+    }, at);
+
+    expect(result).toMatchObject({ attemptNumber: 2, status: 'DRAFT' });
+    expect(tx.valuationSubmission.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ attemptNumber: 2 })
+    });
+    expect(tx.valuationSubmissionItem.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('carries the current official value into a supplementary publish instead of the opening value', async () => {
+    const { service, tx, snapshots, snapshot, submission } = harness();
+    const newSnapshotId = '33333333-3333-4333-8333-333333333333';
+    const newSnapshot = {
+      ...snapshot,
+      id: newSnapshotId,
+      ownershipId: 'ownership-2',
+      footballPlayerId: 'player-2',
+      baseValueMinor: null
+    };
+    snapshots.ensureWindowSnapshot.mockResolvedValueOnce([snapshot, newSnapshot] as never);
+    tx.leaguePlayerValuation.findMany.mockResolvedValueOnce([
+      { footballPlayerId: 'player-1', currentValueMinor: 1100 }
+    ]);
+    tx.valuationSubmission.findFirst.mockResolvedValueOnce({
+      ...submission,
+      id: 'submission-2',
+      attemptNumber: 2,
+      items: [{
+        ...submission.items[0],
+        snapshotId: newSnapshotId,
+        baseValueMinor: null,
+        proposedValueMinor: 900
+      }]
+    } as never);
+    tx.valuationSubmission.findUniqueOrThrow.mockResolvedValueOnce({
+      ...submission,
+      id: 'submission-2',
+      attemptNumber: 2,
+      items: [{
+        ...submission.items[0],
+        snapshotId: newSnapshotId,
+        baseValueMinor: null,
+        proposedValueMinor: 900
+      }]
+    } as never);
+
+    await service.publish('user-1', 'team-1', {
+      windowId,
+      expectedVersion: 1
+    }, 'publish-supplement', at);
+
+    expect(tx.valuationSubmissionItem.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { submissionId_snapshotId: { submissionId: 'submission-2', snapshotId } },
+      update: expect.objectContaining({
+        baseValueMinor: 1100,
+        proposedValueMinor: 1100
+      })
+    }));
   });
 });

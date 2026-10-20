@@ -10,7 +10,6 @@ const browsingPages = [
   'competitions',
   'competition-detail',
   'my-matches',
-  'match-result',
   'my-league-teams',
   'league-team-detail',
   'season-standings',

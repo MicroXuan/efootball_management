@@ -8,13 +8,12 @@ import type {
   CupRegistrationResponse,
   MyCompetitionListResponse,
   MyMatchListResponse,
-  ParticipantMatchResultDisputeResponse,
   StandingsSnapshotResponse,
   SeasonEntryResponse,
-  SubmitMatchResultRequest,
-  RejectMatchResultRequest,
   ManagerMatchResultRequest,
   ParsedCreateCompetitionRequest,
+  SeasonFixtureListResponse,
+  SeasonFixtureStatus,
   UpdateCompetitionRequest,
 } from '@efm/contracts'
 import { api } from './api'
@@ -45,6 +44,13 @@ export type MyMatchListOptions = {
   upcomingOnly?: boolean
 }
 
+export type SeasonFixtureListOptions = {
+  team?: string
+  status?: SeasonFixtureStatus
+  cursor?: string
+  limit?: number
+}
+
 export function competitionListPath(options: CompetitionListOptions = {}): string {
   return query('/competitions', {
     cursor: options.cursor,
@@ -63,6 +69,23 @@ export function myMatchesPath(options: MyMatchListOptions = {}): string {
   })
 }
 
+export function seasonFixturesPath(
+  leagueId: string,
+  seasonId: string,
+  options: SeasonFixtureListOptions = {},
+): string {
+  const team = options.team?.trim()
+  return query(
+    `/me/leagues/${encodeURIComponent(leagueId)}/seasons/${encodeURIComponent(seasonId)}/fixtures`,
+    {
+      team: team || undefined,
+      status: options.status ?? 'ALL',
+      cursor: options.cursor,
+      limit: options.limit ?? 20,
+    },
+  )
+}
+
 export const competitionsApi = {
   list(options: CompetitionListOptions = {}) {
     return api.request<CompetitionListResponse>({ path: competitionListPath(options), skipAuth: true })
@@ -78,6 +101,11 @@ export const competitionsApi = {
   },
   myMatches(options: MyMatchListOptions = {}) {
     return api.request<MyMatchListResponse>({ path: myMatchesPath(options) })
+  },
+  seasonFixtures(leagueId: string, seasonId: string, options: SeasonFixtureListOptions = {}) {
+    return api.request<SeasonFixtureListResponse>({
+      path: seasonFixturesPath(leagueId, seasonId, options),
+    })
   },
   register(competitionId: string, gameAccountId: string, acceptedRuleVersion: number) {
     return api.request<CompetitionRegistrationResponse>({
@@ -140,29 +168,6 @@ export const competitionsApi = {
     return api.request<CompetitionParticipantSummary[]>({
       path: `/cups/${encodeURIComponent(competitionId)}/participants`, skipAuth: true,
     })
-  },
-  submitResult(matchId: string, input: SubmitMatchResultRequest) {
-    return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: input })
-  },
-  confirmResult(matchId: string, resultVersion: number, expectedVersion: number) {
-    return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results/${resultVersion}/confirm`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: { expectedVersion } })
-  },
-  rejectResult(matchId: string, resultVersion: number, input: RejectMatchResultRequest) {
-    return api.request({ path: `/matches/${encodeURIComponent(matchId)}/results/${resultVersion}/reject`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: input })
-  },
-  resultDispute(matchId: string) {
-    return api.request<ParticipantMatchResultDisputeResponse | null>({ path: `/matches/${encodeURIComponent(matchId)}/result-dispute` })
-  },
-  openTimeoutDispute(matchId: string, evidenceUploadId: string, expectedVersion: number) {
-    return api.request<ParticipantMatchResultDisputeResponse>({ path: `/matches/${encodeURIComponent(matchId)}/result-disputes/timeout`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: { evidenceUploadId, expectedVersion } })
-  },
-  attachResultEvidence(matchId: string, evidenceUploadId: string, expectedVersion: number) {
-    return api.request<ParticipantMatchResultDisputeResponse>({ path: `/matches/${encodeURIComponent(matchId)}/result-dispute/evidence`, method: 'POST',
-      headers: { 'Idempotency-Key': actionKey() }, data: { evidenceUploadId, expectedVersion } })
   },
   create(input: ParsedCreateCompetitionRequest) {
     return api.request<CompetitionDetail>({ path: '/admin/competitions', method: 'POST',

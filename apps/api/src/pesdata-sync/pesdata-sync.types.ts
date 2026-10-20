@@ -1,5 +1,11 @@
 export type PesdataSyncMode = 'sample' | 'full' | 'incremental';
 
+export type SyncChunkOutcome = {
+  disposition: 'CONTINUE' | 'STOP';
+  status: 'PENDING' | 'PAUSED' | 'READY';
+  completionReason: 'TARGET_REACHED' | 'SOURCE_EXHAUSTED' | null;
+};
+
 export type StartPesdataSyncInput = {
   mode: PesdataSyncMode;
   limit?: number;

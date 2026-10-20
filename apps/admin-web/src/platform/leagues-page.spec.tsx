@@ -60,7 +60,10 @@ it('uploads a validated league image before creating the league', async () => {
     .mockResolvedValueOnce({ ...league('新联赛', 1), logoUrl: 'https://media.example/league.png' })
     .mockResolvedValueOnce({ items: [], nextCursor: null });
   const upload = vi.fn().mockResolvedValue({
-    key: 'league-images/test.png', url: 'https://media.example/league.png', mimeType: 'image/png', size: 128
+    key: 'cloud://env/league-images--test.png',
+    url: 'https://temporary.example/league.png',
+    mimeType: 'image/png',
+    size: 128
   });
   const api = { request, upload } as unknown as AdminApi;
   const { container } = render(<MemoryRouter><LeaguesPage api={api} /></MemoryRouter>);
@@ -77,8 +80,32 @@ it('uploads a validated league image before creating the league', async () => {
   await waitFor(() => expect(upload).toHaveBeenCalledWith('/v1/admin/uploads/league-images', file, expect.anything()));
   expect(request).toHaveBeenNthCalledWith(2, '/v1/admin/platform/leagues', expect.objectContaining({
     method: 'POST',
-    body: expect.objectContaining({ edition: 'NATIONAL', logoUrl: 'https://media.example/league.png' })
+    body: expect.objectContaining({ edition: 'NATIONAL', logoUrl: 'cloud://env/league-images--test.png' })
   }));
+});
+
+it('does not replace a stored league logo with its temporary display URL when editing other fields', async () => {
+  const current = { ...league('体验联赛', 1), logoUrl: 'https://temporary.example/league-logo.png' };
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [current], nextCursor: null })
+    .mockResolvedValueOnce({ ...current, name: '体验联赛更新', version: 2 })
+    .mockResolvedValueOnce({ items: [{ ...current, name: '体验联赛更新', version: 2 }], nextCursor: null });
+  render(<MemoryRouter><LeaguesPage api={{ request } as unknown as AdminApi} /></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole('button', { name: '编辑 体验联赛' }));
+  const name = screen.getByLabelText('联赛名称');
+  await userEvent.clear(name);
+  await userEvent.type(name, '体验联赛更新');
+  await userEvent.click(screen.getByRole('button', { name: '保存联赛' }));
+
+  await waitFor(() => expect(request).toHaveBeenNthCalledWith(
+    2,
+    '/v1/admin/platform/leagues/22222222-2222-4222-8222-222222222222',
+    expect.objectContaining({
+      method: 'PATCH',
+      body: expect.not.objectContaining({ logoUrl: expect.anything() })
+    })
+  ));
 });
 
 it('blocks unsupported or oversized league images before upload', async () => {

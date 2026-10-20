@@ -29,7 +29,6 @@ export async function createValuationWindowSnapshot(
     include: valuationSnapshotInclude,
     orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
   });
-  if (locked.snapshotInitializedAt || existing.length > 0) return existing;
 
   const entries = await tx.seasonEntry.findMany({
     where: { seasonId, status: 'APPROVED', leagueTeam: { status: 'ACTIVE' } },
@@ -58,9 +57,15 @@ export async function createValuationWindowSnapshot(
   const valueByPlayer = new Map(
     valuations.map((valuation) => [valuation.footballPlayerId, valuation.currentValueMinor])
   );
-  if (ownerships.length) {
+  const existingKeys = new Set(
+    existing.map((snapshot) => `${snapshot.leagueTeamId}:${snapshot.ownershipId}`)
+  );
+  const missingOwnerships = ownerships.filter(
+    (ownership) => !existingKeys.has(`${ownership.leagueTeamId}:${ownership.id}`)
+  );
+  if (missingOwnerships.length) {
     await tx.valuationRosterSnapshot.createMany({
-      data: ownerships.map((ownership) => ({
+      data: missingOwnerships.map((ownership) => ({
         windowId,
         leagueTeamId: ownership.leagueTeamId,
         ownershipId: ownership.id,
@@ -70,15 +75,21 @@ export async function createValuationWindowSnapshot(
       skipDuplicates: true
     });
   }
-  await tx.valuationWindow.update({
-    where: { id: windowId },
-    data: { snapshotInitializedAt: at }
-  });
-  return tx.valuationRosterSnapshot.findMany({
+  if (!locked.snapshotInitializedAt) {
+    await tx.valuationWindow.update({
+      where: { id: windowId },
+      data: { snapshotInitializedAt: at }
+    });
+  }
+  const snapshots = await tx.valuationRosterSnapshot.findMany({
     where: { windowId },
     include: valuationSnapshotInclude,
     orderBy: [{ leagueTeamId: 'asc' }, { footballPlayerId: 'asc' }]
   });
+  const approvedTeamIds = new Set(teamIds);
+  return snapshots.filter((snapshot) => approvedTeamIds.has(snapshot.leagueTeamId)
+    && snapshot.ownership.status === 'ACTIVE'
+    && snapshot.ownership.leagueTeamId === snapshot.leagueTeamId);
 }
 
 export async function synchronizeSeasonValuationSnapshots(

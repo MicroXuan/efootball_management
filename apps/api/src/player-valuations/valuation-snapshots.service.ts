@@ -141,6 +141,10 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
     const draftBySnapshot = new Map(
       (submission?.items ?? []).map((item) => [item.snapshotId, item])
     );
+    const submittedSnapshotIds = new Set((submission?.items ?? []).map((item) => item.snapshotId));
+    const hasUnsubmittedPlayer = snapshots.some((snapshot) => !submittedSnapshotIds.has(snapshot.id));
+    const isSupplement = Boolean(submission && (submission.attemptNumber > 1
+      || (['PUBLISHED', 'APPROVED'].includes(submission.status) && hasUnsubmittedPlayer)));
 
     return {
       window: {
@@ -172,7 +176,11 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
         version: submission.version
       } : null,
       players: snapshots.map((snapshot) => {
-        const range = valuationRange(snapshot.baseValueMinor, effective.rule);
+        const currentValueMinor = currentValueByPlayer.get(snapshot.footballPlayerId) ?? null;
+        const baseValueMinor = isSupplement
+          ? currentValueMinor ?? snapshot.baseValueMinor
+          : snapshot.baseValueMinor;
+        const range = valuationRange(baseValueMinor, effective.rule);
         const draft = draftBySnapshot.get(snapshot.id);
         const draftValueMinor = draft?.proposedValueMinor ?? null;
         return {
@@ -185,8 +193,8 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
           cardName: snapshot.ownership.currentPlayerCard.cardName,
           cardImageUrl: snapshot.ownership.currentPlayerCard.imageUrl,
           rosterStatus: snapshot.ownership.status,
-          baseValueMinor: snapshot.baseValueMinor,
-          currentValueMinor: currentValueByPlayer.get(snapshot.footballPlayerId) ?? null,
+          baseValueMinor,
+          currentValueMinor,
           minimumAllowedMinor: range.minimum,
           maximumAllowedMinor: range.maximum,
           draftValueMinor,

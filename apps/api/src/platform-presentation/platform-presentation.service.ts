@@ -7,6 +7,7 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { AdminError } from '../admin/admin.errors.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
+import { publicImageUrl } from '../storage/public-image-url.js';
 
 const PRESENTATION_ID = 'global';
 
@@ -79,12 +80,7 @@ export class PlatformPresentationService {
     leagueCenterBannerUrl: string | null;
     version: number;
   }): Promise<PlatformPresentation> {
-    const leagueCenterBannerUrl = value.leagueCenterBannerUrl?.startsWith('cloud://')
-      ? await this.storage.temporaryReadUrl?.(value.leagueCenterBannerUrl, 3600)
-      : value.leagueCenterBannerUrl;
-    if (value.leagueCenterBannerUrl?.startsWith('cloud://') && !leagueCenterBannerUrl) {
-      throw new Error('CloudBase banner reads are unavailable');
-    }
+    const leagueCenterBannerUrl = await publicImageUrl(this.storage, value.leagueCenterBannerUrl);
     return {
       leagueCenterBannerUrl: leagueCenterBannerUrl ?? null,
       leagueCenterBannerCloudFileId: value.leagueCenterBannerUrl?.startsWith('cloud://')

@@ -11,4 +11,12 @@ describe('WeChat preview compiler contract', () => {
     expect(config.setting?.es6).toBe(true)
     expect(config.setting?.minified).toBe(true)
   })
+
+  it('opens the league center as the mini-program home page', () => {
+    const app = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'miniprogram/app.json'), 'utf8'),
+    ) as { pages?: string[] }
+
+    expect(app.pages?.[0]).toBe('pages/leagues/index')
+  })
 })

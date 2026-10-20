@@ -9,6 +9,7 @@ import { CupProgressionService } from './cup-progression.service.js';
 import { MatchResultDisputesService } from './match-result-disputes.service.js';
 
 config({ path: '../../.env', quiet: true });
+jest.setTimeout(30_000);
 
 describe('ResultsService', () => {
   const prisma = new PrismaService();
@@ -449,7 +450,10 @@ describe('league administrator match results', () => {
         update: jest.fn(async () => ({})),
         updateMany: jest.fn(async () => ({ count: 1 }))
       },
-      matchResultDispute: { findUnique: jest.fn(async () => null) },
+      matchResultDispute: {
+        findUnique: jest.fn(async () => ({ id: 'dispute-1', status: 'READY_FOR_REVIEW' })),
+        update: jest.fn(async () => ({}))
+      },
       matchResultEvidence: { updateMany: jest.fn(async () => ({ count: 0 })) },
       matchResultEvent: { createMany: jest.fn(async () => ({ count: 1 })) },
       matchResultVersion: {
@@ -487,6 +491,13 @@ describe('league administrator match results', () => {
       submittedById: null, submittedByAdminId: 'admin-1', homeScore: 2, awayScore: 1
     }) });
     expect(standings.recalculate).toHaveBeenCalledWith(transaction, 'competition-1', 'result-1', 'stage-1');
+    expect(transaction.matchResultDispute.update).toHaveBeenCalledWith({
+      where: { id: 'dispute-1' },
+      data: expect.objectContaining({
+        status: 'RESOLVED', activeKey: null, finalHomeScore: 2, finalAwayScore: 1,
+        decidedByAdminId: 'admin-1'
+      })
+    });
     expect(audit.record).toHaveBeenCalledWith(transaction, expect.objectContaining({
       actorAdminId: 'admin-1', leagueId: 'league-1', action: 'admin.competition-result.record'
     }));

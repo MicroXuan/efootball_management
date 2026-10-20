@@ -47,21 +47,12 @@ export class LeagueWorkspaceService {
     );
     const stage = participant?.stageMemberships[0]?.stage ?? null;
     const now = new Date();
-    const [snapshot, matches, valuationWindow] = await Promise.all([
+    const [snapshot, valuationWindow] = await Promise.all([
       stage && participant ? this.prisma.standingsSnapshot.findFirst({
         where: { stageId: stage.id },
         orderBy: { version: 'desc' },
         include: { rows: { where: { participantId: participant.id }, take: 1 } }
       }) : Promise.resolve(null),
-      stage && participant ? this.prisma.competitionMatch.findMany({
-        where: {
-          stageId: stage.id,
-          officialResultVersionId: null,
-          status: { notIn: ['CONFIRMED', 'ADMIN_DECIDED'] },
-          OR: [{ homeParticipantId: participant.id }, { awayParticipantId: participant.id }]
-        },
-        include: { homeParticipant: true, awayParticipant: true }
-      }) : Promise.resolve([]),
       this.prisma.valuationWindow.findFirst({
         where: {
           seasonId,
@@ -73,14 +64,6 @@ export class LeagueWorkspaceService {
       })
     ]);
     const rank = snapshot?.rows[0] ?? null;
-    matches.sort((left, right) => {
-      const leftTime = left.plannedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const rightTime = right.plannedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return leftTime - rightTime || left.roundNumber - right.roundNumber || left.matchNumber - right.matchNumber || left.id.localeCompare(right.id);
-    });
-    const next = matches[0] ?? null;
-    const isHome = next?.homeParticipantId === participant?.id;
-
     return {
       leagueId,
       seasonId,
@@ -100,13 +83,6 @@ export class LeagueWorkspaceService {
         points: rank.totalPoints,
         played: rank.played,
         tiePending: rank.tiePending
-      } : null,
-      nextMatch: next ? {
-        id: next.id,
-        roundNumber: next.roundNumber,
-        plannedAt: next.plannedAt?.toISOString() ?? null,
-        opponentName: isHome ? next.awayParticipant.displayNameSnapshot : next.homeParticipant.displayNameSnapshot,
-        side: isHome ? 'HOME' : 'AWAY'
       } : null,
       capabilities: {
         canViewStandings: Boolean(stage),

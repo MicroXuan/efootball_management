@@ -121,6 +121,31 @@ export class PlayerAuctionBidService {
     return this.prisma.$transaction(async (tx) => {
       const snapshot = await tx.playerAuctionBatch.findUnique({ where: { id: batchId } });
       if (!snapshot) throw new PlayerAuctionError('AUCTION_NOT_FOUND', '拍卖批次不存在', 404);
+      const replay = await tx.playerAuctionBid.findUnique({
+        where: {
+          lotId_userId_idempotencyKey: {
+            lotId: input.lotId,
+            userId,
+            idempotencyKey
+          }
+        },
+        include: { leagueTeam: { select: { name: true } } }
+      });
+      if (replay) {
+        return {
+          ...replay,
+          teamName: replay.leagueTeam?.name ?? null,
+          deadlineAt: null,
+          requiredMinimum: undefined
+        };
+      }
+      const lotSnapshot = await tx.playerAuctionLot.findUnique({ where: { id: input.lotId } });
+      if (
+        snapshot.currentLotId !== input.lotId ||
+        !lotSnapshot || lotSnapshot.batchId !== snapshot.id || lotSnapshot.deadlineEpoch !== input.deadlineEpoch
+      ) {
+        throw new PlayerAuctionError('AUCTION_EPOCH_CHANGED', '当前拍卖倒计时已变化，请刷新后重试', 409);
+      }
 
       await this.locks.lockLeague(tx, snapshot.leagueId);
       await this.locks.lockBatch(tx, batchId);
@@ -154,7 +179,7 @@ export class PlayerAuctionBidService {
       }
       await this.locks.lockLot(tx, input.lotId);
       const lot = await tx.playerAuctionLot.findUnique({ where: { id: input.lotId } });
-      if (!lot || lot.batchId !== batch.id || lot.deadlineEpoch !== input.deadlineEpoch) {
+      if (!lot || lot.batchId !== batch.id) {
         throw new PlayerAuctionError('AUCTION_EPOCH_CHANGED', '拍卖倒计时已变化，请刷新后重试', 409);
       }
       const now = await this.locks.now(tx);

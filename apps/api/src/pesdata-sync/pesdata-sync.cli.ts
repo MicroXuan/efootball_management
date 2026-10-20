@@ -3,6 +3,8 @@ import { pathToFileURL } from 'node:url';
 import { NestFactory } from '@nestjs/core';
 import { z } from 'zod';
 import { AppModule } from '../app.module.js';
+import { PrismaService } from '../database/prisma.service.js';
+import { PlatformDataSyncRunner } from '../platform-data-sync/platform-data-sync.runner.js';
 import { PesdataSyncService } from './pesdata-sync.service.js';
 import type { PesdataSyncMode } from './pesdata-sync.types.js';
 import { PesdataTeamSyncService, type TeamSyncMode } from './pesdata-team-sync.service.js';
@@ -102,20 +104,46 @@ async function run(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
   try {
     const service = app.get(PesdataSyncService);
-    const result = 'resource' in args
-      ? args.command === 'resume'
-        ? await app.get(PesdataTeamSyncService).resume(args.actorId, args.runId)
-        : await app.get(PesdataTeamSyncService).start(args.actorId, { mode: args.mode, ...(args.limit === undefined ? {} : { limit: args.limit }) })
-      : args.command === 'resume'
-        ? await service.resume(args.actorId, args.runId)
-        : await service.start(args.actorId, {
-          mode: args.mode,
-          ...(args.limit !== undefined ? { limit: args.limit } : {}),
-          dryRun: args.dryRun
+    const prisma = app.get(PrismaService);
+    const runner = app.get(PlatformDataSyncRunner);
+    let result: unknown;
+    if ('resource' in args) {
+      const teamService = app.get(PesdataTeamSyncService);
+      const queued = args.command === 'resume'
+        ? await teamService.resumePlatformRun(args.actorId, args.runId)
+        : await teamService.createPlatformRun(args.actorId, {
+          mode: args.mode, ...(args.limit === undefined ? {} : { limit: args.limit })
         });
+      runner.scheduleTeam(queued.runId);
+      await waitForRun(async () => (await prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).status);
+      result = await prisma.teamCatalogSyncRun.findUniqueOrThrow({ where: { id: queued.runId } });
+    } else if (args.command === 'start' && args.dryRun) {
+      result = await service.start(args.actorId, {
+        mode: args.mode, ...(args.limit !== undefined ? { limit: args.limit } : {}), dryRun: true
+      });
+    } else {
+      const queued = args.command === 'resume'
+        ? await service.resumePlatformRun(args.actorId, args.runId)
+        : await service.createPlatformRun(args.actorId, {
+          mode: args.mode, ...(args.limit !== undefined ? { limit: args.limit } : {})
+        });
+      runner.schedulePlayer(queued.runId);
+      await waitForRun(async () => (await prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).status);
+      result = await prisma.externalSyncRun.findUniqueOrThrow({
+        where: { id: queued.runId }, include: { batchLinks: { orderBy: { chunkIndex: 'asc' } } }
+      });
+    }
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } finally {
     await app.close();
+  }
+}
+
+async function waitForRun(readStatus: () => Promise<string>): Promise<void> {
+  for (;;) {
+    const status = await readStatus();
+    if (['READY', 'FAILED', 'CANCELLED', 'PAUSED'].includes(status)) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
   }
 }
 

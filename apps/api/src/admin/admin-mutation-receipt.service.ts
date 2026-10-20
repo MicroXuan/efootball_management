@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
-import { PrismaService } from '../database/prisma.service.js';
+import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../database/prisma.service.js';
 import { AdminError } from './admin.errors.js';
 
 type JsonResult = Record<string, unknown> | unknown[];
@@ -69,7 +69,10 @@ export class AdminMutationReceiptService {
           data: { resultJson: result as Prisma.InputJsonValue }
         });
         return result;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+      }, {
+        ...PRISMA_TRANSACTION_OPTIONS,
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const winner = await this.prisma.adminMutationReceipt.findUnique({

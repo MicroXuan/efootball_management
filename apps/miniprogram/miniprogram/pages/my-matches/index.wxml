@@ -1,12 +1,25 @@
 <view class="matches-page">
   <view class="page-head">
-    <view><text class="kicker">当前及历史赛季</text><text class="title">我的赛程</text></view>
-    <text class="mark">比分与赛程</text>
+    <view><text class="kicker">当前及历史赛季</text><text class="title">全部赛程</text></view>
+    <text class="mark">赛程与结果</text>
   </view>
 
-  <picker wx:if="{{seasonLabels.length}}" class="season-picker" mode="selector" range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="changeSeason">
-    <view class="season-picker-row"><text>查看赛季</text><text>{{seasonLabels[selectedSeasonIndex]}}⌄</text></view>
-  </picker>
+  <view class="fixture-filters">
+    <picker wx:if="{{seasonLabels.length}}" class="season-picker" mode="selector" range="{{seasonLabels}}" value="{{selectedSeasonIndex}}" bindchange="changeSeason">
+      <view class="season-picker-row"><text>查看赛季</text><text>{{seasonLabels[selectedSeasonIndex]}}⌄</text></view>
+    </picker>
+
+    <view class="team-search">
+      <input value="{{teamInput}}" placeholder="搜索队伍名称或编号" confirm-type="search" bindinput="onTeamInput" bindconfirm="search" />
+      <button bindtap="search">搜索</button>
+    </view>
+
+    <view class="status-filter-bar">
+      <button class="status-filter {{status === 'ALL' ? 'status-filter-active' : ''}}" data-status="ALL" bindtap="changeStatus">全部</button>
+      <button class="status-filter {{status === 'UPCOMING' ? 'status-filter-active' : ''}}" data-status="UPCOMING" bindtap="changeStatus">未开始</button>
+      <button class="status-filter {{status === 'FINISHED' ? 'status-filter-active' : ''}}" data-status="FINISHED" bindtap="changeStatus">已结束</button>
+    </view>
+  </view>
 
   <loading-state wx:if="{{loading && items.length === 0}}" label="正在整理赛程" />
   <view wx:elif="{{errorMessage && items.length === 0}}" class="state-card efm-empty-state">
@@ -17,11 +30,11 @@
   </view>
   <view wx:elif="{{!loading && items.length === 0}}" class="state-card efm-empty-state">
     <text class="efm-empty-state__kicker">暂无赛程</text>
-    <text class="efm-empty-state__title">当前赛季暂无赛程</text>
-    <text class="efm-empty-state__copy">赛程发布后会显示在这里。</text>
+    <text class="efm-empty-state__title">没有符合条件的比赛</text>
+    <text class="efm-empty-state__copy">可以更换队伍关键词、比赛状态或赛季后再试。</text>
   </view>
   <view wx:else class="match-list">
-    <view wx:for="{{items}}" wx:key="matchId" class="match-card" data-id="{{item.matchId}}" bindtap="openMatch" hover-class="match-card-pressed">
+    <view wx:for="{{items}}" wx:key="matchId" class="match-card">
       <view class="match-head"><text>{{item.competition.name}}</text><text class="state-tag">{{item.stateCopy}}</text></view>
       <view class="match-meta"><text>{{item.scheduleMeta}}</text><text>{{item.plannedLabel}}</text></view>
       <view class="fixture-grid">
@@ -39,7 +52,14 @@
           <text wx:if="{{item.away.archived}}" class="archived">已退赛</text>
         </view>
       </view>
-      <view class="match-action"><view><text>{{item.nextActionCopy}}</text><text wx:if="{{item.deadlineCopy}}" class="match-deadline">{{item.deadlineCopy}}</text></view><text class="match-arrow">›</text></view>
     </view>
+
+    <view wx:if="{{errorMessage}}" class="pagination-error">
+      <text>{{errorMessage}}</text>
+      <button class="efm-retry-button" bindtap="retry">重试</button>
+    </view>
+    <button wx:if="{{nextCursor}}" class="load-more" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">
+      {{loadingMore ? '加载中' : '加载更多'}}
+    </button>
   </view>
 </view>

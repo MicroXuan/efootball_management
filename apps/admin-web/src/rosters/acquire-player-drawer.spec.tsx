@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AdminApi } from '../lib/api';
+import { ApiError } from '../lib/api';
 import { AcquirePlayerDrawer } from './acquire-player-drawer';
 
 const leagueId = '11111111-1111-4111-8111-111111111111';
@@ -119,5 +120,19 @@ describe('acquire player drawer', () => {
     await userEvent.click(screen.getByRole('button', { name: '确认购买' }));
     await waitFor(() => expect(request).toHaveBeenCalledTimes(4));
     expect(request.mock.calls[2]?.[1]?.body.idempotencyKey).toBe(request.mock.calls[3]?.[1]?.body.idempotencyKey);
+  });
+
+  it('turns purchase prerequisite API codes into an actionable message', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ items: [], nextCursor: null, releaseSequence: 1 })
+      .mockResolvedValueOnce({ items: [candidate] })
+      .mockRejectedValueOnce(new ApiError({ status: 422, code: 'SALARY_RULE_NOT_CONFIGURED' }));
+    render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request)} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText('搜索球员'), '博努奇');
+    await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+    await userEvent.type(screen.getByLabelText('成交金额'), '100');
+    await userEvent.click(screen.getByRole('button', { name: '确认购买' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('尚未配置生效的工资规则');
   });
 });

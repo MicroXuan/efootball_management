@@ -9,6 +9,8 @@ import { PesdataCrestLoader } from './pesdata-crest-loader.js';
 import { PESDATA_SYNC_OPTIONS, PesdataSyncService } from './pesdata-sync.service.js';
 import { PESDATA_TEAM_SYNC_OPTIONS, PesdataTeamSyncService } from './pesdata-team-sync.service.js';
 import { AdminModule } from '../admin/admin.module.js';
+import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
+import { PesdataTeamChunkProcessor } from './pesdata-team-chunk.processor.js';
 
 @Module({
   imports: [AdminModule, DatabaseModule, PlayerImportModule, StorageModule],
@@ -37,8 +39,10 @@ import { AdminModule } from '../admin/admin.module.js';
     { provide: PESDATA_SYNC_OPTIONS, useValue: {} },
     { provide: PESDATA_TEAM_SYNC_OPTIONS, useValue: {} },
     PesdataSyncService,
+    PesdataPlayerChunkProcessor,
+    PesdataTeamChunkProcessor,
     PesdataTeamSyncService
   ],
-  exports: [PesdataSyncService, PesdataTeamSyncService]
+  exports: [PesdataSyncService, PesdataPlayerChunkProcessor, PesdataTeamSyncService, PesdataTeamChunkProcessor]
 })
 export class PesdataSyncModule {}

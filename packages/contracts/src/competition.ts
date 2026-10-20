@@ -604,6 +604,25 @@ export const CompetitionMatchResponseSchema = z.object({
   updatedAt: TimestampSchema
 });
 
+export const SeasonFixtureStatusSchema = z.enum(['ALL', 'UPCOMING', 'FINISHED']);
+
+export const SeasonFixtureListQuerySchema = z.object({
+  team: z.string().trim().min(1).max(64).optional(),
+  status: SeasonFixtureStatusSchema.default('ALL'),
+  cursor: z.string().min(1).max(2_048).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20)
+});
+
+export const SeasonFixtureListItemSchema = z.object({
+  competition: CompetitionSummarySchema,
+  match: CompetitionMatchResponseSchema
+});
+
+export const SeasonFixtureListResponseSchema = z.object({
+  items: z.array(SeasonFixtureListItemSchema),
+  nextCursor: z.string().nullable()
+});
+
 export const StandingsRowResponseSchema = z.object({
   participantId: ResourceIdSchema,
   displayName: z.string(),
@@ -728,6 +747,10 @@ export type CompetitionMatchListResponse = z.infer<typeof CompetitionMatchListRe
 export type CompetitionRegistrationResponse = z.infer<typeof CompetitionRegistrationResponseSchema>;
 export type CompetitionStageSummary = z.infer<typeof CompetitionStageSummarySchema>;
 export type CompetitionMatchResponse = z.infer<typeof CompetitionMatchResponseSchema>;
+export type SeasonFixtureStatus = z.infer<typeof SeasonFixtureStatusSchema>;
+export type SeasonFixtureListQuery = z.output<typeof SeasonFixtureListQuerySchema>;
+export type SeasonFixtureListItem = z.infer<typeof SeasonFixtureListItemSchema>;
+export type SeasonFixtureListResponse = z.infer<typeof SeasonFixtureListResponseSchema>;
 export type MatchResultVersionResponse = z.infer<typeof MatchResultVersionResponseSchema>;
 export type StandingsSnapshotResponse = z.infer<typeof StandingsSnapshotResponseSchema>;
 export type MyCompetitionResponse = z.infer<typeof MyCompetitionResponseSchema>;

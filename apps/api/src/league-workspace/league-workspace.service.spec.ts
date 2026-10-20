@@ -71,7 +71,7 @@ describe('LeagueWorkspaceService', () => {
     const result = await service.get('user-1', 'league-1', 'season-1');
     expect(result.division).toBeNull();
     expect(result.currentRank).toBeNull();
-    expect(result.nextMatch).toBeNull();
+    expect(result).not.toHaveProperty('nextMatch');
     expect(result.capabilities.canViewStandings).toBe(false);
   });
 
@@ -105,19 +105,10 @@ describe('LeagueWorkspaceService', () => {
     });
   });
 
-  it('selects the earliest planned unfinished match then round and returns the opponent', async () => {
-    const match = (id: string, plannedAt: Date | null, roundNumber: number, matchNumber: number) => ({
-      id, plannedAt, roundNumber, matchNumber, homeParticipantId: 'participant-1', awayParticipantId: `opponent-${id}`,
-      homeParticipant: { displayNameSnapshot: '历史海港' }, awayParticipant: { displayNameSnapshot: `对手${id}` }
-    });
-    const service = workspaceService(prisma({
-      competitionMatch: { findMany: jest.fn(async () => [
-        match('late', new Date('2026-11-02T10:00:00Z'), 2, 2),
-        match('unplanned', null, 1, 1),
-        match('early', new Date('2026-11-01T10:00:00Z'), 3, 3)
-      ]) }
-    }));
-    const result = await service.get('user-1', 'league-1', 'season-1');
-    expect(result.nextMatch).toMatchObject({ id: 'early', opponentName: '对手early', side: 'HOME' });
+  it('does not query or expose a participant-specific next match', async () => {
+    const database = prisma();
+    const result = await workspaceService(database).get('user-1', 'league-1', 'season-1');
+    expect(database.competitionMatch.findMany).not.toHaveBeenCalled();
+    expect(result).not.toHaveProperty('nextMatch');
   });
 });

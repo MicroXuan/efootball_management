@@ -67,6 +67,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
   const [manualForm] = Form.useForm<ManualFields>(); const [feeForm] = Form.useForm<FeeFields>();
   const [settlementForm] = Form.useForm<SettlementFields>();
   const manualKey = useMutationKey(); const feeKey = useMutationKey(); const settlementKey = useMutationKey();
+  const seasonNames = new Map(seasons.map(({ id, displayName }) => [id, displayName]));
   const load = useCallback(async () => {
     try {
       const [ledger, transactionResult, teamResult, ruleResult, seasonResult] = await Promise.all([
@@ -147,7 +148,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
     <Typography.Paragraph type="secondary">所有分类均以中文展示，技术类型码仅保留在接口和审计详情中。</Typography.Paragraph>
     <Table pagination={false} rowKey="id" dataSource={data.items} columns={[
       { title: '时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) }, { title: '球队', dataIndex: 'teamName' },
-      { title: '赛季', render: (_, row) => row.seasonId ?? '历史未归档' },
+      { title: '赛季', render: (_, row) => row.seasonId ? seasonNames.get(row.seasonId) ?? '未知赛季' : '历史未归档' },
       { title: '方向', render: (_, row) => <Tag color={row.direction === 'CREDIT' ? 'success' : 'gold'}>{row.direction === 'CREDIT' ? '收入' : '支出'}</Tag> },
       { title: '类型', render: (_, row) => financeTypeLabels[row.type] ?? '其他项目' },
       { title: '金额', dataIndex: 'amountMinor' }, { title: '说明', dataIndex: 'note' }
@@ -155,7 +156,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
     <Modal open={manualOpen} title="新增财务项目" footer={null} onCancel={() => setManualOpen(false)} destroyOnHidden>
       <Form<ManualFields> form={manualForm} layout="vertical" initialValues={{ direction: 'DEBIT', type: 'MANUAL_ADJUSTMENT' }} onValuesChange={() => manualKey.reset()} onFinish={(values) => void createManual(values)}>
         <Form.Item label="球队" name="leagueTeamId" rules={[{ required: true }]}><Select options={teams.map(({ id, name }) => ({ value: id, label: name }))} /></Form.Item>
-        <Form.Item label="赛季 ID（留空归入历史未归档）" name="seasonId"><Input /></Form.Item>
+        <Form.Item label="赛季" name="seasonId" extra="不选择时归入历史未归档"><Select allowClear placeholder="历史未归档" options={seasons.map(({ id, displayName }) => ({ value: id, label: displayName }))} /></Form.Item>
         <Form.Item label="收支方向" name="direction" rules={[{ required: true }]}><Select options={[{ value: 'CREDIT', label: '收入' }, { value: 'DEBIT', label: '支出' }]} /></Form.Item>
         <Form.Item label="项目类型" name="type" rules={[{ required: true }]}><Select options={manualTypes.map((value) => ({ value, label: financeTypeLabels[value] }))} /></Form.Item>
         <Form.Item label="金额" name="amountMinor" rules={[{ required: true }]}><InputNumber min={1} precision={0} style={{ width: '100%' }} /></Form.Item>

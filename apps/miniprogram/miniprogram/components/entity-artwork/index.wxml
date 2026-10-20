@@ -1,4 +1,4 @@
-<view class="artwork artwork--{{shape}}" aria-label="{{fallback}}">
+<view class="artwork artwork--{{shape}} artwork--{{surface}}" aria-label="{{fallback}}">
   <image
     wx:if="{{displaySrc && !imageFailed}}"
     class="artwork__image"

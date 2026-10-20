@@ -4,7 +4,7 @@ import { leaguesApi } from '../../services/leagues'
 import { leagueTeamsApi } from '../../services/league-teams'
 import { session } from '../../services/session'
 import { loadActionCenter, readActionCenterVersions } from '../../services/action-center'
-import { actionCenterSourceAttention, actionCenterView } from '../action-center/action-center.viewmodel'
+import { actionCenterSourceAttention } from '../action-center/action-center.viewmodel'
 import {
   entryStatusCopy,
   leagueDetailErrorMessage,
@@ -51,7 +51,6 @@ Page({
     workspaceView: null as ReturnType<typeof workspaceSummary> | null,
     workspaceModuleGroups: [] as WorkspaceModuleGroup[],
     playerAuctionEnabled: false,
-    leagueAttentionCount: 0,
     marketAttentionCount: 0,
     auctionAttentionCount: 0,
   },
@@ -109,12 +108,12 @@ Page({
     const season = this.data.selectedSeason
     if (!season) {
       this.setData({ entry: null, entryStatus: entryStatusCopy(this.data.loggedIn, Boolean(this.data.profile), null), workspace: null, workspaceView: null, workspaceModuleGroups: [] })
-      this.clearActionCenterSummary()
+      this.clearTransactionAttention()
       return
     }
     if (!this.data.loggedIn) {
       this.setData({ entry: null, entryStatus: entryStatusCopy(false, false, null), workspace: null, workspaceView: null, workspaceModuleGroups: [] })
-      this.clearActionCenterSummary()
+      this.clearTransactionAttention()
       return
     }
     const entry = await leaguesApi.myEntry(season.id)
@@ -129,31 +128,25 @@ Page({
     } else {
       this.setData({ workspace: null, workspaceView: null, workspaceModuleGroups: [] })
     }
-    await this.loadActionCenterSummary()
+    await this.loadTransactionAttention()
   },
 
-  async loadActionCenterSummary() {
+  async loadTransactionAttention() {
     try {
       const response = await loadActionCenter()
       const readVersions = readActionCenterVersions()
-      const summary = actionCenterView(response, readVersions, this.data.leagueId)
       const sourceCounts = actionCenterSourceAttention(response, readVersions, this.data.leagueId)
       this.setData({
-        leagueAttentionCount: summary.attentionCount,
         marketAttentionCount: sourceCounts.TRANSACTION + sourceCounts.FORCED_TRANSFER,
         auctionAttentionCount: sourceCounts.AUCTION,
       })
     } catch {
-      this.clearActionCenterSummary()
+      this.clearTransactionAttention()
     }
   },
 
-  clearActionCenterSummary() {
-    this.setData({ leagueAttentionCount: 0, marketAttentionCount: 0, auctionAttentionCount: 0 })
-  },
-
-  openActionCenter() {
-    wx.navigateTo({ url: `/pages/action-center/index?leagueId=${encodeURIComponent(this.data.leagueId)}` })
+  clearTransactionAttention() {
+    this.setData({ marketAttentionCount: 0, auctionAttentionCount: 0 })
   },
 
   openPlayerAuctions() {
@@ -161,7 +154,7 @@ Page({
     wx.navigateTo({ url: '/pages/player-auctions/index' })
   },
 
-  openUpcomingMatches() {
+  openFixtures() {
     const workspace = this.data.workspace
     if (!workspace) return
     wx.navigateTo({

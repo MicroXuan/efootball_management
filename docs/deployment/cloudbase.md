@@ -82,7 +82,7 @@ curl -i https://<api-domain>/v1/health
 
 预期 HTTP 200，响应包含 `{"status":"ok"}`。随后用微信开发者工具在真实微信登录模式下验证登录、资料保存和账号管理；检查云托管日志中没有连接串、AppSecret、access token 或 refresh token。
 
-确认后再全量切流。将 `apps/miniprogram/miniprogram/config/api.ts` 的 `apiBaseUrl` 改为 `https://<api-domain>/v1`，在微信公众平台加入 `request` 合法域名，重新编译、预览并上传小程序。
+确认后再全量切流。小程序会根据版本自动选择 CloudBase 服务：体验版使用 `efm-dev`，正式版使用 `efm-api-production`；发布前核对 `apps/miniprogram/miniprogram/config/api.ts` 中的环境 ID 与服务名，然后重新编译、预览并上传小程序。
 
 ## 6. 回滚
 

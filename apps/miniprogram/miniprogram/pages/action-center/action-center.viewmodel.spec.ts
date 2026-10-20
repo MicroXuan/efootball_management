@@ -37,25 +37,17 @@ describe('action center view model', () => {
       TRANSACTION: 3,
       FORCED_TRANSFER: 0,
       AUCTION: 0,
-      MATCH_RESULT: 0,
     })
     expect(actionCenterSourceAttention(response, {}, 'league-1')).toEqual({
       TRANSACTION: 2,
       FORCED_TRANSFER: 0,
       AUCTION: 1,
-      MATCH_RESULT: 0,
     })
   })
 
-  it('labels result reminders and counts their source attention within the selected league', () => {
-    const result = { ...task('match-result:one', 'ACTION_REQUIRED'), source: 'MATCH_RESULT' as const,
-      route: '/pages/match-result/index?id=one' }
-    const hidden = { ...task('match-result:two', 'STATUS_UPDATE', 'league-2'), source: 'MATCH_RESULT' as const,
-      route: '/pages/match-result/index?id=two' }
-    const response = { items: [result, hidden], actionRequiredCount: 1 }
-
-    expect(actionCenterView(response, {}, 'league-1').required[0]).toMatchObject({ marker: '赛', sourceLabel: '比赛赛果' })
-    expect(actionCenterSourceAttention(response, {}, 'league-1').MATCH_RESULT).toBe(1)
-    expect(actionCenterView(response, {}, 'league-1').attentionCount).toBe(1)
+  it('exposes attention counts only for retained business sources', () => {
+    expect(Object.keys(actionCenterSourceAttention(response, {})).sort()).toEqual([
+      'AUCTION', 'FORCED_TRANSFER', 'TRANSACTION',
+    ])
   })
 })

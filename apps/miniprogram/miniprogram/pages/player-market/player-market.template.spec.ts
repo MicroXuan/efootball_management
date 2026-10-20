@@ -40,6 +40,7 @@ describe('native player market pages', () => {
     expect(markup).toContain('src="{{item.portraitUrl}}"')
     expect(markup).toContain('fallback="{{item.portraitFallback}}"')
     expect(markup).toContain('shape="portrait"')
+    expect(markup).toContain('directHttps="{{true}}"')
     expect(markup).toContain('<view class="search-button" bindtap="searchPlayers" role="button">搜索</view>')
     expect(markup).not.toContain('<button bindtap="searchPlayers">搜索</button>')
     expect(styles).toMatch(/\.search-row input\s*\{[^}]*box-sizing:\s*border-box;[^}]*font-size:\s*18rpx;/s)

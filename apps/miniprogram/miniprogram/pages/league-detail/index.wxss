@@ -109,26 +109,22 @@ page { background: #0e1417; color: #f4f7f8; }
 .state-title { margin-top: 18rpx; font-size: 32rpx; font-weight: 800; }
 .outline-button { min-height: 76rpx; margin: 26rpx 0 0; padding: 0 26rpx; font-size: 23rpx; font-weight: 750; }
 .workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
-.workspace-todo { min-height:82rpx;margin-top:20rpx;padding:16rpx 20rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;border:2rpx solid #668b26;border-radius:16rpx;background:rgba(182,241,58,.08); }
-.workspace-todo__label,.workspace-todo__count { display:block; }
-.workspace-todo__label { color:#aab5ba;font-size:17rpx; }
-.workspace-todo__count { margin-top:5rpx;font-size:23rpx;font-weight:850; }
-.workspace-todo__arrow { color:#b6f13a;font-size:19rpx;font-weight:850; }
 .workspace-title { display: block; margin-top: 9rpx; font-size: 34rpx; font-weight: 850; }
 .workspace-division { padding: 10rpx 15rpx; border: 2rpx solid #546b37; border-radius: 18rpx; background: #202c25; color: #d9efac; font-size: 18rpx; font-weight: 800; }
-.workspace-metrics { display: grid; grid-template-columns: 180rpx minmax(0, 1fr); gap: 14rpx; margin-top: 26rpx; }
-.workspace-metrics > view { min-width: 0; padding: 22rpx; border: 2rpx solid #2d393f; border-radius: 18rpx; background: #1c262b; }
-.workspace-metric--schedule { transition: border-color 120ms ease, background-color 120ms ease; }
+.workspace-metrics { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14rpx; margin-top: 26rpx; }
+.workspace-metrics > view { min-width: 0; min-height: 164rpx; box-sizing: border-box; display: flex; flex-direction: column; padding: 22rpx; border: 2rpx solid #2d393f; border-radius: 18rpx; background: #1c262b; }
+.workspace-metric--rank { border-color: #46584b; background: linear-gradient(145deg, rgba(182,241,58,.06), transparent 65%), #1c262b; }
+.workspace-metric--schedule { border-color: #3c4b52; transition: border-color 120ms ease, background-color 120ms ease; }
 .workspace-metric--schedule:active { border-color: #7eaa28; background: #202c25; }
 .workspace-metric__label,
 .workspace-metric__meta { display: block; color: #aab5ba; font-size: 17rpx; }
 .workspace-rank-row { display: flex; align-items: center; gap: 10rpx; }
-.workspace-rank { display: block; margin-top: 8rpx; color: #b6f13a; font-size: 48rpx; font-weight: 900; }
+.workspace-rank { display: block; margin-top: 8rpx; color: #b6f13a; font-size: 52rpx; font-weight: 900; line-height: 1; }
 .workspace-rank-notice { margin-top: 10rpx; padding: 4rpx 8rpx; border: 1rpx solid #6d7c56; border-radius: 8rpx; color: #d9efac; background: #202c25; font-size: 15rpx; font-weight: 750; }
-.workspace-next { display: block; margin-top: 10rpx; font-size: 22rpx; font-weight: 850; line-height: 1.35; }
-.workspace-metric__meta { margin-top: 8rpx; }
-.workspace-schedule-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12rpx; }
-.workspace-schedule-arrow { flex: none; color: #b6f13a; font-size: 16rpx; font-weight: 800; }
+.workspace-next { display: block; font-size: 24rpx; font-weight: 850; line-height: 1.35; }
+.workspace-metric__meta { margin-top: auto; padding-top: 10rpx; line-height: 1.4; }
+.workspace-schedule-action { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin-top: 14rpx; }
+.workspace-schedule-arrow { width: 42rpx; height: 42rpx; flex: none; border: 2rpx solid #546b37; border-radius: 50%; color: #b6f13a; background: #202c25; font-size: 32rpx; font-weight: 700; line-height: 36rpx; text-align: center; }
 
 .workspace-groups { margin-top: 20rpx; }
 .workspace-group + .workspace-group { margin-top: 22rpx; }
@@ -152,3 +148,4 @@ page { background: #0e1417; color: #f4f7f8; }
 .module-tile.is-locked .module-title,
 .module-tile.is-locked .module-arrow { color: #7e8b91; }
 .module-tile.is-locked .module-arrow { font-size: 16rpx; letter-spacing: 2rpx; }
+@media (max-width:340px) { .workspace-metrics { grid-template-columns: 1fr; } .workspace-metrics > view { min-height: 142rpx; } }

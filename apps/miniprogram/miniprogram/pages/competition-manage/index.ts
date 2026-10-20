@@ -3,10 +3,15 @@ import { ApiError } from '../../services/api'
 import { competitionsApi, type SchedulePreview } from '../../services/competitions'
 import { formatLocalDate, lifecycleLabel } from '../competitions/competitions.viewmodel'
 import { canCancelCompetition, groupScheduleByRound, reviewReasonRequired } from '../competition-editor/editor.viewmodel'
-import { validateScore } from '../match-result/result.viewmodel'
 
 type DatasetEvent = { currentTarget: { dataset: { id?: string; version?: number; action?: string } } }
 type InputEvent = { detail: { value: string } }
+
+function validateScore(value: string): number | null {
+  if (!/^\d{1,2}$/.test(value)) return null
+  const score = Number(value)
+  return Number.isInteger(score) && score >= 0 && score <= 99 ? score : null
+}
 
 function actionFor(status: CompetitionDetail['status']): { key: 'open-registration' | 'close-registration' | 'start' | 'complete'; label: string } | null {
   if (status === 'DRAFT') return { key: 'open-registration', label: '开放报名' }
