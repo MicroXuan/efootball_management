@@ -85,6 +85,14 @@ enum RosterEntryStatus {
   RETIRED
 }
 
+enum DisappearanceRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  INVALIDATED
+}
+
 enum ValuationSubmissionStatus {
   DRAFT
   PUBLISHED
@@ -837,6 +845,7 @@ model League {
   playerAuctionBatches      PlayerAuctionBatch[]
   playerApplications        PlayerAcquisitionApplication[]
   playerReleaseRestrictions PlayerReleaseRestriction[]
+  disappearanceRequests     DisappearanceRequest[]
 
   @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -901,6 +910,7 @@ model LeagueTeam {
   playerApplications         PlayerAcquisitionApplication[] @relation("PlayerApplicationApplicantTeam")
   sourcedPlayerApplications  PlayerAcquisitionApplication[] @relation("PlayerApplicationSourceTeam")
   playerReleaseRestrictions  PlayerReleaseRestriction[]
+  disappearanceRequests      DisappearanceRequest[]
   playerNominations          PlayerNomination[]
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
@@ -1068,6 +1078,7 @@ model LeagueSeason {
   playerApplications        PlayerAcquisitionApplication[]
   acquiredPlayerOwnerships  LeaguePlayerOwnership[]        @relation("OwnershipAcquisitionSeason")
   playerReleaseRestrictions PlayerReleaseRestriction[]
+  disappearanceRequests     DisappearanceRequest[]
 
   @@unique([leagueId, seasonNumber], map: "league_seasons_number_unique")
   @@index([leagueId, status], map: "league_seasons_status_idx")
@@ -1197,6 +1208,7 @@ model LeaguePlayerOwnership {
   acquisitionSeason   LeagueSeason?                  @relation("OwnershipAcquisitionSeason", fields: [acquisitionSeasonId], references: [id], onDelete: Restrict)
   valuationSnapshots  ValuationRosterSnapshot[]
   forcedApplications  PlayerAcquisitionApplication[]
+  disappearanceRequests DisappearanceRequest[]
 
   @@unique([leagueId, footballPlayerId], map: "league_player_ownerships_player_unique")
   @@index([leagueTeamId, status], map: "league_player_ownerships_team_status_idx")
@@ -1204,6 +1216,49 @@ model LeaguePlayerOwnership {
   @@index([salaryRuleVersionId], map: "league_player_ownerships_salary_rule_idx")
   @@index([acquisitionSeasonId, acquisitionType], map: "league_player_ownerships_acquisition_idx")
   @@map("league_player_ownerships")
+}
+
+model DisappearanceRequest {
+  id                       String                     @id @default(uuid()) @db.Char(36)
+  leagueId                 String                     @map("league_id") @db.Char(36)
+  seasonId                 String                     @map("season_id") @db.Char(36)
+  ownershipId              String                     @map("ownership_id") @db.Char(36)
+  requesterTeamId          String                     @map("requester_team_id") @db.Char(36)
+  requesterUserId          String                     @map("requester_user_id") @db.Char(36)
+  expectedOwnershipVersion Int                        @map("expected_ownership_version") @db.UnsignedInt
+  status                   DisappearanceRequestStatus @default(PENDING)
+  reason                   String                     @db.VarChar(512)
+  reviewReason             String?                    @map("review_reason") @db.VarChar(512)
+  reviewedByAdminId        String?                    @map("reviewed_by_admin_id") @db.Char(36)
+  reviewedAt               DateTime?                  @map("reviewed_at")
+  version                  Int                        @default(1) @db.UnsignedInt
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
+  league                   League                     @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season                   LeagueSeason               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  ownership                LeaguePlayerOwnership      @relation(fields: [ownershipId], references: [id], onDelete: Restrict)
+  requesterTeam            LeagueTeam                 @relation(fields: [requesterTeamId], references: [id], onDelete: Restrict)
+  events                   DisappearanceRequestEvent[]
+
+  @@index([leagueId, status, createdAt], map: "disappearance_requests_queue_idx")
+  @@index([requesterTeamId, createdAt], map: "disappearance_requests_team_idx")
+  @@index([ownershipId, status], map: "disappearance_requests_ownership_idx")
+  @@map("disappearance_requests")
+}
+
+model DisappearanceRequestEvent {
+  id             String                     @id @default(uuid()) @db.Char(36)
+  requestId      String                     @map("request_id") @db.Char(36)
+  fromStatus     DisappearanceRequestStatus? @map("from_status")
+  toStatus       DisappearanceRequestStatus  @map("to_status")
+  actorUserId    String?                    @map("actor_user_id") @db.Char(36)
+  actorAdminId   String?                    @map("actor_admin_id") @db.Char(36)
+  reason         String?                    @db.VarChar(512)
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  request        DisappearanceRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt, id], map: "disappearance_request_events_timeline_idx")
+  @@map("disappearance_request_events")
 }
 
 model RosterTransaction {
