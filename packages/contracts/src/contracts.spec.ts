@@ -81,6 +81,8 @@ import {
   PlayerCardDetailSchema,
   PlayerApplicationStatusSchema,
   PlayerMarketListResponseSchema,
+  PlayerMarketSalaryDisplaySchema,
+  PlayerMarketSalaryImpactSchema,
   ForcedOfferWindowSchema,
   ForcedOfferWindowListResponseSchema,
   SubmitPlayerApplicationRequestSchema,
@@ -413,6 +415,38 @@ describe('player market contracts', () => {
   const playerCardId = '44444444-4444-4444-8444-444444444444';
   const sourceLeagueTeamId = '55555555-5555-4555-8555-555555555555';
   const ownershipId = '66666666-6666-4666-8666-666666666666';
+
+  it('distinguishes projected and recorded salaries without accepting invented amounts', () => {
+    const ruleId = '88888888-8888-4888-8888-888888888888';
+    const currentTier = { salaryMinor: 600, minOverall: 96, maxOverall: 96,
+      salaryRuleVersionId: ruleId, version: 2, effectiveAt: '2026-10-20T00:00:00.000Z' };
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'PROJECTED', salaryMinor: 500, basisOverall: 96, salaryRuleVersionId: ruleId,
+      currentTier: null, unavailableReason: null
+    }).salaryMinor, 500);
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'ACTUAL', salaryMinor: 400, basisOverall: 96, salaryRuleVersionId: ruleId,
+      currentTier, unavailableReason: null
+    }).currentTier?.salaryMinor, 600);
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'ACTUAL', salaryMinor: 400, basisOverall: 96, salaryRuleVersionId: ruleId,
+      currentTier: null, unavailableReason: 'SALARY_RULE_NOT_CONFIGURED'
+    }).salaryMinor, 400);
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'UNAVAILABLE', salaryMinor: null, basisOverall: null, salaryRuleVersionId: null,
+      currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING'
+    }).salaryMinor, null);
+    assert.equal(PlayerMarketSalaryDisplaySchema.safeParse({
+      kind: 'UNAVAILABLE', salaryMinor: 0, basisOverall: null, salaryRuleVersionId: null,
+      currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING'
+    }).success, false);
+  });
+
+  it('preserves an unset salary cap in the market impact', () => {
+    assert.deepEqual(PlayerMarketSalaryImpactSchema.parse({
+      currentSalaryMinor: 900, salaryCapMinor: null, projectedSalaryMinor: 1400, overCapMinor: null
+    }), { currentSalaryMinor: 900, salaryCapMinor: null, projectedSalaryMinor: 1400, overCapMinor: null });
+  });
 
   it('parses normal and forced player applications', () => {
     assert.equal(SubmitPlayerApplicationRequestSchema.parse({
