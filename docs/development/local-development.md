@@ -52,10 +52,10 @@ pnpm db:status
 
 ## 4. 验证并启动 API
 
-完整发布门禁：
+完整发布门禁必须显式连接本机隔离测试库。当前 `.env` 也可能指向共享 CloudBase 数据库；不要直接运行不带 `DATABASE_URL` 的测试或 `pnpm verify`。
 
 ```bash
-pnpm verify
+DATABASE_URL=mysql://<local-user>:<local-password>@127.0.0.1:3307/efm_test pnpm verify
 ```
 
 API 开发启动：
