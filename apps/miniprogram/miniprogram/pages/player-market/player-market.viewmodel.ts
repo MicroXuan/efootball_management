@@ -39,6 +39,7 @@ export function marketPlayerCard(item: PlayerMarketPlayerSummary) {
     ROSTER_FULL: '先下放球员',
     ROSTER_CAPACITY_REACHED: '先下放球员',
     TRANSFER_WINDOW_CLOSED: '窗口未开放',
+    FORCED_OFFER_WINDOW_CLOSED: '强报期未开放',
     ROSTER_NON_COMPLIANT: '阵容待补足',
     REQUOTE_REQUIRED: '需重新报价',
     OWNERSHIP_CHANGED: '归属已变化',
@@ -76,6 +77,7 @@ export function applicationCard(item: PlayerAcquisitionApplication) {
     typeLabel: item.type === 'FORCED_TRANSFER' ? '强报' : '购买申请',
     statusLabel: ({ PENDING: '审核中', APPROVED: '已通过', NOT_SELECTED: '未选中', REJECTED: '已驳回', WITHDRAWN: '已撤回', EXPIRED: '已过期', INELIGIBLE: '资格失效', REQUOTE_REQUIRED: '需重新报价', OWNERSHIP_CHANGED: '归属变化' } as Record<string, string>)[item.status] ?? item.status,
     canEdit: item.status === 'PENDING' || item.status === 'REQUOTE_REQUIRED',
+    canWithdraw: item.status === 'PENDING' || item.status === 'REQUOTE_REQUIRED',
     timeline: item.events.map((event) => ({
       id: event.id,
       label: eventLabels[event.type],

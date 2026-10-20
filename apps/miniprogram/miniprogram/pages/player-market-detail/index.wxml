@@ -12,7 +12,7 @@
     <view wx:if="{{myApplication}}" class="application-panel">
       <view class="section-head"><view><text class="eyebrow">我的申请</text><text class="section-title">{{myApplication.statusLabel}}</text></view><text class="amount">{{myApplication.amountLabel}}</text></view>
       <text class="muted">{{myApplication.typeLabel}} · 公开队列 {{myApplication.queuePosition || '—'}}</text>
-      <view class="button-grid efm-equal-tabs"><button class="primary-button" bindtap="editApplication" disabled="{{submitting || !myApplication.canEdit}}">修改报价</button><button class="danger-button" bindtap="withdrawApplication" loading="{{submitting}}" disabled="{{submitting || !myApplication.canEdit}}">撤回申请</button></view>
+      <view class="button-grid efm-equal-tabs"><button class="primary-button" bindtap="editApplication" disabled="{{submitting || !myApplication.canEdit}}">修改报价</button><button class="danger-button" bindtap="withdrawApplication" loading="{{submitting}}" disabled="{{submitting || !myApplication.canWithdraw}}">撤回申请</button></view>
     </view>
     <view wx:if="{{forcedCopyText}}" class="forced-copy-panel">
       <text class="eyebrow">微信群文案</text><text class="section-title">分享本次强报报价</text>
@@ -21,7 +21,7 @@
       <button class="primary-button" bindtap="copyForcedOffer">复制强报文案</button>
     </view>
 
-    <view wx:else class="action-panel">
+    <view wx:if="{{!myApplication}}" class="action-panel">
       <text class="eyebrow">交易操作</text><text class="section-title">{{player.label}}</text>
       <text wx:if="{{player.action === 'APPLY'}}" class="warning">最高报价不代表必然获批</text>
       <text wx:if="{{player.action === 'FORCE_SIGN'}}" class="warning">原球队无需同意 · 强报金额不得低于官方身价</text>

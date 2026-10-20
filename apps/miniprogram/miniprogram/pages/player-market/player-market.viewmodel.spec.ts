@@ -16,7 +16,7 @@ const player = (overrides: Partial<PlayerMarketPlayerSummary> = {}): PlayerMarke
 })
 
 const application = (overrides: Partial<PlayerAcquisitionApplication> = {}): PlayerAcquisitionApplication => ({
-  id: 'app-1', leagueId: 'league-1', seasonId: 'season-1', transferWindowId: 'window-1', type: 'NORMAL_PURCHASE',
+  id: 'app-1', leagueId: 'league-1', seasonId: 'season-1', transferWindowId: 'window-1', forcedOfferWindowId: null, type: 'NORMAL_PURCHASE',
   applicantTeam: { teamId: 'team-1', teamNumber: 4, name: '巴塞罗那', logoUrl: null, ownerAlias: '小新（潇洒）' },
   playerId: 'player-1', playerName: 'Michele Di Gregorio', playerCard: player().card!, sourceTeam: null,
   ownershipId: null, ownershipVersionSnapshot: null, amountMinor: 500, valuationMinorSnapshot: 500,
@@ -50,6 +50,7 @@ describe('player market list view model', () => {
     expect(marketPlayerCard(player({ action: 'OWNED_BY_ME' })).actionLabel).toBe('本队球员')
     expect(marketPlayerCard(player({ action: 'DISABLED', disabledReason: 'ROSTER_FULL' }))).toMatchObject({ actionLabel: '先下放球员', releaseRequired: true })
     expect(marketPlayerCard(player({ action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' })).actionLabel).toBe('窗口未开放')
+    expect(marketPlayerCard(player({ action: 'DISABLED', disabledReason: 'FORCED_OFFER_WINDOW_CLOSED' })).actionLabel).toBe('强报期未开放')
     expect(marketPlayerCard(player({ action: 'DISABLED', disabledReason: 'REQUOTE_REQUIRED' })).actionLabel).toBe('需重新报价')
     expect(marketPlayerCard(player({ action: 'DISABLED', disabledReason: 'OWNERSHIP_CHANGED' })).actionLabel).toBe('归属已变化')
   })

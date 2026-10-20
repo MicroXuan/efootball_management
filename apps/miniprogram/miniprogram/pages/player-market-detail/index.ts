@@ -8,7 +8,7 @@ import {
   withdrawPlayerApplication,
 } from '../../services/player-market'
 import { applicationCard } from '../player-market/player-market.viewmodel'
-import { detailAction, marketErrorAction, playerMarketDetailView } from './player-market-detail.viewmodel'
+import { buildPlayerApplicationInput, canEditPlayerApplication, detailAction, marketErrorAction, playerMarketDetailView } from './player-market-detail.viewmodel'
 import { activeForcedOfferCopy } from './forced-offer-copy'
 
 type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string; playerId?: string }
@@ -51,7 +51,11 @@ Page({
       const player = playerMarketDetailView(detail)
       this.setData({
         state: 'loaded', player,
-        myApplication: detail.myApplication ? applicationCard(detail.myApplication) : null,
+        myApplication: detail.myApplication ? {
+          ...applicationCard(detail.myApplication),
+          canEdit: canEditPlayerApplication(detail, detail.myApplication),
+          canWithdraw: detail.myApplication.status === 'PENDING' || detail.myApplication.status === 'REQUOTE_REQUIRED',
+        } : null,
         publicApplications: detail.publicApplications.map(applicationCard),
         amount: detail.myApplication ? String(detail.myApplication.amountMinor) : String(player.minimumAmountMinor),
         amountHint: detail.action === 'FORCE_SIGN' ? `强报不得低于官方身价 ${player.minimumAmountMinor}` : '请输入本次申请金额',
@@ -84,25 +88,20 @@ Page({
   async submitApplication() {
     const detail = this.detail
     const amountMinor = Number(this.data.amount)
-    if (!detail || this.data.submitting || !detail.card || !detail.activeTransferWindowId || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return
+    if (!detail || this.data.submitting || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return
     const action = detailAction(detail)
     if (amountMinor < action.minimumAmountMinor) {
       this.setData({ errorMessage: `金额不得低于 ${action.minimumAmountMinor}` })
       return
     }
+    const input = buildPlayerApplicationInput(detail, amountMinor, this.data.seasonId)
+    if (!input) {
+      this.setData({ errorMessage: detail.action === 'FORCE_SIGN' ? '强报期未开放，请刷新后重试' : '转会窗口未开放，请刷新后重试' })
+      return
+    }
     this.setData({ submitting: true, errorMessage: '' })
     try {
-      const submitted = await submitPlayerApplication(this.data.leagueId, {
-        seasonId: this.data.seasonId,
-        transferWindowId: detail.activeTransferWindowId,
-        footballPlayerId: detail.playerId,
-        playerCardId: detail.card.playerCardId,
-        type: detail.action === 'FORCE_SIGN' ? 'FORCED_TRANSFER' : 'NORMAL_PURCHASE',
-        amountMinor,
-        ...(detail.action === 'FORCE_SIGN' && detail.currentOwner && detail.ownershipId && detail.ownershipVersion
-          ? { sourceLeagueTeamId: detail.currentOwner.teamId, ownershipId: detail.ownershipId, ownershipVersionSnapshot: detail.ownershipVersion }
-          : {}),
-      }, createPlayerMarketMutationKey('submit'))
+      const submitted = await submitPlayerApplication(this.data.leagueId, input, createPlayerMarketMutationKey('submit'))
       await this.loadDetail(false)
       this.setData({ forcedCopyText: activeForcedOfferCopy(submitted, detail.playerEnglishName) ?? '' })
       wx.showToast({ title: '申请已提交', icon: 'success' })
@@ -114,14 +113,14 @@ Page({
   },
 
   editApplication() {
-    if (!this.detail?.myApplication) return
+    if (!this.detail?.myApplication || !canEditPlayerApplication(this.detail, this.detail.myApplication)) return
     this.setData({ showComposer: true, amount: String(this.detail.myApplication.amountMinor) })
   },
 
   async amendApplication() {
     const application = this.detail?.myApplication
     const amountMinor = Number(this.data.amount)
-    if (!application || this.data.submitting || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return
+    if (!application || !this.detail || !canEditPlayerApplication(this.detail, application) || this.data.submitting || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return
     this.setData({ submitting: true, errorMessage: '' })
     try {
       const amended = await amendPlayerApplication(application.id, { amountMinor, expectedVersion: application.version }, createPlayerMarketMutationKey('amend'))
@@ -157,8 +156,8 @@ Page({
 
   async handleMutationError(error: unknown) {
     const action = marketErrorAction(error instanceof ApiError ? error.code : 'UNKNOWN', this.data.teamId)
-    this.setData({ errorMessage: action.message, recoveryLabel: action.actionLabel, recoveryRoute: action.route ?? '' })
     if (!action.route) await this.loadDetail(false)
+    this.setData({ errorMessage: action.message, recoveryLabel: action.actionLabel, recoveryRoute: action.route ?? '' })
   },
 
   goRelease() {

@@ -1,4 +1,4 @@
-import type { PlayerMarketPlayerDetail } from '@efm/contracts'
+import type { PlayerMarketPlayerDetail, SubmitPlayerApplicationRequest } from '@efm/contracts'
 import { marketPlayerCard } from '../player-market/player-market.viewmodel'
 
 export function detailAction(detail: PlayerMarketPlayerDetail) {
@@ -17,6 +17,39 @@ export function playerMarketDetailView(detail: PlayerMarketPlayerDetail) {
   }
 }
 
+export function buildPlayerApplicationInput(detail: PlayerMarketPlayerDetail, amountMinor: number, seasonId: string): SubmitPlayerApplicationRequest | null {
+  if (!detail.card || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return null
+  const base = {
+    seasonId,
+    footballPlayerId: detail.playerId,
+    playerCardId: detail.card.playerCardId,
+    amountMinor,
+  }
+  if (detail.action === 'FORCE_SIGN') {
+    if (!detail.activeForcedOfferWindowId || !detail.currentOwner || !detail.ownershipId || !detail.ownershipVersion) return null
+    return {
+      ...base,
+      type: 'FORCED_TRANSFER',
+      window: { kind: 'FORCED_OFFER', id: detail.activeForcedOfferWindowId },
+      sourceLeagueTeamId: detail.currentOwner.teamId,
+      ownershipId: detail.ownershipId,
+      ownershipVersionSnapshot: detail.ownershipVersion,
+    }
+  }
+  if (detail.action !== 'APPLY' || !detail.activeTransferWindowId) return null
+  return { ...base, type: 'NORMAL_PURCHASE', window: { kind: 'TRANSFER', id: detail.activeTransferWindowId } }
+}
+
+export function canEditPlayerApplication(
+  detail: PlayerMarketPlayerDetail,
+  application: Pick<NonNullable<PlayerMarketPlayerDetail['myApplication']>, 'type' | 'status' | 'transferWindowId' | 'forcedOfferWindowId'>,
+): boolean {
+  if (application.status !== 'PENDING' && application.status !== 'REQUOTE_REQUIRED') return false
+  return application.type === 'FORCED_TRANSFER'
+    ? Boolean(application.forcedOfferWindowId && application.forcedOfferWindowId === detail.activeForcedOfferWindowId)
+    : Boolean(application.transferWindowId && application.transferWindowId === detail.activeTransferWindowId)
+}
+
 export function marketErrorAction(code: string, teamId: string): { message: string; actionLabel: string; route: string | null } {
   const messages: Record<string, string> = {
     ROSTER_FULL: '阵容已满，请先下放一名球员',
@@ -24,6 +57,8 @@ export function marketErrorAction(code: string, teamId: string): { message: stri
     OWNERSHIP_CHANGED: '球员归属已变化，已为你刷新最新状态',
     REQUOTE_REQUIRED: '官方身价已变化，请按最新身价重新报价',
     TRANSFER_WINDOW_CLOSED: '转会窗口未开放',
+    FORCED_OFFER_WINDOW_CLOSED: '强报期未开放或已结束，已提交的申请仍可等待审核或撤回',
+    CLIENT_UPGRADE_REQUIRED: '请更新小程序后再发起强报',
     VERSION_CONFLICT: '申请状态已变化，请刷新后重试',
   }
   const release = code === 'ROSTER_FULL' || code === 'ROSTER_CAPACITY_REACHED'
