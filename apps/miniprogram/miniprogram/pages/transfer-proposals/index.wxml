@@ -2,7 +2,7 @@
   <view class="heading"><text class="kicker">球队交易</text><text class="title">协商转会</text><text class="intro">双方确认报价后，管理员审核通过才会转移球员并记账。</text></view>
   <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
   <loading-state wx:if="{{state === 'loading'}}" label="正在加载转会申请" />
-  <view wx:elif="{{state === 'error'}}" class="empty"><text>加载失败</text><button bindtap="load">重试</button></view>
+  <view wx:elif="{{state === 'error'}}" class="empty"><text>加载失败</text><button class="efm-retry-button" bindtap="load">重试</button></view>
   <view wx:elif="{{!items.length}}" class="empty">暂无协商转会申请</view>
   <view wx:else class="proposal-list">
     <view class="proposal" wx:for="{{items}}" wx:key="id">

@@ -1,7 +1,7 @@
 <view class="page-shell">
   <view class="directory-head"><text class="kicker">联赛球队</text><text class="title">看看其他球队的阵容</text><text class="subtitle">球队资产公开展示；操作仅限球队负责人。</text></view>
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取联赛球队" />
-  <view wx:elif="{{state === 'error'}}" class="state-card"><text>{{errorMessage}}</text><button bindtap="loadPage">重新加载</button></view>
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text>{{errorMessage}}</text><button class="efm-retry-button" bindtap="loadPage">重新加载</button></view>
   <block wx:else>
     <input class="team-search" placeholder="搜索编号、球队或负责人" value="{{keyword}}" bindinput="search" />
     <view wx:if="{{!rows.length}}" class="state-card"><text>{{keyword ? '没有符合条件的球队' : '当前联赛暂无现役球队'}}</text></view>
