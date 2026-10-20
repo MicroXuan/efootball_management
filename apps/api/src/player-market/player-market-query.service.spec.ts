@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 import { PlayerMarketAccessService } from './player-market-access.service.js';
-import { PlayerMarketQueryService, resolvePlayerMarketAction } from './player-market-query.service.js';
+import { PlayerMarketQueryService, forcedQueuePositions, resolvePlayerMarketAction } from './player-market-query.service.js';
 
 const now = new Date('2026-10-14T12:00:00.000Z');
 
@@ -36,6 +36,14 @@ describe('PlayerMarketAccessService', () => {
 });
 
 describe('PlayerMarketQueryService', () => {
+  it('ranks pending forced bids across periods by first submission, not page order', () => {
+    const rows = [
+      { id: 'later', footballPlayerId: 'player-1', ownershipId: 'own-1', ownershipVersionSnapshot: 3, firstValidSubmittedAt: new Date(now.getTime() + 1000) },
+      { id: 'earlier', footballPlayerId: 'player-1', ownershipId: 'own-1', ownershipVersionSnapshot: 3, firstValidSubmittedAt: now },
+      { id: 'other-owner', footballPlayerId: 'player-1', ownershipId: 'own-2', ownershipVersionSnapshot: 1, firstValidSubmittedAt: now }
+    ];
+    expect(Object.fromEntries(forcedQueuePositions(rows))).toEqual({ earlier: 1, later: 2, 'other-owner': 1 });
+  });
   it('maps free, own, and rival players without exposing private owner fields', async () => {
     const players = ['free', 'mine', 'rival'].map((id) => ({
       id: `player-${id}`, nameZh: id, nameEn: null, shortName: null, nationality: '中国', club: '测试队',

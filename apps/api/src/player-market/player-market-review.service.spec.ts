@@ -5,7 +5,8 @@ const at = new Date('2026-10-14T12:00:00.000Z');
 
 function row(type: 'NORMAL_PURCHASE' | 'FORCED_TRANSFER' = 'NORMAL_PURCHASE') {
   return {
-    id: 'app-1', leagueId: 'league-1', seasonId: 'season-1', transferWindowId: 'window-1', type,
+    id: 'app-1', leagueId: 'league-1', seasonId: 'season-1', transferWindowId: type === 'FORCED_TRANSFER' ? null : 'window-1',
+    forcedOfferWindowId: type === 'FORCED_TRANSFER' ? 'forced-1' : null, type,
     applicantLeagueTeamId: 'buyer', footballPlayerId: 'player-1', playerCardId: 'card-1',
     sourceLeagueTeamId: type === 'FORCED_TRANSFER' ? 'seller' : null,
     ownershipId: type === 'FORCED_TRANSFER' ? 'ownership-1' : null,
@@ -38,6 +39,7 @@ function harness(type: 'NORMAL_PURCHASE' | 'FORCED_TRANSFER' = 'NORMAL_PURCHASE'
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     transferWindow: { findUnique: jest.fn(async () => ({ seasonId: 'season-1', allowBuy: true, startsAt: new Date(at.getTime() - 1000), endsAt: new Date(at.getTime() + 1000) })) },
+    forcedOfferWindow: { findUnique: jest.fn(async () => ({ seasonId: 'season-1', startsAt: new Date(at.getTime() - 2000), endsAt: at })) },
     leagueTeam: {
       findUnique: jest.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, status: 'ACTIVE', rosterStatus: 'COMPLIANT', salaryCapMinor: 5000 })),
       updateMany: jest.fn(async () => ({ count: 1 }))
@@ -136,6 +138,7 @@ describe('PlayerMarketReviewService', () => {
       acquisitionType: 'FORCED_TRANSFER', acquisitionSeasonId: 'season-1'
     }) }));
     expect(tx.financeLedgerEntry.create).toHaveBeenCalledTimes(2);
+    expect(tx.transferWindow.findUnique).not.toHaveBeenCalled();
     const ledgerCalls = tx.financeLedgerEntry.create.mock.calls.map(([call]) => call.data);
     expect(ledgerCalls).toEqual(expect.arrayContaining([
       expect.objectContaining({ leagueTeamId: 'buyer', direction: 'DEBIT', amountMinor: 700 }),
@@ -214,24 +217,43 @@ describe('PlayerMarketReviewService', () => {
       .rejects.toMatchObject({ code: 'FORCED_QUEUE_ORDER_VIOLATION' });
   });
 
-  it('expires closed-window rivals before evaluating the current forced-transfer queue', async () => {
+  it('preserves older legacy forced bids across periods and enforces their queue priority', async () => {
     const { service, tx } = harness('FORCED_TRANSFER');
     const stale = {
       ...row('FORCED_TRANSFER'), id: 'stale-w1', transferWindowId: 'window-w1',
       firstValidSubmittedAt: new Date(at.getTime() - 10_000)
     };
     tx.playerAcquisitionApplication.findMany
-      .mockResolvedValueOnce([stale] as never)
-      .mockResolvedValueOnce([row('FORCED_TRANSFER')] as never);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([row('FORCED_TRANSFER'), stale] as never);
 
     await expect(service.approve('admin-1', 'app-1', {
       expectedVersion: 1, reason: '新窗口队列首位'
-    }, 'queue-new-window', at)).resolves.toMatchObject({ status: 'APPROVED' });
+    }, 'queue-new-window', at)).rejects.toMatchObject({ code: 'FORCED_QUEUE_ORDER_VIOLATION' });
 
-    expect(tx.playerAcquisitionApplication.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'stale-w1' },
-      data: expect.objectContaining({ status: 'EXPIRED', reviewReason: 'TRANSFER_WINDOW_CLOSED' })
+    expect(tx.playerAcquisitionApplication.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'stale-w1' }
     }));
+  });
+
+  it('terminally rejects an underpriced forced bid once its offer period has closed', async () => {
+    const { service, tx } = harness('FORCED_TRANSFER');
+    tx.leaguePlayerValuation.findUnique.mockResolvedValueOnce({ currentValueMinor: 800, version: 2 });
+    await expect(service.approve('admin-1', 'app-1', {
+      expectedVersion: 1, reason: '身价上涨'
+    }, 'late-underpriced', at)).resolves.toMatchObject({ status: 'INELIGIBLE' });
+    expect(tx.playerAcquisitionApplication.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'INELIGIBLE', reviewReason: 'OFFICIAL_VALUE_INCREASED_AFTER_DEADLINE' })
+    }));
+  });
+
+  it('lets an admin resolve an older requote-required bid after the forced period closes', async () => {
+    const { service, tx, setApplication } = harness('FORCED_TRANSFER');
+    setApplication({ ...row('FORCED_TRANSFER'), status: 'REQUOTE_REQUIRED' });
+    tx.leaguePlayerValuation.findUnique.mockResolvedValueOnce({ currentValueMinor: 800, version: 2 });
+    await expect(service.approve('admin-1', 'app-1', {
+      expectedVersion: 1, reason: '补价期限已过'
+    }, 'resolve-requote', at)).resolves.toMatchObject({ status: 'INELIGIBLE' });
   });
 
   it('rejects without changing ownership or finance', async () => {

@@ -182,7 +182,7 @@ describe('PlayerApplicationService', () => {
 
   it('accepts an owned-player bid while transfers are closed, but not after forced-offer close', async () => {
     const { service, tx } = harness();
-    tx.transferWindow.findUnique.mockResolvedValue(null);
+    tx.transferWindow.findUnique.mockResolvedValue(null as never);
     tx.leaguePlayerOwnership.findUnique.mockResolvedValue({
       id: 'ownership-rival', leagueTeamId: 'team-2', currentPlayerCardId: 'card-2', status: 'ACTIVE', version: 4
     } as never);

@@ -74,16 +74,20 @@ export class PlayerMarketReviewService {
       if (!application) throw playerMarketError('PLAYER_APPLICATION_NOT_FOUND', '申请不存在', 404);
       await this.authorization.requireLeagueManager(adminId, application.leagueId);
       this.assertVersion(application.version, input.expectedVersion);
-      if (application.status !== 'PENDING') throw playerMarketError('APPLICATION_STATE_INVALID', '当前申请不能通过');
+      if (application.status !== 'PENDING' && !(application.type === 'FORCED_TRANSFER' && application.status === 'REQUOTE_REQUIRED')) {
+        throw playerMarketError('APPLICATION_STATE_INVALID', '当前申请不能通过');
+      }
 
       const [window, buyer, rosterCount, valuation, ownership] = await Promise.all([
-        tx.transferWindow.findUnique({ where: { id: application.transferWindowId } }),
+        application.type === 'NORMAL_PURCHASE' && application.transferWindowId
+          ? tx.transferWindow.findUnique({ where: { id: application.transferWindowId } })
+          : Promise.resolve(null),
         tx.leagueTeam.findUnique({ where: { id: application.applicantLeagueTeamId } }),
         tx.leaguePlayerOwnership.count({ where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' } }),
         tx.leaguePlayerValuation.findUnique({ where: { leagueId_footballPlayerId: { leagueId: application.leagueId, footballPlayerId: application.footballPlayerId } } }),
         tx.leaguePlayerOwnership.findUnique({ where: { leagueId_footballPlayerId: { leagueId: application.leagueId, footballPlayerId: application.footballPlayerId } } })
       ]);
-      if (!window || window.seasonId !== application.seasonId || !window.allowBuy || mutationAt < window.startsAt || mutationAt >= window.endsAt) {
+      if (application.type === 'NORMAL_PURCHASE' && (!window || window.seasonId !== application.seasonId || !window.allowBuy || mutationAt < window.startsAt || mutationAt >= window.endsAt)) {
         return this.mark(tx, application, adminId, 'EXPIRED', input.reason, 'TRANSFER_WINDOW_CLOSED', mutationAt);
       }
       if (!buyer || buyer.status !== 'ACTIVE' || buyer.rosterStatus !== 'COMPLIANT' || rosterCount >= 25) {
@@ -101,7 +105,14 @@ export class PlayerMarketReviewService {
           return this.mark(tx, application, adminId, 'OWNERSHIP_CHANGED', input.reason, 'OWNERSHIP_CHANGED');
         }
         if (!valuation || application.amountMinor < valuation.currentValueMinor) {
-          return this.mark(tx, application, adminId, 'REQUOTE_REQUIRED', input.reason, 'OFFICIAL_VALUE_INCREASED');
+          const forcedWindow = application.forcedOfferWindowId
+            ? await tx.forcedOfferWindow.findUnique({ where: { id: application.forcedOfferWindowId } })
+            : null;
+          const canRequote = forcedWindow?.seasonId === application.seasonId
+            && mutationAt >= forcedWindow.startsAt && mutationAt < forcedWindow.endsAt;
+          return canRequote
+            ? this.mark(tx, application, adminId, 'REQUOTE_REQUIRED', input.reason, 'OFFICIAL_VALUE_INCREASED')
+            : this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'OFFICIAL_VALUE_INCREASED_AFTER_DEADLINE', mutationAt);
         }
         const salary = await tx.leaguePlayerOwnership.aggregate({
           where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' },

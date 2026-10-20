@@ -19,6 +19,7 @@ import { PlayerMarketAccessService, type ParticipantScope } from './player-marke
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
 import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
 import { expireClosedPlayerApplications } from './player-market-application-reconciliation.js';
+import { sortForcedQueue } from './forced-transfer-policy.js';
 
 export type MarketActionContext = {
   owned: boolean;
@@ -301,10 +302,13 @@ export class PlayerMarketQueryService {
       take: query.limit + 1
     });
     const page = rows.slice(0, query.limit);
-    const forced = page.filter((row) => row.type === 'FORCED_TRANSFER' && row.status === 'PENDING');
-    const queueById = new Map(forced
-      .sort((a, b) => a.firstValidSubmittedAt.getTime() - b.firstValidSubmittedAt.getTime() || a.id.localeCompare(b.id))
-      .map((row, index) => [row.id, index + 1]));
+    const forcedPlayerIds = [...new Set(page.filter((row) => row.type === 'FORCED_TRANSFER' && row.status === 'PENDING')
+      .map((row) => row.footballPlayerId))];
+    const queueRows = forcedPlayerIds.length ? await this.prisma.playerAcquisitionApplication.findMany({
+      where: { leagueId, seasonId: query.seasonId, footballPlayerId: { in: forcedPlayerIds }, type: 'FORCED_TRANSFER', status: 'PENDING' },
+      select: { id: true, footballPlayerId: true, ownershipId: true, ownershipVersionSnapshot: true, firstValidSubmittedAt: true }
+    }) : [];
+    const queueById = forcedQueuePositions(queueRows);
     const last = page.at(-1);
     return {
       items: page.map((row) => this.application(row, queueById.get(row.id) ?? null)),
@@ -450,4 +454,20 @@ export class PlayerMarketQueryService {
       }))
     };
   }
+}
+
+export function forcedQueuePositions(rows: readonly {
+  id: string; footballPlayerId: string; ownershipId: string | null;
+  ownershipVersionSnapshot: number | null; firstValidSubmittedAt: Date
+}[]): Map<string, number> {
+  const groups = new Map<string, typeof rows[number][]>();
+  for (const row of rows) {
+    const key = `${row.footballPlayerId}:${row.ownershipId ?? ''}:${row.ownershipVersionSnapshot ?? ''}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  const result = new Map<string, number>();
+  for (const group of groups.values()) {
+    sortForcedQueue(group).forEach((row, index) => result.set(row.id, index + 1));
+  }
+  return result;
 }
