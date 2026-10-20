@@ -746,6 +746,7 @@ model AdminAccount {
   mutationReceipts               AdminMutationReceipt[]
   createdSalaryRules             LeagueSalaryRuleVersion[]
   createdTransferWindows         TransferWindow[]
+  createdForcedOfferWindows      ForcedOfferWindow[]
   createdNominationWindows       NominationWindow[]
   rosterTransactions             RosterTransaction[]                 @relation("RosterTransactionAdminCreator")
   createdValuationWindows        ValuationWindow[]                   @relation("ValuationWindowCreator")
@@ -1083,6 +1084,7 @@ model LeagueSeason {
   entries                   SeasonEntry[]
   statusHistory             LeagueSeasonStatusHistory[]
   transferWindows           TransferWindow[]
+  forcedOfferWindows        ForcedOfferWindow[]
   nominationWindows         NominationWindow[]
   rosterTransactions        RosterTransaction[]
   valuationWindows          ValuationWindow[]
@@ -1158,6 +1160,25 @@ model TransferWindow {
   @@index([seasonId, startsAt, endsAt], map: "transfer_windows_timeline_idx")
   @@index([createdByAdminId], map: "transfer_windows_creator_idx")
   @@map("transfer_windows")
+}
+
+model ForcedOfferWindow {
+  id                 String                         @id @default(uuid()) @db.Char(36)
+  seasonId           String                         @map("season_id") @db.Char(36)
+  name               String                         @db.VarChar(64)
+  startsAt           DateTime                       @map("starts_at")
+  endsAt             DateTime                       @map("ends_at")
+  createdByAdminId   String                         @map("created_by_admin_id") @db.Char(36)
+  version            Int                            @default(1) @db.UnsignedInt
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  updatedAt          DateTime                       @updatedAt @map("updated_at")
+  season             LeagueSeason                   @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin     AdminAccount                   @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  playerApplications PlayerAcquisitionApplication[]
+
+  @@index([seasonId, startsAt, endsAt], map: "forced_offer_windows_timeline_idx")
+  @@index([createdByAdminId], map: "forced_offer_windows_creator_idx")
+  @@map("forced_offer_windows")
 }
 
 model NominationWindow {
@@ -1379,7 +1400,8 @@ model PlayerAcquisitionApplication {
   id                       String                              @id @default(uuid()) @db.Char(36)
   leagueId                 String                              @map("league_id") @db.Char(36)
   seasonId                 String                              @map("season_id") @db.Char(36)
-  transferWindowId         String                              @map("transfer_window_id") @db.Char(36)
+  transferWindowId         String?                             @map("transfer_window_id") @db.Char(36)
+  forcedOfferWindowId      String?                             @map("forced_offer_window_id") @db.Char(36)
   type                     PlayerApplicationType
   applicantLeagueTeamId    String                              @map("applicant_league_team_id") @db.Char(36)
   footballPlayerId         String                              @map("football_player_id") @db.Char(36)
@@ -1401,7 +1423,8 @@ model PlayerAcquisitionApplication {
   updatedAt                DateTime                            @updatedAt @map("updated_at")
   league                   League                              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   season                   LeagueSeason                        @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  transferWindow           TransferWindow                      @relation(fields: [transferWindowId], references: [id], onDelete: Restrict)
+  transferWindow           TransferWindow?                     @relation(fields: [transferWindowId], references: [id], onDelete: Restrict)
+  forcedOfferWindow        ForcedOfferWindow?                  @relation(fields: [forcedOfferWindowId], references: [id], onDelete: Restrict)
   applicantLeagueTeam      LeagueTeam                          @relation("PlayerApplicationApplicantTeam", fields: [applicantLeagueTeamId], references: [id], onDelete: Restrict)
   footballPlayer           FootballPlayer                      @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
   playerCard               PlayerCard                          @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
@@ -1416,6 +1439,7 @@ model PlayerAcquisitionApplication {
   @@index([leagueId, footballPlayerId, type, status], map: "player_applications_player_queue_idx")
   @@index([ownershipId, ownershipVersionSnapshot, status, firstValidSubmittedAt, id], map: "player_applications_forced_order_idx")
   @@index([transferWindowId, status], map: "player_applications_window_status_idx")
+  @@index([forcedOfferWindowId, status], map: "player_applications_forced_window_status_idx")
   @@index([reviewedByAdminId], map: "player_applications_reviewer_idx")
   @@map("player_acquisition_applications")
 }

@@ -59,6 +59,7 @@ import {
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
   CreateLeagueTeamRequestSchema,
+  CreateForcedOfferWindowRequestSchema,
   CreateCustomTeamCatalogItemRequestSchema,
   CreateSalaryRuleVersionRequestSchema,
   CreateTeamProfileRequestSchema,
@@ -79,6 +80,8 @@ import {
   PlayerCardDetailSchema,
   PlayerApplicationStatusSchema,
   PlayerMarketListResponseSchema,
+  ForcedOfferWindowSchema,
+  ForcedOfferWindowListResponseSchema,
   SubmitPlayerApplicationRequestSchema,
   ReleaseOwnedPlayerRequestSchema,
   PlayerFavoriteListQuerySchema,
@@ -102,6 +105,7 @@ import {
   TeamCatalogSyncRunSummarySchema,
   TeamSyncItemPageSchema,
   TransferWindowSchema,
+  UpdateForcedOfferWindowRequestSchema,
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
   FinanceSettlementCategorySchema,
@@ -385,6 +389,7 @@ import {
 describe('player market contracts', () => {
   const seasonId = '11111111-1111-4111-8111-111111111111';
   const transferWindowId = '22222222-2222-4222-8222-222222222222';
+  const forcedOfferWindowId = '77777777-7777-4777-8777-777777777777';
   const footballPlayerId = '33333333-3333-4333-8333-333333333333';
   const playerCardId = '44444444-4444-4444-8444-444444444444';
   const sourceLeagueTeamId = '55555555-5555-4555-8555-555555555555';
@@ -393,7 +398,7 @@ describe('player market contracts', () => {
   it('parses normal and forced player applications', () => {
     assert.equal(SubmitPlayerApplicationRequestSchema.parse({
       seasonId,
-      transferWindowId,
+      window: { kind: 'TRANSFER', id: transferWindowId },
       footballPlayerId,
       playerCardId,
       type: 'NORMAL_PURCHASE',
@@ -402,7 +407,7 @@ describe('player market contracts', () => {
 
     assert.equal(SubmitPlayerApplicationRequestSchema.parse({
       seasonId,
-      transferWindowId,
+      window: { kind: 'FORCED_OFFER', id: forcedOfferWindowId },
       footballPlayerId,
       playerCardId,
       type: 'FORCED_TRANSFER',
@@ -411,6 +416,24 @@ describe('player market contracts', () => {
       ownershipId,
       ownershipVersionSnapshot: 3
     }).type, 'FORCED_TRANSFER');
+  });
+
+  it('rejects a forced bid using a transfer-window reference and a purchase using a forced window', () => {
+    const base = { seasonId, footballPlayerId, playerCardId, amountMinor: 500 };
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'FORCED_TRANSFER', window: { kind: 'TRANSFER', id: transferWindowId },
+      sourceLeagueTeamId, ownershipId, ownershipVersionSnapshot: 3,
+    }).success, false);
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'NORMAL_PURCHASE', window: { kind: 'FORCED_OFFER', id: forcedOfferWindowId },
+    }).success, false);
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'FORCED_TRANSFER', transferWindowId,
+      sourceLeagueTeamId, ownershipId, ownershipVersionSnapshot: 3,
+    }).success, false);
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'NORMAL_PURCHASE', transferWindowId,
+    }).success, true);
   });
 
   it('requires the current owner and ownership version for a forced transfer', () => {
@@ -465,9 +488,37 @@ describe('player market contracts', () => {
     const response = PlayerMarketListResponseSchema.parse({
       items: [],
       nextCursor: null,
-      activeTransferWindowId: transferWindowId
+      activeTransferWindowId: transferWindowId,
+      activeForcedOfferWindowId: forcedOfferWindowId,
     });
     assert.equal(response.activeTransferWindowId, transferWindowId);
+    assert.equal(response.activeForcedOfferWindowId, forcedOfferWindowId);
+  });
+});
+
+describe('forced-offer window contracts', () => {
+  const valid = {
+    name: '第一轮强报', startsAt: '2026-10-20T00:00:00.000Z', endsAt: '2026-10-21T00:00:00.000Z',
+  };
+  const id = '11111111-1111-4111-8111-111111111111';
+
+  it('validates dates and names for create and update', () => {
+    assert.equal(CreateForcedOfferWindowRequestSchema.parse(valid).name, '第一轮强报');
+    assert.equal(CreateForcedOfferWindowRequestSchema.safeParse({ ...valid, endsAt: valid.startsAt }).success, false);
+    assert.equal(CreateForcedOfferWindowRequestSchema.safeParse({ ...valid, name: '  ' }).success, false);
+    assert.equal(UpdateForcedOfferWindowRequestSchema.safeParse({ ...valid, expectedVersion: 1 }).success, true);
+    assert.equal(UpdateForcedOfferWindowRequestSchema.safeParse({ ...valid, expectedVersion: 0 }).success, false);
+  });
+
+  it('requires a valid row and status in the list', () => {
+    const row = {
+      ...valid, id, seasonId: id, createdByAdminId: id, version: 1,
+      status: 'UPCOMING', createdAt: valid.startsAt, updatedAt: valid.startsAt,
+    };
+    assert.equal(ForcedOfferWindowSchema.parse(row).status, 'UPCOMING');
+    assert.equal(ForcedOfferWindowListResponseSchema.parse({ items: [row] }).items.length, 1);
+    assert.equal(ForcedOfferWindowSchema.safeParse({ ...row, status: 'UNKNOWN' }).success, false);
+    assert.equal(ForcedOfferWindowListResponseSchema.safeParse({ items: [{ ...row, endsAt: row.startsAt }] }).success, false);
   });
 });
 
