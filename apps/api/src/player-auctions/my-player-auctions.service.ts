@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionBidService } from './player-auction-bid.service.js';
+import { PlayerAuctionWorker } from './player-auction-worker.js';
 
 const ACTIVE_STATUSES = ['READY', 'ACTIVE', 'PAUSED', 'RECOVERY_REQUIRED'] as const;
 const ROOM_INCLUDE = {
@@ -39,7 +40,8 @@ const ROOM_INCLUDE = {
 export class MyPlayerAuctionsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(PlayerAuctionBidService) private readonly bids: PlayerAuctionBidService
+    @Inject(PlayerAuctionBidService) private readonly bids: PlayerAuctionBidService,
+    @Inject(PlayerAuctionWorker) private readonly worker: PlayerAuctionWorker
   ) {}
 
   async list(userId: string, query: MyPlayerAuctionListQuery) {
@@ -80,7 +82,7 @@ export class MyPlayerAuctionsService {
   }
 
   async detail(userId: string, batchId: string) {
-    const batch = await this.prisma.playerAuctionBatch.findFirst({
+    let batch = await this.prisma.playerAuctionBatch.findFirst({
       where: { id: batchId, bidChannel: 'MINIPROGRAM' },
       include: ROOM_INCLUDE
     });
@@ -91,7 +93,18 @@ export class MyPlayerAuctionsService {
     const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
     const serverNow = rows[0]?.databaseNow;
     if (!serverNow) throw new Error('DATABASE_TIME_UNAVAILABLE');
-    const current = batch.lots.find((lot) => lot.id === batch.currentLotId) ?? null;
+    let currentLotId = batch.currentLotId;
+    let current = batch.lots.find((lot) => lot.id === currentLotId) ?? null;
+    if (batch.status === 'ACTIVE' && current?.status === 'ACTIVE' && current.deadlineAt && current.deadlineAt <= serverNow) {
+      await this.worker.closeDueLot(current.id, current.deadlineEpoch);
+      batch = await this.prisma.playerAuctionBatch.findFirst({
+        where: { id: batchId, bidChannel: 'MINIPROGRAM' },
+        include: ROOM_INCLUDE
+      });
+      if (!batch) throw new PlayerAuctionError('AUCTION_NOT_FOUND', '小程序拍卖不存在', 404);
+      currentLotId = batch.currentLotId;
+      current = batch.lots.find((lot) => lot.id === currentLotId) ?? null;
+    }
     return {
       batchId: batch.id,
       name: batch.name,

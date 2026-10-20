@@ -59,4 +59,16 @@ describe('native player auction pages', () => {
     expect(styles).toContain('env(safe-area-inset-bottom)')
     expect(styles).toMatch(/\.bid-history-scroll\{height:/)
   })
+
+  it('shows a persistent winner announcement and a transient confetti layer', () => {
+    const markup = readFileSync(resolve(miniRoot, 'pages/auction-room/index.wxml'), 'utf8')
+    const styles = readFileSync(resolve(miniRoot, 'pages/auction-room/index.wxss'), 'utf8')
+    expect(markup).toContain('等待管理员审核入队')
+    expect(markup).toContain('{{sale.playerName}}')
+    expect(markup).toContain('{{sale.winnerLabel}}')
+    expect(markup).toContain('{{sale.priceLabel}}')
+    expect(markup).toContain('wx:if="{{celebratingSaleId === sale.id}}"')
+    expect(markup).toContain('正在结算')
+    expect(styles).toContain('@keyframes sale-confetti-fall')
+  })
 })

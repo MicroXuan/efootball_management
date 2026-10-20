@@ -18,6 +18,7 @@ import {
   publicBidRows,
   reconnectState,
   roomShare,
+  salePresentation,
   type RoomSnapshot,
 } from './auction-room.viewmodel'
 
@@ -27,6 +28,8 @@ type ShortcutEvent = { currentTarget: { dataset: { amount?: number } } }
 
 Page({
   pollTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  countdownTimer: undefined as ReturnType<typeof setInterval> | undefined,
+  celebrationTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   snapshot: undefined as RoomSnapshot | undefined,
   pendingSubmission: undefined as PlayerAuctionBidSubmission | undefined,
   reconnectAttempts: 0,
@@ -50,6 +53,10 @@ Page({
     amountHint: '请选择快捷价格或输入整数金额',
     submitting: false,
     feedback: '',
+    sale: null as ReturnType<typeof salePresentation>['sale'],
+    celebratingSaleId: '',
+    settling: false,
+    confettiPieces: Array.from({ length: 12 }, (_, index) => index),
   },
 
   onLoad(options: LoadOptions) {
@@ -71,15 +78,47 @@ Page({
 
   onHide() {
     this.stopPolling()
+    this.stopClock()
+    this.stopCelebration()
+    this.snapshot = undefined
   },
 
   onUnload() {
     this.stopPolling()
+    this.stopClock()
+    this.stopCelebration()
+  },
+
+  stopCelebration() {
+    if (this.celebrationTimer !== undefined) clearTimeout(this.celebrationTimer)
+    this.celebrationTimer = undefined
+    this.setData({ celebratingSaleId: '' })
   },
 
   startPolling() {
     this.stopPolling()
+    this.startClock()
     void this.loadRoom()
+  },
+
+  startClock() {
+    this.stopClock()
+    this.countdownTimer = setInterval(() => this.tickCountdown(), 250)
+  },
+
+  stopClock() {
+    if (this.countdownTimer !== undefined) clearInterval(this.countdownTimer)
+    this.countdownTimer = undefined
+  },
+
+  tickCountdown() {
+    if (!this.snapshot) return
+    const countdown = countdownSeconds(this.snapshot.room, Date.now(), this.snapshot.serverOffsetMs)
+    if (countdown === null) return
+    const settling = countdown === 0
+    if (this.data.countdown !== countdown || this.data.settling !== settling) {
+      this.setData({ countdown, settling, ...(settling ? { canSubmit: false } : {}) })
+    }
   },
 
   stopPolling() {
@@ -95,9 +134,15 @@ Page({
   async loadRoom() {
     try {
       const room = await getMyPlayerAuction(this.data.batchId)
+      const presentation = salePresentation(this.snapshot?.room, room)
       this.snapshot = applyRoomSnapshot(this.snapshot, room, Date.now())
       this.reconnectAttempts = 0
       this.renderRoom()
+      if (presentation.celebrate && presentation.sale) {
+        this.stopCelebration()
+        this.setData({ celebratingSaleId: presentation.sale.id })
+        this.celebrationTimer = setTimeout(() => this.stopCelebration(), 3_600)
+      }
       this.scheduleNext(1_000)
     } catch (error) {
       this.reconnectAttempts += 1
@@ -114,6 +159,7 @@ Page({
     const queue = projectAuctionQueue(room.queue)
     const amount = this.snapshot.draftAmount
     const draft = bidDraftState(amount, room.minimumValidPrice)
+    const settling = countdown === 0
     this.setData({
       state: 'loaded', room, teamName: room.team?.name ?? '观战与分享', reconnecting: false, statusMessage: '',
       countdown: countdown ?? '—', amount,
@@ -121,7 +167,8 @@ Page({
       bidRows: publicBidRows(room.currentLot?.bids ?? []),
       playerFallback: room.currentLot?.playerName.slice(0, 2) || '球',
       upcoming: queue.upcoming, completed: queue.completed,
-      canSubmit: room.canBid && !this.data.submitting && !this.data.reconnecting && draft.valid,
+      sale: salePresentation(undefined, room).sale, settling,
+      canSubmit: room.canBid && !settling && !this.data.submitting && !this.data.reconnecting && draft.valid,
       amountHint: draft.hint,
     })
   },
@@ -130,7 +177,7 @@ Page({
     const amount = event.detail.value.replace(/\D/g, '')
     if (this.snapshot) this.snapshot.draftAmount = amount
     const draft = bidDraftState(amount, this.snapshot?.room.minimumValidPrice ?? null)
-    this.setData({ amount, amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting && draft.valid })
+    this.setData({ amount, amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.settling && !this.data.reconnecting && !this.data.submitting && draft.valid })
   },
 
   useShortcut(event: ShortcutEvent) {
@@ -138,7 +185,7 @@ Page({
     if (!amount) return
     if (this.snapshot) this.snapshot.draftAmount = String(amount)
     const draft = bidDraftState(String(amount), this.snapshot?.room.minimumValidPrice ?? null)
-    this.setData({ amount: String(amount), amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.reconnecting && !this.data.submitting && draft.valid })
+    this.setData({ amount: String(amount), amountHint: draft.hint, canSubmit: Boolean(this.snapshot?.room.canBid) && !this.data.settling && !this.data.reconnecting && !this.data.submitting && draft.valid })
   },
 
   openPlayerCard() {

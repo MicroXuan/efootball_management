@@ -4,8 +4,6 @@ page { background: #0e1417; color: #f4f7f8; }
 .kicker { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
 .hero-heading { display: flex; align-items: flex-start; justify-content: space-between; margin-top: 14rpx; }
 .title { display: block; font-size: 43rpx; font-weight: 850; line-height: 1.18; }
-.live-badge { display: flex; align-items: center; margin-top: 7rpx; padding: 9rpx 13rpx; border: 2rpx solid rgba(182, 241, 58, .32); border-radius: 14rpx; color: #b6f13a; background: rgba(182, 241, 58, .06); font-size: 18rpx; font-weight: 750; }
-.live-badge view { width: 9rpx; height: 9rpx; margin-right: 8rpx; border-radius: 50%; background: #b6f13a; }
 .notice { display: block; margin-top: 20rpx; color: #7e8b91; font-size: 19rpx; }
 .balance-block { margin-top: 28rpx; padding-top: 26rpx; border-top: 2rpx solid #2d393f; }
 .balance-label { display: block; color: #aab5ba; font-size: 20rpx; }

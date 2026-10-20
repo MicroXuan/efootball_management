@@ -14,7 +14,6 @@
           <text class="title">赛季账本</text>
         </view>
         <view class="hero-actions">
-          <view class="live-badge"><view></view><text>实时</text></view>
           <view wx:if="{{seasonId}}" class="personal-link" role="button" bindtap="openPersonalLedger"><text>个人记账本</text><view class="personal-link__chevron"></view></view>
         </view>
       </view>

@@ -74,12 +74,36 @@ function harness(teamStatus = 'ACTIVE') {
     }]) }
   };
   const bids: any = { placeMiniprogramBid: jest.fn(async () => ({ id: 'bid-new', result: 'VALID' })) };
-  return { service: new MyPlayerAuctionsService(prisma, bids), prisma, bids, batch };
+  const worker: any = { closeDueLot: jest.fn(async () => {
+    batch.status = 'COMPLETED';
+    batch.currentLotId = null;
+    batch.lots[0].status = 'PENDING_REVIEW';
+    batch.lots[0].deadlineAt = null;
+    batch.lots[0].currentHighestBid = batch.lots[0].bids[1];
+    batch.lots[0].currentPrice = 130;
+    return true;
+  }) };
+  return { service: new MyPlayerAuctionsService(prisma, bids, worker), prisma, bids, batch, worker };
 }
 
 describe('MyPlayerAuctionsService', () => {
+  it('settles an overdue miniprogram lot before returning the room', async () => {
+    const { service, batch, worker } = harness();
+    batch.lots[0].deadlineAt = now;
+
+    const result = await service.detail('user-1', 'batch-1');
+
+    expect(result.status).toBe('COMPLETED');
+    expect(result.currentLot).toBeNull();
+    expect(result.queue[0]).toMatchObject({
+      status: 'PENDING_REVIEW',
+      winner: { teamNumber: 2, teamName: '海港', bidderDisplayName: '小新', price: 130 }
+    });
+    expect(worker.closeDueLot).toHaveBeenCalledWith('lot-1', 4);
+  });
+
   it('projects an active room without failed bids or WeChat identifiers', async () => {
-    const { service } = harness();
+    const { service, worker } = harness();
     const room = await service.detail('user-1', 'batch-1');
 
     expect(room).toMatchObject({
@@ -101,6 +125,7 @@ describe('MyPlayerAuctionsService', () => {
     expect(room.currentLot!.card).toMatchObject({ id: saleCardId, overallRating: 96, position: 'CF' });
     expect(JSON.stringify(room)).not.toContain('wechatMessageId');
     expect(JSON.stringify(room)).not.toContain('bid-failed');
+    expect(worker.closeDueLot).not.toHaveBeenCalled();
   });
 
   it('lets an authenticated non-bidder view and share the room without bid permission', async () => {
