@@ -336,7 +336,7 @@ describe('season agenda contracts', () => {
     assert.equal(SeasonAgendaMonthSchema.parse('2026-10'), '2026-10');
     assert.throws(() => SeasonAgendaMonthSchema.parse('2026-13'));
     const result = SeasonAgendaResponseSchema.parse({ month: '2026-10', seasonId: randomUUID(), timezone: 'Asia/Shanghai', items: [{
-      id: randomUUID(), kind: 'TRANSFER', noteKind: null, title: '秋季转会期', description: null,
+      id: randomUUID(), kind: 'TRANSFER', noteKind: null, title: '秋季转会期', description: null, version: null,
       firstDate: '2026-10-19', lastDate: '2026-10-28', startsAt: '2026-10-19T00:00:00.000Z',
       endsAt: '2026-10-29T00:00:00.000Z', status: 'ACTIVE', targetPath: null
     }] });
@@ -354,7 +354,7 @@ describe('season agenda contracts', () => {
     assert.equal(CreateSeasonCalendarNoteRequestSchema.parse(note).endsOn, '2026-10-07');
     assert.equal(CreateSeasonCalendarNoteRequestSchema.safeParse({ ...note, endsOn: '2026-09-30' }).success, false);
     assert.equal(CreateSeasonCalendarNoteRequestSchema.safeParse({ ...note, endsOn: '2026-02-30' }).success, false);
-    const manual = { id: randomUUID(), kind: 'MANUAL', noteKind: 'HOLIDAY', title: '假期', description: '暂停操作',
+    const manual = { id: randomUUID(), kind: 'MANUAL', noteKind: 'HOLIDAY', title: '假期', description: '暂停操作', version: 1,
       firstDate: '2026-10-01', lastDate: '2026-10-07', startsAt: null, endsAt: null, status: 'ACTIVE', targetPath: null };
     assert.equal(SeasonAgendaResponseSchema.parse({ month: '2026-10', seasonId: randomUUID(), timezone: 'Asia/Shanghai', items: [manual] }).items[0]?.noteKind, 'HOLIDAY');
     assert.equal(SeasonAgendaResponseSchema.safeParse({ month: '2026-10', seasonId: randomUUID(), timezone: 'Asia/Shanghai', items: [{ ...manual, kind: 'TRANSFER' }] }).success, false);

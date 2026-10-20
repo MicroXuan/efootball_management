@@ -21,9 +21,9 @@ const AgendaItemBase = z.object({
 });
 export const SeasonAgendaItemSchema = z.discriminatedUnion('kind', [
   AgendaItemBase.extend({ kind: z.enum(['TRANSFER', 'FORCED_OFFER', 'VALUATION', 'NOMINATION']),
-    noteKind: z.null(), startsAt: z.iso.datetime(), endsAt: z.iso.datetime() }),
+    noteKind: z.null(), startsAt: z.iso.datetime(), endsAt: z.iso.datetime(), version: z.null() }),
   AgendaItemBase.extend({ kind: z.literal('MANUAL'), noteKind: SeasonCalendarNoteKindSchema,
-    startsAt: z.null(), endsAt: z.null() })
+    startsAt: z.null(), endsAt: z.null(), version: z.number().int().positive() })
 ]);
 export const SeasonAgendaResponseSchema = z.object({
   month: SeasonAgendaMonthSchema,

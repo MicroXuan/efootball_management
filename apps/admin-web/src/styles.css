@@ -923,3 +923,24 @@ select { font: inherit; }
   .market-application-main { grid-template-columns: 48px minmax(0, 1fr); }
   .market-application-price { grid-column: 2; text-align: left; }
 }
+.season-phase-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px;align-items:start;max-width:100%}
+.season-phase-calendar,.season-phase-sidebar{min-width:0}
+.season-phase-sidebar{display:grid;gap:16px}
+.season-phase-weekdays,.season-phase-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));width:100%;min-width:0}
+.season-phase-weekdays span{text-align:center;padding:8px 0;font-weight:700;color:#6e8088}
+.season-phase-day{min-width:0;min-height:92px;border:1px solid #d9e1e5;padding:6px;box-sizing:border-box;overflow:hidden;background:#fff}
+.season-phase-day.is-adjacent{background:#f5f7f8;color:#89969e}
+.season-phase-number{display:block;font-size:13px;font-weight:700;margin-bottom:5px}
+.season-phase-markers{display:flex;flex-wrap:wrap;gap:3px;min-width:0}
+.season-phase-marker{display:inline-block;min-width:0;border-radius:4px;padding:2px 5px;font-size:11px;font-weight:700;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.season-phase-marker.kind-transfer,.season-phase-summary-row.kind-transfer{background:#eaf5dc;color:#47680e}
+.season-phase-marker.kind-forced-offer,.season-phase-summary-row.kind-forced-offer{background:#f2e8ff;color:#69428a}
+.season-phase-marker.kind-valuation,.season-phase-summary-row.kind-valuation{background:#e4f1ff;color:#285f90}
+.season-phase-marker.kind-nomination,.season-phase-summary-row.kind-nomination{background:#fff2df;color:#87571b}
+.season-phase-marker.kind-manual,.season-phase-summary-row.kind-manual{background:#f5ece8;color:#805148}
+.season-phase-summary-row{border-radius:9px;padding:11px 13px;margin-bottom:10px;display:grid;gap:5px;min-width:0}
+.season-phase-summary-head{display:flex;gap:8px;align-items:center;min-width:0;flex-wrap:wrap}
+.season-phase-kind{font-size:12px;font-weight:700;white-space:nowrap}
+.season-phase-form-dates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(max-width:900px){.season-phase-layout{grid-template-columns:minmax(0,1fr)}.season-phase-day{min-height:70px;padding:4px}.season-phase-marker{font-size:10px;padding:1px 3px}}
+@media(max-width:390px){.season-phase-day{min-height:62px}.season-phase-marker{max-width:100%}.season-phase-form-dates{grid-template-columns:minmax(0,1fr)}}

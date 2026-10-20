@@ -34,7 +34,7 @@ function phaseItem(
   title: string, startsAt: Date, endsAt: Date, now: Date, targetPath: string | null = null
 ): SeasonAgendaItem {
   return {
-    id, kind, noteKind: null, title, description: null,
+    id, kind, noteKind: null, title, description: null, version: null,
     firstDate: beijingDate(startsAt), lastDate: beijingDate(new Date(endsAt.getTime() - 1)),
     startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(),
     status: now < startsAt ? 'UPCOMING' : now >= endsAt ? 'ENDED' : 'ACTIVE',
@@ -95,7 +95,7 @@ export class SeasonCalendarService {
       this.prisma.seasonCalendarNote.findMany({
         where: { seasonId, deletedAt: null, startsOn: { lte: new Date(`${bounds.lastDate}T00:00:00.000Z`) },
           endsOn: { gte: new Date(`${bounds.firstDate}T00:00:00.000Z`) } },
-        select: { id: true, kind: true, title: true, description: true, startsOn: true, endsOn: true }
+        select: { id: true, kind: true, title: true, description: true, startsOn: true, endsOn: true, version: true }
       })
     ]);
     const overlapsMonth = (start: Date, end: Date) => end > bounds.start && start < bounds.end && end > start;
@@ -116,7 +116,7 @@ export class SeasonCalendarService {
           const lastDate = dateColumn(row.endsOn);
           const today = beijingDate(now);
           return {
-            id: row.id, kind: 'MANUAL', noteKind: row.kind, title: row.title, description: row.description,
+            id: row.id, kind: 'MANUAL', noteKind: row.kind, title: row.title, description: row.description, version: row.version,
             firstDate, lastDate, startsAt: null, endsAt: null,
             status: today < firstDate ? 'UPCOMING' : today > lastDate ? 'ENDED' : 'ACTIVE',
             targetPath: null

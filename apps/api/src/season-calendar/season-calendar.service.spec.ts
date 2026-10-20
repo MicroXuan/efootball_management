@@ -26,7 +26,7 @@ function harness() {
       { id: 'forced-1', name: '第一轮强报', startsAt: new Date('2026-10-20T00:00:00.000Z'), endsAt: new Date('2026-10-22T16:00:00.000Z') }
     ]) },
     seasonCalendarNote: { findMany: jest.fn(async () => [
-      { id: 'note-1', kind: 'HOLIDAY', title: '假期', description: '暂停考核', startsOn: new Date('2026-10-01T00:00:00Z'), endsOn: new Date('2026-10-07T00:00:00Z') }
+      { id: 'note-1', kind: 'HOLIDAY', title: '假期', description: '暂停考核', version: 1, startsOn: new Date('2026-10-01T00:00:00Z'), endsOn: new Date('2026-10-07T00:00:00Z') }
     ]) }
   };
   const visibility = { requireVisible: jest.fn(async () => 'league-1'), notFound: () => new LeagueError('LEAGUE_NOT_FOUND', 'not found', 404) };
