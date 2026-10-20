@@ -31,10 +31,12 @@ import { WechatBotModule } from './wechat-bot/wechat-bot.module.js';
 import { PlayerAuctionsModule } from './player-auctions/player-auctions.module.js';
 import { PlayerMarketModule } from './player-market/player-market.module.js';
 import { ActionCenterModule } from './action-center/action-center.module.js';
+import { SeasonCalendarModule } from './season-calendar/season-calendar.module.js';
 
 @Module({
   imports: [
     ActionCenterModule,
+    SeasonCalendarModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['../../.env', '.env'],

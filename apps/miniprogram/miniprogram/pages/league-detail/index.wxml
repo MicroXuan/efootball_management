@@ -49,6 +49,7 @@
         <view class="workspace-metric workspace-metric--rank"><text class="workspace-metric__label">当前排名</text><view class="workspace-rank-row"><text class="workspace-rank">{{workspaceView.rank}}</text><text wx:if="{{workspaceView.rankNotice}}" class="workspace-rank-notice">{{workspaceView.rankNotice}}</text></view><text class="workspace-metric__meta">{{workspaceView.rankMeta}}</text></view>
         <view class="workspace-metric workspace-metric--schedule" bindtap="openFixtures" role="button"><text class="workspace-metric__label">赛程中心</text><view class="workspace-schedule-action"><text class="workspace-next">全部赛程</text><text class="workspace-schedule-arrow">›</text></view><text class="workspace-metric__meta">按队伍和状态查找比赛</text></view>
       </view>
+      <view class="directory-entry" bindtap="openSeasonCalendar" role="button"><text>赛季日程</text><text>比赛 · 转会 · 身价 ›</text></view>
       <view class="directory-entry" bindtap="openTeamDirectory" role="button"><text>联赛球队阵容</text><text>查看全部球队 ›</text></view>
       <view class="workspace-groups">
         <view wx:for="{{workspaceModuleGroups}}" wx:key="key" wx:for-item="group" class="workspace-group">

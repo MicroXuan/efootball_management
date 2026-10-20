@@ -1,0 +1,24 @@
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { min-height: 100vh; padding: 42rpx 28rpx 120rpx; background: #0e1417; }
+.hero { padding: 16rpx 4rpx 28rpx; }
+.kicker { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 800; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 8rpx; font-size: 38rpx; font-weight: 850; }
+.timezone { display: block; margin-top: 10rpx; color: #8f9ca2; font-size: 19rpx; }
+.month-switch { display: flex; align-items: center; justify-content: space-between; padding: 12rpx; border: 2rpx solid #344047; border-radius: 19rpx; background: #151d21; }
+.month-switch text { font-size: 25rpx; font-weight: 850; }
+.month-switch button { width: 70rpx; height: 62rpx; margin: 0; padding: 0; border: 0; border-radius: 12rpx; color: #b6f13a; background: #253025; font-size: 38rpx; line-height: 58rpx; }
+.month-switch button::after { border: 0; }
+.day-group { margin-top: 28rpx; }
+.day-title { display: block; margin-bottom: 12rpx; color: #b6f13a; font-size: 22rpx; font-weight: 850; }
+.agenda-row { display: flex; align-items: center; margin-bottom: 10rpx; padding: 22rpx; border: 2rpx solid #344047; border-radius: 20rpx; background: #151d21; }
+.agenda-marker { width: 8rpx; height: 76rpx; flex: none; border-radius: 4rpx; background: #b6f13a; }
+.agenda-copy { min-width: 0; flex: 1; margin-left: 17rpx; }
+.kind { display: block; color: #8f9ca2; font-size: 17rpx; }
+.event-title { display: block; margin-top: 4rpx; overflow: hidden; font-size: 24rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.range { display: block; margin-top: 7rpx; color: #aab5ba; font-size: 18rpx; }
+.status { margin-left: 14rpx; padding: 7rpx 10rpx; border-radius: 9rpx; color: #aab5ba; background: #273238; font-size: 17rpx; }
+.status.active { color: #d4ff83; background: #26391d; }
+.status.upcoming { color: #a7d9e9; background: #1a323b; }
+.state-card { margin-top: 24rpx; padding: 42rpx 24rpx; border: 2rpx solid #344047; border-radius: 20rpx; color: #aab5ba; text-align: center; background: #151d21; font-size: 22rpx; }
+.state-card .hint { display: block; margin-top: 12rpx; color: #7e8b91; font-size: 19rpx; }
+.state-card button { margin-top: 20rpx; color: #0e1417; background: #b6f13a; }

@@ -53,6 +53,8 @@ import {
   SeasonCupSummarySchema,
   SeasonFixtureListQuerySchema,
   SeasonFixtureListResponseSchema,
+  SeasonAgendaMonthSchema,
+  SeasonAgendaResponseSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -321,6 +323,18 @@ describe('season fixture contracts', () => {
     const parsed = SeasonFixtureListResponseSchema.parse({ items: [{ competition, match }], nextCursor: null });
     assert.equal(parsed.items[0]?.match.id, match.id);
     assert.equal(parsed.nextCursor, null);
+  });
+});
+
+describe('season agenda contracts', () => {
+  it('accepts a real month and a dated agenda item', () => {
+    assert.equal(SeasonAgendaMonthSchema.parse('2026-10'), '2026-10');
+    assert.throws(() => SeasonAgendaMonthSchema.parse('2026-13'));
+    const result = SeasonAgendaResponseSchema.parse({ month: '2026-10', items: [{
+      id: randomUUID(), kind: 'TRANSFER', title: '秋季转会期', startsAt: '2026-10-19T00:00:00.000Z',
+      endsAt: '2026-10-29T00:00:00.000Z', status: 'ACTIVE', targetPath: null
+    }] });
+    assert.equal(result.items[0]?.kind, 'TRANSFER');
   });
 });
 import {

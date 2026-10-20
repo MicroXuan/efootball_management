@@ -16,6 +16,7 @@
     "pages/my-league-teams/index",
     "pages/league-team-detail/index",
     "pages/league-team-directory/index",
+    "pages/season-calendar/index",
     "pages/valuation-manage/index",
     "pages/team-assets/index",
     "pages/league-transactions/index",

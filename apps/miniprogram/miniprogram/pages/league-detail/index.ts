@@ -167,6 +167,12 @@ Page({
     wx.navigateTo({ url: `/pages/league-team-directory/index?leagueId=${encodeURIComponent(this.data.leagueId)}` })
   },
 
+  openSeasonCalendar() {
+    const seasonId = this.data.selectedSeason?.id
+    if (!seasonId) return
+    wx.navigateTo({ url: `/pages/season-calendar/index?leagueId=${encodeURIComponent(this.data.leagueId)}&seasonId=${encodeURIComponent(seasonId)}` })
+  },
+
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return

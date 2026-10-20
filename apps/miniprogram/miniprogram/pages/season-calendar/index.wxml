@@ -1,0 +1,17 @@
+<view class="page-shell">
+  <view class="hero"><text class="kicker">赛季日程</text><text class="title">比赛与关键窗口</text><text class="timezone">{{timezoneCopy}}</text></view>
+  <view class="month-switch"><button bindtap="previousMonth" aria-label="上个月">‹</button><text>{{monthLabel}}</text><button bindtap="nextMonth" aria-label="下个月">›</button></view>
+  <loading-state wx:if="{{state === 'loading'}}" label="正在整理赛季日程" />
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text>{{errorMessage}}</text><button bindtap="loadPage">重新加载</button></view>
+  <view wx:elif="{{!groups.length}}" class="state-card"><text>这个月暂无已公布的比赛或窗口</text><text class="hint">可以切换月份查看下一段赛程。</text></view>
+  <view wx:else class="agenda-list">
+    <view wx:for="{{groups}}" wx:key="day" wx:for-item="group" class="day-group">
+      <text class="day-title">{{group.day}}</text>
+      <view wx:for="{{group.items}}" wx:key="id" wx:for-item="event" class="agenda-row" data-path="{{event.targetPath}}" bindtap="openItem" role="button">
+        <view class="agenda-marker"></view>
+        <view class="agenda-copy"><text class="kind">{{event.kind}}</text><text class="event-title">{{event.title}}</text><text class="range">{{event.range}}</text></view>
+        <view class="status {{event.statusTone}}">{{event.status}}</view>
+      </view>
+    </view>
+  </view>
+</view>
