@@ -39,7 +39,7 @@ function harness(type: 'NORMAL_PURCHASE' | 'FORCED_TRANSFER' = 'NORMAL_PURCHASE'
     },
     transferWindow: { findUnique: jest.fn(async () => ({ seasonId: 'season-1', allowBuy: true, startsAt: new Date(at.getTime() - 1000), endsAt: new Date(at.getTime() + 1000) })) },
     leagueTeam: {
-      findUnique: jest.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, status: 'ACTIVE', rosterStatus: 'COMPLIANT' })),
+      findUnique: jest.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, status: 'ACTIVE', rosterStatus: 'COMPLIANT', salaryCapMinor: 5000 })),
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     leaguePlayerOwnership: {
@@ -143,6 +143,22 @@ describe('PlayerMarketReviewService', () => {
     ]));
   });
 
+  it('recomputes both teams after a forced transfer against their own caps', async () => {
+    const { service, tx } = harness('FORCED_TRANSFER');
+    tx.leagueTeam.findUnique.mockImplementation(async ({ where }) => ({
+      id: where.id, status: 'ACTIVE', rosterStatus: 'COMPLIANT',
+      salaryCapMinor: where.id === 'seller' ? 100 : 5_000
+    }));
+
+    await expect(service.approve('admin-1', 'app-1', {
+      expectedVersion: 1, reason: '分别重算工资帽'
+    }, 'distinct-forced-caps', at)).resolves.toMatchObject({ status: 'APPROVED' });
+    expect(tx.leagueTeam.updateMany).toHaveBeenCalledWith({
+      where: { id: 'seller', rosterStatus: { not: 'OVER_CAP' } },
+      data: { rosterStatus: 'OVER_CAP', version: { increment: 1 } }
+    });
+  });
+
   it('rejects a forced transfer that would cross the 5,000 salary cap', async () => {
     const { service, tx } = harness('FORCED_TRANSFER');
     tx.leaguePlayerOwnership.aggregate.mockResolvedValueOnce({ _sum: { salaryMinor: 4800 } });
@@ -153,6 +169,23 @@ describe('PlayerMarketReviewService', () => {
     expect(tx.leaguePlayerOwnership.update).not.toHaveBeenCalled();
     expect(tx.financeLedgerEntry.create).not.toHaveBeenCalled();
   });
+
+  it.each(['NORMAL_PURCHASE', 'FORCED_TRANSFER'] as const)(
+    'rejects %s when the applicant team cap is lower than the league rule cap', async (type) => {
+      const { service, tx } = harness(type);
+      tx.leagueTeam.findUnique.mockImplementation(async ({ where }) => ({
+        id: where.id, status: 'ACTIVE', rosterStatus: 'COMPLIANT',
+        salaryCapMinor: where.id === 'buyer' ? 1_200 : 5_000
+      }));
+
+      const result = await service.approve('admin-1', 'app-1', {
+        expectedVersion: 1, reason: '逐队工资帽复核'
+      }, `team-cap-${type}`, at);
+
+      expect(result).toMatchObject({ status: 'INELIGIBLE', transactionId: null });
+      expect(tx.financeLedgerEntry.create).not.toHaveBeenCalled();
+    }
+  );
 
   it('expires the selected application durably when its own transfer window has closed', async () => {
     const { service, tx } = harness();

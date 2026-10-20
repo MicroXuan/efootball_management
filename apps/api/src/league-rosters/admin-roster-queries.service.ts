@@ -90,10 +90,6 @@ export class AdminRosterQueriesService {
       include: { footballPlayer: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } },
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
-    const salaryRule = await this.prisma.leagueSalaryRuleVersion.findFirst({
-      where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
-      orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
-    });
     const activeWindow = await this.prisma.transferWindow.findFirst({
       where: { seasonId, startsAt: { lte: new Date() }, endsAt: { gt: new Date() } },
       orderBy: { startsAt: 'asc' }
@@ -122,7 +118,7 @@ export class AdminRosterQueriesService {
         salaryMinor: entries
           .filter((entry) => entry.status === 'ACTIVE')
           .reduce((total, entry) => total + entry.salaryMinor, 0),
-        salaryCapMinor: salaryRule?.salaryCapMinor ?? 0
+        salaryCapMinor: team.salaryCapMinor ?? 0
       },
       operations: {
         BUY: activeWindow?.allowBuy ?? false,

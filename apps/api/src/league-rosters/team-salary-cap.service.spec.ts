@@ -25,4 +25,12 @@ describe('TeamSalaryCapService', () => {
       code: 'TEAM_SALARY_CAP_UNSET'
     });
   });
+
+  it('permits a nullable cap read for salary-reducing operations', async () => {
+    const client = {
+      leagueTeam: { findUnique: jest.fn<() => Promise<{ salaryCapMinor: null }>>().mockResolvedValue({ salaryCapMinor: null }) }
+    };
+
+    await expect(service.readWithClient(client as never, 'team-2')).resolves.toBeNull();
+  });
 });

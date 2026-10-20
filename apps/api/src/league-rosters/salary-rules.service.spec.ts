@@ -111,7 +111,7 @@ describe('SalaryRulesService', () => {
     });
     ids.catalogs.push(shell.id);
     const team = await prisma.leagueTeam.create({
-      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'One', shortName: 'ONE' }
+      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'One', shortName: 'ONE', salaryCapMinor: 500 }
     });
     const source = await prisma.dataSource.create({
       data: { code: `salary-source-${randomUUID()}`, name: 'Salary source' }
@@ -151,7 +151,7 @@ describe('SalaryRulesService', () => {
       leagueTeamId: team.id,
       currentSalaryMinor: 200,
       projectedSalaryMinor: 400,
-      projectedStatus: 'OVER_CAP'
+      projectedStatus: 'COMPLIANT'
     })]);
     await expect(prisma.leaguePlayerOwnership.findFirstOrThrow({ where: { leagueTeamId: team.id } }))
       .resolves.toMatchObject({ salaryMinor: 200, salaryRuleVersionId: current.id });
@@ -162,7 +162,7 @@ describe('SalaryRulesService', () => {
     await prisma.dataSource.delete({ where: { id: source.id } });
   });
 
-  it('marks a team over cap when an immediately-effective cap is lowered', async () => {
+  it('does not change a team cap when the legacy league cap in a new salary rule is lowered', async () => {
     const { admin, user, league } = await fixture();
     const current = await createRule(admin.id, league.id, 1_000, 200);
     const shell = await prisma.teamCatalogItem.create({
@@ -170,7 +170,7 @@ describe('SalaryRulesService', () => {
     });
     ids.catalogs.push(shell.id);
     const team = await prisma.leagueTeam.create({
-      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP' }
+      data: { leagueId: league.id, ownerUserId: user.id, ownerAlias: user.displayName, catalogTeamId: shell.id, teamNumber: 1, name: 'Cap team', shortName: 'CAP', salaryCapMinor: 1_000 }
     });
     const source = await prisma.dataSource.create({
       data: { code: `cap-source-${randomUUID()}`, name: 'Cap source' }
@@ -216,7 +216,7 @@ describe('SalaryRulesService', () => {
 
     await expect(prisma.leagueTeam.findUniqueOrThrow({
       where: { id: team.id }, select: { rosterStatus: true }
-    })).resolves.toEqual({ rosterStatus: 'OVER_CAP' });
+    })).resolves.toEqual({ rosterStatus: 'COMPLIANT' });
     await expect(prisma.leaguePlayerOwnership.findFirstOrThrow({
       where: { leagueTeamId: team.id }, select: { salaryMinor: true, salaryRuleVersionId: true }
     })).resolves.toEqual({ salaryMinor: 200, salaryRuleVersionId: current.id });

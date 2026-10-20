@@ -16,6 +16,7 @@ describe('LeagueTeamsService roster summary', () => {
       defaultGameAccountId: null,
       status: 'ACTIVE',
       rosterStatus: 'COMPLIANT',
+      salaryCapMinor: 1_500,
       version: 1,
       createdAt: new Date('2026-09-01T00:00:00.000Z'),
       updatedAt: new Date('2026-09-01T00:00:00.000Z'),
@@ -43,7 +44,7 @@ describe('LeagueTeamsService roster summary', () => {
       catalogTeamId: '44444444-4444-4444-8444-444444444444',
       activePlayerCount: 3,
       salaryTotalMinor: 1_200,
-      salaryCapMinor: 2_000
+      salaryCapMinor: 1_500
     });
   });
 

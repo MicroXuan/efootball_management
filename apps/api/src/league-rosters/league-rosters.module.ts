@@ -7,6 +7,7 @@ import { AdminRostersController } from './admin-rosters.controller.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { RosterTransactionsService } from './roster-transactions.service.js';
 import { SalaryRulesService } from './salary-rules.service.js';
+import { TeamSalaryCapService } from './team-salary-cap.service.js';
 import { SalaryRecalculationService } from './salary-recalculation.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
@@ -18,6 +19,7 @@ import { PlayerValuationsModule } from '../player-valuations/player-valuations.m
   controllers: [AdminRulesController, AdminRostersController],
   providers: [
     SalaryRulesService,
+    TeamSalaryCapService,
     TransferWindowsService,
     RosterLockRepository,
     RosterTransactionsService,
@@ -26,6 +28,7 @@ import { PlayerValuationsModule } from '../player-valuations/player-valuations.m
   ],
   exports: [
     SalaryRulesService,
+    TeamSalaryCapService,
     TransferWindowsService,
     RosterLockRepository,
     RosterTransactionsService,

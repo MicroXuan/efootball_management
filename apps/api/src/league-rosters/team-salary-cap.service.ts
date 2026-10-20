@@ -4,12 +4,17 @@ import { LeagueRosterError } from './league-roster.errors.js';
 
 @Injectable()
 export class TeamSalaryCapService {
-  async requireWithClient(tx: Prisma.TransactionClient, teamId: string): Promise<number> {
+  async readWithClient(tx: Prisma.TransactionClient, teamId: string): Promise<number | null> {
     const team = await tx.leagueTeam.findUnique({
       where: { id: teamId },
       select: { salaryCapMinor: true }
     });
-    if (team?.salaryCapMinor == null) {
+    return team?.salaryCapMinor ?? null;
+  }
+
+  async requireWithClient(tx: Prisma.TransactionClient, teamId: string): Promise<number> {
+    const salaryCapMinor = await this.readWithClient(tx, teamId);
+    if (salaryCapMinor === null) {
       throw new LeagueRosterError(
         'TEAM_SALARY_CAP_UNSET',
         'An administrator must set this team salary cap before adding players',
@@ -17,6 +22,6 @@ export class TeamSalaryCapService {
         { teamId }
       );
     }
-    return team.salaryCapMinor;
+    return salaryCapMinor;
   }
 }

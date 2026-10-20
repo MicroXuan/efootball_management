@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { ReviewPlayerApplicationRequest } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
@@ -12,6 +12,7 @@ import { playerMarketError } from './player-market.errors.js';
 import { sortForcedQueue } from './forced-transfer-policy.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
 import { expireClosedPlayerApplications } from './player-market-application-reconciliation.js';
+import { TeamSalaryCapService } from '../league-rosters/team-salary-cap.service.js';
 
 export type PlayerMarketReviewResult = {
   applicationId: string;
@@ -23,6 +24,7 @@ export type PlayerMarketReviewResult = {
 
 @Injectable()
 export class PlayerMarketReviewService {
+  private readonly teamSalaryCaps: TeamSalaryCapService;
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
@@ -31,8 +33,11 @@ export class PlayerMarketReviewService {
     @Inject(RosterLockRepository) private readonly rosterLocks: RosterLockRepository,
     @Inject(SalaryRulesService) private readonly salaryRules: SalaryRulesService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService
-  ) {}
+    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
+    @Optional() @Inject(TeamSalaryCapService) teamSalaryCaps?: TeamSalaryCapService
+  ) {
+    this.teamSalaryCaps = teamSalaryCaps ?? new TeamSalaryCapService();
+  }
 
   approve(
     adminId: string,
@@ -84,6 +89,10 @@ export class PlayerMarketReviewService {
       if (!buyer || buyer.status !== 'ACTIVE' || buyer.rosterStatus !== 'COMPLIANT' || rosterCount >= 25) {
         return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, rosterCount >= 25 ? 'ROSTER_CAPACITY_REACHED' : 'TEAM_INELIGIBLE');
       }
+      const salaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, application.applicantLeagueTeamId);
+      if (salaryCapMinor === null) {
+        return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'TEAM_SALARY_CAP_UNSET');
+      }
 
       if (application.type === 'FORCED_TRANSFER') {
         if (!ownership || ownership.status !== 'ACTIVE' || ownership.id !== application.ownershipId
@@ -94,12 +103,11 @@ export class PlayerMarketReviewService {
         if (!valuation || application.amountMinor < valuation.currentValueMinor) {
           return this.mark(tx, application, adminId, 'REQUOTE_REQUIRED', input.reason, 'OFFICIAL_VALUE_INCREASED');
         }
-        const quote = await this.salaryRules.quoteWithClient(tx, application.leagueId, ownership.maxOverallSnapshot, mutationAt);
         const salary = await tx.leaguePlayerOwnership.aggregate({
           where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' },
           _sum: { salaryMinor: true }
         });
-        if ((salary._sum.salaryMinor ?? 0) + ownership.salaryMinor > quote.salaryCapMinor) {
+        if ((salary._sum.salaryMinor ?? 0) + ownership.salaryMinor > salaryCapMinor) {
           return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'SALARY_CAP_EXCEEDED');
         }
         const queue = await tx.playerAcquisitionApplication.findMany({
@@ -117,7 +125,7 @@ export class PlayerMarketReviewService {
         if (sortForcedQueue(queue)[0]?.id !== application.id) {
           throw playerMarketError('FORCED_QUEUE_ORDER_VIOLATION', '只能审核当前强报队列首位');
         }
-        return this.settleForced(tx, adminId, application, ownership, quote.salaryCapMinor, input.reason, mutationAt);
+        return this.settleForced(tx, adminId, application, ownership, input.reason, mutationAt);
       }
 
       if (ownership?.status === 'ACTIVE') {
@@ -130,7 +138,7 @@ export class PlayerMarketReviewService {
         where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' },
         _sum: { salaryMinor: true }
       });
-      if ((salary._sum.salaryMinor ?? 0) + quote.salaryMinor > quote.salaryCapMinor) {
+      if ((salary._sum.salaryMinor ?? 0) + quote.salaryMinor > salaryCapMinor) {
         return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'SALARY_CAP_EXCEEDED');
       }
       const ownershipData: Prisma.LeaguePlayerOwnershipUncheckedCreateInput = {
@@ -182,7 +190,7 @@ export class PlayerMarketReviewService {
       } });
       await this.approveApplication(tx, application, adminId, input.reason, mutationAt);
       await this.setRosterStatus(tx, application.applicantLeagueTeamId,
-        (salary._sum.salaryMinor ?? 0) + quote.salaryMinor, quote.salaryCapMinor);
+        (salary._sum.salaryMinor ?? 0) + quote.salaryMinor, salaryCapMinor);
       await tx.playerAcquisitionApplication.updateMany({
         where: {
           id: { not: application.id },
@@ -229,7 +237,6 @@ export class PlayerMarketReviewService {
     adminId: string,
     application: Prisma.PlayerAcquisitionApplicationGetPayload<{ include: { playerCard: { include: { autoBuilds: true } } } }>,
     ownership: NonNullable<Awaited<ReturnType<Prisma.TransactionClient['leaguePlayerOwnership']['findUnique']>>>,
-    salaryCapMinor: number,
     reason: string,
     at: Date
   ): Promise<PlayerMarketReviewResult> {
@@ -289,6 +296,7 @@ export class PlayerMarketReviewService {
       [sourceTeamId, sourceSalary._sum.salaryMinor ?? 0]
     ]);
     for (const teamId of [...salaries.keys()].sort()) {
+      const salaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, teamId) ?? 0;
       await this.setRosterStatus(tx, teamId, salaries.get(teamId)!, salaryCapMinor);
     }
     await tx.playerAcquisitionApplication.updateMany({

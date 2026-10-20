@@ -24,6 +24,7 @@ import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { SalaryRulesService } from './salary-rules.service.js';
+import { TeamSalaryCapService } from './team-salary-cap.service.js';
 import { TransferWindowsService } from './transfer-windows.service.js';
 import { TransactionFeesService } from '../league-economy/transaction-fees.service.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
@@ -39,6 +40,7 @@ type AppliedTransactionFee = {
 @Injectable()
 export class RosterTransactionsService {
   private readonly visibility: LeagueVisibilityService;
+  private readonly teamSalaryCaps: TeamSalaryCapService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -51,9 +53,11 @@ export class RosterTransactionsService {
     @Inject(TransactionFeesService) private readonly transactionFees: TransactionFeesService,
     @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
     @Inject(PlayerBuildsService) private readonly playerBuilds: PlayerBuildsService,
-    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
+    @Optional() @Inject(TeamSalaryCapService) teamSalaryCaps?: TeamSalaryCapService
   ) {
     this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+    this.teamSalaryCaps = teamSalaryCaps ?? new TeamSalaryCapService();
   }
 
   async acquire(raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
@@ -116,7 +120,8 @@ export class RosterTransactionsService {
           );
           const currentSalaryMinor = roster._sum.salaryMinor ?? 0;
           const projectedSalaryMinor = currentSalaryMinor + quote.salaryMinor;
-          if (projectedSalaryMinor > quote.salaryCapMinor) {
+          const salaryCapMinor = await this.teamSalaryCaps.requireWithClient(tx, input.targetLeagueTeamId);
+          if (projectedSalaryMinor > salaryCapMinor) {
             throw new LeagueRosterError(
               'TEAM_SALARY_CAP_EXCEEDED',
               'The acquisition would exceed the team salary cap',
@@ -125,7 +130,7 @@ export class RosterTransactionsService {
                 currentSalaryMinor,
                 playerSalaryMinor: quote.salaryMinor,
                 projectedSalaryMinor,
-                salaryCapMinor: quote.salaryCapMinor
+                salaryCapMinor
               }
             );
           }
@@ -203,13 +208,13 @@ export class RosterTransactionsService {
             tx,
             input.targetLeagueTeamId,
             projectedSalaryMinor,
-            quote.salaryCapMinor
+            salaryCapMinor
           );
 
           return this.result(ownership, transaction, {
             rosterCount: roster._count._all + 1,
             salaryMinor: projectedSalaryMinor,
-            salaryCapMinor: quote.salaryCapMinor
+            salaryCapMinor
           });
         }, input);
     } catch (error) {
@@ -303,22 +308,17 @@ export class RosterTransactionsService {
           _count: { _all: true },
           _sum: { salaryMinor: true }
         });
-        const quote = await this.salaryRules.quoteWithClient(
-          tx,
-          locked.leagueId,
-          locked.maxOverallSnapshot,
-          at
-        );
+        const salaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, locked.leagueTeamId) ?? 0;
         await this.setRosterStatus(
           tx,
           locked.leagueTeamId,
           roster._sum.salaryMinor ?? 0,
-          quote.salaryCapMinor
+          salaryCapMinor
         );
         return this.result(ownership, transaction, {
           rosterCount: roster._count._all,
           salaryMinor: roster._sum.salaryMinor ?? 0,
-          salaryCapMinor: quote.salaryCapMinor
+          salaryCapMinor
         });
       }, input);
   }
@@ -364,12 +364,14 @@ export class RosterTransactionsService {
           at
         );
         const projectedSalaryMinor = targetRoster.salaryMinor + quote.salaryMinor;
-        if (projectedSalaryMinor > quote.salaryCapMinor) {
+        const targetSalaryCapMinor = await this.teamSalaryCaps.requireWithClient(tx, input.targetLeagueTeamId);
+        const sourceSalaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, locked.leagueTeamId) ?? 0;
+        if (projectedSalaryMinor > targetSalaryCapMinor) {
           throw this.salaryCapExceeded(
             targetRoster.salaryMinor,
             quote.salaryMinor,
             projectedSalaryMinor,
-            quote.salaryCapMinor
+            targetSalaryCapMinor
           );
         }
 
@@ -456,21 +458,21 @@ export class RosterTransactionsService {
           tx,
           locked.leagueTeamId,
           sourceRoster.salaryMinor,
-          quote.salaryCapMinor
+          sourceSalaryCapMinor
         );
         await this.setRosterStatus(
           tx,
           input.targetLeagueTeamId,
           projectedSalaryMinor,
-          quote.salaryCapMinor
+          targetSalaryCapMinor
         );
         return {
           ...this.result(ownership, transaction, {
             rosterCount: targetRoster.rosterCount + 1,
             salaryMinor: projectedSalaryMinor,
-            salaryCapMinor: quote.salaryCapMinor
+            salaryCapMinor: targetSalaryCapMinor
           }),
-          sourceSummary: { ...sourceRoster, salaryCapMinor: quote.salaryCapMinor }
+          sourceSummary: { ...sourceRoster, salaryCapMinor: sourceSalaryCapMinor }
         };
       }, input);
   }
@@ -511,13 +513,18 @@ export class RosterTransactionsService {
         );
         const roster = await this.rosterAggregate(tx, locked.leagueTeamId);
         const projectedSalaryMinor = roster.salaryMinor - locked.salaryMinor + quote.salaryMinor;
-        if (projectedSalaryMinor > quote.salaryCapMinor
+        const configuredCap = await this.teamSalaryCaps.readWithClient(tx, locked.leagueTeamId);
+        if (configuredCap === null && quote.salaryMinor >= locked.salaryMinor) {
+          await this.teamSalaryCaps.requireWithClient(tx, locked.leagueTeamId);
+        }
+        const salaryCapMinor = configuredCap ?? 0;
+        if (projectedSalaryMinor > salaryCapMinor
           && quote.salaryMinor >= locked.salaryMinor) {
           throw this.salaryCapExceeded(
             roster.salaryMinor,
             quote.salaryMinor - locked.salaryMinor,
             projectedSalaryMinor,
-            quote.salaryCapMinor
+            salaryCapMinor
           );
         }
         const ownership = await tx.leaguePlayerOwnership.update({
@@ -581,12 +588,12 @@ export class RosterTransactionsService {
           tx,
           locked.leagueTeamId,
           projectedSalaryMinor,
-          quote.salaryCapMinor
+          salaryCapMinor
         );
         return this.result(ownership, transaction, {
           rosterCount: roster.rosterCount,
           salaryMinor: projectedSalaryMinor,
-          salaryCapMinor: quote.salaryCapMinor
+          salaryCapMinor
         });
       }, input);
   }
@@ -643,13 +650,18 @@ export class RosterTransactionsService {
         const projectedSalaryMinor = targetRoster.salaryMinor
           - (movingTeams ? 0 : locked.salaryMinor)
           + quote.salaryMinor;
+        const configuredTargetCap = await this.teamSalaryCaps.readWithClient(tx, targetTeamId);
+        if (configuredTargetCap === null && quote.salaryMinor > (movingTeams ? 0 : locked.salaryMinor)) {
+          await this.teamSalaryCaps.requireWithClient(tx, targetTeamId);
+        }
+        const targetSalaryCapMinor = configuredTargetCap ?? 0;
         if (quote.salaryMinor > (movingTeams ? 0 : locked.salaryMinor)
-          && projectedSalaryMinor > quote.salaryCapMinor) {
+          && projectedSalaryMinor > targetSalaryCapMinor) {
           throw this.salaryCapExceeded(
             targetRoster.salaryMinor,
             quote.salaryMinor,
             projectedSalaryMinor,
-            quote.salaryCapMinor
+            targetSalaryCapMinor
           );
         }
         const ownership = await tx.leaguePlayerOwnership.update({
@@ -691,23 +703,24 @@ export class RosterTransactionsService {
         });
         if (movingTeams) {
           const sourceRoster = await this.rosterAggregate(tx, locked.leagueTeamId);
+          const sourceSalaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, locked.leagueTeamId) ?? 0;
           await this.setRosterStatus(
             tx,
             locked.leagueTeamId,
             sourceRoster.salaryMinor,
-            quote.salaryCapMinor
+            sourceSalaryCapMinor
           );
         }
         await this.setRosterStatus(
           tx,
           targetTeamId,
           projectedSalaryMinor,
-          quote.salaryCapMinor
+          targetSalaryCapMinor
         );
         return this.result(ownership, transaction, {
           rosterCount: targetRoster.rosterCount + (movingTeams ? 1 : 0),
           salaryMinor: projectedSalaryMinor,
-          salaryCapMinor: quote.salaryCapMinor
+          salaryCapMinor: targetSalaryCapMinor
         });
       }, input);
   }
