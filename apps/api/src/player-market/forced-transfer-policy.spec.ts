@@ -33,9 +33,9 @@ describe('forced transfer policy', () => {
       .toEqual({ status: 'OWNERSHIP_CHANGED', reason: 'OWNERSHIP_NO_LONGER_ACTIVE' });
   });
 
-  it('expires at the exact window end', () => {
+  it('keeps a submitted bid reviewable after the offer window ends', () => {
     expect(reconcileForcedApplication({ ...base, windowEndsAt: now }))
-      .toEqual({ status: 'EXPIRED', reason: 'TRANSFER_WINDOW_CLOSED' });
+      .toEqual({ status: 'PENDING', reason: null });
   });
 
   it('sorts by first valid submission and then application id without mutating input', () => {

@@ -53,6 +53,7 @@ describe('PlayerMarketQueryService', () => {
       leaguePlayerValuation: { findMany: jest.fn(async () => players.map((player, index) => ({ footballPlayerId: player.id, currentValueMinor: 500 + index, version: 1 }))) },
       leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
       transferWindow: { findFirst: jest.fn(async () => ({ id: 'window-1', allowBuy: true, startsAt: new Date(now.getTime() - 1000), endsAt: new Date(now.getTime() + 1000) })) },
+      forcedOfferWindow: { findFirst: jest.fn(async () => ({ id: 'forced-1' })) },
       playerReleaseRestriction: { findMany: jest.fn(async () => []) },
       playerAcquisitionApplication: { findMany: jest.fn(async () => []) }
     };
@@ -68,6 +69,7 @@ describe('PlayerMarketQueryService', () => {
 
     expect(result.items.map(({ action }) => action)).toEqual(['APPLY', 'OWNED_BY_ME', 'FORCE_SIGN']);
     expect(result.activeTransferWindowId).toBe('window-1');
+    expect(result.activeForcedOfferWindowId).toBe('forced-1');
     expect(result.items[2]?.currentOwner).toEqual({ teamId: 'team-2', teamNumber: 2, name: '对手队', logoUrl: '/logo.png', ownerAlias: '对手' });
     expect(prisma.footballPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { AND: expect.arrayContaining([expect.objectContaining({ OR: expect.arrayContaining([
@@ -96,6 +98,7 @@ describe('PlayerMarketQueryService', () => {
       leaguePlayerValuation: { findMany: jest.fn(async () => []) },
       leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
       transferWindow: { findFirst: jest.fn(async () => null) },
+      forcedOfferWindow: { findFirst: jest.fn(async () => null) },
       playerReleaseRestriction: { findMany: jest.fn(async () => []) }
     };
     const access = { requireParticipant: jest.fn(async () => ({
@@ -153,6 +156,7 @@ describe('PlayerMarketQueryService', () => {
       leaguePlayerValuation: { findMany: jest.fn(async () => []) },
       leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
       transferWindow: { findFirst: jest.fn(async () => null) },
+      forcedOfferWindow: { findFirst: jest.fn(async () => null) },
       playerReleaseRestriction: { findMany: jest.fn(async () => []) }
     };
     const access = { requireParticipant: jest.fn(async () => ({
@@ -181,7 +185,8 @@ describe('PlayerMarketQueryService', () => {
       leaguePlayerOwnership: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
       leaguePlayerValuation: { findMany: jest.fn(async () => []) },
       leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
-      transferWindow: { findFirst: jest.fn(async () => null) }
+      transferWindow: { findFirst: jest.fn(async () => null) },
+      forcedOfferWindow: { findFirst: jest.fn(async () => null) }
     };
     const access = { requireParticipant: jest.fn(async () => ({
       leagueTeamId: 'team-1', rosterStatus: 'COMPLIANT'
@@ -214,6 +219,7 @@ describe('PlayerMarketQueryService', () => {
       leaguePlayerValuation: { findMany: jest.fn(async () => []) },
       leagueSalaryRuleVersion: { findFirst: jest.fn(async () => null) },
       transferWindow: { findFirst: jest.fn(async () => null) },
+      forcedOfferWindow: { findFirst: jest.fn(async () => null) },
       playerAcquisitionApplication: { findMany: jest.fn(async () => []) }
     };
     const access = { requireParticipant: jest.fn(async () => ({
@@ -230,10 +236,13 @@ describe('PlayerMarketQueryService', () => {
   });
 
   it('returns explicit disabled reasons for capacity, window, compliance, and release restrictions', () => {
-    expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 25, rosterStatus: 'COMPLIANT', windowOpen: true, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'ROSTER_CAPACITY_REACHED' });
-    expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'COMPLIANT', windowOpen: false, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' });
-    expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'OVER_CAP', windowOpen: true, releasedByMe: false })).toEqual({ action: 'DISABLED', disabledReason: 'ROSTER_NON_COMPLIANT' });
-    expect(resolvePlayerMarketAction({ ownedByMe: false, owned: false, rosterCount: 1, rosterStatus: 'COMPLIANT', windowOpen: true, releasedByMe: true })).toEqual({ action: 'DISABLED', disabledReason: 'RELEASED_BY_TEAM_IN_WINDOW' });
+    const base = { ownedByMe: false, rosterCount: 1, rosterStatus: 'COMPLIANT' as const, transferWindowOpen: true, forcedOfferWindowOpen: true, releasedByMe: false };
+    expect(resolvePlayerMarketAction({ ...base, owned: false, rosterCount: 25 })).toEqual({ action: 'DISABLED', disabledReason: 'ROSTER_CAPACITY_REACHED' });
+    expect(resolvePlayerMarketAction({ ...base, owned: false, transferWindowOpen: false })).toEqual({ action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' });
+    expect(resolvePlayerMarketAction({ ...base, owned: true, forcedOfferWindowOpen: false })).toEqual({ action: 'DISABLED', disabledReason: 'FORCED_OFFER_WINDOW_CLOSED' });
+    expect(resolvePlayerMarketAction({ ...base, owned: true, transferWindowOpen: false })).toEqual({ action: 'FORCE_SIGN', disabledReason: null });
+    expect(resolvePlayerMarketAction({ ...base, owned: false, rosterStatus: 'OVER_CAP' })).toEqual({ action: 'DISABLED', disabledReason: 'ROSTER_NON_COMPLIANT' });
+    expect(resolvePlayerMarketAction({ ...base, owned: false, releasedByMe: true })).toEqual({ action: 'DISABLED', disabledReason: 'RELEASED_BY_TEAM_IN_WINDOW' });
   });
 
   it('expires closed-window applications idempotently before returning the W2 queue', async () => {

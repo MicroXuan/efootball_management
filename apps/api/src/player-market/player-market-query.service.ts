@@ -25,7 +25,8 @@ export type MarketActionContext = {
   ownedByMe: boolean;
   rosterCount: number;
   rosterStatus: 'COMPLIANT' | 'OVER_CAP';
-  windowOpen: boolean;
+  transferWindowOpen: boolean;
+  forcedOfferWindowOpen: boolean;
   releasedByMe: boolean;
 };
 
@@ -35,10 +36,15 @@ export function resolvePlayerMarketAction(context: MarketActionContext): {
 } {
   if (context.ownedByMe) return { action: 'OWNED_BY_ME', disabledReason: null };
   if (context.rosterCount >= 25) return { action: 'DISABLED', disabledReason: 'ROSTER_CAPACITY_REACHED' };
-  if (!context.windowOpen) return { action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' };
   if (context.rosterStatus !== 'COMPLIANT') return { action: 'DISABLED', disabledReason: 'ROSTER_NON_COMPLIANT' };
+  if (context.owned) {
+    return context.forcedOfferWindowOpen
+      ? { action: 'FORCE_SIGN', disabledReason: null }
+      : { action: 'DISABLED', disabledReason: 'FORCED_OFFER_WINDOW_CLOSED' };
+  }
+  if (!context.transferWindowOpen) return { action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' };
   if (context.releasedByMe) return { action: 'DISABLED', disabledReason: 'RELEASED_BY_TEAM_IN_WINDOW' };
-  return { action: context.owned ? 'FORCE_SIGN' : 'APPLY', disabledReason: null };
+  return { action: 'APPLY', disabledReason: null };
 }
 
 type ApplicationRow = Prisma.PlayerAcquisitionApplicationGetPayload<{
@@ -155,6 +161,7 @@ export class PlayerMarketQueryService {
       ...summary,
       playerEnglishName: player.nameEn,
       activeTransferWindowId: result.activeTransferWindowId,
+      activeForcedOfferWindowId: result.activeForcedOfferWindowId,
       myApplication: applications.items.find((item) => item.applicantTeam.teamId === scope.leagueTeamId) ?? null,
       publicApplications: applications.items
     };
@@ -166,10 +173,10 @@ export class PlayerMarketQueryService {
     seasonId: string,
     page: MarketPlayerRow[],
     now: Date
-  ): Promise<{ items: PlayerMarketPlayerSummary[]; activeTransferWindowId: string | null }> {
+  ): Promise<{ items: PlayerMarketPlayerSummary[]; activeTransferWindowId: string | null; activeForcedOfferWindowId: string | null }> {
     const playerIds = page.map(({ id }) => id);
     const missingBestCardPlayerIds = page.filter(({ bestCard }) => !bestCard).map(({ id }) => id);
-    const [ownerships, valuations, window, rosterCount, salaryRule, fallbackCards] = await Promise.all([
+    const [ownerships, valuations, window, forcedWindow, rosterCount, salaryRule, fallbackCards] = await Promise.all([
       this.prisma.leaguePlayerOwnership.findMany({
         where: { leagueId, footballPlayerId: { in: playerIds }, status: 'ACTIVE' },
         include: { leagueTeam: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } }
@@ -177,6 +184,10 @@ export class PlayerMarketQueryService {
       this.prisma.leaguePlayerValuation.findMany({ where: { leagueId, footballPlayerId: { in: playerIds } } }),
       this.prisma.transferWindow.findFirst({
         where: { seasonId, allowBuy: true, startsAt: { lte: now }, endsAt: { gt: now } },
+        orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
+      }),
+      this.prisma.forcedOfferWindow.findFirst({
+        where: { seasonId, startsAt: { lte: now }, endsAt: { gt: now } },
         orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
       }),
       this.prisma.leaguePlayerOwnership.count({ where: { leagueTeamId: scope.leagueTeamId, status: 'ACTIVE' } }),
@@ -222,7 +233,8 @@ export class PlayerMarketQueryService {
         ownedByMe: ownership?.leagueTeamId === scope.leagueTeamId,
         rosterCount,
         rosterStatus: scope.rosterStatus,
-        windowOpen: Boolean(window),
+        transferWindowOpen: Boolean(window),
+        forcedOfferWindowOpen: Boolean(forcedWindow),
         releasedByMe: restrictedPlayers.has(player.id)
       });
       return {
@@ -249,7 +261,8 @@ export class PlayerMarketQueryService {
     });
     return {
       items,
-      activeTransferWindowId: window?.id ?? null
+      activeTransferWindowId: window?.id ?? null,
+      activeForcedOfferWindowId: forcedWindow?.id ?? null
     };
   }
 
@@ -302,7 +315,7 @@ export class PlayerMarketQueryService {
   private async expireClosedApplications(leagueId: string, seasonId: string, now: Date): Promise<void> {
     if (!this.locks) return;
     const candidates = await this.prisma.playerAcquisitionApplication.findMany({
-      where: { leagueId, seasonId, status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }, transferWindow: { endsAt: { lte: now } } },
+      where: { leagueId, seasonId, type: 'NORMAL_PURCHASE', status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }, transferWindow: { endsAt: { lte: now } } },
       select: { id: true, footballPlayerId: true }
     });
     const playerIds = [...new Set(candidates.map(({ footballPlayerId }) => footballPlayerId))].sort();
@@ -311,7 +324,7 @@ export class PlayerMarketQueryService {
         await this.locks!.lockSeason(tx, seasonId);
         await this.locks!.lockPlayer(tx, leagueId, footballPlayerId);
         const rows = await tx.playerAcquisitionApplication.findMany({ where: {
-          leagueId, seasonId, footballPlayerId, status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }, transferWindow: { endsAt: { lte: now } }
+          leagueId, seasonId, footballPlayerId, type: 'NORMAL_PURCHASE', status: { in: ['PENDING', 'REQUOTE_REQUIRED'] }, transferWindow: { endsAt: { lte: now } }
         }, select: { id: true, applicantLeagueTeamId: true, sourceLeagueTeamId: true, status: true, amountMinor: true } });
         await this.locks!.lockTeams(tx, rows.flatMap((row) => [row.applicantLeagueTeamId, row.sourceLeagueTeamId]));
         await this.locks!.lockApplicationsForPlayer(tx, leagueId, seasonId, footballPlayerId);
@@ -397,6 +410,7 @@ export class PlayerMarketQueryService {
       leagueId: row.leagueId,
       seasonId: row.seasonId,
       transferWindowId: row.transferWindowId,
+      forcedOfferWindowId: row.forcedOfferWindowId,
       type: row.type,
       applicantTeam: this.team(row.applicantLeagueTeam),
       playerId: row.footballPlayerId,

@@ -54,8 +54,8 @@ export class MyPlayerMarketController {
   }
 
   @Post('leagues/:leagueId/player-market-applications')
-  submit(@CurrentUser() user: AuthenticatedUser, @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string, @Body(new ZodValidationPipe(SubmitPlayerApplicationRequestSchema)) body: SubmitPlayerApplicationRequest, @Headers('idempotency-key') key?: string) {
-    return this.applications.submit(user.id, leagueId, body, this.key(key));
+  submit(@CurrentUser() user: AuthenticatedUser, @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string, @Body() rawBody: unknown, @Headers('idempotency-key') key?: string) {
+    return this.applications.submit(user.id, leagueId, parsePlayerApplicationRequest(rawBody), this.key(key));
   }
 
   @Patch('player-market-applications/:applicationId')
@@ -78,4 +78,14 @@ export class MyPlayerMarketController {
     if (!value?.trim()) throw playerMarketError('IDEMPOTENCY_KEY_REQUIRED', '必须提供 Idempotency-Key 请求头', 400);
     return value;
   }
+}
+
+export function parsePlayerApplicationRequest(rawBody: unknown): SubmitPlayerApplicationRequest {
+  if (typeof rawBody === 'object' && rawBody !== null && !Array.isArray(rawBody)) {
+    const body = rawBody as Record<string, unknown>;
+    if (body.type === 'FORCED_TRANSFER' && (typeof body.window !== 'object' || body.window === null || (body.window as Record<string, unknown>).kind !== 'FORCED_OFFER')) {
+      throw playerMarketError('CLIENT_UPGRADE_REQUIRED', '请更新小程序后再提交强报', 400);
+    }
+  }
+  return new ZodValidationPipe(SubmitPlayerApplicationRequestSchema).transform(rawBody);
 }

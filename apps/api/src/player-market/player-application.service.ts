@@ -42,6 +42,17 @@ export class PlayerApplicationService {
     key: string
   ): Promise<PlayerAcquisitionApplication> {
     const scope = await this.access.requireParticipant(userId, leagueId, input.seasonId);
+    const transferWindowId = input.type === 'NORMAL_PURCHASE'
+      ? input.window?.kind === 'TRANSFER' ? input.window.id : input.transferWindowId
+      : null;
+    const forcedOfferWindowId = input.type === 'FORCED_TRANSFER' && input.window?.kind === 'FORCED_OFFER'
+      ? input.window.id : null;
+    if (input.type === 'FORCED_TRANSFER' && !forcedOfferWindowId) {
+      throw playerMarketError('CLIENT_UPGRADE_REQUIRED', '请更新小程序后再提交强报', 400);
+    }
+    if (input.type === 'NORMAL_PURCHASE' && !transferWindowId) {
+      throw playerMarketError('TRANSFER_WINDOW_CLOSED', '请选择当前转会窗口', 400);
+    }
     return this.receipts.execute(userId, `player-market.submit:${leagueId}:${input.footballPlayerId}`, key, async (tx) => {
       await this.locks.lockSeason(tx, input.seasonId);
       await this.locks.lockPlayer(tx, leagueId, input.footballPlayerId);
@@ -53,7 +64,9 @@ export class PlayerApplicationService {
       });
       const [team, window, ownership, rosterCount, valuation, restriction, activeExisting] = await Promise.all([
         tx.leagueTeam.findUnique({ where: { id: scope.leagueTeamId } }),
-        tx.transferWindow.findUnique({ where: { id: input.transferWindowId } }),
+        input.type === 'FORCED_TRANSFER'
+          ? tx.forcedOfferWindow.findUnique({ where: { id: forcedOfferWindowId! } })
+          : tx.transferWindow.findUnique({ where: { id: transferWindowId! } }),
         tx.leaguePlayerOwnership.findUnique({
           where: { leagueId_footballPlayerId: { leagueId, footballPlayerId: input.footballPlayerId } }
         }),
@@ -61,13 +74,13 @@ export class PlayerApplicationService {
         tx.leaguePlayerValuation.findUnique({
           where: { leagueId_footballPlayerId: { leagueId, footballPlayerId: input.footballPlayerId } }
         }),
-        tx.playerReleaseRestriction.findUnique({
+        transferWindowId ? tx.playerReleaseRestriction.findUnique({
           where: { transferWindowId_leagueTeamId_footballPlayerId: {
-            transferWindowId: input.transferWindowId,
+            transferWindowId,
             leagueTeamId: scope.leagueTeamId,
             footballPlayerId: input.footballPlayerId
           } }
-        }),
+        }) : Promise.resolve(null),
         tx.playerAcquisitionApplication.findFirst({
           where: {
             leagueId,
@@ -80,7 +93,8 @@ export class PlayerApplicationService {
         })
       ]);
       this.assertTeam(team);
-      this.assertWindow(window, input.seasonId, now);
+      if (input.type === 'FORCED_TRANSFER') this.assertForcedWindow(window, input.seasonId, now);
+      else this.assertWindow(window as { seasonId: string; allowBuy: boolean; startsAt: Date; endsAt: Date } | null, input.seasonId, now);
       if (rosterCount >= 25) throw playerMarketError('ROSTER_CAPACITY_REACHED', '球队已满 25 人，请先下放球员');
       let sourceLeagueTeamId: string | null = null;
       let ownershipId: string | null = null;
@@ -111,14 +125,15 @@ export class PlayerApplicationService {
         include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } }
       });
       if (!card) throw playerMarketError('PLAYER_CARD_NOT_AVAILABLE', '所选球员卡不可用', 404);
-      if (restriction) throw playerMarketError('RELEASED_BY_TEAM_IN_WINDOW', '本队在当前窗口下放过该球员，不能回购');
+      if (input.type === 'NORMAL_PURCHASE' && restriction) throw playerMarketError('RELEASED_BY_TEAM_IN_WINDOW', '本队在当前窗口下放过该球员，不能回购');
       if (activeExisting) throw playerMarketError('ACTIVE_APPLICATION_EXISTS', '本队已有一笔有效申请');
 
       const created = await tx.playerAcquisitionApplication.create({
         data: {
           leagueId,
           seasonId: input.seasonId,
-          transferWindowId: input.transferWindowId,
+          transferWindowId: transferWindowId ?? null,
+          forcedOfferWindowId,
           type: input.type,
           applicantLeagueTeamId: scope.leagueTeamId,
           footballPlayerId: input.footballPlayerId,
@@ -161,9 +176,16 @@ export class PlayerApplicationService {
         ? ['PENDING', 'REQUOTE_REQUIRED'].includes(current.status)
         : current.status === 'PENDING';
       if (!amendable) throw playerMarketError('APPLICATION_STATE_INVALID', '当前状态不能改价');
-      const window = await tx.transferWindow.findUnique({ where: { id: current.transferWindowId } });
       const now = this.clock();
-      this.assertWindow(window, current.seasonId, now);
+      const window = current.type === 'FORCED_TRANSFER'
+        ? current.forcedOfferWindowId
+          ? await tx.forcedOfferWindow.findUnique({ where: { id: current.forcedOfferWindowId } })
+          : null
+        : current.transferWindowId
+          ? await tx.transferWindow.findUnique({ where: { id: current.transferWindowId } })
+          : null;
+      if (current.type === 'FORCED_TRANSFER') this.assertForcedWindow(window, current.seasonId, now);
+      else this.assertWindow(window as { seasonId: string; allowBuy: boolean; startsAt: Date; endsAt: Date } | null, current.seasonId, now);
       let nextStatus = current.status;
       if (current.type === 'FORCED_TRANSFER') {
         if (input.amountMinor < current.amountMinor) {
@@ -248,6 +270,12 @@ export class PlayerApplicationService {
     }
   }
 
+  private assertForcedWindow(window: { seasonId: string; startsAt: Date; endsAt: Date } | null, seasonId: string, at: Date): void {
+    if (!window || window.seasonId !== seasonId || at < window.startsAt || at >= window.endsAt) {
+      throw playerMarketError('FORCED_OFFER_WINDOW_CLOSED', '当前不在强报期，不能新提交或修改报价');
+    }
+  }
+
   private assertVersion(actual: number, expected: number): void {
     if (actual !== expected) throw playerMarketError('VERSION_CONFLICT', '申请已被其他操作更新，请刷新后重试');
   }
@@ -281,6 +309,7 @@ export class PlayerApplicationService {
       leagueId: row.leagueId,
       seasonId: row.seasonId,
       transferWindowId: row.transferWindowId,
+      forcedOfferWindowId: row.forcedOfferWindowId,
       type: row.type,
       applicantTeam: this.team(row.applicantLeagueTeam),
       playerId: row.footballPlayerId,
