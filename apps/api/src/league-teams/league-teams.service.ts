@@ -45,6 +45,9 @@ export class LeagueTeamsService {
     input: ParsedCreateLeagueTeamRequest,
     key: string
   ): Promise<LeagueTeamDetail> {
+    if (!Number.isSafeInteger(input.salaryCapMinor) || input.salaryCapMinor <= 0 || input.salaryCapMinor > 4_294_967_295) {
+      throw new LeagueError('TEAM_SALARY_CAP_REQUIRED', 'Set a positive team salary cap', 422);
+    }
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.create:${leagueId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
@@ -85,6 +88,8 @@ export class LeagueTeamsService {
             name: catalogName,
             shortName: catalogTeam.shortName,
             logoUrl: catalogTeam.storedLogoUrl,
+            salaryCapMinor: input.salaryCapMinor,
+            salaryCapConfirmedAt: new Date(),
             defaultGameAccountId: null
           }
         });
@@ -122,6 +127,7 @@ export class LeagueTeamsService {
             ownerAlias: team.ownerAlias,
             teamNumber: team.teamNumber,
             catalogTeamId: team.catalogTeamId,
+            salaryCapMinor: team.salaryCapMinor,
             currentSeasonId: league.currentSeasonId
           }
         });

@@ -1088,6 +1088,7 @@ describe('shared API contracts', () => {
       ownerAlias: '申花经理',
       teamNumber: 1,
       catalogTeamId: '33333333-3333-4333-8333-333333333333',
+      salaryCapMinor: 14_000,
       defaultGameAccountId: '22222222-2222-4222-8222-222222222222'
     });
 
@@ -1602,16 +1603,31 @@ describe('league team administration contracts', () => {
     assert.throws(() => TeamNumberSchema.parse(1.5));
   });
 
-  it('requires a catalog shell and league-specific alias when creating a team', () => {
+  it('requires a catalog shell, alias and positive team salary cap when creating a team', () => {
     const parsed = CreateLeagueTeamRequestSchema.parse({
       ownerUserId: ids.user,
       ownerAlias: '  tidus  ',
       teamNumber: 3,
-      catalogTeamId: ids.card
+      catalogTeamId: ids.card,
+      salaryCapMinor: 14_000
     });
 
     assert.equal(parsed.ownerAlias, 'tidus');
     assert.equal(parsed.catalogTeamId, ids.card);
+    assert.equal(parsed.salaryCapMinor, 14_000);
+    assert.throws(() => CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: 'tidus',
+      teamNumber: 3,
+      catalogTeamId: ids.card
+    }));
+    assert.throws(() => CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: 'tidus',
+      teamNumber: 3,
+      catalogTeamId: ids.card,
+      salaryCapMinor: 0
+    }));
     assert.throws(() => CreateLeagueTeamRequestSchema.parse({
       ownerUserId: ids.user,
       ownerAlias: 'tidus',

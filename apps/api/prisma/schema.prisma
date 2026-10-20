@@ -876,6 +876,8 @@ model LeagueTeam {
   status                     LeagueTeamStatus               @default(ACTIVE)
   rosterStatus               LeagueTeamRosterStatus         @default(COMPLIANT) @map("roster_status")
   shellValueMinor            Int                            @default(0) @map("shell_value_minor") @db.UnsignedInt
+  salaryCapMinor             Int?                           @map("salary_cap_minor") @db.UnsignedInt
+  salaryCapConfirmedAt       DateTime?                      @map("salary_cap_confirmed_at")
   version                    Int                            @default(1) @db.UnsignedInt
   createdAt                  DateTime                       @default(now()) @map("created_at")
   updatedAt                  DateTime                       @updatedAt @map("updated_at")

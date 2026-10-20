@@ -26,7 +26,8 @@ const LeagueTeamMutableFieldsSchema = z.object({
 
 export const CreateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.extend({
   ownerUserId: ResourceIdSchema,
-  catalogTeamId: ResourceIdSchema
+  catalogTeamId: ResourceIdSchema,
+  salaryCapMinor: NonNegativeMoneyMinorSchema.positive().max(4_294_967_295)
 });
 
 export const UpdateLeagueTeamRequestSchema = LeagueTeamMutableFieldsSchema.partial().extend({
