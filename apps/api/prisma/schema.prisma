@@ -24,6 +24,12 @@ enum LeagueEdition {
   INTERNATIONAL
 }
 
+enum SeasonCalendarNoteKind {
+  HOLIDAY
+  MAINTENANCE
+  NOTICE
+}
+
 enum VerificationStatus {
   UNVERIFIED
   PENDING
@@ -773,6 +779,8 @@ model AdminAccount {
   reviewedPlayerAuctionLots      PlayerAuctionReview[]               @relation("PlayerAuctionReviewAdmin")
   reviewedPlayerApplications     PlayerAcquisitionApplication[]      @relation("PlayerApplicationReviewer")
   playerApplicationEvents        PlayerAcquisitionApplicationEvent[] @relation("PlayerApplicationEventAdmin")
+  createdSeasonCalendarNotes     SeasonCalendarNote[]                @relation("SeasonCalendarNoteCreator")
+  updatedSeasonCalendarNotes     SeasonCalendarNote[]                @relation("SeasonCalendarNoteUpdater")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -1085,6 +1093,7 @@ model LeagueSeason {
   statusHistory             LeagueSeasonStatusHistory[]
   transferWindows           TransferWindow[]
   forcedOfferWindows        ForcedOfferWindow[]
+  calendarNotes             SeasonCalendarNote[]
   nominationWindows         NominationWindow[]
   rosterTransactions        RosterTransaction[]
   valuationWindows          ValuationWindow[]
@@ -1179,6 +1188,30 @@ model ForcedOfferWindow {
   @@index([seasonId, startsAt, endsAt], map: "forced_offer_windows_timeline_idx")
   @@index([createdByAdminId], map: "forced_offer_windows_creator_idx")
   @@map("forced_offer_windows")
+}
+
+model SeasonCalendarNote {
+  id               String                 @id @default(uuid()) @db.Char(36)
+  seasonId         String                 @map("season_id") @db.Char(36)
+  kind             SeasonCalendarNoteKind
+  title            String                 @db.VarChar(64)
+  description      String?                @db.VarChar(300)
+  startsOn         DateTime               @map("starts_on") @db.Date
+  endsOn           DateTime               @map("ends_on") @db.Date
+  createdByAdminId String                 @map("created_by_admin_id") @db.Char(36)
+  updatedByAdminId String                 @map("updated_by_admin_id") @db.Char(36)
+  version          Int                    @default(1) @db.UnsignedInt
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  deletedAt        DateTime?              @map("deleted_at")
+  season           LeagueSeason           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount           @relation("SeasonCalendarNoteCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  updatedByAdmin   AdminAccount           @relation("SeasonCalendarNoteUpdater", fields: [updatedByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([seasonId, startsOn, endsOn, deletedAt], map: "season_calendar_notes_range_idx")
+  @@index([createdByAdminId], map: "season_calendar_notes_creator_idx")
+  @@index([updatedByAdminId], map: "season_calendar_notes_updater_idx")
+  @@map("season_calendar_notes")
 }
 
 model NominationWindow {
