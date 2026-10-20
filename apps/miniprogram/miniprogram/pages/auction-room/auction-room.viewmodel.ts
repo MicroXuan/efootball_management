@@ -122,7 +122,12 @@ export function publicBidRows(bids: NonNullable<MyPlayerAuctionRoom['currentLot'
 
 export function projectAuctionQueue(queue: MyPlayerAuctionRoom['queue']) {
   const upcoming = queue.filter((lot) => lot.status === 'QUEUED')
-  const completed = queue.filter((lot) => ['PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID'].includes(lot.status))
+  const completed = queue.filter((lot) => ['PENDING_REVIEW', 'REVIEWED', 'VOID', 'NO_BID'].includes(lot.status)).map((lot) => ({
+    ...lot,
+    resultLabel: lot.status === 'VOID' ? '已作废' : lot.winner ? '已成交' : '流拍',
+    winnerLabel: lot.winner ? `${lot.winner.teamNumber === null ? '—' : lot.winner.teamNumber}号 · ${lot.winner.teamName} · ${lot.winner.bidderDisplayName}` : '',
+    priceLabel: lot.winner ? `${lot.winner.price} 资金` : '',
+  }))
   return { upcoming, completed }
 }
 

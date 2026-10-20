@@ -31,6 +31,7 @@ pnpm db:status
 ```
 
 迁移完成后清除当前终端变量，并按需关闭数据库外网直连。生产容器启动时不会自动修改表结构，从而避免多个实例并发迁移。
+如果 `pnpm db:status` 仍列出待应用迁移，不要发布依赖这些字段的新 API 或后台页面；本地测试库已迁移不代表 CloudBase 目标库已迁移。
 
 ## 3. 构建并推送镜像
 
@@ -68,6 +69,7 @@ docker buildx build \
 | `REFRESH_TOKEN_PEPPER` | 另一个独立随机值，至少 32 字符 |
 | `WECHAT_APP_ID` | 生产小程序 AppID |
 | `WECHAT_APP_SECRET` | 生产小程序 AppSecret |
+| `WECHAT_MINIPROGRAM_ENV_VERSION` | `release`；测试服务应配置为 `trial` |
 | `WECHAT_GATEWAY_MODE` | `http` |
 
 CloudBase 控制台配置优先于 Dockerfile 默认值，且环境变量属于具体服务版本。任何密钥调整都应创建新版本，不能写入 Dockerfile。
@@ -83,6 +85,8 @@ curl -i https://<api-domain>/v1/health
 预期 HTTP 200，响应包含 `{"status":"ok"}`。随后用微信开发者工具在真实微信登录模式下验证登录、资料保存和账号管理；检查云托管日志中没有连接串、AppSecret、access token 或 refresh token。
 
 确认后再全量切流。小程序会根据版本自动选择 CloudBase 服务：体验版使用 `efm-dev`，正式版使用 `efm-api-production`；发布前核对 `apps/miniprogram/miniprogram/config/api.ts` 中的环境 ID 与服务名，然后重新编译、预览并上传小程序。
+
+切流前后都要用目标环境的管理员账号复测既有路径：联赛球队“现役球队 / 已退出”列表、球队详情，以及小程序“我的联赛”；若任一路径加载失败，暂停切流并检查接口错误与目标库迁移状态。
 
 ## 6. 回滚
 

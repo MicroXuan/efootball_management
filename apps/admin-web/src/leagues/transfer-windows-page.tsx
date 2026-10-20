@@ -46,7 +46,7 @@ export function TransferWindowsPage({ api = adminApi }: { api?: AdminApi }) {
     <Card title="赛季转会窗口">
       {error ? <Alert role="alert" type="warning" showIcon title={error} /> : null}
       <Select aria-label="选择赛季" value={seasonId || undefined} onChange={setSeasonId} options={seasons.map((season) => ({ value: season.id, label: season.displayName }))} />
-      <Table pagination={false} rowKey="id" dataSource={windows} columns={[
+      <Table pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} rowKey="id" dataSource={windows} columns={[
         { title: '名称', dataIndex: 'name' },
         { title: '开始', dataIndex: 'startsAt', render: (value: string) => formatDateTime(value) },
         { title: '结束', dataIndex: 'endsAt', render: (value: string) => formatDateTime(value) },

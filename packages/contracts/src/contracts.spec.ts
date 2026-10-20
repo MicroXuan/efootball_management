@@ -53,10 +53,16 @@ import {
   SeasonCupSummarySchema,
   SeasonFixtureListQuerySchema,
   SeasonFixtureListResponseSchema,
+  SeasonAgendaMonthSchema,
+  SeasonAgendaResponseSchema,
+  CreateSeasonCalendarNoteRequestSchema,
   CreatePlayerFavoriteRequestSchema,
+  CreatePlayerFavoriteGroupRequestSchema,
+  MovePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
   CreateLeagueTeamRequestSchema,
+  CreateForcedOfferWindowRequestSchema,
   CreateCustomTeamCatalogItemRequestSchema,
   CreateSalaryRuleVersionRequestSchema,
   CreateTeamProfileRequestSchema,
@@ -77,6 +83,10 @@ import {
   PlayerCardDetailSchema,
   PlayerApplicationStatusSchema,
   PlayerMarketListResponseSchema,
+  PlayerMarketSalaryDisplaySchema,
+  PlayerMarketSalaryImpactSchema,
+  ForcedOfferWindowSchema,
+  ForcedOfferWindowListResponseSchema,
   SubmitPlayerApplicationRequestSchema,
   ReleaseOwnedPlayerRequestSchema,
   PlayerFavoriteListQuerySchema,
@@ -100,6 +110,7 @@ import {
   TeamCatalogSyncRunSummarySchema,
   TeamSyncItemPageSchema,
   TransferWindowSchema,
+  UpdateForcedOfferWindowRequestSchema,
   FinanceLedgerEntrySchema,
   FinanceLedgerTypeSchema,
   FinanceSettlementCategorySchema,
@@ -287,6 +298,9 @@ describe('action center contracts', () => {
 describe('season fixture contracts', () => {
   it('defaults to all fixtures with a twenty-item page and normalizes team search', () => {
     assert.deepEqual(SeasonFixtureListQuerySchema.parse({}), { status: 'ALL', limit: 20 });
+    assert.throws(() => SeasonFixtureListQuerySchema.parse({ scope: 'MINE' }));
+    const ownedTeamId = randomUUID();
+    assert.equal(SeasonFixtureListQuerySchema.parse({ scope: 'MINE', leagueTeamId: ownedTeamId }).leagueTeamId, ownedTeamId);
     assert.deepEqual(SeasonFixtureListQuerySchema.parse({ team: '  AC Milan  ', status: 'UPCOMING', limit: '100' }), {
       team: 'AC Milan', status: 'UPCOMING', limit: 100
     });
@@ -318,6 +332,36 @@ describe('season fixture contracts', () => {
     const parsed = SeasonFixtureListResponseSchema.parse({ items: [{ competition, match }], nextCursor: null });
     assert.equal(parsed.items[0]?.match.id, match.id);
     assert.equal(parsed.nextCursor, null);
+  });
+});
+
+describe('season agenda contracts', () => {
+  it('accepts phase items in Beijing dates and rejects fixtures', () => {
+    assert.equal(SeasonAgendaMonthSchema.parse('2026-10'), '2026-10');
+    assert.throws(() => SeasonAgendaMonthSchema.parse('2026-13'));
+    const result = SeasonAgendaResponseSchema.parse({ month: '2026-10', seasonId: randomUUID(), timezone: 'Asia/Shanghai', items: [{
+      id: randomUUID(), kind: 'TRANSFER', noteKind: null, title: '秋季转会期', description: null, version: null,
+      firstDate: '2026-10-19', lastDate: '2026-10-28', startsAt: '2026-10-19T00:00:00.000Z',
+      endsAt: '2026-10-29T00:00:00.000Z', status: 'ACTIVE', targetPath: null
+    }] });
+    assert.equal(result.items[0]?.kind, 'TRANSFER');
+    for (const kind of ['FORCED_OFFER', 'VALUATION', 'NOMINATION'] as const) {
+      assert.equal(SeasonAgendaResponseSchema.parse({ ...result, items: [{ ...result.items[0], kind }] }).items[0]?.kind, kind);
+    }
+    assert.equal(SeasonAgendaResponseSchema.safeParse({ ...result, items: [{ ...result.items[0], kind: 'FIXTURE' }] }).success, false);
+    assert.equal(SeasonAgendaResponseSchema.safeParse({ ...result, timezone: 'America/New_York' }).success, false);
+    assert.equal(SeasonAgendaResponseSchema.parse({ month: '2026-10', seasonId: null, timezone: 'Asia/Shanghai', items: [] }).seasonId, null);
+  });
+
+  it('validates all-day manual notes and inclusive end dates', () => {
+    const note = { kind: 'HOLIDAY', title: '假期', description: '暂停操作', startsOn: '2026-10-01', endsOn: '2026-10-07' };
+    assert.equal(CreateSeasonCalendarNoteRequestSchema.parse(note).endsOn, '2026-10-07');
+    assert.equal(CreateSeasonCalendarNoteRequestSchema.safeParse({ ...note, endsOn: '2026-09-30' }).success, false);
+    assert.equal(CreateSeasonCalendarNoteRequestSchema.safeParse({ ...note, endsOn: '2026-02-30' }).success, false);
+    const manual = { id: randomUUID(), kind: 'MANUAL', noteKind: 'HOLIDAY', title: '假期', description: '暂停操作', version: 1,
+      firstDate: '2026-10-01', lastDate: '2026-10-07', startsAt: null, endsAt: null, status: 'ACTIVE', targetPath: null };
+    assert.equal(SeasonAgendaResponseSchema.parse({ month: '2026-10', seasonId: randomUUID(), timezone: 'Asia/Shanghai', items: [manual] }).items[0]?.noteKind, 'HOLIDAY');
+    assert.equal(SeasonAgendaResponseSchema.safeParse({ month: '2026-10', seasonId: randomUUID(), timezone: 'Asia/Shanghai', items: [{ ...manual, kind: 'TRANSFER' }] }).success, false);
   });
 });
 import {
@@ -368,15 +412,48 @@ import {
 describe('player market contracts', () => {
   const seasonId = '11111111-1111-4111-8111-111111111111';
   const transferWindowId = '22222222-2222-4222-8222-222222222222';
+  const forcedOfferWindowId = '77777777-7777-4777-8777-777777777777';
   const footballPlayerId = '33333333-3333-4333-8333-333333333333';
   const playerCardId = '44444444-4444-4444-8444-444444444444';
   const sourceLeagueTeamId = '55555555-5555-4555-8555-555555555555';
   const ownershipId = '66666666-6666-4666-8666-666666666666';
 
+  it('distinguishes projected and recorded salaries without accepting invented amounts', () => {
+    const ruleId = '88888888-8888-4888-8888-888888888888';
+    const currentTier = { salaryMinor: 600, minOverall: 96, maxOverall: 96,
+      salaryRuleVersionId: ruleId, version: 2, effectiveAt: '2026-10-20T00:00:00.000Z' };
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'PROJECTED', salaryMinor: 500, basisOverall: 96, salaryRuleVersionId: ruleId,
+      currentTier: null, unavailableReason: null
+    }).salaryMinor, 500);
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'ACTUAL', salaryMinor: 400, basisOverall: 96, salaryRuleVersionId: ruleId,
+      currentTier, unavailableReason: null
+    }).currentTier?.salaryMinor, 600);
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'ACTUAL', salaryMinor: 400, basisOverall: 96, salaryRuleVersionId: ruleId,
+      currentTier: null, unavailableReason: 'SALARY_RULE_NOT_CONFIGURED'
+    }).salaryMinor, 400);
+    assert.equal(PlayerMarketSalaryDisplaySchema.parse({
+      kind: 'UNAVAILABLE', salaryMinor: null, basisOverall: null, salaryRuleVersionId: null,
+      currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING'
+    }).salaryMinor, null);
+    assert.equal(PlayerMarketSalaryDisplaySchema.safeParse({
+      kind: 'UNAVAILABLE', salaryMinor: 0, basisOverall: null, salaryRuleVersionId: null,
+      currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING'
+    }).success, false);
+  });
+
+  it('preserves an unset salary cap in the market impact', () => {
+    assert.deepEqual(PlayerMarketSalaryImpactSchema.parse({
+      currentSalaryMinor: 900, salaryCapMinor: null, projectedSalaryMinor: 1400, overCapMinor: null
+    }), { currentSalaryMinor: 900, salaryCapMinor: null, projectedSalaryMinor: 1400, overCapMinor: null });
+  });
+
   it('parses normal and forced player applications', () => {
     assert.equal(SubmitPlayerApplicationRequestSchema.parse({
       seasonId,
-      transferWindowId,
+      window: { kind: 'TRANSFER', id: transferWindowId },
       footballPlayerId,
       playerCardId,
       type: 'NORMAL_PURCHASE',
@@ -385,7 +462,7 @@ describe('player market contracts', () => {
 
     assert.equal(SubmitPlayerApplicationRequestSchema.parse({
       seasonId,
-      transferWindowId,
+      window: { kind: 'FORCED_OFFER', id: forcedOfferWindowId },
       footballPlayerId,
       playerCardId,
       type: 'FORCED_TRANSFER',
@@ -394,6 +471,24 @@ describe('player market contracts', () => {
       ownershipId,
       ownershipVersionSnapshot: 3
     }).type, 'FORCED_TRANSFER');
+  });
+
+  it('rejects a forced bid using a transfer-window reference and a purchase using a forced window', () => {
+    const base = { seasonId, footballPlayerId, playerCardId, amountMinor: 500 };
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'FORCED_TRANSFER', window: { kind: 'TRANSFER', id: transferWindowId },
+      sourceLeagueTeamId, ownershipId, ownershipVersionSnapshot: 3,
+    }).success, false);
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'NORMAL_PURCHASE', window: { kind: 'FORCED_OFFER', id: forcedOfferWindowId },
+    }).success, false);
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'FORCED_TRANSFER', transferWindowId,
+      sourceLeagueTeamId, ownershipId, ownershipVersionSnapshot: 3,
+    }).success, false);
+    assert.equal(SubmitPlayerApplicationRequestSchema.safeParse({
+      ...base, type: 'NORMAL_PURCHASE', transferWindowId,
+    }).success, true);
   });
 
   it('requires the current owner and ownership version for a forced transfer', () => {
@@ -448,9 +543,37 @@ describe('player market contracts', () => {
     const response = PlayerMarketListResponseSchema.parse({
       items: [],
       nextCursor: null,
-      activeTransferWindowId: transferWindowId
+      activeTransferWindowId: transferWindowId,
+      activeForcedOfferWindowId: forcedOfferWindowId,
     });
     assert.equal(response.activeTransferWindowId, transferWindowId);
+    assert.equal(response.activeForcedOfferWindowId, forcedOfferWindowId);
+  });
+});
+
+describe('forced-offer window contracts', () => {
+  const valid = {
+    name: '第一轮强报', startsAt: '2026-10-20T00:00:00.000Z', endsAt: '2026-10-21T00:00:00.000Z',
+  };
+  const id = '11111111-1111-4111-8111-111111111111';
+
+  it('validates dates and names for create and update', () => {
+    assert.equal(CreateForcedOfferWindowRequestSchema.parse(valid).name, '第一轮强报');
+    assert.equal(CreateForcedOfferWindowRequestSchema.safeParse({ ...valid, endsAt: valid.startsAt }).success, false);
+    assert.equal(CreateForcedOfferWindowRequestSchema.safeParse({ ...valid, name: '  ' }).success, false);
+    assert.equal(UpdateForcedOfferWindowRequestSchema.safeParse({ ...valid, expectedVersion: 1 }).success, true);
+    assert.equal(UpdateForcedOfferWindowRequestSchema.safeParse({ ...valid, expectedVersion: 0 }).success, false);
+  });
+
+  it('requires a valid row and status in the list', () => {
+    const row = {
+      ...valid, id, seasonId: id, createdByAdminId: id, version: 1,
+      status: 'UPCOMING', createdAt: valid.startsAt, updatedAt: valid.startsAt,
+    };
+    assert.equal(ForcedOfferWindowSchema.parse(row).status, 'UPCOMING');
+    assert.equal(ForcedOfferWindowListResponseSchema.parse({ items: [row] }).items.length, 1);
+    assert.equal(ForcedOfferWindowSchema.safeParse({ ...row, status: 'UNKNOWN' }).success, false);
+    assert.equal(ForcedOfferWindowListResponseSchema.safeParse({ items: [{ ...row, endsAt: row.startsAt }] }).success, false);
   });
 });
 
@@ -716,6 +839,7 @@ describe('league economy contracts', () => {
       teamId: ids.team,
       seasonId: ids.season,
       activeTransferWindowId: ids.window,
+      nextTransferWindowStartAt: null,
       teamName: '海港竞技',
       teamNumber: 7,
       divisionName: '冠军 A 组',
@@ -731,6 +855,8 @@ describe('league economy contracts', () => {
       missingValuationCount: 1,
       activePlayerCount: 3,
       activeSalaryMinor: 1200,
+      salaryCapMinor: 1500,
+      salaryCapConfirmed: false,
       players: []
     });
     assert.equal(assets.valuationCompleteness, 'INCOMPLETE');
@@ -1088,6 +1214,7 @@ describe('shared API contracts', () => {
       ownerAlias: '申花经理',
       teamNumber: 1,
       catalogTeamId: '33333333-3333-4333-8333-333333333333',
+      salaryCapMinor: 14_000,
       defaultGameAccountId: '22222222-2222-4222-8222-222222222222'
     });
 
@@ -1196,6 +1323,18 @@ describe('shared API contracts', () => {
     assert.equal(query.limit, 20);
     assert.equal(PlayerFavoriteListQuerySchema.parse({ limit: 100 }).limit, 100);
     assert.throws(() => PlayerFavoriteListQuerySchema.parse({ limit: 101 }));
+    assert.equal(PlayerFavoriteListQuerySchema.parse({ groupId: 'ungrouped' }).groupId, 'ungrouped');
+    assert.equal(PlayerFavoriteListQuerySchema.parse({ groupId: playerId }).groupId, playerId);
+    assert.throws(() => PlayerFavoriteListQuerySchema.parse({ groupId: 'other' }));
+  });
+
+  it('accepts one manually named group and one destination per favorite', () => {
+    const groupId = '22222222-2222-4222-8222-222222222222';
+    assert.equal(CreatePlayerFavoriteGroupRequestSchema.parse({ name: ' 自由球员 ' }).name, '自由球员');
+    assert.throws(() => CreatePlayerFavoriteGroupRequestSchema.parse({ name: ' '.repeat(3) }));
+    assert.throws(() => CreatePlayerFavoriteGroupRequestSchema.parse({ name: '球'.repeat(25) }));
+    assert.equal(MovePlayerFavoriteRequestSchema.parse({ groupId }).groupId, groupId);
+    assert.equal(MovePlayerFavoriteRequestSchema.parse({ groupId: null }).groupId, null);
   });
 
   it('rejects oversized favorite status queries', () => {
@@ -1602,16 +1741,31 @@ describe('league team administration contracts', () => {
     assert.throws(() => TeamNumberSchema.parse(1.5));
   });
 
-  it('requires a catalog shell and league-specific alias when creating a team', () => {
+  it('requires a catalog shell, alias and positive team salary cap when creating a team', () => {
     const parsed = CreateLeagueTeamRequestSchema.parse({
       ownerUserId: ids.user,
       ownerAlias: '  tidus  ',
       teamNumber: 3,
-      catalogTeamId: ids.card
+      catalogTeamId: ids.card,
+      salaryCapMinor: 14_000
     });
 
     assert.equal(parsed.ownerAlias, 'tidus');
     assert.equal(parsed.catalogTeamId, ids.card);
+    assert.equal(parsed.salaryCapMinor, 14_000);
+    assert.throws(() => CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: 'tidus',
+      teamNumber: 3,
+      catalogTeamId: ids.card
+    }));
+    assert.throws(() => CreateLeagueTeamRequestSchema.parse({
+      ownerUserId: ids.user,
+      ownerAlias: 'tidus',
+      teamNumber: 3,
+      catalogTeamId: ids.card,
+      salaryCapMinor: 0
+    }));
     assert.throws(() => CreateLeagueTeamRequestSchema.parse({
       ownerUserId: ids.user,
       ownerAlias: 'tidus',
@@ -1640,6 +1794,28 @@ describe('league team administration contracts', () => {
       status: 'ARCHIVED',
       expectedVersion: 2
     }));
+  });
+
+  it('requires a reason and explicit confirmation for a team salary cap change', () => {
+    assert.deepEqual(UpdateLeagueTeamRequestSchema.parse({
+      salaryCapMinor: 15_000,
+      salaryCapConfirmed: true,
+      reason: '赛季工资帽调整',
+      expectedVersion: 2
+    }), {
+      salaryCapMinor: 15_000,
+      salaryCapConfirmed: true,
+      reason: '赛季工资帽调整',
+      expectedVersion: 2
+    });
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({
+      salaryCapMinor: 0,
+      salaryCapConfirmed: true,
+      reason: '无效工资帽',
+      expectedVersion: 2
+    }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({ salaryCapMinor: 15_000, expectedVersion: 2 }));
+    assert.throws(() => UpdateLeagueTeamRequestSchema.parse({ salaryCapConfirmed: true, expectedVersion: 2 }));
   });
 
   it('requires a reason and version for team lifecycle changes', () => {
@@ -3058,6 +3234,7 @@ describe('player auction contracts', () => {
         minimumIncrement: 10,
         status: 'ACTIVE',
         currentPrice: 120,
+        winner: null,
         deadlineAt: now,
         deadlineEpoch: 4,
         bids: [{

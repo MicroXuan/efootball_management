@@ -64,6 +64,10 @@ await prisma.$transaction(async (transaction) => {
   });
 
   if (localAdminUsername && localAdminPasswordHash) {
+    await transaction.adminAccount.updateMany({
+      where: { username: localAdminUsername, displayName: 'Local Platform Administrator' },
+      data: { displayName: '本地平台管理员' }
+    });
     await transaction.adminAccount.upsert({
       where: { username: localAdminUsername },
       update: {
@@ -73,7 +77,7 @@ await prisma.$transaction(async (transaction) => {
       },
       create: {
         username: localAdminUsername,
-        displayName: 'Local Platform Administrator',
+        displayName: '本地平台管理员',
         passwordHash: localAdminPasswordHash,
         platformRole: 'PLATFORM_ADMIN'
       }

@@ -264,6 +264,7 @@ describe('tiered stage schedules', () => {
         updateMany: jest.fn(async () => ({ count: 1 }))
       },
       competitionMatch: {
+        findFirst: jest.fn(async () => matchData.find((match) => match.plannedAt != null) ?? null),
         deleteMany: jest.fn(async () => ({ count: matchData.length })),
         createMany: jest.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
           matchData = data;

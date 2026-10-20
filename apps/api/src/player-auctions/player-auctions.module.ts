@@ -3,6 +3,7 @@ import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminModule } from '../admin/admin.module.js';
 import { AdminPlayerAuctionsController } from './admin-player-auctions.controller.js';
 import { AdminPlayerAuctionsService } from './admin-player-auctions.service.js';
+import { AuctionShareCodeService } from './auction-share-code.service.js';
 import { AuthorizationModule } from '../authorization/authorization.module.js';
 import { PlayerAuctionBidService } from './player-auction-bid.service.js';
 import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js';
@@ -24,6 +25,7 @@ import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
   controllers: [AdminPlayerAuctionsController, MyPlayerAuctionsController],
   providers: [
     AdminPlayerAuctionsService,
+    AuctionShareCodeService,
     MyPlayerAuctionsService,
     PlayerAuctionBidService,
     PlayerAuctionCommandHandler,

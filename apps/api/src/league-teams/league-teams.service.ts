@@ -45,6 +45,9 @@ export class LeagueTeamsService {
     input: ParsedCreateLeagueTeamRequest,
     key: string
   ): Promise<LeagueTeamDetail> {
+    if (!Number.isSafeInteger(input.salaryCapMinor) || input.salaryCapMinor <= 0 || input.salaryCapMinor > 4_294_967_295) {
+      throw new LeagueError('TEAM_SALARY_CAP_REQUIRED', 'Set a positive team salary cap', 422);
+    }
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     return this.receipts.execute(actorAdminId, `league-team.create:${leagueId}`, key, async (transaction) => {
       await transaction.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
@@ -85,6 +88,8 @@ export class LeagueTeamsService {
             name: catalogName,
             shortName: catalogTeam.shortName,
             logoUrl: catalogTeam.storedLogoUrl,
+            salaryCapMinor: input.salaryCapMinor,
+            salaryCapConfirmedAt: new Date(),
             defaultGameAccountId: null
           }
         });
@@ -122,6 +127,7 @@ export class LeagueTeamsService {
             ownerAlias: team.ownerAlias,
             teamNumber: team.teamNumber,
             catalogTeamId: team.catalogTeamId,
+            salaryCapMinor: team.salaryCapMinor,
             currentSeasonId: league.currentSeasonId
           }
         });
@@ -172,6 +178,18 @@ export class LeagueTeamsService {
         where: { id: teamId, leagueId, league: { isDeleted: false } }
       });
       if (!existing) throw this.notFound('LEAGUE_TEAM_NOT_FOUND', 'League team was not found');
+      if (input.salaryCapMinor !== undefined &&
+        (!Number.isSafeInteger(input.salaryCapMinor) || input.salaryCapMinor <= 0 || input.salaryCapMinor > 4_294_967_295 ||
+          input.salaryCapConfirmed !== true || !input.reason?.trim())) {
+        throw new LeagueError('TEAM_SALARY_CAP_INVALID', 'Confirm a positive salary cap and provide a reason', 422);
+      }
+      const salary = input.salaryCapMinor === undefined ? null : await transaction.leaguePlayerOwnership.aggregate({
+        where: { leagueTeamId: teamId, status: 'ACTIVE' },
+        _sum: { salaryMinor: true }
+      });
+      const salaryTotalMinor = salary?._sum.salaryMinor ?? 0;
+      const projectedRosterStatus = input.salaryCapMinor === undefined ? existing.rosterStatus :
+        salaryTotalMinor > input.salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT';
       if (input.teamNumber !== undefined && input.teamNumber !== existing.teamNumber) {
         const participationCount = await transaction.seasonEntry.count({
           where: { leagueTeamId: teamId }
@@ -201,6 +219,11 @@ export class LeagueTeamsService {
           ...(input.teamNumber !== undefined ? { teamNumber: input.teamNumber } : {}),
           ...(input.ownerAlias !== undefined ? { ownerAlias: input.ownerAlias } : {}),
           ...(input.shellValueMinor !== undefined ? { shellValueMinor: input.shellValueMinor } : {}),
+          ...(input.salaryCapMinor !== undefined ? {
+            salaryCapMinor: input.salaryCapMinor,
+            salaryCapConfirmedAt: new Date(),
+            rosterStatus: projectedRosterStatus
+          } : {}),
           version: { increment: 1 }
         }
       });
@@ -209,16 +232,25 @@ export class LeagueTeamsService {
       await this.audit.record(transaction, {
         actorAdminId,
         leagueId,
-        action: input.shellValueMinor !== undefined
+        action: input.salaryCapMinor !== undefined
+          ? 'TEAM_SALARY_CAP_UPDATED'
+          : input.shellValueMinor !== undefined
           ? 'LEAGUE_TEAM_SHELL_VALUE_UPDATED'
           : 'league-team.update',
         resourceType: 'LeagueTeam',
         resourceId: teamId,
-        metadata: Object.fromEntries(
-          Object.entries(input).filter(([field]) => field !== 'expectedVersion')
-        )
+        ...(input.salaryCapMinor !== undefined ? { reason: input.reason!.trim() } : {}),
+        metadata: input.salaryCapMinor !== undefined ? {
+          oldSalaryCapMinor: existing.salaryCapMinor,
+          newSalaryCapMinor: input.salaryCapMinor,
+          salaryTotalMinor,
+          oldRosterStatus: existing.rosterStatus,
+          projectedRosterStatus,
+          version: updated.version
+        } : Object.fromEntries(Object.entries(input).filter(([field]) => field !== 'expectedVersion'))
       });
-      return this.detail(updated);
+      const metrics = await this.rosterMetrics(transaction, [updated]);
+      return this.detail(updated, metrics.get(updated.id));
     });
   }
 
@@ -556,24 +588,12 @@ export class LeagueTeamsService {
   ): Promise<Map<string, TeamRosterMetrics>> {
     if (teams.length === 0) return new Map();
     const teamIds = teams.map(({ id }) => id);
-    const leagueIds = [...new Set(teams.map(({ leagueId }) => leagueId))];
-    const [ownerships, rules] = await Promise.all([
-      client.leaguePlayerOwnership.groupBy({
-        by: ['leagueTeamId'],
-        where: { leagueTeamId: { in: teamIds }, status: 'ACTIVE' },
-        _count: { _all: true },
-        _sum: { salaryMinor: true }
-      }),
-      client.leagueSalaryRuleVersion.findMany({
-        where: { leagueId: { in: leagueIds }, status: 'ACTIVE', effectiveAt: { lte: new Date() } },
-        select: { leagueId: true, salaryCapMinor: true },
-        orderBy: [{ leagueId: 'asc' }, { effectiveAt: 'desc' }, { version: 'desc' }]
-      })
-    ]);
-    const salaryCapByLeague = new Map<string, number>();
-    for (const rule of rules) {
-      if (!salaryCapByLeague.has(rule.leagueId)) salaryCapByLeague.set(rule.leagueId, rule.salaryCapMinor);
-    }
+    const ownerships = await client.leaguePlayerOwnership.groupBy({
+      by: ['leagueTeamId'],
+      where: { leagueTeamId: { in: teamIds }, status: 'ACTIVE' },
+      _count: { _all: true },
+      _sum: { salaryMinor: true }
+    });
     const ownershipByTeam = new Map(
       ownerships.map((row) => [row.leagueTeamId, {
         activePlayerCount: row._count._all,
@@ -585,7 +605,7 @@ export class LeagueTeamsService {
       return [team.id, {
         activePlayerCount: ownership?.activePlayerCount ?? 0,
         salaryTotalMinor: ownership?.salaryTotalMinor ?? 0,
-        salaryCapMinor: salaryCapByLeague.get(team.leagueId) ?? 0
+        salaryCapMinor: team.salaryCapMinor ?? 0
       }];
     }));
   }
@@ -610,7 +630,9 @@ export class LeagueTeamsService {
       rosterStatus: team.rosterStatus,
       activePlayerCount: metrics?.activePlayerCount ?? 0,
       salaryTotalMinor: metrics?.salaryTotalMinor ?? 0,
-      salaryCapMinor: metrics?.salaryCapMinor ?? 0,
+      salaryCapMinor: metrics?.salaryCapMinor ?? team.salaryCapMinor ?? 0,
+      salaryCapConfirmed: Boolean(team.salaryCapConfirmedAt),
+      salaryCapConfirmedAt: team.salaryCapConfirmedAt?.toISOString() ?? null,
       shellValueMinor: team.shellValueMinor,
       version: team.version,
       createdAt: team.createdAt.toISOString(),

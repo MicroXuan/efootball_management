@@ -99,7 +99,8 @@ describe('league economy end-to-end flow', () => {
           teamNumber: index + 1,
           name: teamName,
           shortName: teamShortName,
-          shellValueMinor: 5_000
+          shellValueMinor: 5_000,
+          salaryCapMinor: 10_000
         }
       });
       teamIds.push(team.id);

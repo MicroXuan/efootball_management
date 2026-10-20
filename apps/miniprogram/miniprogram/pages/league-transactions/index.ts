@@ -27,7 +27,7 @@ Page({
     this.setData({ state: 'loading' })
     try {
       const result = await economyApi.transactions(this.data.leagueId)
-      const allItems = result.items.map(transactionView)
+      const allItems = result.items.map((item) => transactionView(item, result.teamId))
       this.setData({ state: 'loaded', allItems, items: allItems, nextCursor: result.nextCursor })
     } catch {
       this.setData({ state: 'error', errorMessage: '交易记录加载失败，请稍后重试' })
@@ -54,7 +54,7 @@ Page({
     this.setData({ loadingMore: true })
     try {
       const result = await economyApi.transactions(this.data.leagueId, this.data.nextCursor)
-      const allItems = [...this.data.allItems, ...result.items.map(transactionView)]
+      const allItems = [...this.data.allItems, ...result.items.map((item) => transactionView(item, result.teamId))]
       this.setData({
         allItems,
         items: filterTransactions(allItems, this.data.directionFilter, this.data.typeFilter),

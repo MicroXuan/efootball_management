@@ -23,7 +23,7 @@ function harness() {
     leagueTransactionFeeRuleVersion: tx.leagueTransactionFeeRuleVersion,
     leaguePlayerValuation: tx.leaguePlayerValuation,
     rosterTransaction: { findMany: jest.fn(async () => []) },
-    seasonEntry: { findFirst: jest.fn<() => Promise<{ id: string } | null>>(async () => ({ id: 'entry-1' })) }
+    seasonEntry: { findFirst: jest.fn<() => Promise<{ leagueTeamId: string } | null>>(async () => ({ leagueTeamId: 'team-1' })) }
   };
   const authorization = { requireLeagueManager: jest.fn(async () => undefined) };
   const receipts = {
@@ -70,7 +70,15 @@ describe('TransactionFeesService', () => {
   it('exposes transaction records only to an approved league participant', async () => {
     const { service, prisma } = harness();
     await expect(service.listTransactionsForParticipant('user-1', 'league-1'))
-      .resolves.toEqual({ items: [], nextCursor: null });
+      .resolves.toEqual({ items: [], nextCursor: null, teamId: 'team-1' });
+    expect(prisma.rosterTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId: 'league-1', OR: [
+        { sourceLeagueTeamId: 'team-1' }, { targetLeagueTeamId: 'team-1' }
+      ] }
+    }));
+    expect(prisma.seasonEntry.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { ownerUserId: 'user-1', status: 'APPROVED', season: { leagueId: 'league-1' } }
+    }));
     prisma.seasonEntry.findFirst.mockResolvedValueOnce(null);
     await expect(service.listTransactionsForParticipant('outsider', 'league-1'))
       .rejects.toMatchObject({ code: 'LEAGUE_PARTICIPANT_REQUIRED' });
@@ -94,12 +102,12 @@ describe('TransactionFeesService', () => {
       createdByAdminId: 'admin-1',
       createdAt: at,
       footballPlayer: { nameZh: '分页球员', nameEn: null, shortName: null },
-      sourceLeagueTeam: { name: '甲队' },
-      targetLeagueTeam: { name: '乙队' }
+      sourceLeagueTeam: { name: '甲队', teamNumber: 3 },
+      targetLeagueTeam: { name: '乙队', teamNumber: 8 }
     });
     prisma.rosterTransaction.findMany.mockResolvedValueOnce([row('tx-1'), row('tx-2')] as never);
     await expect(service.listTransactions('league-1', undefined, 1)).resolves.toMatchObject({
-      items: [{ id: 'tx-1' }], nextCursor: 'tx-1'
+      items: [{ id: 'tx-1', sourceTeamNumber: 3, targetTeamNumber: 8 }], nextCursor: 'tx-1'
     });
     prisma.rosterTransaction.findMany.mockResolvedValueOnce([]);
     await service.listTransactions('league-1', 'tx-1', 1);

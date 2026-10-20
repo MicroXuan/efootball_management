@@ -1,0 +1,19 @@
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { min-height: 100vh; padding: 40rpx 28rpx 100rpx; box-sizing: border-box; }
+.heading { padding: 28rpx; border: 2rpx solid #344047; border-radius: 24rpx; background: #151d21; }
+.kicker { display: block; color: #b6f13a; font-size: 18rpx; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 8rpx; font-size: 40rpx; font-weight: 850; }
+.intro { display: block; margin-top: 12rpx; color: #9ba7aa; font-size: 20rpx; line-height: 1.5; }
+.proposal-list { margin-top: 22rpx; }
+.proposal { margin-bottom: 15rpx; padding: 24rpx; border: 2rpx solid #344047; border-radius: 20rpx; background: #151d21; }
+.proposal-top { display: flex; justify-content: space-between; align-items: center; gap: 12rpx; }
+.player { font-size: 27rpx; font-weight: 800; }
+.status { color: #b6f13a; font-size: 19rpx; }
+.teams,.amount,.reason { display: block; margin-top: 12rpx; color: #c5cfd2; font-size: 20rpx; }
+.amount { color: #ffcf83; font-weight: 750; }
+.reason { color: #9ba7aa; }
+.actions { display: flex; gap: 14rpx; margin-top: 20rpx; }
+.actions button { flex: 1; margin: 0; color: #f4f7f8; background: #344047; font-size: 21rpx; }
+.actions .approve { color: #142008; background: #b6f13a; font-weight: 800; }
+.empty,.error { margin-top: 22rpx; padding: 30rpx; border: 2rpx solid #344047; border-radius: 20rpx; color: #aab5ba; background: #151d21; text-align: center; }
+.error { border-color: #70423f; color: #ffaaa3; }

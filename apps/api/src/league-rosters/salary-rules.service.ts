@@ -11,6 +11,8 @@ import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { TeamSalaryCapService } from './team-salary-cap.service.js';
+import { findActiveSalaryRule, matchSalaryTier } from './salary-quote.js';
 
 export function defaultSalaryTiers() {
   return [
@@ -25,8 +27,7 @@ export function defaultSalaryTiers() {
 }
 
 function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
-  const tier = tiers.find(({ minOverall, maxOverall }) =>
-    overall >= minOverall && overall <= maxOverall);
+  const tier = matchSalaryTier(tiers, overall);
   if (!tier) {
     throw new LeagueRosterError(
       'SALARY_TIER_NOT_CONFIGURED',
@@ -41,14 +42,17 @@ function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
 @Injectable()
 export class SalaryRulesService {
   private readonly visibility: LeagueVisibilityService;
+  private readonly teamSalaryCaps: TeamSalaryCapService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
+    @Optional() @Inject(TeamSalaryCapService) teamSalaryCaps?: TeamSalaryCapService
   ) {
     this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+    this.teamSalaryCaps = teamSalaryCaps ?? new TeamSalaryCapService();
   }
 
   async createVersion(adminId: string, leagueId: string, raw: CreateSalaryRuleVersionRequest) {
@@ -87,7 +91,7 @@ export class SalaryRulesService {
         },
         include: { tiers: { orderBy: { minOverall: 'asc' } } }
       });
-      await this.synchronizeRosterStatuses(tx, leagueId, input.salaryCapMinor);
+      await this.synchronizeRosterStatuses(tx, leagueId);
       await this.audit.record(tx, {
         actorAdminId: adminId,
         leagueId,
@@ -102,8 +106,7 @@ export class SalaryRulesService {
 
   private async synchronizeRosterStatuses(
     tx: Prisma.TransactionClient,
-    leagueId: string,
-    salaryCapMinor: number
+    leagueId: string
   ) {
     await this.visibility.requireVisible(
       { type: 'LEAGUE', id: leagueId },
@@ -131,6 +134,7 @@ export class SalaryRulesService {
       _sum.salaryMinor ?? 0
     ]));
     for (const team of teams) {
+      const salaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, team.id) ?? 0;
       const rosterStatus = (salaryByTeam.get(team.id) ?? 0) > salaryCapMinor
         ? 'OVER_CAP'
         : 'COMPLIANT';
@@ -152,11 +156,7 @@ export class SalaryRulesService {
     at = new Date()
   ) {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
-    const rule = await client.leagueSalaryRuleVersion.findFirst({
-      where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: at } },
-      orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
-      include: { tiers: { orderBy: { minOverall: 'asc' } } }
-    });
+    const rule = await findActiveSalaryRule(client, leagueId, at);
     if (!rule) {
       throw new LeagueRosterError('SALARY_RULE_NOT_CONFIGURED', 'No salary rule is active', 422);
     }
@@ -197,13 +197,14 @@ export class SalaryRulesService {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const ownerships = await this.prisma.leaguePlayerOwnership.findMany({
       where: { leagueId, status: 'ACTIVE' },
-      include: { leagueTeam: { select: { name: true } } },
+      include: { leagueTeam: { select: { name: true, salaryCapMinor: true } } },
       orderBy: [{ leagueTeamId: 'asc' }, { id: 'asc' }]
     });
-    const teams = new Map<string, { teamName: string; currentSalaryMinor: number; projectedSalaryMinor: number }>();
+    const teams = new Map<string, { teamName: string; salaryCapMinor: number; currentSalaryMinor: number; projectedSalaryMinor: number }>();
     for (const ownership of ownerships) {
       const aggregate = teams.get(ownership.leagueTeamId) ?? {
         teamName: ownership.leagueTeam.name,
+        salaryCapMinor: ownership.leagueTeam.salaryCapMinor ?? 0,
         currentSalaryMinor: 0,
         projectedSalaryMinor: 0
       };
@@ -217,7 +218,7 @@ export class SalaryRulesService {
         leagueTeamId,
         ...totals,
         deltaMinor: totals.projectedSalaryMinor - totals.currentSalaryMinor,
-        projectedStatus: totals.projectedSalaryMinor > input.salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT'
+        projectedStatus: totals.projectedSalaryMinor > totals.salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT'
       }))
     };
   }

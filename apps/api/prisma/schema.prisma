@@ -24,6 +24,12 @@ enum LeagueEdition {
   INTERNATIONAL
 }
 
+enum SeasonCalendarNoteKind {
+  HOLIDAY
+  MAINTENANCE
+  NOTICE
+}
+
 enum VerificationStatus {
   UNVERIFIED
   PENDING
@@ -83,6 +89,24 @@ enum RosterEntryStatus {
   TRANSFERRED
   DISAPPEARED
   RETIRED
+}
+
+enum DisappearanceRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  INVALIDATED
+}
+
+enum TransferProposalStatus {
+  PENDING_COUNTERPARTY
+  PENDING_ADMIN
+  REJECTED
+  WITHDRAWN
+  APPROVED
+  EXPIRED
+  INVALIDATED
 }
 
 enum ValuationSubmissionStatus {
@@ -590,6 +614,7 @@ model User {
   mutationReceipts                 MutationReceipt[]                      @relation("MutationReceiptActor")
   ownedTeamProfile                 TeamProfile?                           @relation("TeamProfileOwner")
   leagueTeams                      LeagueTeam[]                           @relation("LeagueTeamOwner")
+  personalFinanceEntries           PersonalFinanceEntry[]
   createdLeagues                   League[]                               @relation("LeagueCreator")
   createdLeagueSeasons             LeagueSeason[]                         @relation("LeagueSeasonCreator")
   seasonEntries                    SeasonEntry[]                          @relation("SeasonEntryOwner")
@@ -599,6 +624,7 @@ model User {
   valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
   auditLogs                        AuditLog[]                             @relation("AuditUserActor")
   playerFavorites                  UserPlayerFavorite[]
+  playerFavoriteGroups             UserPlayerFavoriteGroup[]
   wechatIdentityBindings           WechatIdentityBinding[]                @relation("WechatIdentityUser")
   wechatBindingCodes               WechatBindingCode[]                    @relation("WechatBindingCodeUser")
   playerAuctionBids                PlayerAuctionBid[]                     @relation("PlayerAuctionBidUser")
@@ -728,6 +754,8 @@ model AdminAccount {
   mutationReceipts               AdminMutationReceipt[]
   createdSalaryRules             LeagueSalaryRuleVersion[]
   createdTransferWindows         TransferWindow[]
+  createdForcedOfferWindows      ForcedOfferWindow[]
+  createdNominationWindows       NominationWindow[]
   rosterTransactions             RosterTransaction[]                 @relation("RosterTransactionAdminCreator")
   createdValuationWindows        ValuationWindow[]                   @relation("ValuationWindowCreator")
   createdValuationRules          ValuationWindowRuleVersion[]        @relation("ValuationRuleCreator")
@@ -753,6 +781,8 @@ model AdminAccount {
   reviewedPlayerAuctionLots      PlayerAuctionReview[]               @relation("PlayerAuctionReviewAdmin")
   reviewedPlayerApplications     PlayerAcquisitionApplication[]      @relation("PlayerApplicationReviewer")
   playerApplicationEvents        PlayerAcquisitionApplicationEvent[] @relation("PlayerApplicationEventAdmin")
+  createdSeasonCalendarNotes     SeasonCalendarNote[]                @relation("SeasonCalendarNoteCreator")
+  updatedSeasonCalendarNotes     SeasonCalendarNote[]                @relation("SeasonCalendarNoteUpdater")
 
   @@index([status, username], map: "admin_accounts_status_username_idx")
   @@map("admin_accounts")
@@ -829,6 +859,7 @@ model League {
   playerOwnerships          LeaguePlayerOwnership[]
   rosterTransactions        RosterTransaction[]
   financeLedgerEntries      FinanceLedgerEntry[]
+  personalFinanceEntries    PersonalFinanceEntry[]
   playerValuations          LeaguePlayerValuation[]
   playerValuationHistory    PlayerValuationHistory[]
   transactionFeeRules       LeagueTransactionFeeRuleVersion[]
@@ -836,6 +867,8 @@ model League {
   playerAuctionBatches      PlayerAuctionBatch[]
   playerApplications        PlayerAcquisitionApplication[]
   playerReleaseRestrictions PlayerReleaseRestriction[]
+  disappearanceRequests     DisappearanceRequest[]
+  transferProposals         TransferProposal[]
 
   @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -876,6 +909,8 @@ model LeagueTeam {
   status                     LeagueTeamStatus               @default(ACTIVE)
   rosterStatus               LeagueTeamRosterStatus         @default(COMPLIANT) @map("roster_status")
   shellValueMinor            Int                            @default(0) @map("shell_value_minor") @db.UnsignedInt
+  salaryCapMinor             Int?                           @map("salary_cap_minor") @db.UnsignedInt
+  salaryCapConfirmedAt       DateTime?                      @map("salary_cap_confirmed_at")
   version                    Int                            @default(1) @db.UnsignedInt
   createdAt                  DateTime                       @default(now()) @map("created_at")
   updatedAt                  DateTime                       @updatedAt @map("updated_at")
@@ -888,6 +923,7 @@ model LeagueTeam {
   outgoingRosterTransactions RosterTransaction[]            @relation("RosterTransactionSourceTeam")
   incomingRosterTransactions RosterTransaction[]            @relation("RosterTransactionTargetTeam")
   financeLedgerEntries       FinanceLedgerEntry[]
+  personalFinanceEntries     PersonalFinanceEntry[]
   valuationSnapshots         ValuationRosterSnapshot[]
   valuationSubmissions       ValuationSubmission[]
   shellHistory               LeagueTeamShellHistory[]       @relation("ShellHistoryTeam")
@@ -898,6 +934,11 @@ model LeagueTeam {
   playerApplications         PlayerAcquisitionApplication[] @relation("PlayerApplicationApplicantTeam")
   sourcedPlayerApplications  PlayerAcquisitionApplication[] @relation("PlayerApplicationSourceTeam")
   playerReleaseRestrictions  PlayerReleaseRestriction[]
+  disappearanceRequests      DisappearanceRequest[]
+  outgoingTransferProposals TransferProposal[] @relation("TransferProposalSource")
+  incomingTransferProposals TransferProposal[] @relation("TransferProposalTarget")
+  initiatedTransferProposals TransferProposal[] @relation("TransferProposalInitiator")
+  playerNominations          PlayerNomination[]
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
   @@unique([leagueId, teamNumber], map: "league_teams_number_unique")
@@ -1055,14 +1096,20 @@ model LeagueSeason {
   entries                   SeasonEntry[]
   statusHistory             LeagueSeasonStatusHistory[]
   transferWindows           TransferWindow[]
+  forcedOfferWindows        ForcedOfferWindow[]
+  calendarNotes             SeasonCalendarNote[]
+  nominationWindows         NominationWindow[]
   rosterTransactions        RosterTransaction[]
   valuationWindows          ValuationWindow[]
   financeLedgerEntries      FinanceLedgerEntry[]
   competitions              Competition[]
+  personalFinanceEntries    PersonalFinanceEntry[]
   allocationProposals       SeasonAllocationProposal[]
   playerApplications        PlayerAcquisitionApplication[]
   acquiredPlayerOwnerships  LeaguePlayerOwnership[]        @relation("OwnershipAcquisitionSeason")
   playerReleaseRestrictions PlayerReleaseRestriction[]
+  disappearanceRequests     DisappearanceRequest[]
+  transferProposals         TransferProposal[]
 
   @@unique([leagueId, seasonNumber], map: "league_seasons_number_unique")
   @@index([leagueId, status], map: "league_seasons_status_idx")
@@ -1129,6 +1176,87 @@ model TransferWindow {
   @@map("transfer_windows")
 }
 
+model ForcedOfferWindow {
+  id                 String                         @id @default(uuid()) @db.Char(36)
+  seasonId           String                         @map("season_id") @db.Char(36)
+  name               String                         @db.VarChar(64)
+  startsAt           DateTime                       @map("starts_at")
+  endsAt             DateTime                       @map("ends_at")
+  createdByAdminId   String                         @map("created_by_admin_id") @db.Char(36)
+  version            Int                            @default(1) @db.UnsignedInt
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  updatedAt          DateTime                       @updatedAt @map("updated_at")
+  season             LeagueSeason                   @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin     AdminAccount                   @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  playerApplications PlayerAcquisitionApplication[]
+
+  @@index([seasonId, startsAt, endsAt], map: "forced_offer_windows_timeline_idx")
+  @@index([createdByAdminId], map: "forced_offer_windows_creator_idx")
+  @@map("forced_offer_windows")
+}
+
+model SeasonCalendarNote {
+  id               String                 @id @default(uuid()) @db.Char(36)
+  seasonId         String                 @map("season_id") @db.Char(36)
+  kind             SeasonCalendarNoteKind
+  title            String                 @db.VarChar(64)
+  description      String?                @db.VarChar(300)
+  startsOn         DateTime               @map("starts_on") @db.Date
+  endsOn           DateTime               @map("ends_on") @db.Date
+  createdByAdminId String                 @map("created_by_admin_id") @db.Char(36)
+  updatedByAdminId String                 @map("updated_by_admin_id") @db.Char(36)
+  version          Int                    @default(1) @db.UnsignedInt
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  deletedAt        DateTime?              @map("deleted_at")
+  season           LeagueSeason           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount           @relation("SeasonCalendarNoteCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  updatedByAdmin   AdminAccount           @relation("SeasonCalendarNoteUpdater", fields: [updatedByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([seasonId, startsOn, endsOn, deletedAt], map: "season_calendar_notes_range_idx")
+  @@index([createdByAdminId], map: "season_calendar_notes_creator_idx")
+  @@index([updatedByAdminId], map: "season_calendar_notes_updater_idx")
+  @@map("season_calendar_notes")
+}
+
+model NominationWindow {
+  id               String        @id @default(uuid()) @db.Char(36)
+  seasonId         String        @map("season_id") @db.Char(36)
+  startsAt         DateTime      @map("starts_at")
+  endsAt           DateTime      @map("ends_at")
+  perTeamLimit     Int           @map("per_team_limit") @db.UnsignedSmallInt
+  createdByAdminId String        @map("created_by_admin_id") @db.Char(36)
+  version          Int           @default(1) @db.UnsignedInt
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  season           LeagueSeason  @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  nominations      PlayerNomination[]
+
+  @@index([seasonId, startsAt, endsAt], map: "nomination_windows_season_timeline_idx")
+  @@index([createdByAdminId], map: "nomination_windows_creator_idx")
+  @@map("nomination_windows")
+}
+
+model PlayerNomination {
+  id               String           @id @default(uuid()) @db.Char(36)
+  windowId         String           @map("window_id") @db.Char(36)
+  leagueTeamId     String           @map("league_team_id") @db.Char(36)
+  footballPlayerId String           @map("football_player_id") @db.Char(36)
+  withdrawnAt      DateTime?        @map("withdrawn_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  window           NominationWindow @relation(fields: [windowId], references: [id], onDelete: Restrict)
+  leagueTeam       LeagueTeam       @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  footballPlayer   FootballPlayer   @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  auctionLots      PlayerAuctionLot[]
+
+  @@unique([windowId, leagueTeamId, footballPlayerId], map: "player_nominations_unique")
+  @@index([windowId, withdrawnAt, footballPlayerId], map: "player_nominations_candidates_idx")
+  @@index([leagueTeamId, windowId], map: "player_nominations_team_idx")
+  @@map("player_nominations")
+}
+
 model LeaguePlayerOwnership {
   id                  String                         @id @default(uuid()) @db.Char(36)
   leagueId            String                         @map("league_id") @db.Char(36)
@@ -1154,6 +1282,8 @@ model LeaguePlayerOwnership {
   acquisitionSeason   LeagueSeason?                  @relation("OwnershipAcquisitionSeason", fields: [acquisitionSeasonId], references: [id], onDelete: Restrict)
   valuationSnapshots  ValuationRosterSnapshot[]
   forcedApplications  PlayerAcquisitionApplication[]
+  disappearanceRequests DisappearanceRequest[]
+  transferProposals TransferProposal[]
 
   @@unique([leagueId, footballPlayerId], map: "league_player_ownerships_player_unique")
   @@index([leagueTeamId, status], map: "league_player_ownerships_team_status_idx")
@@ -1161,6 +1291,99 @@ model LeaguePlayerOwnership {
   @@index([salaryRuleVersionId], map: "league_player_ownerships_salary_rule_idx")
   @@index([acquisitionSeasonId, acquisitionType], map: "league_player_ownerships_acquisition_idx")
   @@map("league_player_ownerships")
+}
+
+model DisappearanceRequest {
+  id                       String                     @id @default(uuid()) @db.Char(36)
+  leagueId                 String                     @map("league_id") @db.Char(36)
+  seasonId                 String                     @map("season_id") @db.Char(36)
+  ownershipId              String                     @map("ownership_id") @db.Char(36)
+  requesterTeamId          String                     @map("requester_team_id") @db.Char(36)
+  requesterUserId          String                     @map("requester_user_id") @db.Char(36)
+  expectedOwnershipVersion Int                        @map("expected_ownership_version") @db.UnsignedInt
+  status                   DisappearanceRequestStatus @default(PENDING)
+  reason                   String                     @db.VarChar(512)
+  reviewReason             String?                    @map("review_reason") @db.VarChar(512)
+  reviewedByAdminId        String?                    @map("reviewed_by_admin_id") @db.Char(36)
+  reviewedAt               DateTime?                  @map("reviewed_at")
+  version                  Int                        @default(1) @db.UnsignedInt
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
+  league                   League                     @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season                   LeagueSeason               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  ownership                LeaguePlayerOwnership      @relation(fields: [ownershipId], references: [id], onDelete: Restrict)
+  requesterTeam            LeagueTeam                 @relation(fields: [requesterTeamId], references: [id], onDelete: Restrict)
+  events                   DisappearanceRequestEvent[]
+
+  @@index([leagueId, status, createdAt], map: "disappearance_requests_queue_idx")
+  @@index([requesterTeamId, createdAt], map: "disappearance_requests_team_idx")
+  @@index([ownershipId, status], map: "disappearance_requests_ownership_idx")
+  @@map("disappearance_requests")
+}
+
+model DisappearanceRequestEvent {
+  id             String                     @id @default(uuid()) @db.Char(36)
+  requestId      String                     @map("request_id") @db.Char(36)
+  fromStatus     DisappearanceRequestStatus? @map("from_status")
+  toStatus       DisappearanceRequestStatus  @map("to_status")
+  actorUserId    String?                    @map("actor_user_id") @db.Char(36)
+  actorAdminId   String?                    @map("actor_admin_id") @db.Char(36)
+  reason         String?                    @db.VarChar(512)
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  request        DisappearanceRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt, id], map: "disappearance_request_events_timeline_idx")
+  @@map("disappearance_request_events")
+}
+
+model TransferProposal {
+  id                       String                 @id @default(uuid()) @db.Char(36)
+  leagueId                 String                 @map("league_id") @db.Char(36)
+  seasonId                 String                 @map("season_id") @db.Char(36)
+  ownershipId              String                 @map("ownership_id") @db.Char(36)
+  sourceTeamId             String                 @map("source_team_id") @db.Char(36)
+  targetTeamId             String                 @map("target_team_id") @db.Char(36)
+  initiatorTeamId          String                 @map("initiator_team_id") @db.Char(36)
+  initiatorUserId          String                 @map("initiator_user_id") @db.Char(36)
+  counterpartyUserId       String?                @map("counterparty_user_id") @db.Char(36)
+  expectedOwnershipVersion Int                    @map("expected_ownership_version") @db.UnsignedInt
+  amountMinor              Int                    @map("amount_minor") @db.UnsignedInt
+  status                   TransferProposalStatus @default(PENDING_COUNTERPARTY)
+  reason                   String?                @db.VarChar(512)
+  reviewReason             String?                @map("review_reason") @db.VarChar(512)
+  reviewedByAdminId        String?                @map("reviewed_by_admin_id") @db.Char(36)
+  reviewedAt               DateTime?              @map("reviewed_at")
+  version                  Int                    @default(1) @db.UnsignedInt
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+  league                   League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season                   LeagueSeason          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  ownership                LeaguePlayerOwnership @relation(fields: [ownershipId], references: [id], onDelete: Restrict)
+  sourceTeam               LeagueTeam             @relation("TransferProposalSource", fields: [sourceTeamId], references: [id], onDelete: Restrict)
+  targetTeam               LeagueTeam             @relation("TransferProposalTarget", fields: [targetTeamId], references: [id], onDelete: Restrict)
+  initiatorTeam            LeagueTeam             @relation("TransferProposalInitiator", fields: [initiatorTeamId], references: [id], onDelete: Restrict)
+  events                   TransferProposalEvent[]
+
+  @@index([leagueId, status, createdAt], map: "transfer_proposals_queue_idx")
+  @@index([sourceTeamId, status], map: "transfer_proposals_source_idx")
+  @@index([targetTeamId, status], map: "transfer_proposals_target_idx")
+  @@index([ownershipId, status], map: "transfer_proposals_ownership_idx")
+  @@map("transfer_proposals")
+}
+
+model TransferProposalEvent {
+  id           String                 @id @default(uuid()) @db.Char(36)
+  proposalId   String                 @map("proposal_id") @db.Char(36)
+  fromStatus   TransferProposalStatus? @map("from_status")
+  toStatus     TransferProposalStatus  @map("to_status")
+  actorUserId  String?                @map("actor_user_id") @db.Char(36)
+  actorAdminId String?                @map("actor_admin_id") @db.Char(36)
+  reason       String?                @db.VarChar(512)
+  createdAt    DateTime               @default(now()) @map("created_at")
+  proposal     TransferProposal       @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt, id], map: "transfer_proposal_events_timeline_idx")
+  @@map("transfer_proposal_events")
 }
 
 model RosterTransaction {
@@ -1215,7 +1438,8 @@ model PlayerAcquisitionApplication {
   id                       String                              @id @default(uuid()) @db.Char(36)
   leagueId                 String                              @map("league_id") @db.Char(36)
   seasonId                 String                              @map("season_id") @db.Char(36)
-  transferWindowId         String                              @map("transfer_window_id") @db.Char(36)
+  transferWindowId         String?                             @map("transfer_window_id") @db.Char(36)
+  forcedOfferWindowId      String?                             @map("forced_offer_window_id") @db.Char(36)
   type                     PlayerApplicationType
   applicantLeagueTeamId    String                              @map("applicant_league_team_id") @db.Char(36)
   footballPlayerId         String                              @map("football_player_id") @db.Char(36)
@@ -1237,7 +1461,8 @@ model PlayerAcquisitionApplication {
   updatedAt                DateTime                            @updatedAt @map("updated_at")
   league                   League                              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   season                   LeagueSeason                        @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  transferWindow           TransferWindow                      @relation(fields: [transferWindowId], references: [id], onDelete: Restrict)
+  transferWindow           TransferWindow?                     @relation(fields: [transferWindowId], references: [id], onDelete: Restrict)
+  forcedOfferWindow        ForcedOfferWindow?                  @relation(fields: [forcedOfferWindowId], references: [id], onDelete: Restrict)
   applicantLeagueTeam      LeagueTeam                          @relation("PlayerApplicationApplicantTeam", fields: [applicantLeagueTeamId], references: [id], onDelete: Restrict)
   footballPlayer           FootballPlayer                      @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
   playerCard               PlayerCard                          @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
@@ -1252,6 +1477,7 @@ model PlayerAcquisitionApplication {
   @@index([leagueId, footballPlayerId, type, status], map: "player_applications_player_queue_idx")
   @@index([ownershipId, ownershipVersionSnapshot, status, firstValidSubmittedAt, id], map: "player_applications_forced_order_idx")
   @@index([transferWindowId, status], map: "player_applications_window_status_idx")
+  @@index([forcedOfferWindowId, status], map: "player_applications_forced_window_status_idx")
   @@index([reviewedByAdminId], map: "player_applications_reviewer_idx")
   @@map("player_acquisition_applications")
 }
@@ -1300,6 +1526,29 @@ model PlayerReleaseRestriction {
   @@index([leagueId, seasonId, footballPlayerId], map: "player_release_restrictions_player_idx")
   @@index([createdByUserId, createdAt], map: "player_release_restrictions_user_idx")
   @@map("player_release_restrictions")
+}
+
+model PersonalFinanceEntry {
+  id           String                 @id @default(uuid()) @db.Char(36)
+  userId       String                 @map("user_id") @db.Char(36)
+  leagueId     String                 @map("league_id") @db.Char(36)
+  leagueTeamId String                 @map("league_team_id") @db.Char(36)
+  seasonId     String                 @map("season_id") @db.Char(36)
+  direction    FinanceLedgerDirection
+  amountMinor  Int                    @map("amount_minor") @db.UnsignedInt
+  title        String                 @db.VarChar(80)
+  note         String                 @default("") @db.VarChar(300)
+  occurredOn   DateTime               @map("occurred_on") @db.Date
+  version      Int                    @default(1) @db.UnsignedInt
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  league       League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueTeam   LeagueTeam             @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  season       LeagueSeason           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+
+  @@index([userId, leagueTeamId, seasonId, occurredOn, id], map: "personal_finance_entries_scope_idx")
+  @@map("personal_finance_entries")
 }
 
 model FinanceLedgerEntry {
@@ -1650,6 +1899,7 @@ model FootballPlayer {
   playerAuctionLots            PlayerAuctionLot[]
   playerApplications           PlayerAcquisitionApplication[]
   playerReleaseRestrictions    PlayerReleaseRestriction[]
+  playerNominations            PlayerNomination[]
 
   @@index([normalizedNameZh], map: "football_players_name_zh_idx")
   @@index([normalizedNameEn], map: "football_players_name_en_idx")
@@ -1661,15 +1911,32 @@ model UserPlayerFavorite {
   id               String         @id @default(uuid()) @db.Char(36)
   userId           String         @map("user_id") @db.Char(36)
   footballPlayerId String         @map("football_player_id") @db.Char(36)
+  groupId          String?        @map("group_id") @db.Char(36)
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   footballPlayer   FootballPlayer @relation(fields: [footballPlayerId], references: [id], onDelete: Cascade)
+  group            UserPlayerFavoriteGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@unique([userId, footballPlayerId], map: "user_player_favorites_user_player_unique")
   @@index([userId, createdAt, id], map: "user_player_favorites_user_created_idx")
   @@index([footballPlayerId], map: "user_player_favorites_player_idx")
+  @@index([userId, groupId, createdAt, id], map: "user_player_favorites_group_created_idx")
   @@map("user_player_favorites")
+}
+
+model UserPlayerFavoriteGroup {
+  id        String               @id @default(uuid()) @db.Char(36)
+  userId    String               @map("user_id") @db.Char(36)
+  name      String               @db.VarChar(24)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favorites UserPlayerFavorite[]
+
+  @@unique([userId, name], map: "user_player_favorite_groups_user_name_unique")
+  @@index([userId, createdAt, id], map: "user_player_favorite_groups_user_created_idx")
+  @@map("user_player_favorite_groups")
 }
 
 model FootballPlayerSource {
@@ -2893,6 +3160,7 @@ model PlayerAuctionLot {
   batchId             String                 @map("batch_id") @db.Char(36)
   footballPlayerId    String                 @map("football_player_id") @db.Char(36)
   playerCardId        String?                @map("player_card_id") @db.Char(36)
+  nominationId        String?                @map("nomination_id") @db.Char(36)
   displayOrder        Int                    @map("display_order") @db.UnsignedInt
   playerNameSnapshot  String                 @map("player_name_snapshot") @db.VarChar(128)
   playerSnapshot      Json                   @map("player_snapshot")
@@ -2915,6 +3183,7 @@ model PlayerAuctionLot {
   currentForBatch     PlayerAuctionBatch?    @relation("PlayerAuctionCurrentLot")
   footballPlayer      FootballPlayer         @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
   playerCard          PlayerCard?            @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
+  nomination          PlayerNomination?      @relation(fields: [nominationId], references: [id], onDelete: Restrict)
   currentHighestBid   PlayerAuctionBid?      @relation("PlayerAuctionLotHighestBid", fields: [currentHighestBidId], references: [id], onDelete: Restrict)
   bids                PlayerAuctionBid[]     @relation("PlayerAuctionLotBids")
   review              PlayerAuctionReview?
@@ -2923,6 +3192,7 @@ model PlayerAuctionLot {
   @@index([batchId, status], map: "player_auction_lots_batch_status_idx")
   @@index([footballPlayerId], map: "player_auction_lots_player_idx")
   @@index([playerCardId], map: "player_auction_lots_card_idx")
+  @@index([nominationId], map: "player_auction_lots_nomination_idx")
   @@index([status, deadlineAt], map: "player_auction_lots_deadline_idx")
   @@map("player_auction_lots")
 }

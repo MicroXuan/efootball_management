@@ -1,0 +1,22 @@
+CREATE TABLE `season_calendar_notes` (
+  `id` CHAR(36) NOT NULL,
+  `season_id` CHAR(36) NOT NULL,
+  `kind` ENUM('HOLIDAY', 'MAINTENANCE', 'NOTICE') NOT NULL,
+  `title` VARCHAR(64) NOT NULL,
+  `description` VARCHAR(300) NULL,
+  `starts_on` DATE NOT NULL,
+  `ends_on` DATE NOT NULL,
+  `created_by_admin_id` CHAR(36) NOT NULL,
+  `updated_by_admin_id` CHAR(36) NOT NULL,
+  `version` INT UNSIGNED NOT NULL DEFAULT 1,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  `deleted_at` DATETIME(3) NULL,
+  PRIMARY KEY (`id`),
+  INDEX `season_calendar_notes_range_idx` (`season_id`, `starts_on`, `ends_on`, `deleted_at`),
+  INDEX `season_calendar_notes_creator_idx` (`created_by_admin_id`),
+  INDEX `season_calendar_notes_updater_idx` (`updated_by_admin_id`),
+  CONSTRAINT `season_calendar_notes_season_id_fkey` FOREIGN KEY (`season_id`) REFERENCES `league_seasons`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `season_calendar_notes_created_by_admin_id_fkey` FOREIGN KEY (`created_by_admin_id`) REFERENCES `admin_accounts`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `season_calendar_notes_updated_by_admin_id_fkey` FOREIGN KEY (`updated_by_admin_id`) REFERENCES `admin_accounts`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

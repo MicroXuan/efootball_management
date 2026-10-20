@@ -5,7 +5,7 @@ type ProfilePage = {
   onShow(): void
   loadPage(showLoading?: boolean): Promise<void>
   openActionCenter(): void
-  openMyMatches(): void
+  openMyLeagues(): void
   openPlayerAuctions(): void
   openFavorites(): void
   startEditingName(): void
@@ -15,7 +15,7 @@ let page: ProfilePage
 
 beforeAll(async () => {
   vi.stubGlobal('Page', (definition: ProfilePage) => { page = definition })
-  vi.stubGlobal('wx', { navigateTo: vi.fn(), getSystemInfoSync: vi.fn(() => ({ statusBarHeight: 0 })), showToast: vi.fn() })
+  vi.stubGlobal('wx', { navigateTo: vi.fn(), switchTab: vi.fn(), getSystemInfoSync: vi.fn(() => ({ statusBarHeight: 0 })), showToast: vi.fn() })
   await import('./index')
 })
 
@@ -42,13 +42,19 @@ describe('profile quick actions', () => {
   })
 
   it.each([
-    ['openMyMatches', '/pages/my-matches/index'],
     ['openPlayerAuctions', '/pages/player-auctions/index'],
     ['openFavorites', '/pages/favorites/index'],
   ] as const)('%s opens its existing destination', (method, url) => {
     page[method]()
 
     expect(wx.navigateTo).toHaveBeenCalledWith({ url })
+  })
+
+  it('opens the My Leagues tab from the profile shortcut', () => {
+    page.openMyLeagues()
+
+    expect(wx.switchTab).toHaveBeenCalledWith(expect.objectContaining({ url: '/pages/leagues/index' }))
+    expect(wx.navigateTo).not.toHaveBeenCalled()
   })
 
   it('opens nickname editing with the current generated name', () => {

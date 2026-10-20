@@ -21,6 +21,18 @@ it('filters formal transactions by market direction and operation category', () 
   const items = [item('买入', 'BUY'), item('卖出', 'SELL'), item('转会', 'TRANSFER'), item('修正', 'EMERGENCY_CORRECTION')]
 
   expect(filterTransactions(items, 'BUY', 'ALL').map(({ playerName }) => playerName)).toEqual(['买入'])
-  expect(filterTransactions(items, 'ALL', 'TRANSFER').map(({ playerName }) => playerName)).toEqual(['转会'])
+  expect(filterTransactions(items, 'ALL', 'TRANSFER').map(({ playerName }) => playerName)).toEqual(['买入', '卖出', '转会'])
   expect(filterTransactions(items, 'ALL', 'ADMIN').map(({ playerName }) => playerName)).toEqual(['修正'])
+})
+
+it('does not classify same-team card and salary changes as purchases', () => {
+  const base = {
+    id: 'tx-2', leagueId: 'league-1', seasonId: 'season-1', playerId: 'player-1', playerName: '球员甲',
+    sourceLeagueTeamId: 'team-1', sourceTeamName: '甲队', targetLeagueTeamId: 'team-1', targetTeamName: '甲队',
+    amountMinor: null, valuationSnapshotMinor: null, transactionFeeMinor: null, transactionFeeRuleVersionId: null,
+    reason: '调整', createdByAdminId: 'admin-1', createdByUserId: null, createdAt: '2026-10-01T00:00:00.000Z',
+  } as const
+  const upgrades = [transactionView({ ...base, type: 'CARD_UPGRADE' }, 'team-1'),
+    transactionView({ ...base, id: 'tx-3', type: 'SALARY_RECALCULATION' }, 'team-1')]
+  expect(filterTransactions(upgrades, 'BUY', 'ALL')).toEqual([])
 })

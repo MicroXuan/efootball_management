@@ -21,12 +21,29 @@ import { CurrentAdmin, type CurrentAdminIdentity } from '../admin-auth/current-a
 import { AdminScopeGuard } from '../admin/admin-scope.guard.js';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { AdminPlayerAuctionsService } from './admin-player-auctions.service.js';
+import { AuctionShareCodeService } from './auction-share-code.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 
 @Controller('admin/leagues/:leagueId/player-auctions')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
 export class AdminPlayerAuctionsController {
-  constructor(@Inject(AdminPlayerAuctionsService) private readonly service: AdminPlayerAuctionsService) {}
+  constructor(
+    @Inject(AdminPlayerAuctionsService) private readonly service: AdminPlayerAuctionsService,
+    @Inject(AuctionShareCodeService) private readonly shareCodes: AuctionShareCodeService
+  ) {}
+
+  @Get(':batchId/share-code')
+  async shareCode(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('batchId', new ZodValidationPipe(ResourceIdSchema)) batchId: string
+  ) {
+    const batch = await this.service.detail(admin.id, leagueId, batchId);
+    if (batch.bidChannel !== 'MINIPROGRAM' || batch.status === 'DRAFT') {
+      throw new PlayerAuctionError('AUCTION_SHARE_NOT_AVAILABLE', '当前拍卖尚不能分享', 409);
+    }
+    return this.shareCodes.create(batchId);
+  }
 
   @Get()
   list(

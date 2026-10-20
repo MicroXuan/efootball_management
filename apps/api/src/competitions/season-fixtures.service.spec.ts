@@ -10,9 +10,9 @@ const competition = {
   activeRuleVersion: 1, version: 1, createdAt: at, updatedAt: at, _count: { participants: 2 }
 };
 
-function participant(id: string, name: string, number: number, shortName: string, status = 'ACTIVE') {
+function participant(id: string, name: string, number: number, shortName: string, status = 'ACTIVE', leagueTeamId = `team-${number}`) {
   return { id, participantType: 'TEAM', displayNameSnapshot: name, seasonEntry: {
-    teamNameSnapshot: name, teamShortNameSnapshot: shortName, teamNumberSnapshot: number,
+    leagueTeamId, teamNameSnapshot: name, teamShortNameSnapshot: shortName, teamNumberSnapshot: number,
     teamLogoUrlSnapshot: null, leagueTeam: { status, ownerAlias: `${name}经理`, teamNumber: number, name, shortName, logoUrl: null }
   } };
 }
@@ -93,5 +93,35 @@ describe('SeasonFixturesService', () => {
     if (!first.nextCursor) return;
     await expect(service.list('user-1', 'league-1', 'season-1', { team: 'milan', status: 'ALL', limit: 1, cursor: first.nextCursor }))
       .rejects.toMatchObject({ response: { code: 'INVALID_FIXTURE_CURSOR' }, status: 400 });
+  });
+
+  it('filters mine by exact owned team id, not a matching team name, and rejects a foreign team', async () => {
+    const own = match('own', 1, 1);
+    const namesake = match('namesake', 1, 2);
+    namesake.homeParticipant = participant('home-namesake', '阿哈尔', 1, 'AHAL', 'ACTIVE', 'team-other');
+    const { service, prisma } = harness([own, namesake]);
+    const query = { status: 'ALL' as const, scope: 'MINE' as const, leagueTeamId: 'team-1', limit: 20 };
+    const result = await service.list('user-1', 'league-1', 'season-1', query);
+    expect(result.items.map(({ match }) => match.id)).toEqual(['own']);
+    expect(prisma.seasonEntry.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ leagueTeamId: 'team-1', ownerUserId: 'user-1', status: 'APPROVED' })
+    }));
+    prisma.seasonEntry.findFirst.mockResolvedValueOnce(null);
+    await expect(service.list('user-1', 'league-1', 'season-1', { ...query, leagueTeamId: 'team-other' }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('rejects a cursor from another scope or owned team', async () => {
+    const { service } = harness([match('one', 1, 1), match('two', 1, 2)]);
+    const first = await service.list('user-1', 'league-1', 'season-1', {
+      status: 'ALL', scope: 'MINE', leagueTeamId: 'team-1', limit: 1
+    });
+    expect(first.nextCursor).toEqual(expect.any(String));
+    await expect(service.list('user-1', 'league-1', 'season-1', {
+      status: 'ALL', scope: 'MINE', leagueTeamId: 'team-2', limit: 1, cursor: first.nextCursor!
+    })).rejects.toMatchObject({ response: { code: 'INVALID_FIXTURE_CURSOR' } });
+    await expect(service.list('user-1', 'league-1', 'season-1', {
+      status: 'ALL', scope: 'ALL', limit: 1, cursor: first.nextCursor!
+    })).rejects.toMatchObject({ response: { code: 'INVALID_FIXTURE_CURSOR' } });
   });
 });

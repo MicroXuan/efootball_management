@@ -95,6 +95,11 @@ describe('tiered league lifecycle API', () => {
     await prisma.standingsRow.deleteMany({ where: { snapshot: { competitionId: { in: ids } } } });
     await prisma.standingsSnapshot.deleteMany({ where: { competitionId: { in: ids } } });
     await prisma.competitionMatch.updateMany({ where: { stage: { competitionId: { in: ids } } }, data: { officialResultVersionId: null } });
+    const matchScope = { match: { stage: { competitionId: { in: ids } } } };
+    await prisma.matchResultEvent.deleteMany({ where: matchScope });
+    await prisma.matchResultEvidence.deleteMany({ where: matchScope });
+    await prisma.matchResultEvidenceUpload.deleteMany({ where: matchScope });
+    await prisma.matchResultDispute.deleteMany({ where: matchScope });
     await prisma.matchResultVersion.deleteMany({ where: { match: { stage: { competitionId: { in: ids } } } } });
     await prisma.competitionMatch.deleteMany({ where: { stage: { competitionId: { in: ids } } } });
     await prisma.stageParticipant.deleteMany({ where: { stage: { competitionId: { in: ids } } } });
@@ -159,13 +164,11 @@ describe('tiered league lifecycle API', () => {
       include: { homeParticipant: { include: { seasonEntry: true } }, awayParticipant: { include: { seasonEntry: true } } }
     });
     const homeToken = userTokenById.get(match.homeParticipant.seasonEntry!.ownerUserId)!;
-    const awayToken = userTokenById.get(match.awayParticipant.seasonEntry!.ownerUserId)!;
-    const submitted = await request(app.getHttpServer()).post(`/v1/matches/${match.id}/results`)
-      .set('Authorization', `Bearer ${homeToken}`).set('Idempotency-Key', randomUUID())
-      .send({ homeScore: 2, awayScore: 1, expectedVersion: match.version }).expect(201);
-    await request(app.getHttpServer()).post(`/v1/matches/${match.id}/results/${submitted.body.version}/confirm`)
-      .set('Authorization', `Bearer ${awayToken}`).set('Idempotency-Key', randomUUID())
-      .send({ expectedVersion: match.version + 1 }).expect(200);
+    await request(app.getHttpServer())
+      .post(`/v1/admin/leagues/${leagueId}/competitions/${competitionId}/matches/${match.id}/results`)
+      .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
+      .send({ homeScore: 2, awayScore: 1, expectedVersion: match.version, reason: '端到端验证分组积分' })
+      .expect(200);
 
     const standings = await request(app.getHttpServer())
       .get(`/v1/me/leagues/${leagueId}/seasons/${seasonId}/division-standings`)

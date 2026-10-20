@@ -12,7 +12,7 @@ function harness() {
   const tx = {
     $queryRaw: jest.fn(async () => []),
     leagueTeam: {
-      findUnique: jest.fn(async () => ({ id: 'team-1', status: 'ACTIVE' })),
+      findUnique: jest.fn(async () => ({ id: 'team-1', status: 'ACTIVE', salaryCapMinor: 5000 as number | null })),
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     transferWindow: { findUnique: jest.fn(async () => ({ id: 'window-1', seasonId: 'season-1', allowSell: true, startsAt: new Date(at.getTime() - 1000), endsAt: new Date(at.getTime() + 1000) })) },
@@ -81,6 +81,23 @@ describe('TeamPlayerReleaseService', () => {
     expect(valuationSnapshots.synchronizeSeasonBeforeRosterMutation.mock.invocationCallOrder[0])
       .toBeLessThan(locks.lockPlayer.mock.invocationCallOrder[0]!);
     expect(locks.lockPlayer.mock.invocationCallOrder[0]).toBeLessThan(locks.lockTeams.mock.invocationCallOrder[0]!);
+  });
+
+  it('allows a salary-reducing release even when the team cap is unset', async () => {
+    const { service, tx } = harness();
+    tx.leagueTeam.findUnique.mockResolvedValue({ id: 'team-1', status: 'ACTIVE', salaryCapMinor: null });
+
+    const result = await service.release('user-1', 'team-1', {
+      seasonId: 'season-1', transferWindowId: 'window-1', ownershipId: 'ownership-1',
+      expectedVersion: 2, reason: '降低工资'
+    }, 'release-without-cap', at);
+
+    expect(result.ownership.status).toBe('RELEASED');
+    expect(result.summary.salaryCapMinor).toBe(0);
+    expect(tx.leagueTeam.updateMany).toHaveBeenCalledWith({
+      where: { id: 'team-1', rosterStatus: { not: 'OVER_CAP' } },
+      data: { rosterStatus: 'OVER_CAP', version: { increment: 1 } }
+    });
   });
 
   it('rejects another owner, stale versions, inactive ownerships, and a closed sell window', async () => {

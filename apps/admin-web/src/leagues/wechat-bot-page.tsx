@@ -8,6 +8,7 @@ import { Alert, Button, Card, Checkbox, Empty, Spin, Switch, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
+import { PaginatedRecords } from '../components/paginated-records';
 
 const competitionStatus: Record<string, string> = {
   DRAFT: '草稿',
@@ -126,7 +127,7 @@ export function WechatBotPage({ api = adminApi }: { api?: AdminApi }) {
     {notice ? <Alert role="status" type="success" showIcon title={notice} closable onClose={() => setNotice(null)} /> : null}
     {config ? <>
       <Card className="wechat-config-section" title={<><span className="wechat-step">01</span> 选择微信群</>}>
-        {config.observedGroups.length ? <div className="wechat-group-grid">{config.observedGroups.map((group) => {
+        {config.observedGroups.length ? <PaginatedRecords items={config.observedGroups} label="微信群分页" render={(pageGroups) => <div className="wechat-group-grid">{pageGroups.map((group) => {
           const device = config.devices.find((item) => item.id === group.deviceId);
           const isSelected = selectedGroupId === group.id;
           return <button
@@ -141,7 +142,7 @@ export function WechatBotPage({ api = adminApi }: { api?: AdminApi }) {
             <span><strong>{group.displayName}</strong><small>{device?.name ?? '未知设备'} · {device?.loginStatus === 'LOGGED_IN' ? '设备在线' : '设备离线'}</small></span>
             <Tag color={device?.loginStatus === 'LOGGED_IN' ? 'success' : 'default'}>{isSelected ? '已选择' : '可绑定'}</Tag>
           </button>;
-        })}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="机器人尚未观察到微信群，请先启动 Windows 桥接程序并保持目标群可见。" />}
+        })}</div>} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="机器人尚未观察到微信群，请先启动 Windows 桥接程序并保持目标群可见。" />}
       </Card>
       <Card className="wechat-config-section" title={<><span className="wechat-step">02</span> 设置群功能</>}>
         <p className="wechat-section-description">功能可以单选或多选，切换微信群后会加载该群自己的配置。</p>
@@ -166,14 +167,14 @@ export function WechatBotPage({ api = adminApi }: { api?: AdminApi }) {
       </Card>
       {capabilities.includes('SCHEDULE_QUERY') ? <Card className="wechat-config-section" title={<><span className="wechat-step">03</span> 选择可查询赛程</>}>
         <p className="wechat-section-description">群友发送“查询赛程”时，机器人只返回这里勾选的赛事。可同时选择多个联赛或杯赛。</p>
-        {config.scheduleSourceOptions.length ? <div className="wechat-source-list">{config.scheduleSourceOptions.map((source) => <div key={source.id} className="wechat-source-option">
+        {config.scheduleSourceOptions.length ? <PaginatedRecords items={config.scheduleSourceOptions} label="赛程来源分页" render={(pageSources) => <div className="wechat-source-list">{pageSources.map((source) => <div key={source.id} className="wechat-source-option">
           <Checkbox
             checked={scheduleSourceIds.includes(source.id)}
             disabled={source.status === 'CANCELLED'}
             onChange={(event) => setScheduleSourceIds((current) => event.target.checked ? [...current, source.id] : current.filter((id) => id !== source.id))}
           >{source.name}</Checkbox>
           <Tag>{competitionStatus[source.status]}</Tag>
-        </div>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可作为查询来源的赛事，请先创建联赛或杯赛。" />}
+        </div>)}</div>} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可作为查询来源的赛事，请先创建联赛或杯赛。" />}
       </Card> : null}
       <Card className="wechat-config-footer">
         <div>

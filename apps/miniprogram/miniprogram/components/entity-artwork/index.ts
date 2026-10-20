@@ -5,6 +5,7 @@ Component({
     src: { type: String, value: '' },
     fallback: { type: String, value: '球' },
     shape: { type: String, value: 'square' },
+    fit: { type: String, value: 'cover' },
     surface: { type: String, value: 'dark' },
     directHttps: { type: Boolean, value: false },
   },

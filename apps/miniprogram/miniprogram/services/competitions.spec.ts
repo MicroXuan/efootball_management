@@ -25,6 +25,8 @@ describe('competition service query', () => {
     })).toBe('/me/leagues/league%2F1/seasons/season%201/fixtures?team=AC%20%E7%B1%B3%E5%85%B0&status=FINISHED&cursor=next%2Fpage&limit=50')
     expect(seasonFixturesPath('league-1', 'season-1'))
       .toBe('/me/leagues/league-1/seasons/season-1/fixtures?status=ALL&limit=20')
+    expect(seasonFixturesPath('league-1', 'season-1', { scope: 'MINE', leagueTeamId: 'team/1' }))
+      .toBe('/me/leagues/league-1/seasons/season-1/fixtures?status=ALL&scope=MINE&leagueTeamId=team%2F1&limit=20')
   })
 
   it('does not expose participant result or evidence operations', () => {

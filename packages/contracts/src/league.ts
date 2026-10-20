@@ -313,7 +313,8 @@ export const SeasonAllocationSourceSchema = z.enum([
 
 export const GenerateSeasonAllocationRequestSchema = z.object({
   expectedSeasonVersion: ExpectedVersionSchema,
-  randomSeed: z.number().int().positive()
+  randomSeed: z.number().int().positive(),
+  mode: z.enum(['AUTO', 'MANUAL']).optional()
 });
 
 const SeasonAllocationOverrideSchema = z.object({

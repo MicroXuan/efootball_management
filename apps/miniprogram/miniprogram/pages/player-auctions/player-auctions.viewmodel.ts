@@ -6,6 +6,10 @@ export type PlayerAuctionLeagueGroup = {
   items: MyPlayerAuctionListItem[]
 }
 
+export function displayableAuctions(items: MyPlayerAuctionListItem[]) {
+  return items.filter((item) => !['DRAFT', 'CANCELLED'].includes(item.status))
+}
+
 export function groupAuctionsByLeague(items: MyPlayerAuctionListItem[]): PlayerAuctionLeagueGroup[] {
   const groups = new Map<string, PlayerAuctionLeagueGroup>()
   for (const item of items) {

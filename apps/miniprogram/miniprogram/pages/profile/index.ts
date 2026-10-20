@@ -8,6 +8,7 @@ import { actionCenterAttentionCount, loadActionCenter, readActionCenterVersions 
 import { actionCenterSourceAttention } from '../action-center/action-center.viewmodel'
 import { profileView, type ProfileView } from './profile.viewmodel'
 import { completeProfileLogin } from './profile-login'
+import { consumeMyLeaguesTabRequest, requestMyLeaguesTab } from '../leagues/league-list-navigation'
 
 type TeamTapEvent = { currentTarget: { dataset: { id?: string } } }
 type NicknameInputEvent = { detail: { value: string } }
@@ -126,8 +127,12 @@ Page({
     wx.navigateTo({ url: '/pages/action-center/index' })
   },
 
-  openMyMatches() {
-    wx.navigateTo({ url: '/pages/my-matches/index' })
+  openMyLeagues() {
+    requestMyLeaguesTab()
+    wx.switchTab({
+      url: '/pages/leagues/index',
+      fail: () => { consumeMyLeaguesTabRequest() },
+    })
   },
 
   openPlayerAuctions() {

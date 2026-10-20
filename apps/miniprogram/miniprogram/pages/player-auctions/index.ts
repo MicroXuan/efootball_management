@@ -1,6 +1,6 @@
 import type { MyPlayerAuctionListItem } from '@efm/contracts'
 import { listMyPlayerAuctions } from '../../services/player-auctions'
-import { groupAuctionsByLeague, playerAuctionStatusLabel, type PlayerAuctionLeagueGroup } from './player-auctions.viewmodel'
+import { displayableAuctions, groupAuctionsByLeague, playerAuctionStatusLabel, type PlayerAuctionLeagueGroup } from './player-auctions.viewmodel'
 
 type AuctionTapEvent = { currentTarget: { dataset: { batchId?: string } } }
 
@@ -22,8 +22,8 @@ Page({
   async loadAuctions(showLoading = true) {
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     try {
-      const items = await listMyPlayerAuctions('active')
-      const groups = groupAuctionsByLeague(items).map((group) => ({
+      const items = await listMyPlayerAuctions('all')
+      const groups = groupAuctionsByLeague(displayableAuctions(items)).map((group) => ({
         ...group,
         items: group.items.map((item) => ({ ...item, statusLabel: playerAuctionStatusLabel(item.status) })),
       }))

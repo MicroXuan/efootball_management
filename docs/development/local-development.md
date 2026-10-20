@@ -52,10 +52,10 @@ pnpm db:status
 
 ## 4. 验证并启动 API
 
-完整发布门禁：
+完整发布门禁必须显式连接本机隔离测试库。当前 `.env` 也可能指向共享 CloudBase 数据库；不要直接运行不带 `DATABASE_URL` 的测试或 `pnpm verify`。
 
 ```bash
-pnpm verify
+DATABASE_URL=mysql://<local-user>:<local-password>@127.0.0.1:3307/efm_test pnpm verify
 ```
 
 API 开发启动：
@@ -152,6 +152,7 @@ DATABASE_URL=mysql://<test-user>:<test-password>@<test-external-host>:<port>/<te
 WECHAT_GATEWAY_MODE=http
 WECHAT_APP_ID=<小程序 AppID>
 WECHAT_APP_SECRET=<小程序 AppSecret>
+WECHAT_MINIPROGRAM_ENV_VERSION=develop
 STORAGE_PROVIDER=cloudbase
 CLOUDBASE_ENV_ID=cloud1-d0g1gwk2aefd9f1e8
 CLOUDBASE_SECRET_ID=<仅保存在本机的 SecretId>

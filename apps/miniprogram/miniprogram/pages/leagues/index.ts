@@ -5,6 +5,7 @@ import { platformPresentationApi } from '../../services/platform-presentation'
 import { session } from '../../services/session'
 import { cacheImageSource } from '../../services/image-source'
 import { clearBannerBeforeTabSwitch } from './banner-transition'
+import { consumeMyLeaguesTabRequest } from './league-list-navigation'
 import {
   leagueCardView,
   leagueBannerView,
@@ -37,7 +38,10 @@ Page({
   },
 
   onShow() {
-    this.setData({ bannerLayerVisible: true })
+    this.setData({
+      bannerLayerVisible: true,
+      ...(consumeMyLeaguesTabRequest() ? { activeTab: 'mine' as LeagueListTab } : {}),
+    })
     this.getTabBar?.()?.setData({ selected: 1 })
     void this.loadLeagues()
   },

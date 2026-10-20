@@ -19,12 +19,19 @@ it('loads the protected platform league collection and renders an empty state', 
 
   expect(await screen.findByText('暂无联赛')).toBeInTheDocument();
   expect(request).toHaveBeenCalledWith('/v1/admin/platform/leagues', expect.any(Object));
-  expect(screen.getByRole('button', { name: '创建联赛' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '新增联赛' })).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: '新建联赛' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /删除联赛/ })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('游戏平台')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('服务器区域')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: '新增联赛' }));
+
+  expect(screen.getByRole('dialog', { name: '新建联赛' })).toBeInTheDocument();
   expect(screen.getByLabelText('版本')).toBeInTheDocument();
   expect(screen.getByText('支持 JPG、PNG、WebP，图片大小不超过 2MB')).toBeInTheDocument();
+
+  expect(screen.getByRole('button', { name: /取\s*消/ })).toBeInTheDocument();
 });
 
 it('shows active leagues by default and separates archived leagues into their own tab', async () => {
@@ -66,15 +73,16 @@ it('uploads a validated league image before creating the league', async () => {
     size: 128
   });
   const api = { request, upload } as unknown as AdminApi;
-  const { container } = render(<MemoryRouter><LeaguesPage api={api} /></MemoryRouter>);
+  render(<MemoryRouter><LeaguesPage api={api} /></MemoryRouter>);
 
   await screen.findByText('暂无联赛');
+  await userEvent.click(screen.getByRole('button', { name: '新增联赛' }));
   await userEvent.type(screen.getByLabelText('联赛名称'), '新联赛');
   await userEvent.type(screen.getByLabelText('联赛简称'), 'NEW');
   await userEvent.click(screen.getByLabelText('版本'));
   await userEvent.click(await screen.findByText('国服'));
   const file = new File(['png'], 'league.png', { type: 'image/png' });
-  await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, file);
+  await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
   await userEvent.click(screen.getByRole('button', { name: '创建联赛' }));
 
   await waitFor(() => expect(upload).toHaveBeenCalledWith('/v1/admin/uploads/league-images', file, expect.anything()));
@@ -111,10 +119,11 @@ it('does not replace a stored league logo with its temporary display URL when ed
 it('blocks unsupported or oversized league images before upload', async () => {
   const request = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
   const upload = vi.fn();
-  const { container } = render(<MemoryRouter><LeaguesPage api={{ request, upload } as unknown as AdminApi} /></MemoryRouter>);
+  render(<MemoryRouter><LeaguesPage api={{ request, upload } as unknown as AdminApi} /></MemoryRouter>);
   await screen.findByText('暂无联赛');
+  await userEvent.click(screen.getByRole('button', { name: '新增联赛' }));
   const choose = (file: File) => {
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const files = {
       0: file,
       length: 1,
@@ -139,14 +148,15 @@ it('blocks unsupported or oversized league images before upload', async () => {
 it('keeps an image upload failure visible and does not save the league', async () => {
   const request = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
   const upload = vi.fn().mockRejectedValue(new Error('storage unavailable'));
-  const { container } = render(<MemoryRouter><LeaguesPage api={{ request, upload } as unknown as AdminApi} /></MemoryRouter>);
+  render(<MemoryRouter><LeaguesPage api={{ request, upload } as unknown as AdminApi} /></MemoryRouter>);
   await screen.findByText('暂无联赛');
+  await userEvent.click(screen.getByRole('button', { name: '新增联赛' }));
   await userEvent.type(screen.getByLabelText('联赛名称'), '新联赛');
   await userEvent.type(screen.getByLabelText('联赛简称'), 'NEW');
   await userEvent.click(screen.getByLabelText('版本'));
   await userEvent.click(await screen.findByText('国际服'));
   await userEvent.upload(
-    container.querySelector('input[type="file"]') as HTMLInputElement,
+    document.querySelector('input[type="file"]') as HTMLInputElement,
     new File(['png'], 'league.png', { type: 'image/png' })
   );
   await userEvent.click(screen.getByRole('button', { name: '创建联赛' }));
@@ -175,7 +185,7 @@ it('reloads the latest league and version after an edit conflict', async () => {
   }));
 });
 
-it('brings the editor into view when editing a later league', async () => {
+it('opens the selected league in the editor dialog', async () => {
   const first = league('第一联赛', 1);
   const second = {
     ...league('第二联赛', 1),
@@ -183,19 +193,12 @@ it('brings the editor into view when editing a later league', async () => {
     shortName: 'NEXT',
   };
   const request = vi.fn().mockResolvedValue({ items: [first, second], nextCursor: null });
-  const scrollIntoView = vi.fn();
-  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-    configurable: true,
-    value: scrollIntoView,
-  });
   render(<MemoryRouter><LeaguesPage api={{ request } as unknown as AdminApi} /></MemoryRouter>);
 
   await userEvent.click(await screen.findByRole('button', { name: '编辑 第二联赛' }));
 
   await waitFor(() => expect(screen.getByLabelText('联赛名称')).toHaveValue('第二联赛'));
-  const heading = screen.getByRole('heading', { name: '编辑联赛 · 第二联赛' });
-  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
-  expect(heading).toHaveFocus();
+  expect(screen.getByRole('dialog', { name: '编辑联赛 · 第二联赛' })).toBeInTheDocument();
 });
 
 it('renders a resilient league card with clear season and primary actions', async () => {

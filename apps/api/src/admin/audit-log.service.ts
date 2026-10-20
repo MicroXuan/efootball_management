@@ -86,8 +86,7 @@ export class AuditLogService {
         actorUser: { select: { displayName: true } },
         league: { select: { name: true } }
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 100
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
     });
     const seasonIds = new Set<string>();
     for (const log of logs) {

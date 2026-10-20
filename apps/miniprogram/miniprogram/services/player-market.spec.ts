@@ -37,7 +37,7 @@ describe('player market service', () => {
   it('sends idempotency keys and optimistic versions for every mutation', async () => {
     const request = vi.spyOn(api, 'request').mockResolvedValue({ id: 'application-1' })
     await submitPlayerApplication('league-1', {
-      seasonId: 'season-1', transferWindowId: 'window-1', footballPlayerId: 'player-1', playerCardId: 'card-1',
+      seasonId: 'season-1', window: { kind: 'FORCED_OFFER', id: 'forced-1' }, footballPlayerId: 'player-1', playerCardId: 'card-1',
       type: 'FORCED_TRANSFER', amountMinor: 500, sourceLeagueTeamId: 'team-2', ownershipId: 'owner-1', ownershipVersionSnapshot: 4,
     }, 'submit-key')
     await amendPlayerApplication('application / 1', { amountMinor: 600, expectedVersion: 7 }, 'amend-key')
@@ -45,7 +45,7 @@ describe('player market service', () => {
 
     expect(request).toHaveBeenNthCalledWith(1, expect.objectContaining({
       path: '/me/leagues/league-1/player-market-applications', method: 'POST', headers: { 'Idempotency-Key': 'submit-key' },
-      data: expect.objectContaining({ ownershipVersionSnapshot: 4 }),
+      data: expect.objectContaining({ ownershipVersionSnapshot: 4, window: { kind: 'FORCED_OFFER', id: 'forced-1' } }),
     }))
     expect(request).toHaveBeenNthCalledWith(2, expect.objectContaining({
       path: '/me/player-market-applications/application%20%2F%201', method: 'PATCH', headers: { 'Idempotency-Key': 'amend-key' },

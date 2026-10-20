@@ -32,6 +32,10 @@ export const PlayerApplicationEventTypeSchema = z.enum([
   'INELIGIBLE'
 ]);
 export const PlayerMarketActionSchema = z.enum(['APPLY', 'FORCE_SIGN', 'OWNED_BY_ME', 'DISABLED']);
+export const PlayerApplicationWindowReferenceSchema = z.object({
+  kind: z.enum(['TRANSFER', 'FORCED_OFFER']),
+  id: ResourceIdSchema,
+});
 
 export const PlayerMarketTeamSummarySchema = z.object({
   teamId: ResourceIdSchema,
@@ -50,17 +54,71 @@ export const PlayerMarketCardSummarySchema = z.object({
   salaryMinor: NonNegativeMoneyMinorSchema.nullable()
 });
 
+const CurrentSalaryTierSchema = z.object({
+  salaryMinor: NonNegativeMoneyMinorSchema,
+  minOverall: OverallRatingSchema,
+  maxOverall: OverallRatingSchema,
+  salaryRuleVersionId: ResourceIdSchema,
+  version: z.number().int().positive(),
+  effectiveAt: TimestampSchema
+});
+
+const SalaryUnavailableReasonSchema = z.enum([
+  'AUTO_BUILD_MISSING', 'SALARY_RULE_NOT_CONFIGURED', 'SALARY_TIER_NOT_CONFIGURED'
+]);
+
+export const PlayerMarketSalaryDisplaySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('ACTUAL'),
+    salaryMinor: NonNegativeMoneyMinorSchema,
+    basisOverall: OverallRatingSchema,
+    salaryRuleVersionId: ResourceIdSchema,
+    currentTier: CurrentSalaryTierSchema.nullable(),
+    unavailableReason: SalaryUnavailableReasonSchema.nullable()
+  }),
+  z.object({
+    kind: z.literal('PROJECTED'),
+    salaryMinor: NonNegativeMoneyMinorSchema,
+    basisOverall: OverallRatingSchema,
+    salaryRuleVersionId: ResourceIdSchema,
+    currentTier: z.null(),
+    unavailableReason: z.null()
+  }),
+  z.object({
+    kind: z.literal('UNAVAILABLE'),
+    salaryMinor: z.null(),
+    basisOverall: OverallRatingSchema.nullable(),
+    salaryRuleVersionId: z.null(),
+    currentTier: z.null(),
+    unavailableReason: SalaryUnavailableReasonSchema
+  })
+]);
+
+export const PlayerMarketSalaryImpactSchema = z.object({
+  currentSalaryMinor: NonNegativeMoneyMinorSchema,
+  salaryCapMinor: NonNegativeMoneyMinorSchema.nullable(),
+  projectedSalaryMinor: NonNegativeMoneyMinorSchema.nullable(),
+  overCapMinor: NonNegativeMoneyMinorSchema.nullable()
+});
+
 export const PlayerMarketPlayerSummarySchema = z.object({
   playerId: ResourceIdSchema,
   playerName: z.string().min(1),
   nationality: z.string().nullable(),
+  nationalityZh: z.string().nullable().optional(),
   club: z.string().nullable(),
+  clubZh: z.string().nullable().optional(),
+  age: z.number().int().positive().nullable().optional(),
+  heightCm: z.number().int().positive().nullable().optional(),
+  weightKg: z.number().int().positive().nullable().optional(),
+  preferredFoot: z.string().nullable().optional(),
   currentOwner: PlayerMarketTeamSummarySchema.nullable(),
   ownershipId: ResourceIdSchema.nullable(),
   ownershipVersion: z.number().int().positive().nullable(),
   officialValueMinor: NonNegativeMoneyMinorSchema.nullable(),
   valuationVersion: z.number().int().positive().nullable(),
   card: PlayerMarketCardSummarySchema.nullable(),
+  salary: PlayerMarketSalaryDisplaySchema,
   forcedTransferBadge: z.boolean(),
   action: PlayerMarketActionSchema,
   disabledReason: z.string().min(1).nullable()
@@ -78,7 +136,8 @@ export const PlayerMarketQuerySchema = z.object({
 export const PlayerMarketListResponseSchema = z.object({
   items: z.array(PlayerMarketPlayerSummarySchema),
   nextCursor: z.string().nullable(),
-  activeTransferWindowId: ResourceIdSchema.nullable()
+  activeTransferWindowId: ResourceIdSchema.nullable(),
+  activeForcedOfferWindowId: ResourceIdSchema.nullable().default(null),
 });
 
 export const PlayerApplicationEventSchema = z.object({
@@ -98,7 +157,8 @@ export const PlayerAcquisitionApplicationSchema = z.object({
   id: ResourceIdSchema,
   leagueId: ResourceIdSchema,
   seasonId: ResourceIdSchema,
-  transferWindowId: ResourceIdSchema,
+  transferWindowId: ResourceIdSchema.nullable(),
+  forcedOfferWindowId: ResourceIdSchema.nullable().default(null),
   type: PlayerApplicationTypeSchema,
   applicantTeam: PlayerMarketTeamSummarySchema,
   playerId: ResourceIdSchema,
@@ -137,12 +197,13 @@ export const PlayerApplicationListResponseSchema = z.object({
 
 export const PlayerMarketAnnouncementSchema = z.object({
   id: ResourceIdSchema,
-  kind: z.enum(['NORMAL_PURCHASE', 'FORCED_TRANSFER', 'RELEASE', 'APPLICATION_CLOSED']),
+  kind: z.enum(['NORMAL_PURCHASE', 'FORCED_TRANSFER', 'TRANSFER', 'RELEASE', 'APPLICATION_CLOSED']),
   playerId: ResourceIdSchema,
   playerName: z.string().min(1),
   sourceTeam: PlayerMarketTeamSummarySchema.nullable(),
   targetTeam: PlayerMarketTeamSummarySchema.nullable(),
   amountMinor: NonNegativeMoneyMinorSchema.nullable(),
+  valuationSnapshotMinor: NonNegativeMoneyMinorSchema.nullable().optional(),
   message: z.string().min(1),
   createdAt: TimestampSchema
 });
@@ -159,14 +220,18 @@ export const PlayerMarketAnnouncementListResponseSchema = z.object({
 });
 
 export const PlayerMarketPlayerDetailSchema = PlayerMarketPlayerSummarySchema.extend({
+  playerEnglishName: z.string().nullable(),
   activeTransferWindowId: ResourceIdSchema.nullable(),
+  activeForcedOfferWindowId: ResourceIdSchema.nullable().default(null),
   myApplication: PlayerAcquisitionApplicationSchema.nullable(),
-  publicApplications: z.array(PlayerAcquisitionApplicationSchema)
+  publicApplications: z.array(PlayerAcquisitionApplicationSchema),
+  salaryImpact: PlayerMarketSalaryImpactSchema
 });
 
 const SubmitPlayerApplicationFieldsSchema = z.object({
   seasonId: ResourceIdSchema,
-  transferWindowId: ResourceIdSchema,
+  transferWindowId: ResourceIdSchema.optional(),
+  window: PlayerApplicationWindowReferenceSchema.optional(),
   footballPlayerId: ResourceIdSchema,
   playerCardId: ResourceIdSchema,
   type: PlayerApplicationTypeSchema,
@@ -179,12 +244,19 @@ const SubmitPlayerApplicationFieldsSchema = z.object({
 export const SubmitPlayerApplicationRequestSchema = SubmitPlayerApplicationFieldsSchema.superRefine((input, context) => {
   const forcedFields = ['sourceLeagueTeamId', 'ownershipId', 'ownershipVersionSnapshot'] as const;
   if (input.type === 'FORCED_TRANSFER') {
+    if (input.window?.kind !== 'FORCED_OFFER' || input.transferWindowId !== undefined) {
+      context.addIssue({ code: 'custom', path: ['window'], message: 'forced transfer requires a forced-offer window' });
+    }
     for (const field of forcedFields) {
       if (input[field] === undefined) {
         context.addIssue({ code: 'custom', path: [field], message: `${field} is required for a forced transfer` });
       }
     }
   } else {
+    if ((input.window?.kind !== 'TRANSFER' && input.transferWindowId === undefined) ||
+      (input.window !== undefined && input.transferWindowId !== undefined)) {
+      context.addIssue({ code: 'custom', path: ['window'], message: 'normal purchase requires one transfer window' });
+    }
     for (const field of forcedFields) {
       if (input[field] !== undefined) {
         context.addIssue({ code: 'custom', path: [field], message: `${field} is only valid for a forced transfer` });
@@ -220,8 +292,11 @@ export type PlayerApplicationType = z.infer<typeof PlayerApplicationTypeSchema>;
 export type PlayerApplicationStatus = z.infer<typeof PlayerApplicationStatusSchema>;
 export type PlayerApplicationEventType = z.infer<typeof PlayerApplicationEventTypeSchema>;
 export type PlayerMarketAction = z.infer<typeof PlayerMarketActionSchema>;
+export type PlayerApplicationWindowReference = z.infer<typeof PlayerApplicationWindowReferenceSchema>;
 export type PlayerMarketTeamSummary = z.infer<typeof PlayerMarketTeamSummarySchema>;
 export type PlayerMarketCardSummary = z.infer<typeof PlayerMarketCardSummarySchema>;
+export type PlayerMarketSalaryDisplay = z.infer<typeof PlayerMarketSalaryDisplaySchema>;
+export type PlayerMarketSalaryImpact = z.infer<typeof PlayerMarketSalaryImpactSchema>;
 export type PlayerMarketPlayerSummary = z.infer<typeof PlayerMarketPlayerSummarySchema>;
 export type PlayerMarketQuery = z.infer<typeof PlayerMarketQuerySchema>;
 export type PlayerMarketListResponse = z.infer<typeof PlayerMarketListResponseSchema>;

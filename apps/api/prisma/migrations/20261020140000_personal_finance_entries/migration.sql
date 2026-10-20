@@ -1,0 +1,21 @@
+CREATE TABLE `personal_finance_entries` (
+  `id` CHAR(36) NOT NULL,
+  `user_id` CHAR(36) NOT NULL,
+  `league_id` CHAR(36) NOT NULL,
+  `league_team_id` CHAR(36) NOT NULL,
+  `season_id` CHAR(36) NOT NULL,
+  `direction` ENUM('DEBIT', 'CREDIT') NOT NULL,
+  `amount_minor` INT UNSIGNED NOT NULL,
+  `title` VARCHAR(80) NOT NULL,
+  `note` VARCHAR(300) NOT NULL DEFAULT '',
+  `occurred_on` DATE NOT NULL,
+  `version` INT UNSIGNED NOT NULL DEFAULT 1,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  INDEX `personal_finance_entries_scope_idx` (`user_id`, `league_team_id`, `season_id`, `occurred_on`, `id`),
+  CONSTRAINT `personal_finance_entries_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `personal_finance_entries_league_id_fkey` FOREIGN KEY (`league_id`) REFERENCES `leagues`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `personal_finance_entries_league_team_id_fkey` FOREIGN KEY (`league_team_id`) REFERENCES `league_teams`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `personal_finance_entries_season_id_fkey` FOREIGN KEY (`season_id`) REFERENCES `league_seasons`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

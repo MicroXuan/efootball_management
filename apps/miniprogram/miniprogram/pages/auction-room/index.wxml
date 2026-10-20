@@ -4,7 +4,7 @@
   <block wx:else>
     <view wx:if="{{reconnecting}}" class="reconnect-notice"><text>{{reconnectLabel || '正在重新连接'}}</text><text>保留最后状态，恢复后由服务端重新校时</text></view>
     <view class="room-head"><view><text class="room-kicker">{{room.league.name}}</text><text class="room-title">{{room.name}}</text></view><button class="share-button" open-type="share">分享拍卖</button></view>
-    <view class="identity-card"><text class="identity-label">当前出价球队</text><text class="identity-name">{{teamName}}</text><text class="identity-note">权限由已登录账号与联赛球队关系校验</text></view>
+    <view class="identity-card"><text class="identity-label">{{room.team ? '当前出价球队' : '当前身份'}}</text><text class="identity-name">{{teamName}}</text><text class="identity-note">{{room.team ? '出价权限由账号与联赛球队关系校验' : '可查看拍卖并分享，参赛球队才能出价'}}</text></view>
     <view wx:if="{{room.currentLot}}" class="lot-hero" bindtap="openPlayerCard" role="button" aria-label="查看{{room.currentLot.playerName}}球员详情">
       <view class="player-artwork"><entity-artwork src="{{room.currentLot.card.imageUrl}}" fallback="{{playerFallback}}" shape="portrait" surface="dark" /></view>
       <view class="player-summary"><text class="lot-order">第 {{room.currentLot.displayOrder}} 位 · {{room.currentLot.card.cardName}}</text><text class="lot-player">{{room.currentLot.playerName}}</text><text class="card-meta">{{room.currentLot.card.overallRating}} · {{room.currentLot.card.position}} · 查看详情 ›</text><view class="countdown"><text class="countdown-value">{{countdown}}</text><text class="countdown-unit">秒</text></view></view>
@@ -15,7 +15,7 @@
       <text wx:if="{{!bidRows.length}}" class="empty-copy">尚无有效出价</text>
       <scroll-view wx:else class="bid-history-scroll" scroll-y enhanced show-scrollbar="{{false}}"><view wx:for="{{bidRows}}" wx:key="id" class="bid-row"><view class="bid-identity"><text>{{item.identity}}</text><text class="bid-time">{{item.timeLabel}}</text></view><view class="bid-amount"><text>{{item.amount}}</text><text>资金</text></view></view></scroll-view>
     </view>
-    <view wx:if="{{room.currentLot}}" class="bid-dock">
+    <view wx:if="{{room.currentLot && room.team}}" class="bid-dock">
       <view class="bid-minimum"><text>本次最低有效价</text><text class="bid-minimum__price">{{room.minimumValidPrice}}</text></view>
       <view class="amount-field"><input class="amount-input" aria-label="出价金额" type="number" value="{{amount}}" bindinput="onAmountInput" placeholder="输入整数金额" disabled="{{!room.canBid || reconnecting}}" /><text class="fund-label">资金</text></view>
       <text class="amount-hint {{canSubmit ? 'is-valid' : ''}}">{{amountHint}}</text>
@@ -23,6 +23,7 @@
       <button class="bid-button" bindtap="submitBid" loading="{{submitting}}" disabled="{{!canSubmit}}">确认出价</button><text wx:if="{{feedback}}" class="bid-feedback">{{feedback}}</text>
     </view>
     <view class="queue-card"><text class="section-title">后续球员</text><text wx:if="{{!upcoming.length}}" class="empty-copy">没有等待中的球员</text><view wx:for="{{upcoming}}" wx:key="id" class="queue-row"><text>{{item.displayOrder}} · {{item.playerName}}</text><text>{{item.startingPrice}} 资金起</text></view></view>
-    <view wx:if="{{completed.length}}" class="queue-card"><text class="section-title">已结束</text><view wx:for="{{completed}}" wx:key="id" class="queue-row"><text>{{item.displayOrder}} · {{item.playerName}}</text><text>{{item.status}}</text></view></view>
+    <view wx:if="{{completed.length}}" class="queue-card"><text class="section-title">已结束</text><view wx:for="{{completed}}" wx:key="id" class="queue-row sale-row"><view><text class="sale-row__player">{{item.displayOrder}} · {{item.playerName}}</text><text wx:if="{{item.winnerLabel}}" class="sale-row__winner">{{item.winnerLabel}}</text></view><view class="sale-row__result"><text>{{item.resultLabel}}</text><text wx:if="{{item.priceLabel}}">{{item.priceLabel}}</text></view></view></view>
+    <button class="room-home-button" bindtap="openHome">返回小程序首页</button>
   </block>
 </view>

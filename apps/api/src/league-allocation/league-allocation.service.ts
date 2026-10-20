@@ -92,7 +92,19 @@ export class LeagueAllocationService {
           seasonEntryId: entry.id,
           teamName: entry.teamNameSnapshot
         }));
-        const suggestions = season.isFirstSeason
+        const suggestions = input.mode === 'MANUAL'
+          ? entries.map((entry) => ({
+            ...entry,
+            stageCode: 'CHAMPION_A',
+            source: 'NEW_ENTRY' as const,
+            previousRank: null,
+            pointsPerMatch: null,
+            goalDifferencePerMatch: null,
+            goalsForPerMatch: null,
+            tiePending: false,
+            reason: '管理员手动分组，待指定最终组别'
+          }))
+          : season.isFirstSeason
           ? buildFirstSeasonAllocation({
             entries,
             championCapacity: season.championCapacity,
@@ -120,7 +132,7 @@ export class LeagueAllocationService {
           data: {
             seasonId,
             version: (previous?.version ?? 0) + 1,
-            algorithmVersion: ALGORITHM_VERSION,
+            algorithmVersion: input.mode === 'MANUAL' ? 'manual-v1' : ALGORITHM_VERSION,
             randomSeed: input.randomSeed,
             createdByAdminId: actorAdminId,
             inputSummary: {
@@ -157,6 +169,7 @@ export class LeagueAllocationService {
             seasonId,
             proposalVersion: proposal.version,
             randomSeed: proposal.randomSeed,
+            mode: input.mode,
             approvedEntryCount: season.entries.length
           }
         });

@@ -1,0 +1,18 @@
+<view class="page-shell">
+  <view class="heading"><text class="kicker">球队交易</text><text class="title">协商转会</text><text class="intro">双方确认报价后，管理员审核通过才会转移球员并记账。</text></view>
+  <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
+  <loading-state wx:if="{{state === 'loading'}}" label="正在加载转会申请" />
+  <view wx:elif="{{state === 'error'}}" class="empty"><text>加载失败</text><button class="efm-retry-button" bindtap="load">重试</button></view>
+  <view wx:elif="{{!items.length}}" class="empty">暂无协商转会申请</view>
+  <view wx:else class="proposal-list">
+    <view class="proposal" wx:for="{{items}}" wx:key="id">
+      <view class="proposal-top"><text class="player">{{item.playerName}}</text><text class="status">{{item.statusCopy}}</text></view>
+      <text class="teams">{{item.sourceTeamNumber}}号 {{item.sourceTeamName}} → {{item.targetTeamNumber}}号 {{item.targetTeamName}}</text>
+      <text class="amount">约定报价 {{item.amountMinor}}</text>
+      <text wx:if="{{item.reason}}" class="reason">备注：{{item.reason}}</text>
+      <text wx:if="{{item.reviewReason}}" class="reason">审核：{{item.reviewReason}}</text>
+      <view wx:if="{{item.canRespond}}" class="actions"><button class="approve" data-id="{{item.id}}" data-decision="CONFIRM" bindtap="respond" disabled="{{!!busyId}}">确认报价</button><button data-id="{{item.id}}" data-decision="REJECT" bindtap="respond" disabled="{{!!busyId}}">驳回</button></view>
+      <view wx:if="{{item.canWithdraw}}" class="actions"><button data-id="{{item.id}}" data-decision="WITHDRAW" bindtap="respond" disabled="{{!!busyId}}">撤回申请</button></view>
+    </view>
+  </view>
+</view>

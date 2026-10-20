@@ -29,7 +29,11 @@ import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 import { z } from 'zod';
 
 const RosterQuerySchema = z.object({ seasonId: ResourceIdSchema });
-const LedgerQuerySchema = z.object({ teamId: ResourceIdSchema.optional() });
+const LedgerQuerySchema = z.object({
+  teamId: ResourceIdSchema.optional(),
+  cursor: ResourceIdSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30)
+});
 
 @Controller('admin/roster')
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
@@ -64,7 +68,7 @@ export class AdminRostersController {
     @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
     @Query(new ZodValidationPipe(LedgerQuerySchema)) query: z.output<typeof LedgerQuerySchema>
   ) {
-    return this.queries.ledger(leagueId, query.teamId);
+    return this.queries.ledger(leagueId, query.teamId, query.cursor, query.limit);
   }
 
   @Post('acquisitions')

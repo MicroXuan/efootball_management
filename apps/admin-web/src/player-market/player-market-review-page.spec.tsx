@@ -15,20 +15,17 @@ const base = {
   events: [{ id: id(8), type: 'AMOUNT_CHANGED', fromStatus: 'PENDING', toStatus: 'PENDING', fromAmountMinor: 1000, toAmountMinor: 1200, actorType: 'USER', actorDisplayName: '小宣', reason: null, createdAt: '2026-10-14T12:02:00.000Z' }]
 } as const;
 
-it('filters queues, shows the public timeline, and submits a versioned review', async () => {
-  const forced = { ...base, id: id(9), type: 'FORCED_TRANSFER', queuePosition: 1, sourceTeam: { teamId: id(10), teamNumber: 8, name: '成都蓉城', logoUrl: null, ownerAlias: 'Jeremy' }, ownershipId: id(11), ownershipVersionSnapshot: 2 };
+it('shows the normal purchase queue and submits a versioned review', async () => {
   const request = vi.fn()
-    .mockResolvedValueOnce({ items: [base, forced], nextCursor: null })
+    .mockResolvedValueOnce({ items: [base], nextCursor: null })
     .mockResolvedValueOnce({ applicationId: base.id, status: 'APPROVED', transactionId: id(30), transactionType: 'BUY', ownershipId: id(31) })
-    .mockResolvedValueOnce({ items: [forced], nextCursor: null });
+    .mockResolvedValueOnce({ items: [], nextCursor: null });
   const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
   render(<MemoryRouter initialEntries={[`/leagues/${id(2)}/player-market?seasonId=${id(3)}`]}><Routes><Route path="/leagues/:leagueId/player-market" element={<PlayerMarketReviewPage api={api} />} /></Routes></MemoryRouter>);
 
   expect(await screen.findByText('迪格雷戈里奥')).toBeInTheDocument();
   expect(screen.getByText(/1,000.*1,200/)).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('tab', { name: '强报队列' }));
-  expect(screen.getByText(/强报自 成都蓉城/)).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('tab', { name: '普通购买' }));
+  expect(screen.getByText('普通购买')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '通过申请' }));
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByRole('button', { name: '确认通过' })).toBeDisabled();
@@ -39,6 +36,7 @@ it('filters queues, shows the public timeline, and submits a versioned review', 
     method: 'POST', headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }), body: { expectedVersion: 3, reason: '资料完整' }
   }));
   expect(request).toHaveBeenCalledTimes(3);
+  expect(request).toHaveBeenNthCalledWith(1, expect.stringContaining('type=NORMAL_PURCHASE'), expect.anything());
 });
 
 it('disables review actions behind the forced-transfer queue head', async () => {
@@ -46,8 +44,9 @@ it('disables review actions behind the forced-transfer queue head', async () => 
   const head = { ...queued, id: id(19), queuePosition: 1, firstValidSubmittedAt: '2026-10-14T12:00:00.000Z' };
   const request = vi.fn().mockResolvedValue({ items: [queued, head], nextCursor: null });
   const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
-  render(<MemoryRouter initialEntries={[`/leagues/${id(2)}/player-market?seasonId=${id(3)}`]}><Routes><Route path="/leagues/:leagueId/player-market" element={<PlayerMarketReviewPage api={api} />} /></Routes></MemoryRouter>);
-  await userEvent.click(await screen.findByRole('tab', { name: '强报队列' }));
+  render(<MemoryRouter initialEntries={[`/leagues/${id(2)}/forced-player-market?seasonId=${id(3)}`]}><Routes><Route path="/leagues/:leagueId/forced-player-market" element={<PlayerMarketReviewPage api={api} />} /></Routes></MemoryRouter>);
+  expect(await screen.findAllByText(/强报自 成都蓉城/)).toHaveLength(2);
+  expect(request).toHaveBeenCalledWith(expect.stringContaining('type=FORCED_TRANSFER'), expect.anything());
   const buttons = screen.getAllByRole('button', { name: '通过申请' });
   expect(buttons[0]).toBeEnabled();
   expect(buttons[1]).toBeDisabled();

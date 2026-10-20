@@ -23,15 +23,21 @@ const AllocationPage = lazy(() => import('./leagues/allocation-page').then((modu
 const CupsPage = lazy(() => import('./leagues/cups-page').then((module) => ({ default: module.CupsPage })));
 const SalaryRulesPage = lazy(() => import('./leagues/salary-rules-page').then((module) => ({ default: module.SalaryRulesPage })));
 const TransferWindowsPage = lazy(() => import('./leagues/transfer-windows-page').then((module) => ({ default: module.TransferWindowsPage })));
+const ForcedOfferWindowsPage = lazy(() => import('./leagues/forced-offer-windows-page').then((module) => ({ default: module.ForcedOfferWindowsPage })));
+const SeasonCalendarPage = lazy(() => import('./leagues/season-calendar-page').then((module) => ({ default: module.SeasonCalendarPage })));
 const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => ({ default: module.RosterPage })));
 const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
 const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
+const NominationWindowsPage = lazy(() => import('./leagues/nomination-windows-page').then((module) => ({ default: module.NominationWindowsPage })));
 const ValuationReviewsPage = lazy(() => import('./valuations/valuation-reviews-page').then((module) => ({ default: module.ValuationReviewsPage })));
 const WechatBotPage = lazy(() => import('./leagues/wechat-bot-page').then((module) => ({ default: module.WechatBotPage })));
 const AuctionListPage = lazy(() => import('./auctions/auction-list-page').then((module) => ({ default: module.AuctionListPage })));
 const AuctionEditorPage = lazy(() => import('./auctions/auction-editor-page').then((module) => ({ default: module.AuctionEditorPage })));
 const AuctionDetailPage = lazy(() => import('./auctions/auction-detail-page').then((module) => ({ default: module.AuctionDetailPage })));
+const NominationShortlistPage = lazy(() => import('./auctions/nomination-shortlist-page').then((module) => ({ default: module.NominationShortlistPage })));
 const PlayerMarketReviewPage = lazy(() => import('./player-market/player-market-review-page').then((module) => ({ default: module.PlayerMarketReviewPage })));
+const DisappearanceReviewPage = lazy(() => import('./rosters/disappearance-review-page').then((module) => ({ default: module.DisappearanceReviewPage })));
+const TransferProposalsPage = lazy(() => import('./rosters/transfer-proposals-page').then((module) => ({ default: module.TransferProposalsPage })));
 
 function DefaultRoute() {
   const { identity } = useAdminSession();
@@ -73,10 +79,17 @@ export function App() {
               <Route path="teams/:teamId/roster" element={deferred(<RosterPage api={adminApi} />)} />
               <Route path="salary-rules" element={deferred(<SalaryRulesPage api={adminApi} />)} />
               <Route path="transfer-windows" element={deferred(<TransferWindowsPage api={adminApi} />)} />
+              <Route path="forced-offer-windows" element={deferred(<ForcedOfferWindowsPage api={adminApi} />)} />
+              <Route path="season-calendar" element={deferred(<SeasonCalendarPage api={adminApi} />)} />
               <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
               <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
+              <Route path="nomination-windows" element={deferred(<NominationWindowsPage api={adminApi} />)} />
+              <Route path="nomination-windows/:windowId/candidates" element={deferred(<NominationShortlistPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
               <Route path="player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
+              <Route path="forced-player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
+              <Route path="disappearance-requests" element={deferred(<DisappearanceReviewPage api={adminApi} />)} />
+              <Route path="transfer-proposals" element={deferred(<TransferProposalsPage api={adminApi} />)} />
               <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />
               <Route path="auctions" element={deferred(<AuctionListPage api={adminApi} />)} />
               <Route path="auctions/new" element={deferred(<AuctionEditorPage api={adminApi} />)} />

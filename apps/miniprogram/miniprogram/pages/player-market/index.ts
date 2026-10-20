@@ -22,7 +22,7 @@ type PickerEvent = { detail: { value: string } }
 const viewLabels = [
   { key: 'players', label: '找球员' },
   { key: 'public', label: '公开申请' },
-  { key: 'announcements', label: '成交公告' },
+  { key: 'announcements', label: '转会新闻' },
   { key: 'mine', label: '我的申请' },
 ] as const
 const positions = [
@@ -45,6 +45,7 @@ Page({
     applications: [] as ReturnType<typeof applicationCard>[],
     announcements: [] as ReturnType<typeof announcementCard>[],
     nextPlayerCursor: null as string | null,
+    nextAnnouncementCursor: null as string | null,
     loadingMore: false,
     showBackToTop: false,
   },
@@ -67,7 +68,12 @@ Page({
   },
 
   onReachBottom() {
-    if (this.data.view !== 'players' || this.data.loadingMore || !this.data.nextPlayerCursor) return
+    if (this.data.loadingMore) return
+    if (this.data.view === 'announcements' && this.data.nextAnnouncementCursor) {
+      void this.loadView(false, 'append')
+      return
+    }
+    if (this.data.view !== 'players' || !this.data.nextPlayerCursor) return
     void this.loadView(false, 'append')
   },
 
@@ -108,7 +114,7 @@ Page({
 
   async loadView(showLoading = true, mode: 'replace' | 'append' = 'replace') {
     if (mode === 'append') this.setData({ loadingMore: true, errorMessage: '' })
-    else if (showLoading) this.setData({ state: 'loading', errorMessage: '', nextPlayerCursor: null })
+    else if (showLoading) this.setData({ state: 'loading', errorMessage: '', nextPlayerCursor: null, nextAnnouncementCursor: null })
     try {
       let count = 0
       if (this.data.view === 'players') {
@@ -130,10 +136,14 @@ Page({
         count = players.length
         this.setData({ players, nextPlayerCursor: result.nextCursor })
       } else if (this.data.view === 'announcements') {
-        const result = await listPlayerMarketAnnouncements(this.data.leagueId, { seasonId: this.data.seasonId, limit: 60 })
-        const announcements = result.items.map(announcementCard)
+        const result = await listPlayerMarketAnnouncements(this.data.leagueId, {
+          seasonId: this.data.seasonId, cursor: mode === 'append' ? this.data.nextAnnouncementCursor ?? undefined : undefined, limit: 30,
+        })
+        const existing = mode === 'append' ? this.data.announcements : []
+        const seen = new Set(existing.map((item) => item.id))
+        const announcements = [...existing, ...result.items.map(announcementCard).filter((item) => !seen.has(item.id) && Boolean(seen.add(item.id)))]
         count = announcements.length
-        this.setData({ announcements })
+        this.setData({ announcements, nextAnnouncementCursor: result.nextCursor })
       } else {
         const result = await listPlayerApplications(this.data.leagueId, {
           seasonId: this.data.seasonId, scope: this.data.view === 'mine' ? 'MINE' : 'PUBLIC', limit: 60,

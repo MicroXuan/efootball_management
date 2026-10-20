@@ -11,10 +11,12 @@ import { LeagueRosterError } from './league-roster.errors.js';
 import { RosterLockRepository } from './roster-lock.repository.js';
 import { SalaryRulesService } from './salary-rules.service.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { TeamSalaryCapService } from './team-salary-cap.service.js';
 
 @Injectable()
 export class SalaryRecalculationService {
   private readonly visibility: LeagueVisibilityService;
+  private readonly teamSalaryCaps: TeamSalaryCapService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -23,9 +25,11 @@ export class SalaryRecalculationService {
     @Inject(AuditLogService) private readonly audit: AuditLogService,
     @Inject(SalaryRulesService) private readonly salaryRules: SalaryRulesService,
     @Inject(RosterLockRepository) private readonly locks: RosterLockRepository,
-    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
+    @Optional() @Inject(TeamSalaryCapService) teamSalaryCaps?: TeamSalaryCapService
   ) {
     this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+    this.teamSalaryCaps = teamSalaryCaps ?? new TeamSalaryCapService();
   }
 
   async recalculateLeague(
@@ -103,7 +107,8 @@ export class SalaryRecalculationService {
         const teamResults = [];
         for (const team of teams) {
           const salaryMinor = totals.get(team.id) ?? 0;
-          const rosterStatus = salaryMinor > rule.salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT';
+          const salaryCapMinor = await this.teamSalaryCaps.readWithClient(tx, team.id) ?? 0;
+          const rosterStatus = salaryMinor > salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT';
           await tx.leagueTeam.update({
             where: { id: team.id },
             data: { rosterStatus, version: { increment: 1 } }

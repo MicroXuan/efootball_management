@@ -103,9 +103,27 @@ describe('MyPlayerAuctionsService', () => {
     expect(JSON.stringify(room)).not.toContain('bid-failed');
   });
 
-  it('denies room access after the league team becomes inactive', async () => {
+  it('lets an authenticated non-bidder view and share the room without bid permission', async () => {
     const { service } = harness('ARCHIVED');
-    await expect(service.detail('user-1', 'batch-1')).rejects.toMatchObject({ code: 'NO_ACTIVE_TEAM' });
+    await expect(service.detail('user-1', 'batch-1')).resolves.toMatchObject({
+      batchId: 'batch-1', team: null, canBid: false,
+      sharePath: '/pages/auction-room/index?batchId=batch-1'
+    });
+  });
+
+  it('publishes the winning bidder as soon as a lot closes', async () => {
+    const { service, batch } = harness();
+    batch.currentLotId = null;
+    batch.status = 'COMPLETED';
+    batch.lots[0].status = 'PENDING_REVIEW';
+    batch.lots[0].currentPrice = 130;
+    batch.lots[0].currentHighestBid = batch.lots[0].bids[1];
+    batch.lots[0].review = null;
+    const room = await service.detail('user-1', 'batch-1');
+    expect(room.queue[0]).toMatchObject({
+      status: 'PENDING_REVIEW',
+      winner: { teamNumber: 2, teamName: '海港', bidderDisplayName: '小新', price: 130 }
+    });
   });
 
   it('delegates bids with only authenticated user, batch, request, and idempotency key', async () => {

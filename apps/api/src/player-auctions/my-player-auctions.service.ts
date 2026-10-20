@@ -15,6 +15,13 @@ const ROOM_INCLUDE = {
   league: { select: { id: true, name: true } },
   lots: {
     include: {
+      currentHighestBid: {
+        include: {
+          leagueTeam: { select: { teamNumber: true, name: true } },
+          user: { select: { displayName: true } }
+        }
+      },
+      review: true,
       bids: {
         where: { result: 'VALID' as const },
         include: {
@@ -81,7 +88,6 @@ export class MyPlayerAuctionsService {
     const team = await this.prisma.leagueTeam.findFirst({
       where: { ownerUserId: userId, leagueId: batch.leagueId, status: 'ACTIVE' }
     });
-    if (!team) throw new PlayerAuctionError('NO_ACTIVE_TEAM', '没有当前联赛的有效球队', 403);
     const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
     const serverNow = rows[0]?.databaseNow;
     if (!serverNow) throw new Error('DATABASE_TIME_UNAVAILABLE');
@@ -93,8 +99,8 @@ export class MyPlayerAuctionsService {
       bidChannel: 'MINIPROGRAM' as const,
       serverNow: serverNow.toISOString(),
       league: batch.league,
-      team: { id: team.id, name: team.name },
-      canBid: batch.status === 'ACTIVE' && current?.status === 'ACTIVE',
+      team: team ? { id: team.id, name: team.name } : null,
+      canBid: Boolean(team && batch.status === 'ACTIVE' && current?.status === 'ACTIVE'),
       minimumValidPrice: current
         ? current.currentPrice === null
           ? current.startingPrice
@@ -203,6 +209,17 @@ export class MyPlayerAuctionsService {
     currentPrice: number | null;
     deadlineAt: Date | null;
     deadlineEpoch: number;
+    currentHighestBid: {
+      leagueTeam: { teamNumber: number | null; name: string } | null;
+      user: { displayName: string } | null;
+    } | null;
+    review: {
+      decision: string;
+      winnerTeamNumberSnapshot: number | null;
+      winnerTeamNameSnapshot: string | null;
+      winnerDisplayNameSnapshot: string | null;
+      reviewedPrice: number | null;
+    } | null;
     bids: Array<{
       id: string;
       amount: number;
@@ -212,6 +229,15 @@ export class MyPlayerAuctionsService {
       user: { displayName: string } | null;
     }>;
   }, includeBids: boolean) {
+    const closed = ['PENDING_REVIEW', 'REVIEWED'].includes(lot.status);
+    const reviewed = lot.status === 'REVIEWED' ? lot.review : null;
+    const winningTeam = reviewed
+      ? reviewed.winnerTeamNameSnapshot && reviewed.winnerDisplayNameSnapshot && reviewed.reviewedPrice
+        ? { teamNumber: reviewed.winnerTeamNumberSnapshot, teamName: reviewed.winnerTeamNameSnapshot, bidderDisplayName: reviewed.winnerDisplayNameSnapshot, price: reviewed.reviewedPrice }
+        : null
+      : lot.currentHighestBid?.leagueTeam && lot.currentHighestBid.user && lot.currentPrice
+        ? { teamNumber: lot.currentHighestBid.leagueTeam.teamNumber, teamName: lot.currentHighestBid.leagueTeam.name, bidderDisplayName: lot.currentHighestBid.user.displayName, price: lot.currentPrice }
+        : null;
     return {
       id: lot.id,
       displayOrder: lot.displayOrder,
@@ -222,6 +248,7 @@ export class MyPlayerAuctionsService {
       minimumIncrement: lot.minimumIncrement,
       status: lot.status,
       currentPrice: lot.currentPrice,
+      winner: closed ? winningTeam : null,
       deadlineAt: lot.deadlineAt?.toISOString() ?? null,
       deadlineEpoch: lot.deadlineEpoch,
       ...(includeBids ? {

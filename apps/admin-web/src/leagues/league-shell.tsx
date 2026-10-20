@@ -1,33 +1,58 @@
 import { Alert, Tabs } from 'antd';
+import { useLayoutEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { useAdminSession } from '../auth/admin-session';
 import { featureFlags } from '../config/features';
 import { AdminIcon } from '../design-system/icons';
+import { leagueNavigationItems, resolveLeagueNavigation } from './league-navigation';
+
+const groupIcons = {
+  teams: 'teams', seasons: 'seasons', allocation: 'allocation', cups: 'cup',
+  windows: 'transfer', reviews: 'review', 'salary-rules': 'salary', finance: 'finance', auctions: 'review', more: 'bot',
+} as const;
 
 export function LeagueShell() {
   const { leagueId = '' } = useParams();
   const location = useLocation();
   const { identity } = useAdminSession();
   const grant = identity?.leagueGrants.find((item) => item.leagueId === leagueId);
+  const active = resolveLeagueNavigation(location.pathname);
+  const items = leagueNavigationItems(leagueId, featureFlags.wechatBot);
+  const selectedGroup = items.find(({ key }) => key === active.topKey);
+  const groupNavRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const revealSelected = () => {
+      const nav = groupNavRef.current;
+      const selected = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!nav || !selected) return;
+      const navBounds = nav.getBoundingClientRect();
+      const selectedBounds = selected.getBoundingClientRect();
+      if (selectedBounds.left < navBounds.left) nav.scrollLeft += selectedBounds.left - navBounds.left - 8;
+      else if (selectedBounds.right > navBounds.right) nav.scrollLeft += selectedBounds.right - navBounds.right + 8;
+    };
+    revealSelected();
+    window.addEventListener('resize', revealSelected);
+    return () => window.removeEventListener('resize', revealSelected);
+  }, [location.pathname, identity]);
   if (!identity?.platformAdmin && !grant) return <Alert showIcon type="error" title="你没有此联赛的管理权限" />;
-  const activeKey = location.pathname.includes('/player-market') ? 'player-market' : location.pathname.includes('/auctions') ? 'auctions' : location.pathname.includes('/wechat-bot') ? 'wechat-bot' : location.pathname.includes('/cups') ? 'cups' : location.pathname.includes('/allocation') ? 'allocation' : location.pathname.includes('/valuation-reviews') ? 'valuation-reviews' : location.pathname.includes('/valuation-windows') ? 'valuation-windows' : location.pathname.includes('/seasons') ? 'seasons' : location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams';
   return <div className="league-workspace">
     <div className="page-heading">
       <div className="league-heading-copy"><span className="section-kicker">联赛工作区</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1><p>管理球队、赛季、赛果与联赛规则。</p></div>
-      <nav className="league-heading-nav" aria-label="联赛工作区导航"><Tabs activeKey={activeKey} items={[
-        { key: 'teams', label: <Link aria-current={activeKey === 'teams' ? 'page' : undefined} to={`/leagues/${leagueId}/teams`}><AdminIcon name="teams" />用户与球队</Link> },
-        { key: 'seasons', label: <Link aria-current={activeKey === 'seasons' ? 'page' : undefined} to={`/leagues/${leagueId}/seasons`}><AdminIcon name="seasons" />赛季管理</Link> },
-        { key: 'allocation', label: <Link aria-current={activeKey === 'allocation' ? 'page' : undefined} to={`/leagues/${leagueId}/allocation`}><AdminIcon name="allocation" />分组与赛程</Link> },
-        { key: 'cups', label: <Link aria-current={activeKey === 'cups' ? 'page' : undefined} to={`/leagues/${leagueId}/cups`}><AdminIcon name="cup" />杯赛中心</Link> },
-        { key: 'salary', label: <Link aria-current={activeKey === 'salary' ? 'page' : undefined} to={`/leagues/${leagueId}/salary-rules`}><AdminIcon name="salary" />工资规则</Link> },
-        { key: 'windows', label: <Link aria-current={activeKey === 'windows' ? 'page' : undefined} to={`/leagues/${leagueId}/transfer-windows`}><AdminIcon name="transfer" />转会窗口</Link> },
-        { key: 'valuation-windows', label: <Link aria-current={activeKey === 'valuation-windows' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-windows`}><AdminIcon name="valuation" />身价窗口</Link> },
-        { key: 'valuation-reviews', label: <Link aria-current={activeKey === 'valuation-reviews' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-reviews`}><AdminIcon name="review" />身价审核</Link> },
-        { key: 'player-market', label: <Link aria-current={activeKey === 'player-market' ? 'page' : undefined} to={`/leagues/${leagueId}/player-market`}><AdminIcon name="market" />球员申请</Link> },
-        { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}><AdminIcon name="finance" />财务与交易</Link> },
-        { key: 'auctions', label: <Link aria-current={activeKey === 'auctions' ? 'page' : undefined} to={`/leagues/${leagueId}/auctions`}><AdminIcon name="review" />球员拍卖</Link> },
-        ...(featureFlags.wechatBot ? [{ key: 'wechat-bot', label: <Link aria-current={activeKey === 'wechat-bot' ? 'page' : undefined} to={`/leagues/${leagueId}/wechat-bot`}><AdminIcon name="bot" />微信群机器人</Link> }] : [])
-      ]} /></nav>
+      <nav className="league-heading-nav league-heading-nav--bounded" aria-label="联赛工作区导航">
+        <Tabs activeKey={active.topKey} items={items.map((item) => ({
+          key: item.key,
+          label: <Link aria-current={active.topKey === item.key ? 'page' : undefined} to={item.path}>
+            <AdminIcon name={groupIcons[item.key as keyof typeof groupIcons]} />{item.label}
+          </Link>,
+        }))} />
+      </nav>
+      {selectedGroup?.children && <nav ref={groupNavRef} className="league-group-nav league-group-nav--bounded" aria-label="联赛分组导航">
+        {selectedGroup.children.map((child) => <Link
+          key={child.key}
+          aria-current={active.childKey === child.key ? 'page' : undefined}
+          to={child.path}
+        >{child.label}</Link>)}
+      </nav>}
     </div>
     <Outlet />
   </div>;

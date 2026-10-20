@@ -26,6 +26,7 @@ const lot = (overrides: Partial<NonNullable<MyPlayerAuctionRoom['currentLot']>> 
   minimumIncrement: 10,
   status: 'ACTIVE' as const,
   currentPrice: 110,
+  winner: null,
   deadlineAt: '2026-10-10T12:00:30.000Z',
   deadlineEpoch: 4,
   bids: [],
@@ -125,9 +126,19 @@ describe('auction room view model', () => {
       queueLot({ id: '66666666-6666-4666-8666-666666666666', status: 'PENDING_REVIEW' }),
       queueLot({ id: '77777777-7777-4777-8777-777777777777', status: 'NO_BID' }),
     ]
-    expect(projectAuctionQueue(queue)).toEqual({
+    expect(projectAuctionQueue(queue)).toMatchObject({
       upcoming: [queue[0]],
       completed: [queue[1], queue[2]],
+    })
+  })
+
+  it('shows an immediate sale with full winner identity and price', () => {
+    const queue = [queueLot({
+      status: 'PENDING_REVIEW',
+      winner: { teamNumber: 1, teamName: '阿哈尔', bidderDisplayName: '小宣', price: 210 },
+    })]
+    expect(projectAuctionQueue(queue).completed[0]).toMatchObject({
+      resultLabel: '已成交', winnerLabel: '1号 · 阿哈尔 · 小宣', priceLabel: '210 资金',
     })
   })
 })

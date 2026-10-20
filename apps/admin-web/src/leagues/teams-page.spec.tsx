@@ -25,6 +25,7 @@ const baseTeam: LeagueTeamSummary = {
   activePlayerCount: 20,
   salaryTotalMinor: 12_000,
   salaryCapMinor: 20_000,
+  salaryCapConfirmed: true,
   shellValueMinor: 8_000,
   version: 1,
   createdAt: '2026-09-01T00:00:00.000Z',
@@ -116,6 +117,11 @@ describe('league teams page', () => {
     expect(screen.queryByRole('link', { name: '管理阵容' })).not.toBeInTheDocument();
   });
 
+  it('flags legacy teams whose salary cap still needs administrator confirmation', async () => {
+    renderPage(mockRoutes({ teams: [{ ...baseTeam, salaryCapMinor: 0, salaryCapConfirmed: false }] }));
+    expect(await screen.findByText('待管理员确认')).toBeInTheDocument();
+  });
+
   it('keeps PESDATA synchronization out of the league workspace', async () => {
     const request = mockRoutes();
     renderPage(request);
@@ -204,6 +210,7 @@ describe('league teams page', () => {
     await userEvent.type(screen.getByLabelText('用户编号'), '000123');
     await userEvent.type(screen.getByLabelText('球队编号'), '8');
     await userEvent.type(screen.getByLabelText('联赛称呼'), 'tidus');
+    await userEvent.type(screen.getByLabelText('工资帽'), '14000');
     await userEvent.click(screen.getByRole('button', { name: '选择阿贾克斯' }));
 
     const createButton = screen.getByRole('button', { name: '创建球队' });
@@ -213,7 +220,7 @@ describe('league teams page', () => {
     expect(await screen.findByText('请先查找并确认用户')).toBeInTheDocument();
   });
 
-  it('submits only the owner, alias, number, and selected shell and reports duplicate numbers', async () => {
+  it('requires a team salary cap and reports duplicate numbers', async () => {
     const request = mockRoutes({
       catalog: [ajaxCatalogItem],
       createErrors: [new ApiError({ status: 409, code: 'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS' })]
@@ -225,13 +232,14 @@ describe('league teams page', () => {
     await screen.findByText('小宣');
     await userEvent.type(screen.getByLabelText('球队编号'), '0');
     await userEvent.type(screen.getByLabelText('联赛称呼'), 'tidus');
+    await userEvent.type(screen.getByLabelText('工资帽'), '14000');
     await userEvent.click(screen.getByRole('button', { name: '选择阿贾克斯' }));
     await userEvent.click(screen.getByRole('button', { name: '创建球队' }));
 
     expect(await screen.findByText('球队编号已被占用，请选择其他编号')).toBeInTheDocument();
     expect(request).toHaveBeenLastCalledWith(`/v1/admin/leagues/${leagueId}/teams`, expect.objectContaining({
       method: 'POST',
-      body: { ownerUserId: userId, ownerAlias: 'tidus', teamNumber: 0, catalogTeamId: baseTeam.catalogTeamId }
+      body: { ownerUserId: userId, ownerAlias: 'tidus', teamNumber: 0, catalogTeamId: baseTeam.catalogTeamId, salaryCapMinor: 14000 }
     }));
     expect(request.mock.calls.at(-1)?.[1]?.body).not.toHaveProperty('defaultGameAccountId');
   });
@@ -248,6 +256,7 @@ describe('league teams page', () => {
     await screen.findByText('小宣');
     await userEvent.type(screen.getByLabelText('球队编号'), '8');
     await userEvent.type(screen.getByLabelText('联赛称呼'), '测试');
+    await userEvent.type(screen.getByLabelText('工资帽'), '14000');
     await userEvent.click(screen.getByRole('button', { name: '选择阿贾克斯' }));
     await userEvent.click(screen.getByRole('button', { name: '创建球队' }));
 
@@ -275,6 +284,7 @@ describe('league teams page', () => {
     await screen.findByText('小宣');
     await userEvent.type(screen.getByLabelText('球队编号'), '7');
     await userEvent.type(screen.getByLabelText('联赛称呼'), 'tidus');
+    await userEvent.type(screen.getByLabelText('工资帽'), '14000');
     await userEvent.click(screen.getByRole('button', { name: '选择阿贾克斯' }));
 
     await userEvent.click(screen.getByRole('button', { name: '创建球队' }));

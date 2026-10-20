@@ -17,6 +17,7 @@ export async function expireClosedPlayerApplications(
       footballPlayerId: input.footballPlayerId,
       ...(input.excludeApplicationId ? { id: { not: input.excludeApplicationId } } : {}),
       status: { in: ['PENDING', 'REQUOTE_REQUIRED'] },
+      type: 'NORMAL_PURCHASE',
       transferWindow: { endsAt: { lte: input.at } }
     },
     select: { id: true, status: true, amountMinor: true },

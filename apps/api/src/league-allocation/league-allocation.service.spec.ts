@@ -194,6 +194,25 @@ function confirmationHarness(options: { published?: boolean; seasonVersion?: num
 }
 
 describe('LeagueAllocationService', () => {
+  it('creates a manual allocation draft without requiring previous standings', async () => {
+    const { service, transaction } = harness({
+      isFirstSeason: false,
+      previousSeasonId: null,
+      entries: approvedEntries(2)
+    });
+
+    const result = await service.generate('admin-1', 'league-1', 'season-1', {
+      expectedSeasonVersion: 3, randomSeed: 1, mode: 'MANUAL'
+    }, 'manual-allocation');
+
+    expect(result.algorithmVersion).toBe('manual-v1');
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.every((row) => row.suggestedStageCode === 'CHAMPION_A')).toBe(true);
+    expect(transaction.seasonAllocationProposal.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ algorithmVersion: 'manual-v1' })
+    }));
+  });
+
   it('uses only approved entries from active teams and never creates a super group for the first season', async () => {
     const { service, transaction } = harness();
 

@@ -1,10 +1,14 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   CreatePlayerFavoriteRequestSchema,
+  CreatePlayerFavoriteGroupRequestSchema,
+  MovePlayerFavoriteRequestSchema,
   PlayerFavoriteListQuerySchema,
   PlayerFavoriteStatusQuerySchema,
   ResourceIdSchema,
   type CreatePlayerFavoriteRequest,
+  type CreatePlayerFavoriteGroupRequest,
+  type MovePlayerFavoriteRequest,
   type PlayerFavoriteListQuery,
   type PlayerFavoriteStatusQuery
 } from '@efm/contracts';
@@ -17,6 +21,36 @@ import { PlayerFavoritesService } from './player-favorites.service.js';
 @UseGuards(JwtAuthGuard)
 export class PlayerFavoritesController {
   constructor(@Inject(PlayerFavoritesService) private readonly favorites: PlayerFavoritesService) {}
+
+  @Get('groups')
+  groups(@CurrentUser() user: AuthenticatedUser) {
+    return this.favorites.groups(user.id);
+  }
+
+  @Post('groups')
+  createGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(CreatePlayerFavoriteGroupRequestSchema)) body: CreatePlayerFavoriteGroupRequest
+  ) {
+    return this.favorites.createGroup(user.id, body.name);
+  }
+
+  @Delete('groups/:groupId')
+  deleteGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', new ZodValidationPipe(ResourceIdSchema)) groupId: string
+  ) {
+    return this.favorites.deleteGroup(user.id, groupId);
+  }
+
+  @Patch(':playerId/group')
+  move(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('playerId', new ZodValidationPipe(ResourceIdSchema)) playerId: string,
+    @Body(new ZodValidationPipe(MovePlayerFavoriteRequestSchema)) body: MovePlayerFavoriteRequest
+  ) {
+    return this.favorites.move(user.id, playerId, body.groupId);
+  }
 
   @Get()
   list(
