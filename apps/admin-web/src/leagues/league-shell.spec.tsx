@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminMeResponse } from '@efm/contracts';
 import type { AdminApi } from '../lib/api';
@@ -100,6 +100,39 @@ describe('role-aware administration navigation', () => {
     expect(childNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
     expect(screen.getByRole('link', { name: topLabel })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: childLabel })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('keeps the last top entry and selected secondary entry in bounded scroll areas', async () => {
+    renderLeague('transfer-proposals');
+    const topNav = await screen.findByRole('navigation', { name: '联赛工作区导航' });
+    const childNav = screen.getByRole('navigation', { name: '联赛分组导航' });
+    expect(topNav).toHaveClass('league-heading-nav--bounded');
+    expect(childNav).toHaveClass('league-group-nav--bounded');
+    expect(topNav.querySelector('a[href$="/auctions"]')).toBeInTheDocument();
+    expect(childNav.querySelector('a[href$="/transfer-proposals"]')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('scrolls a selected secondary link into view when its group is wider than the screen', async () => {
+    const bounds = (left: number, right: number) => ({ left, right, width: right - left, top: 0, bottom: 34, height: 34, x: left, y: 0, toJSON: () => undefined });
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('league-group-nav')) return bounds(0, 160);
+      if (this.getAttribute('aria-current') === 'page' && this.closest('.league-group-nav')) return bounds(246, 322);
+      return bounds(0, 0);
+    });
+    const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('league-group-nav') ? 160 : 0;
+    });
+    try {
+      renderLeague('transfer-proposals');
+      const childNav = await screen.findByRole('navigation', { name: '联赛分组导航' });
+      expect(childNav.scrollLeft).toBeGreaterThan(0);
+      childNav.scrollLeft = 0;
+      fireEvent(window, new Event('resize'));
+      expect(childNav.scrollLeft).toBeGreaterThan(0);
+    } finally {
+      rectSpy.mockRestore();
+      widthSpy.mockRestore();
+    }
   });
 
   it('keeps unauthorized league navigation inaccessible', async () => {
