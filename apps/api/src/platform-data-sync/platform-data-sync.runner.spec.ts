@@ -42,7 +42,7 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
   });
 
   it.each(['PENDING', 'RUNNING'] as const)(
-    'marks expired %s player and team runs interrupted and clears their leases',
+    'restores expired %s player and team runs to their last committed checkpoint',
     async (status) => {
       const now = new Date('2026-10-07T12:00:00.000Z');
       const expiredAt = new Date('2026-10-07T11:59:59.000Z');
@@ -79,19 +79,19 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
 
       expect(result).toEqual({ players: 1, teams: 1 });
       await expect(prisma.externalSyncRun.findUnique({ where: { id: player.id } })).resolves.toMatchObject({
-        status: 'FAILED',
-        activeLeaseKey: null,
+        status: 'PENDING',
+        activeLeaseKey: expect.any(String),
         leaseOwnerToken: null,
-        errorCode: 'PROCESS_INTERRUPTED',
+        errorCode: null,
         currentOffset: 40,
         scannedCount: 40,
         failedCount: 3
       });
       await expect(prisma.teamCatalogSyncRun.findUnique({ where: { id: team.id } })).resolves.toMatchObject({
-        status: 'FAILED',
-        activeLeaseKey: null,
+        status: 'PENDING',
+        activeLeaseKey: expect.any(String),
         leaseOwnerToken: null,
-        errorCode: 'PROCESS_INTERRUPTED',
+        errorCode: null,
         currentOffset: 80,
         scannedCount: 80,
         addedCount: 50,
@@ -153,5 +153,39 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
     expect(team.executePlatformRun).toHaveBeenCalledTimes(1);
     resolvePlayer();
     await Promise.resolve();
+  });
+
+  it('reschedules a continuing player chunk only after the current task leaves the running map', async () => {
+    const outcomes: Array<{
+      disposition: 'CONTINUE' | 'STOP';
+      status: 'PENDING' | 'READY';
+      completionReason: null | 'TARGET_REACHED';
+    }> = [
+      { disposition: 'CONTINUE', status: 'PENDING', completionReason: null },
+      { disposition: 'STOP', status: 'READY', completionReason: 'TARGET_REACHED' }
+    ];
+    const processor = { processNextChunk: jest.fn(async () => outcomes.shift()!) };
+    const runner = new PlatformDataSyncRunner(prisma, undefined, undefined, processor as never);
+
+    runner.schedulePlayer('checkpointed-player-run');
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(processor.processNextChunk).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the same continuation policy for team chunks', async () => {
+    const outcomes = [
+      { disposition: 'CONTINUE', status: 'PENDING', completionReason: null },
+      { disposition: 'STOP', status: 'READY', completionReason: 'SOURCE_EXHAUSTED' }
+    ];
+    const processor = { processNextChunk: jest.fn(async () => outcomes.shift()!) };
+    const runner = new PlatformDataSyncRunner(prisma, undefined, undefined, undefined, processor as never);
+
+    runner.scheduleTeam('checkpointed-team-run');
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(processor.processNextChunk).toHaveBeenCalledTimes(2);
   });
 });

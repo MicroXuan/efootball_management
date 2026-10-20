@@ -162,6 +162,27 @@ describe('PlayerBuildsService', () => {
       .resolves.toBe(1);
   });
 
+  it('derives and persists a fixed build for an epic card with zero progression points', async () => {
+    const card = await createCard('seedorf-fixed-epic', '2026-10-15', {
+      position: 'DMF',
+      overallRating: 87,
+      cardType: 'EPIC',
+      maxLevel: 0
+    });
+
+    const build = await prisma.$transaction((tx) => service.resolveOrDeriveWithClient(tx, card.id));
+
+    expect(build).toMatchObject({
+      playerCardId: card.id,
+      maxOverall: 87,
+      dtRating: null,
+      algorithmVersion: 'pesdata-final-card-v1',
+      allocationJson: {}
+    });
+    await expect(prisma.playerCardAutoBuild.count({ where: { playerCardId: card.id } }))
+      .resolves.toBe(1);
+  });
+
   it('derives and persists a position build for a legacy trainable card', async () => {
     const card = await createCard('legacy-dmf', '2026-09-24', {
       position: 'DMF',

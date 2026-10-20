@@ -8,6 +8,7 @@ const ids = Array.from({ length: 20 }, (_, index) => `${String(index + 10).padSt
 const run = {
   id: runId, kind: 'TEAM_SHELLS', mode: 'INCREMENTAL', status: 'READY', actorAdminId: '99999999-1111-4111-8111-111111111111',
   currentPhase: 'READY', heartbeatAt: null, leaseExpiresAt: null, resumable: false,
+  targetCount: null, matchedCount: 0, chunkIndex: 0, pauseRequested: false, completionReason: null,
   counters: { sourceTotal: null, scanned: 981, fetched: 0, skipped: 0, added: 900, updated: 80, missing: 1, failed: 1, batches: 0 },
   errorCode: null, errorMessage: null, startedAt: null, completedAt: '2026-10-07T00:00:00.000Z', createdAt: '2026-10-07T00:00:00.000Z', updatedAt: '2026-10-07T00:00:00.000Z'
 };
@@ -27,7 +28,7 @@ const secondPageItems = items.map((item, index) => ({
   candidate: { ...item.candidate, sourceExternalId: `team-page-2-${index + 1}`, nameZh: `第二页球队 ${index + 1}` }
 }));
 
-function fixture({ resumableRun = false } = {}) {
+function fixture({ resumableRun = false, resumableStatus = 'FAILED', mode = 'INCREMENTAL' } = {}) {
   const request = vi.fn(async (path: string, options?: { method?: string; body?: { ids?: string[] } }) => {
     if (path.endsWith('/publish') && options?.method === 'POST') return {
       requestedCount: options.body?.ids?.length ?? 0,
@@ -40,7 +41,7 @@ function fixture({ resumableRun = false } = {}) {
       return { items: path.includes('page=2') ? secondPageItems : items, page: path.includes('page=2') ? 2 : 1, pageSize: path.includes('pageSize=50') ? 50 : 20, total: 981, summary: { pending: 19, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] } };
     }
     if (path.includes('/runs')) return {
-      items: [{ ...run, status: resumableRun ? 'FAILED' : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
+      items: [{ ...run, mode, status: resumableRun ? resumableStatus : 'READY', resumable: resumableRun, errorCode: resumableRun ? 'PROCESS_INTERRUPTED' : null }],
       page: 1, pageSize: 20, total: 1,
       summary: { pending: 0, running: 0, ready: resumableRun ? 0 : 1, paused: 0, failed: resumableRun ? 1 : 0 }
     };
@@ -50,6 +51,13 @@ function fixture({ resumableRun = false } = {}) {
 }
 
 describe('TeamSyncPanel', () => {
+  it('labels sample history as sample synchronization', async () => {
+    const { api } = fixture({ mode: 'SAMPLE' });
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    expect(await screen.findByText(/当前显示.*抽样同步任务/)).toBeInTheDocument();
+  });
+
   it('puts team shells needing attention before a collapsed history section', async () => {
     const { api } = fixture();
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
@@ -58,7 +66,7 @@ describe('TeamSyncPanel', () => {
     const historyTitle = screen.getByText('历史同步记录');
     expect(reviewTitle.compareDocumentPosition(historyTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(historyTitle.closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByText(/当前显示.*增量更新任务/)).toBeInTheDocument();
+    expect(screen.getByText(/当前显示.*增量同步任务/)).toBeInTheDocument();
   });
 
   it('shows only the current server page and applies exception-first filters', async () => {
@@ -114,6 +122,17 @@ describe('TeamSyncPanel', () => {
     await userEvent.click(await screen.findByText('历史同步记录'));
     await userEvent.click(await screen.findByRole('button', { name: '继续任务' }));
     expect(onResumeRun).toHaveBeenCalledWith(runId);
+  });
+
+  it('offers cancellation beside a resumable paused history item', async () => {
+    const { api } = fixture({ resumableRun: true, resumableStatus: 'PAUSED' });
+    const onCancelRun = vi.fn().mockResolvedValue(undefined);
+    render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} onCancelRun={onCancelRun} />);
+
+    await userEvent.click(await screen.findByText('历史同步记录'));
+    await userEvent.click(await screen.findByRole('button', { name: '取消任务' }));
+    await userEvent.click(await screen.findByRole('button', { name: '确认取消' }));
+    expect(onCancelRun).toHaveBeenCalledWith(runId);
   });
 
   it('keeps eligible selections when paging through a large review list', async () => {

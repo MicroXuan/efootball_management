@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { MyPlayerAuctionListQuery, PlaceMiniprogramAuctionBidRequest } from '@efm/contracts';
+import {
+  AuctionPlayerCardSnapshotSchema,
+  type MyPlayerAuctionListQuery,
+  type MyPlayerAuctionSaleListQuery,
+  type MyPlayerAuctionSaleListResponse,
+  type PlaceMiniprogramAuctionBidRequest
+} from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionBidService } from './player-auction-bid.service.js';
@@ -11,8 +17,11 @@ const ROOM_INCLUDE = {
     include: {
       bids: {
         where: { result: 'VALID' as const },
-        include: { leagueTeam: { select: { name: true } } },
-        orderBy: [{ submittedAt: 'asc' as const }, { id: 'asc' as const }]
+        include: {
+          leagueTeam: { select: { teamNumber: true, name: true } },
+          user: { select: { displayName: true } }
+        },
+        orderBy: [{ submittedAt: 'desc' as const }, { id: 'desc' as const }]
       }
     },
     orderBy: [{ displayOrder: 'asc' as const }, { id: 'asc' as const }]
@@ -97,6 +106,83 @@ export class MyPlayerAuctionsService {
     };
   }
 
+  async listSales(userId: string, query: MyPlayerAuctionSaleListQuery): Promise<MyPlayerAuctionSaleListResponse> {
+    const teams = await this.prisma.leagueTeam.findMany({
+      where: { ownerUserId: userId, status: 'ACTIVE' },
+      select: { leagueId: true }
+    });
+    const leagueIds = [...new Set(teams.map((team) => team.leagueId))];
+    if (leagueIds.length === 0) return { items: [], nextCursor: null };
+
+    const keyword = query.keyword?.trim();
+    const numericTeamNumber = keyword && /^\d+$/.test(keyword) ? Number(keyword) : undefined;
+    const rows = await this.prisma.playerAuctionReview.findMany({
+      where: {
+        decision: { in: ['CONFIRM', 'ADJUST'] },
+        reviewedWinnerTeamId: { not: null },
+        reviewedPrice: { not: null },
+        winnerTeamNameSnapshot: { not: null },
+        winnerDisplayNameSnapshot: { not: null },
+        lot: { batch: { leagueId: { in: leagueIds } } },
+        ...(keyword ? {
+          OR: [
+            { lot: { playerNameSnapshot: { contains: keyword } } },
+            { winnerTeamNameSnapshot: { contains: keyword } },
+            { winnerDisplayNameSnapshot: { contains: keyword } },
+            ...(numericTeamNumber === undefined ? [] : [{ winnerTeamNumberSnapshot: numericTeamNumber }])
+          ]
+        } : {})
+      },
+      include: {
+        lot: {
+          include: {
+            batch: { include: { league: { select: { id: true, name: true } } } },
+            playerCard: { select: { id: true, imageUrl: true, cardName: true, position: true, overallRating: true, cardType: true } }
+          }
+        }
+      },
+      orderBy: [{ reviewedAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {})
+    });
+
+    const hasMore = rows.length > query.limit;
+    const page = rows.slice(0, query.limit);
+    const items = page.flatMap((review) => {
+      const snapshot = review.lot.playerSnapshot as { card?: unknown };
+      const parsedSnapshot = AuctionPlayerCardSnapshotSchema.safeParse(snapshot.card);
+      const fallbackCard = review.lot.playerCard;
+      const card = parsedSnapshot.success ? parsedSnapshot.data : fallbackCard;
+      if (
+        !card || !review.reviewedWinnerTeamId || review.reviewedPrice === null ||
+        !review.winnerTeamNameSnapshot || !review.winnerDisplayNameSnapshot || !review.lot.playerCardId
+      ) return [];
+      return [{
+        id: review.id,
+        batchId: review.lot.batch.id,
+        league: review.lot.batch.league,
+        player: {
+          id: review.lot.footballPlayerId,
+          cardId: review.lot.playerCardId,
+          name: review.lot.playerNameSnapshot,
+          imageUrl: card.imageUrl,
+          position: card.position,
+          overallRating: card.overallRating,
+          cardType: card.cardType
+        },
+        winner: {
+          teamId: review.reviewedWinnerTeamId,
+          teamNumber: review.winnerTeamNumberSnapshot,
+          teamName: review.winnerTeamNameSnapshot,
+          bidderDisplayName: review.winnerDisplayNameSnapshot
+        },
+        price: review.reviewedPrice,
+        confirmedAt: review.reviewedAt.toISOString()
+      }];
+    });
+    return { items, nextCursor: hasMore ? page.at(-1)?.id ?? null : null };
+  }
+
   async placeBid(
     userId: string,
     batchId: string,
@@ -117,13 +203,21 @@ export class MyPlayerAuctionsService {
     currentPrice: number | null;
     deadlineAt: Date | null;
     deadlineEpoch: number;
-    bids: Array<{ id: string; amount: number; result: string; submittedAt: Date; leagueTeam: { name: string } | null }>;
+    bids: Array<{
+      id: string;
+      amount: number;
+      result: string;
+      submittedAt: Date;
+      leagueTeam: { teamNumber: number | null; name: string } | null;
+      user: { displayName: string } | null;
+    }>;
   }, includeBids: boolean) {
     return {
       id: lot.id,
       displayOrder: lot.displayOrder,
       playerName: lot.playerNameSnapshot,
       playerSnapshot: lot.playerSnapshot,
+      card: AuctionPlayerCardSnapshotSchema.parse((lot.playerSnapshot as { card?: unknown }).card),
       startingPrice: lot.startingPrice,
       minimumIncrement: lot.minimumIncrement,
       status: lot.status,
@@ -131,12 +225,17 @@ export class MyPlayerAuctionsService {
       deadlineAt: lot.deadlineAt?.toISOString() ?? null,
       deadlineEpoch: lot.deadlineEpoch,
       ...(includeBids ? {
-        bids: lot.bids.filter((bid) => bid.result === 'VALID').map((bid) => ({
-          id: bid.id,
-          teamName: bid.leagueTeam?.name ?? '未知球队',
-          amount: bid.amount,
-          submittedAt: bid.submittedAt.toISOString()
-        }))
+        bids: lot.bids
+          .filter((bid) => bid.result === 'VALID')
+          .sort((left, right) => right.submittedAt.getTime() - left.submittedAt.getTime() || right.id.localeCompare(left.id))
+          .map((bid) => ({
+            id: bid.id,
+            teamNumber: bid.leagueTeam?.teamNumber ?? null,
+            teamName: bid.leagueTeam?.name ?? '未知球队',
+            bidderDisplayName: bid.user?.displayName ?? '未知用户',
+            amount: bid.amount,
+            submittedAt: bid.submittedAt.toISOString()
+          }))
       } : {})
     };
   }

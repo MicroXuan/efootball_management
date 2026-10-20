@@ -1,14 +1,13 @@
 {
   "pages": [
+    "pages/leagues/index",
     "pages/players/index",
     "pages/competitions/index",
-    "pages/leagues/index",
     "pages/league-detail/index",
     "pages/season-standings/index",
     "pages/competition-detail/index",
     "pages/cup-bracket-panorama/index",
     "pages/my-matches/index",
-    "pages/match-result/index",
     "pages/competition-manage/index",
     "pages/competition-editor/index",
     "pages/login/index",
@@ -26,7 +25,8 @@
     "pages/wechat-bot-binding/index",
     "pages/player-card-detail/index",
     "pages/player-auctions/index",
-    "pages/auction-room/index"
+    "pages/auction-room/index",
+    "pages/auction-sales/index"
   ],
   "window": {
     "navigationBarTextStyle": "white",

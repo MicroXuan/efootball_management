@@ -60,7 +60,7 @@ export const CreateCustomTeamCatalogItemRequestSchema = z.object({
 });
 
 export const TeamCatalogSyncModeSchema = z.enum(['SAMPLE', 'FULL', 'INCREMENTAL', 'RESUME']);
-export const TeamCatalogSyncRunStatusSchema = z.enum(['PENDING', 'RUNNING', 'READY', 'FAILED']);
+export const TeamCatalogSyncRunStatusSchema = z.enum(['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED', 'CANCELLED']);
 export const TeamCatalogSyncRunSummarySchema = z.object({
   id: ResourceIdSchema,
   mode: TeamCatalogSyncModeSchema,

@@ -1,9 +1,11 @@
-import { cloudbaseEnvironmentId } from './config/api'
+import { apiRuntimeConfig } from './config/api'
 
 App<IAppOption>({
   globalData: {},
   onLaunch() {
-    wx.cloud.init({ env: cloudbaseEnvironmentId })
+    if (apiRuntimeConfig.transport === 'cloudbase') {
+      wx.cloud.init({ env: apiRuntimeConfig.environmentId })
+    }
   },
 })
 

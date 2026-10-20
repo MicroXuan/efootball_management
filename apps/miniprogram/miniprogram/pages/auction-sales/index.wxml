@@ -1,0 +1,17 @@
+<view class="page-shell sales-page">
+  <view class="page-head"><text class="page-kicker">已确认的最终成交</text><text class="page-title">拍卖成交纪录</text><text class="page-copy">只显示当前参加联赛中，已由管理员确认的成交结果。</text></view>
+  <view class="search-box"><input value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" placeholder="搜索球员、队名、编号或用户" /></view>
+  <loading-state wx:if="{{state === 'loading' && !items.length}}" label="正在读取成交纪录" />
+  <view wx:elif="{{state === 'error' && !items.length}}" class="state-card efm-empty-state"><text class="efm-empty-state__title">暂时无法读取</text><text class="efm-empty-state__copy">{{errorMessage}}</text><button class="outline-button efm-retry-button" bindtap="retry">重新加载</button></view>
+  <view wx:elif="{{!items.length}}" class="state-card efm-empty-state"><text class="efm-empty-state__title">暂无已确认成交</text><text class="efm-empty-state__copy">管理员确认成交后会显示在这里。</text></view>
+  <view wx:else class="sales-list">
+    <view wx:for="{{items}}" wx:key="id" class="sale-card" data-card-id="{{item.player.cardId}}" bindtap="openCard" role="button">
+      <view class="sale-artwork"><entity-artwork src="{{item.player.imageUrl}}" fallback="{{item.playerFallback}}" shape="portrait" surface="dark" /></view>
+      <view class="sale-main"><text class="sale-league">{{item.league.name}}</text><text class="sale-player">{{item.player.name}}</text><text class="sale-card-meta">{{item.player.overallRating}} · {{item.player.position}} · 查看球员卡 ›</text><text class="sale-team">{{item.teamLabel}}</text><text class="sale-bidder">竞价用户 · {{item.winner.bidderDisplayName}}</text><text class="sale-time">成交时间 · {{item.confirmedTimeLabel}}</text></view>
+      <view class="sale-price"><text>{{item.price}}</text><text>资金</text></view>
+    </view>
+    <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text><button wx:if="{{errorMessage}}" class="retry-link efm-retry-button" bindtap="retry">重新加载</button>
+    <loading-state wx:if="{{loadingMore}}" label="继续加载" /><text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部成交 —</text>
+  </view>
+  <view wx:if="{{showBackToTop}}" class="back-to-top" bindtap="backToTop" role="button" aria-label="回到顶部"><text class="back-to-top-arrow">↑</text><text>顶部</text></view>
+</view>

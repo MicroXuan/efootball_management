@@ -14,6 +14,16 @@
 .artwork--square { aspect-ratio: 1 / 1; }
 .artwork--portrait { aspect-ratio: 3 / 4; }
 
+.artwork--light {
+  border-color: #dfe6e9;
+  background: #f5f7f8;
+}
+
+.artwork--light .artwork__fallback {
+  color: #172027;
+  background: #f5f7f8;
+}
+
 .artwork__image,
 .artwork__fallback {
   width: 100%;

@@ -18,7 +18,8 @@ Page({
     this.setData({ loading: true, errorMessage: '' })
     try {
       await auth.login()
-      if (this.data.redirect) wx.redirectTo({ url: this.data.redirect })
+      if (this.data.redirect === '/pages/players/index') wx.switchTab({ url: this.data.redirect })
+      else if (this.data.redirect) wx.redirectTo({ url: this.data.redirect })
       else wx.switchTab({ url: '/pages/profile/index' })
     } catch (error) {
       const message = error instanceof ApiError

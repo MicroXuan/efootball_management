@@ -1,15 +1,16 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type {
-  PlayerAcquisitionApplication,
-  PlayerApplicationListQuery,
-  PlayerApplicationListResponse,
-  PlayerMarketAnnouncementListResponse,
-  PlayerMarketAnnouncementQuery,
-  PlayerMarketListResponse,
-  PlayerMarketPlayerDetail,
-  PlayerMarketPlayerSummary,
-  PlayerMarketQuery,
-  PlayerMarketTeamSummary
+import {
+  derivePesdataAutoBuild,
+  type PlayerAcquisitionApplication,
+  type PlayerApplicationListQuery,
+  type PlayerApplicationListResponse,
+  type PlayerMarketAnnouncementListResponse,
+  type PlayerMarketAnnouncementQuery,
+  type PlayerMarketListResponse,
+  type PlayerMarketPlayerDetail,
+  type PlayerMarketPlayerSummary,
+  type PlayerMarketQuery,
+  type PlayerMarketTeamSummary
 } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
@@ -53,6 +54,20 @@ type ApplicationRow = Prisma.PlayerAcquisitionApplicationGetPayload<{
 type MarketPlayerRow = Prisma.FootballPlayerGetPayload<{
   include: { bestCard: { include: { playerCard: true; autoBuild: true } } };
 }>;
+
+type MarketFallbackCard = Prisma.PlayerCardGetPayload<{
+  include: {
+    attributes: true;
+    autoBuilds: true;
+    cardPack: { select: { releaseDate: true } };
+  };
+}>;
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
 
 @Injectable()
 export class PlayerMarketQueryService {
@@ -152,7 +167,8 @@ export class PlayerMarketQueryService {
     now: Date
   ): Promise<{ items: PlayerMarketPlayerSummary[]; activeTransferWindowId: string | null }> {
     const playerIds = page.map(({ id }) => id);
-    const [ownerships, valuations, window, rosterCount, salaryRule] = await Promise.all([
+    const missingBestCardPlayerIds = page.filter(({ bestCard }) => !bestCard).map(({ id }) => id);
+    const [ownerships, valuations, window, rosterCount, salaryRule, fallbackCards] = await Promise.all([
       this.prisma.leaguePlayerOwnership.findMany({
         where: { leagueId, footballPlayerId: { in: playerIds }, status: 'ACTIVE' },
         include: { leagueTeam: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } }
@@ -163,7 +179,19 @@ export class PlayerMarketQueryService {
         orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
       }),
       this.prisma.leaguePlayerOwnership.count({ where: { leagueTeamId: scope.leagueTeamId, status: 'ACTIVE' } }),
-      this.prisma.leagueSalaryRuleVersion.findFirst({ where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: now } }, include: { tiers: true }, orderBy: { version: 'desc' } })
+      this.prisma.leagueSalaryRuleVersion.findFirst({ where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: now } }, include: { tiers: true }, orderBy: { version: 'desc' } }),
+      missingBestCardPlayerIds.length === 0 ? Promise.resolve([]) : this.prisma.playerCard.findMany({
+        where: {
+          playerId: { in: missingBestCardPlayerIds },
+          status: 'ACTIVE',
+          publishedAt: { not: null }
+        },
+        include: {
+          attributes: true,
+          autoBuilds: { orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }] },
+          cardPack: { select: { releaseDate: true } }
+        }
+      })
     ]);
     const restrictions = window ? await this.prisma.playerReleaseRestriction.findMany({
       where: { transferWindowId: window.id, leagueTeamId: scope.leagueTeamId, footballPlayerId: { in: playerIds } },
@@ -172,12 +200,21 @@ export class PlayerMarketQueryService {
     const ownershipByPlayer = new Map(ownerships.map((row) => [row.footballPlayerId, row]));
     const valuationByPlayer = new Map(valuations.map((row) => [row.footballPlayerId, row]));
     const restrictedPlayers = new Set(restrictions.map(({ footballPlayerId }) => footballPlayerId));
+    const fallbackCardsByPlayer = new Map<string, MarketFallbackCard[]>();
+    for (const card of fallbackCards) {
+      fallbackCardsByPlayer.set(card.playerId, [...(fallbackCardsByPlayer.get(card.playerId) ?? []), card]);
+    }
 
     const items = page.map((player) => {
       const ownership = ownershipByPlayer.get(player.id);
       const valuation = valuationByPlayer.get(player.id);
-      const selectedCard = ownership?.currentPlayerCard ?? player.bestCard?.playerCard ?? null;
-      const maxOverall = ownership?.maxOverallSnapshot ?? player.bestCard?.autoBuild.maxOverall ?? selectedCard?.overallRating ?? null;
+      const fallbackCard = player.bestCard ? null : this.fallbackCard(fallbackCardsByPlayer.get(player.id) ?? []);
+      const selectedCard = ownership?.currentPlayerCard ?? player.bestCard?.playerCard ?? fallbackCard?.card ?? null;
+      const maxOverall = ownership?.maxOverallSnapshot
+        ?? player.bestCard?.autoBuild.maxOverall
+        ?? fallbackCard?.maxOverall
+        ?? selectedCard?.overallRating
+        ?? null;
       const salaryMinor = ownership?.salaryMinor ?? this.salaryFor(maxOverall, salaryRule?.tiers ?? []);
       const action = resolvePlayerMarketAction({
         owned: Boolean(ownership),
@@ -324,6 +361,27 @@ export class PlayerMarketQueryService {
 
   private team(team: { id: string; teamNumber: number | null; name: string; logoUrl: string | null; ownerAlias: string }): PlayerMarketTeamSummary {
     return { teamId: team.id, teamNumber: team.teamNumber, name: team.name, logoUrl: team.logoUrl, ownerAlias: team.ownerAlias };
+  }
+
+  private fallbackCard(cards: MarketFallbackCard[]) {
+    return cards.map((card) => {
+      const attributes = objectRecord(card.attributes?.attributesJson);
+      const sourceMetadata = objectRecord(attributes?.sourceMetadata);
+      const storedBuild = card.autoBuilds[0];
+      const derivedBuild = storedBuild ? null : derivePesdataAutoBuild({
+        position: card.position,
+        overallRating: card.overallRating,
+        maxLevel: sourceMetadata?.maxLevel as number | string | null | undefined,
+        cardType: card.cardType
+      });
+      return {
+        card,
+        maxOverall: storedBuild?.maxOverall ?? derivedBuild?.maxOverall ?? card.overallRating,
+        releaseDate: card.cardPack?.releaseDate?.valueOf() ?? Number.NEGATIVE_INFINITY
+      };
+    }).sort((left, right) => right.maxOverall - left.maxOverall
+      || right.releaseDate - left.releaseDate
+      || left.card.externalId.localeCompare(right.card.externalId, 'en-US'))[0] ?? null;
   }
 
   private salaryFor(overall: number | null, tiers: Array<{ minOverall: number; maxOverall: number; salaryMinor: number }>): number | null {

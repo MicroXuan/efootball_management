@@ -95,6 +95,70 @@ describe('PesdataSyncService', () => {
     expect(run.heartbeatAt).toBeInstanceOf(Date);
   });
 
+  it('pauses a queued player run at its checkpoint and resumes the same run', async () => {
+    const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
+    const sync = new PesdataSyncService(prisma, importService, client as never);
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+
+    await expect(sync.pausePlatformRun(adminId, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'PAUSED'
+    });
+    await expect(prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).resolves.toMatchObject({
+      status: 'PAUSED',
+      activeLeaseKey: 'pesdata',
+      leaseOwnerToken: null,
+      leaseExpiresAt: null,
+      currentPhase: 'PAUSED'
+    });
+
+    await expect(sync.resumePlatformRun(adminId, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'PENDING'
+    });
+  });
+
+  it('cancels a paused player run and preserves its reviewable checkpoint data', async () => {
+    const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
+    const sync = new PesdataSyncService(prisma, importService, client as never);
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+    await prisma.externalSyncItem.create({ data: {
+      runId: queued.runId,
+      externalId: 'cancel-player-1',
+      summaryChecksum: 'a'.repeat(64),
+      status: 'PENDING'
+    } });
+    await sync.pausePlatformRun(adminId, queued.runId);
+
+    await expect(sync.cancelPlatformRun(adminId, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'CANCELLED'
+    });
+    await expect(prisma.externalSyncRun.findUniqueOrThrow({ where: { id: queued.runId } })).resolves.toMatchObject({
+      status: 'CANCELLED',
+      activeLeaseKey: null,
+      leaseOwnerToken: null,
+      currentPhase: 'CANCELLED'
+    });
+    await expect(prisma.externalSyncItem.count({ where: { runId: queued.runId } })).resolves.toBe(1);
+  });
+
+  it('cancels a failed resumable player run so it cannot be resumed again', async () => {
+    const client = { listPlayers: async () => ({ list: [], count: 0 }), getPlayerDetail: async (id: string) => detail(id) };
+    const sync = new PesdataSyncService(prisma, importService, client as never);
+    const queued = await sync.createPlatformRun(adminId, { mode: 'incremental' });
+    await prisma.externalSyncRun.update({ where: { id: queued.runId }, data: {
+      status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null, currentPhase: 'INTERRUPTED'
+    } });
+
+    await expect(sync.cancelPlatformRun(adminId, queued.runId)).resolves.toEqual({
+      runId: queued.runId,
+      status: 'CANCELLED'
+    });
+    await expect(sync.resumePlatformRun(adminId, queued.runId))
+      .rejects.toMatchObject({ code: 'PESDATA_SYNC_CONFLICT' });
+  });
+
   it('renews the lease independently while an upstream request is still pending', async () => {
     let releaseRequest!: () => void;
     let requestStarted!: () => void;
@@ -407,6 +471,30 @@ describe('PesdataSyncService', () => {
       ['2', 'FETCHED'],
       ['3', 'FETCHED']
     ]);
+  });
+
+  it('keeps scanning past previously synchronized players until the sample contains the requested number of new rows', async () => {
+    const initialClient = {
+      listPlayers: async () => ({ list: [summary(1)], count: 1 }),
+      getPlayerDetail: async (id: string) => detail(id)
+    };
+    await new PesdataSyncService(prisma, importService, initialClient as never, { pageSize: 10 })
+      .start(actorId, { mode: 'full' });
+
+    const detailIds: string[] = [];
+    const sampleClient = {
+      listPlayers: async ({ start, limit }: { start: number; limit: number }) => ({
+        list: [summary(1), summary(2)].slice(start, start + limit),
+        count: 2
+      }),
+      getPlayerDetail: async (id: string) => { detailIds.push(id); return detail(id); }
+    };
+    const result = await new PesdataSyncService(prisma, importService, sampleClient as never, { pageSize: 1 })
+      .start(actorId, { mode: 'sample', limit: 1 });
+
+    expect(detailIds).toEqual(['2']);
+    expect(result).toMatchObject({ scannedCount: 2, skippedCount: 1, fetchedCount: 1 });
+    expect(result.batchIds).toHaveLength(1);
   });
 
   it('removes a newly created unlinked batch when ownership is lost before linking', async () => {

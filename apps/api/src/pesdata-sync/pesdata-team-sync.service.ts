@@ -98,14 +98,19 @@ export class PesdataTeamSyncService {
   ): Promise<{ runId: string; status: 'PENDING' }> {
     const run = await this.prisma.teamCatalogSyncRun.findUnique({ where: { id: runId } });
     if (!run) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
-    if (run.status !== 'FAILED' || run.activeLeaseKey || run.leaseOwnerToken) {
-      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a failed, inactive team synchronization run can be resumed');
+    const paused = run.status === 'PAUSED' && run.activeLeaseKey === 'pesdata-team-catalog' && !run.leaseOwnerToken;
+    const failed = run.status === 'FAILED' && !run.activeLeaseKey && !run.leaseOwnerToken;
+    if (!paused && !failed) {
+      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a paused or failed inactive team synchronization run can be resumed');
     }
     const now = new Date();
     try {
       const resumed = await this.prisma.$transaction(async (tx) => {
         const changed = await tx.teamCatalogSyncRun.updateMany({ where: {
-          id: runId, status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null
+          id: runId,
+          status: paused ? 'PAUSED' : 'FAILED',
+          activeLeaseKey: paused ? 'pesdata-team-catalog' : null,
+          leaseOwnerToken: null
         }, data: {
           status: 'PENDING',
           activeLeaseKey: 'pesdata-team-catalog',
@@ -114,6 +119,7 @@ export class PesdataTeamSyncService {
           leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS),
           errorCode: null,
           errorMessage: null,
+          pauseRequestedAt: null,
           completedAt: null
         } });
         if (changed.count === 1 && this.audit) await this.audit.record(tx, {
@@ -135,6 +141,90 @@ export class PesdataTeamSyncService {
       }
       throw error;
     }
+  }
+
+  async pausePlatformRun(
+    actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'PAUSING' | 'PAUSED' }> {
+    const now = new Date();
+    const status = await this.prisma.$transaction(async (tx) => {
+      const run = await tx.teamCatalogSyncRun.findUnique({ where: { id: runId } });
+      if (!run) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
+      if (!['PENDING', 'RUNNING'].includes(run.status) || run.activeLeaseKey !== 'pesdata-team-catalog') {
+        throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only an active team synchronization run can be paused');
+      }
+      const pausing = run.status === 'RUNNING';
+      const updated = await tx.teamCatalogSyncRun.updateMany({
+        where: { id: runId, status: run.status, activeLeaseKey: 'pesdata-team-catalog' },
+        data: pausing ? {
+          pauseRequestedAt: now,
+          currentPhase: 'PAUSING',
+          heartbeatAt: now
+        } : {
+          status: 'PAUSED',
+          pauseRequestedAt: null,
+          currentPhase: 'PAUSED',
+          heartbeatAt: now,
+          leaseOwnerToken: null,
+          leaseExpiresAt: null
+        }
+      });
+      if (updated.count !== 1) {
+        throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Team synchronization run state changed while pausing');
+      }
+      if (this.audit) await this.audit.record(tx, {
+        actorAdminId,
+        action: pausing ? 'REQUEST_PAUSE_TEAM_SHELL_SYNC' : 'PAUSE_TEAM_SHELL_SYNC',
+        resourceType: 'TeamCatalogSyncRun',
+        resourceId: runId,
+        metadata: { runId, status: pausing ? 'PAUSING' : 'PAUSED' }
+      });
+      return pausing ? 'PAUSING' as const : 'PAUSED' as const;
+    });
+    return { runId, status };
+  }
+
+  async cancelPlatformRun(
+    actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'CANCELLED' }> {
+    const now = new Date();
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const exists = await tx.teamCatalogSyncRun.findUnique({ where: { id: runId }, select: { id: true } });
+      if (!exists) throw new PesdataTeamSyncError('PESDATA_TEAM_RUN_NOT_FOUND', 'Team synchronization run was not found');
+      const updated = await tx.teamCatalogSyncRun.updateMany({
+        where: {
+          id: runId,
+          leaseOwnerToken: null,
+          OR: [
+            { status: 'PAUSED', activeLeaseKey: 'pesdata-team-catalog' },
+            { status: 'FAILED', activeLeaseKey: null }
+          ]
+        },
+        data: {
+          status: 'CANCELLED',
+          activeLeaseKey: null,
+          currentPhase: 'CANCELLED',
+          heartbeatAt: now,
+          leaseExpiresAt: null,
+          completedAt: now
+        }
+      });
+      if (updated.count !== 1) return 0;
+      if (this.audit) await this.audit.record(tx, {
+        actorAdminId,
+        action: 'CANCEL_TEAM_SHELL_SYNC',
+        resourceType: 'TeamCatalogSyncRun',
+        resourceId: runId,
+        metadata: { runId }
+      });
+      return 1;
+    });
+    if (changed !== 1) {
+      throw new PesdataTeamSyncError('PESDATA_TEAM_SYNC_CONFLICT', 'Only a paused or failed inactive team synchronization run can be cancelled');
+    }
+    return { runId, status: 'CANCELLED' };
   }
 
   async executePlatformRun(runId: string): Promise<TeamSyncResult> {
@@ -250,8 +340,10 @@ export class PesdataTeamSyncService {
     let skippedCount = 0;
     const seen = new Set(priorItems.map(({ sourceExternalId }) => sourceExternalId));
 
-    while (limit === undefined || scannedCount < limit) {
-      const size = limit === undefined ? this.pageSize : Math.min(this.pageSize, limit - scannedCount);
+    while (limit === undefined || addedCount + updatedCount < limit) {
+      const size = limit === undefined
+        ? this.pageSize
+        : Math.min(this.pageSize, limit - addedCount - updatedCount);
       const page = await this.client.listTeams({ start: offset, limit: size, order: 'ASC' });
       assertLeaseHealthy?.();
       if (leaseOwnerToken) await this.touchLease(runId, leaseOwnerToken);
@@ -264,6 +356,15 @@ export class PesdataTeamSyncService {
         scannedCount += 1;
         const summaryChecksum = pesdataValueChecksum(summary);
         try {
+          const current = await this.prisma.teamCatalogItem.findUnique({
+            where: { sourceType_sourceExternalId: { sourceType: 'PESDATA', sourceExternalId: externalId } }
+          });
+          if (mode === 'sample' && current) {
+            skippedCount += 1;
+            processed.add(externalId);
+            if (leaseOwnerToken) await this.touchLease(runId, leaseOwnerToken);
+            continue;
+          }
           const detail = await this.client.getTeamDetail(externalId);
           assertLeaseHealthy?.();
           let candidate = mapPesdataTeam({
@@ -277,9 +378,6 @@ export class PesdataTeamSyncService {
             assertLeaseHealthy?.();
           }
           const detailChecksum = pesdataValueChecksum(candidate);
-          const current = await this.prisma.teamCatalogItem.findUnique({
-            where: { sourceType_sourceExternalId: { sourceType: 'PESDATA', sourceExternalId: externalId } }
-          });
           if (current?.sourceChecksum === detailChecksum && mode === 'incremental') {
             skippedCount += 1;
             processed.add(externalId);

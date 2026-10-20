@@ -13,9 +13,10 @@ import { AdminSeasonsController, PublicSeasonsController } from './seasons.contr
 import { SeasonsService } from './seasons.service.js';
 import { TeamProfilesController } from './team-profiles.controller.js';
 import { TeamProfilesService } from './team-profiles.service.js';
+import { StorageModule } from '../storage/storage.module.js';
 
 @Module({
-  imports: [AuthorizationModule, CompetitionsModule, JwtModule.register({})],
+  imports: [AuthorizationModule, CompetitionsModule, JwtModule.register({}), StorageModule],
   controllers: [
     TeamProfilesController,
     PublicLeaguesController,

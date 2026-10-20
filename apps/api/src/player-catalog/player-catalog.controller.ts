@@ -1,9 +1,10 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query, UseGuards } from '@nestjs/common';
 import { PlayerSearchQuerySchema, ResourceIdSchema } from '@efm/contracts';
 import type { PlayerSearchQuery } from '@efm/contracts';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { PlayerCatalogService } from './player-catalog.service.js';
+import { CatalogReadAuthGuard } from './catalog-read-auth.guard.js';
 
 const PackListQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
@@ -12,6 +13,7 @@ const PackListQuerySchema = z.object({
 type PackListQuery = z.output<typeof PackListQuerySchema>;
 
 @Controller()
+@UseGuards(CatalogReadAuthGuard)
 export class PlayerCatalogController {
   constructor(@Inject(PlayerCatalogService) private readonly catalog: PlayerCatalogService) {}
 

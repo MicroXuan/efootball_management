@@ -44,7 +44,8 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
       if (imageFile) {
         try {
           if (!api.upload) throw new Error('Upload is unavailable');
-          logoUrl = (await api.upload('/v1/admin/uploads/league-images', imageFile, UploadResultSchema)).url;
+          const stored = await api.upload('/v1/admin/uploads/league-images', imageFile, UploadResultSchema);
+          logoUrl = stored.key.startsWith('cloud://') ? stored.key : stored.url;
         } catch {
           setError('联赛图片上传失败，请稍后重试');
           return;
@@ -53,7 +54,7 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
       await api.request(editing ? `/v1/admin/platform/leagues/${editing.id}` : '/v1/admin/platform/leagues', {
         method: editing ? 'PATCH' : 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: LeagueDetailSchema,
         body: editing
-          ? { ...values, description: values.description ?? '', logoUrl, expectedVersion: editing.version }
+          ? { ...values, description: values.description ?? '', ...(imageFile ? { logoUrl } : {}), expectedVersion: editing.version }
           : { ...values, status: undefined, description: values.description ?? '', logoUrl }
       });
       mutationKey.reset(); setEditing(null); setImageFile(null); form.resetFields(); await load();

@@ -26,10 +26,22 @@ function parseDatabaseUrl(value: string | undefined): DatabaseConnection {
   };
 }
 
+export const PRISMA_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 60_000
+} as const;
+
+export function prismaClientOptions(databaseUrl: string | undefined) {
+  return {
+    adapter: new PrismaMariaDb(parseDatabaseUrl(databaseUrl)),
+    transactionOptions: PRISMA_TRANSACTION_OPTIONS
+  };
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    super({ adapter: new PrismaMariaDb(parseDatabaseUrl(process.env.DATABASE_URL)) });
+    super(prismaClientOptions(process.env.DATABASE_URL));
   }
 
   async onModuleInit(): Promise<void> {

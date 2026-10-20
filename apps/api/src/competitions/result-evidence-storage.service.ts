@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Optional, StreamableFile } from '@nestjs/common';
 import type { CompleteEvidenceUploadRequest, CreateEvidenceUploadRequest } from '@efm/contracts';
 import type { Prisma } from '../generated/prisma/client.js';
-import { PrismaService } from '../database/prisma.service.js';
+import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../database/prisma.service.js';
 import { MAX_RESULT_EVIDENCE_BYTES, validateResultEvidenceImage } from '../storage/image-validation.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
 import { CompetitionError, assertExpectedVersion } from './competition.errors.js';
@@ -155,7 +155,7 @@ export class ResultEvidenceStorageService {
       });
       if (claimed.count !== 1) throw new CompetitionError('EVIDENCE_UPLOAD_EXPIRED', 'Evidence upload is no longer pending', 409);
       return upload.objectKey === retainedKey ? null : upload.objectKey;
-    }, { timeout: 30_000 });
+    }, PRISMA_TRANSACTION_OPTIONS);
     // Daily source cleanup retries failures even after consumption, including legacy/Local
     // objects without a lifecycle rule. The temporary-only provider lifecycle is a fallback.
     if (sourceKey) await this.storage.delete(sourceKey).catch(() => undefined);

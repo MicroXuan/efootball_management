@@ -3,11 +3,13 @@ import {
   Button,
   Card,
   Checkbox,
+  Drawer,
   Empty,
   Form,
   Input,
   InputNumber,
   Modal,
+  Space,
   Spin,
   Table,
   Tag
@@ -27,7 +29,10 @@ import { adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 import { SeasonRail } from '../components/season-rail';
 
-const SeasonListSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
+const AdminLeagueSeasonSummarySchema = LeagueSeasonSummarySchema.extend({
+  enrolledLeagueTeamIds: z.array(z.string()).default([])
+});
+const SeasonListSchema = z.object({ items: z.array(AdminLeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
 const SetCurrentResponseSchema = z.object({ leagueId: z.string(), currentSeasonId: z.string(), version: z.number().int() });
 const EnrollResponseSchema = z.object({ seasonId: z.string(), enrolledCount: z.number().int(), approvedEntryCount: z.number().int(), version: z.number().int() });
 
@@ -53,10 +58,12 @@ const seasonStatusLabel = {
 export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
   const [league, setLeague] = useState<LeagueDetail | null>(null);
-  const [seasons, setSeasons] = useState<LeagueSeasonSummary[]>([]);
+  const [seasons, setSeasons] = useState<z.infer<typeof AdminLeagueSeasonSummarySchema>[]>([]);
   const [teams, setTeams] = useState<LeagueTeamSummary[]>([]);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [editing, setEditing] = useState<LeagueSeasonSummary | null>(null);
+  const [seasonEditorOpen, setSeasonEditorOpen] = useState(false);
+  const [teamPickerOpen, setTeamPickerOpen] = useState(false);
   const [renaming, setRenaming] = useState<LeagueSeasonSummary | null>(null);
   const [renameName, setRenameName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -75,7 +82,6 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
       ]);
       setLeague(leagueResult); setSeasons(seasonResult.items); setTeams(teamResult.items);
       setSelectedTeamIds([]);
-      if (!form.getFieldValue('displayName')) form.setFieldValue('seasonNumber', (seasonResult.items[0]?.seasonNumber ?? 0) + 1);
     } catch { setError('赛季数据加载失败，请稍后重试'); }
     finally { setLoading(false); }
   }, [api, form, leagueId]);
@@ -109,13 +115,14 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
             : { ...timeline, seasonNumber: values.seasonNumber }
         }
       );
-      mutationKey.reset(); setEditing(null); form.resetFields(); await load();
+      mutationKey.reset(); setEditing(null); setSeasonEditorOpen(false); form.resetFields(); await load();
     } catch { setError(editing ? '赛季保存失败，请刷新后重试' : '赛季创建失败，请检查时间和赛季编号'); }
     finally { setSubmitting(false); }
   };
 
   const beginEdit = (season: LeagueSeasonSummary) => {
     mutationKey.reset(); setEditing(season);
+    setSeasonEditorOpen(true);
     form.setFieldsValue({
       seasonNumber: season.seasonNumber,
       displayName: season.displayName,
@@ -127,6 +134,14 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
       championCapacity: season.championCapacity,
       promotionCount: season.promotionCount
     });
+  };
+
+  const beginCreate = () => {
+    mutationKey.reset();
+    setEditing(null);
+    form.resetFields();
+    form.setFieldValue('seasonNumber', (seasons[0]?.seasonNumber ?? 0) + 1);
+    setSeasonEditorOpen(true);
   };
 
   const beginRename = (season: LeagueSeasonSummary) => {
@@ -173,13 +188,43 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
         method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: EnrollResponseSchema,
         body: { leagueTeamIds: selectedTeamIds, expectedSeasonVersion: current.version }
       });
-      mutationKey.reset(); await load();
+      mutationKey.reset(); setTeamPickerOpen(false); setSelectedTeamIds([]); await load();
     } catch { setError('球队加入赛季失败，请刷新后重试'); }
     finally { setSubmitting(false); }
   };
 
+  const transitionRegistration = async (
+    season: z.infer<typeof AdminLeagueSeasonSummarySchema>,
+    action: 'open-registration' | 'close-registration'
+  ) => {
+    if (submitting) return;
+    setSubmitting(true); setError(null);
+    try {
+      await api.request(`/v1/admin/leagues/${leagueId}/seasons/${season.id}/${action}`, {
+        method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: AdminLeagueSeasonSummarySchema,
+        body: { expectedVersion: season.version }
+      });
+      mutationKey.reset(); await load();
+    } catch { setError(action === 'open-registration' ? '开放报名失败，请刷新后重试' : '确认名单失败，请刷新后重试'); }
+    finally { setSubmitting(false); }
+  };
+
+  const confirmRoster = (season: z.infer<typeof AdminLeagueSeasonSummarySchema>) => {
+    Modal.confirm({
+      title: '确认当前参赛名单？',
+      content: '确认后将关闭报名并锁定当前名单，随后进入分组确认阶段。',
+      okText: '确认名单', cancelText: '取消',
+      onOk: () => transitionRegistration(season, 'close-registration')
+    });
+  };
+
   if (loading) return <div className="loading-block"><Spin /></div>;
-  const currentSeason = seasons.find((season) => season.id === league?.currentSeason?.id) ?? league?.currentSeason;
+  const currentSeasonRecord = seasons.find((season) => season.id === league?.currentSeason?.id) ?? null;
+  const currentSeason = currentSeasonRecord ?? league?.currentSeason;
+  const availableTeams = currentSeasonRecord
+    ? teams.filter((team) => !currentSeasonRecord.enrolledLeagueTeamIds.includes(team.id))
+    : [];
+  const rosterEditable = currentSeasonRecord?.status === 'DRAFT' || currentSeasonRecord?.status === 'REGISTRATION_OPEN';
   return <div className="page-grid page-grid--seasons">
     <Card className={`current-season-card${currentSeason?.status === 'CANCELLED' ? ' current-season-card--cancelled' : ''}`}>
       {currentSeason ? <div className="current-season-summary">
@@ -189,15 +234,24 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
             <h2>{currentSeason.displayName}</h2>
             <p><strong>{seasonStatusLabel[currentSeason.status]}</strong><span>{currentSeason.approvedEntryCount} 支球队参赛</span></p>
           </div>
-          <Button type="primary" href="#current-season-teams">进入当前赛季</Button>
+          <Space wrap>
+            <Button onClick={beginCreate}>新建赛季</Button>
+            {currentSeasonRecord?.status === 'DRAFT'
+              ? <Button type="primary" loading={submitting} onClick={() => void transitionRegistration(currentSeasonRecord, 'open-registration')}>开放报名</Button>
+              : currentSeasonRecord?.status === 'REGISTRATION_OPEN'
+                ? <Button type="primary" loading={submitting} onClick={() => confirmRoster(currentSeasonRecord)}>确认名单</Button>
+                : currentSeason.status === 'ALLOCATION_REVIEW'
+                  ? <Button type="primary" href={`/leagues/${leagueId}/allocation`}>前往分组</Button>
+                  : null}
+          </Space>
         </div>
         <SeasonRail status={currentSeason.status} />
       </div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未设置当前赛季">
-        <Button type="primary" href="#season-editor">创建首个赛季</Button>
+        <Button type="primary" onClick={beginCreate}>创建首个赛季</Button>
       </Empty>}
     </Card>
 
-    <Card title="全部赛季" className="data-card">
+    <Card title="全部赛季" className="data-card seasons-list-card">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       {seasons.length === 0 ? <Empty description="暂无赛季" /> : <Table rowKey="id" pagination={false} dataSource={seasons} columns={[
         { title: '赛季', dataIndex: 'displayName' },
@@ -232,7 +286,12 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
       />
     </Modal>
 
-    <Card id="season-editor" title={editing ? `编辑赛季 · ${editing.displayName}` : '新建赛季'} className="form-card">
+    <Drawer
+      title={editing ? `编辑赛季 · ${editing.displayName}` : '新建赛季'}
+      size="large"
+      open={seasonEditorOpen}
+      onClose={() => { if (!submitting) { setSeasonEditorOpen(false); setEditing(null); form.resetFields(); } }}
+    >
       <Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save}>
         <Form.Item label="赛季编号" name="seasonNumber" rules={[{ required: true }]}><InputNumber min={1} disabled={Boolean(editing)} /></Form.Item>
         <Form.Item label="赛季名称" name="displayName" rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
@@ -246,21 +305,43 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
           <Form.Item label="升级建议数" name="promotionCount"><InputNumber min={0} max={32} placeholder="沿用联赛" /></Form.Item>
         </div>
         <Button type="primary" htmlType="submit" loading={submitting}>{editing ? '保存赛季' : '创建赛季'}</Button>
-        {editing ? <Button onClick={() => { setEditing(null); form.resetFields(); }}>取消编辑</Button> : null}
+        <Button onClick={() => { setSeasonEditorOpen(false); setEditing(null); form.resetFields(); }}>取消</Button>
       </Form>
-    </Card>
+    </Drawer>
 
     <Card id="current-season-teams" title="当前赛季球队" className="data-card season-enrollment-card">
-      {!league?.currentSeason ? <Alert type="warning" showIcon title="请先设置当前赛季" /> : <>
-        <p>选择需要加入 {league.currentSeason.displayName} 的球队。系统不会自动全选，重复加入会安全跳过。</p>
+      {!currentSeasonRecord ? <Alert type="warning" showIcon title="请先设置当前赛季" /> : <div className="season-team-summary">
+        <div>
+          <strong>已加入 {currentSeasonRecord.approvedEntryCount} 支球队</strong>
+          <p>{rosterEditable
+            ? `添加球队时只显示尚未进入 ${currentSeasonRecord.displayName} 的球队。`
+            : '名单已确认，不能继续添加球队'}</p>
+        </div>
+        {rosterEditable ? <Button type="primary" disabled={availableTeams.length === 0} onClick={() => setTeamPickerOpen(true)}>
+          {availableTeams.length === 0 ? '全部球队已加入' : '添加球队'}
+        </Button> : null}
+      </div>}
+    </Card>
+
+    <Modal
+      title="添加球队"
+      open={teamPickerOpen}
+      okText="加入当前赛季"
+      cancelText="取消"
+      confirmLoading={submitting}
+      okButtonProps={{ disabled: selectedTeamIds.length === 0 }}
+      onOk={() => void enroll()}
+      onCancel={() => { if (!submitting) { setTeamPickerOpen(false); setSelectedTeamIds([]); } }}
+    >
+      {availableTeams.length === 0 ? <Empty description="所有球队均已加入当前赛季" /> : <>
+        <p>选择尚未加入 {currentSeasonRecord?.displayName} 的球队。</p>
         <Checkbox.Group
           className="season-team-options"
-          options={teams.map((team) => ({ label: `${team.teamNumber ?? '—'} · ${team.name}（${team.ownerPublicUserNo}）`, value: team.id }))}
+          options={availableTeams.map((team) => ({ label: `${team.teamNumber ?? '—'} · ${team.name}（${team.ownerPublicUserNo}）`, value: team.id }))}
           value={selectedTeamIds}
           onChange={(values) => setSelectedTeamIds(values as string[])}
         />
-        <Button type="primary" disabled={selectedTeamIds.length === 0 || submitting} loading={submitting} onClick={() => void enroll()}>加入当前赛季</Button>
       </>}
-    </Card>
+    </Modal>
   </div>;
 }

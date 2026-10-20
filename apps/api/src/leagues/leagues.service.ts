@@ -14,6 +14,8 @@ import { PrismaService } from '../database/prisma.service.js';
 import { LeagueError } from './league.errors.js';
 import type { LeagueTransaction } from './league.types.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
+import { OBJECT_STORAGE, type ObjectStorage } from '../storage/object-storage.js';
+import { publicImageUrl } from '../storage/public-image-url.js';
 
 type SeasonWithCount = LeagueSeason & {
   _count: { entries: number };
@@ -38,7 +40,8 @@ export class LeaguesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
-    @Optional() @Inject(AuditLogService) private readonly audit: AuditLogService = new AuditLogService(prisma)
+    @Optional() @Inject(AuditLogService) private readonly audit: AuditLogService = new AuditLogService(prisma),
+    @Optional() @Inject(OBJECT_STORAGE) private readonly storage?: ObjectStorage
   ) {}
 
   create(
@@ -159,7 +162,7 @@ export class LeaguesService {
     const page = records.slice(0, query.limit);
     const last = page.at(-1);
     return {
-      items: page.map((record) => this.summary(record)),
+      items: await Promise.all(page.map((record) => this.summary(record))),
       nextCursor: records.length > query.limit && last
         ? this.encodeCursor(last.createdAt, last.id)
         : null
@@ -189,20 +192,20 @@ export class LeaguesService {
     return record;
   }
 
-  private detail(record: LeagueRecord, canManage: boolean): LeagueDetail {
+  private async detail(record: LeagueRecord, canManage: boolean): Promise<LeagueDetail> {
     return {
-      ...this.summary(record),
+      ...await this.summary(record),
       capabilities: { canManage, canCreateSeason: canManage }
     };
   }
 
-  private summary(record: League & { currentSeason: SeasonWithCount | null }): LeagueSummary {
+  private async summary(record: League & { currentSeason: SeasonWithCount | null }): Promise<LeagueSummary> {
     return {
       id: record.id,
       name: record.name,
       shortName: record.shortName,
       description: record.description,
-      logoUrl: record.logoUrl,
+      logoUrl: await publicImageUrl(this.storage, record.logoUrl),
       status: record.status,
       edition: record.edition,
       resultEvidenceRequired: record.resultEvidenceRequired,

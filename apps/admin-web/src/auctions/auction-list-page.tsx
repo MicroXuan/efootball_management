@@ -32,7 +32,7 @@ export function AuctionListPage({ api = adminApi }: { api?: AdminApi }) {
     {error ? <Alert role="alert" type="error" showIcon title="拍卖列表加载失败" action={<Button onClick={() => void load()}>重试</Button>} /> : null}
     {items?.length === 0 ? <Card className="auction-empty"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<><strong>还没有球员拍卖</strong><span>创建草稿后配置球员、起拍价和最低加价。</span></>} /><Link className="ant-btn ant-btn-primary auction-create-button auction-create-button--compact" to={`/leagues/${leagueId}/auctions/new`}><span className="auction-create-button__icon" aria-hidden="true">＋</span><span>创建拍卖批次</span></Link></Card> : null}
     {items?.length ? <Card className="data-card" title="拍卖批次"><Table rowKey="id" pagination={false} dataSource={items} columns={[
-      { title: '批次', dataIndex: 'name', render: (_: unknown, row) => <Link to={`/leagues/${leagueId}/auctions/${row.id}`}><strong>{row.name}</strong><small className="auction-table-subline">{row.groupDisplayName}</small></Link> },
+      { title: '批次', dataIndex: 'name', render: (_: unknown, row) => <Link to={`/leagues/${leagueId}/auctions/${row.id}`}><strong>{row.name}</strong><small className="auction-table-subline">{row.groupDisplayName ?? '小程序拍卖大厅'}</small></Link> },
       { title: '状态', dataIndex: 'status', render: (status: string) => <Tag color={status === 'ACTIVE' ? 'processing' : status === 'RECOVERY_REQUIRED' ? 'error' : status === 'COMPLETED' ? 'success' : 'default'}>{statusLabel[status] ?? status}</Tag> },
       { title: '出价渠道', dataIndex: 'bidChannel', render: (channel: string) => channel === 'MINIPROGRAM' ? '小程序大厅' : '微信群' },
       { title: '球员', dataIndex: 'lotCount', render: (count: number) => `${count} 位` },

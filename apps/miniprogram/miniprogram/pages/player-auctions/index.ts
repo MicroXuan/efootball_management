@@ -38,4 +38,8 @@ Page({
     if (!batchId) return
     wx.navigateTo({ url: `/pages/auction-room/index?batchId=${encodeURIComponent(batchId)}` })
   },
+
+  openSales() {
+    wx.navigateTo({ url: '/pages/auction-sales/index' })
+  },
 })

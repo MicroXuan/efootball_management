@@ -36,11 +36,17 @@ page { background: #0e1417; color: #f4f7f8; }
 .attribute-row { min-width: 0; }
 .attribute-label { color: #aab5ba; font-size: 20rpx; }
 .attribute-value { float: right; color: #f4f7f8; font-size: 26rpx; font-weight: 800; }
-.attribute-row.is-elite .attribute-value { color: #b6f13a; }
+.attribute-value.tone-red { color: #ff0000; }
+.attribute-value.tone-yellow { color: #ffe600; }
+.attribute-value.tone-green { color: #22ff00; }
+.attribute-value.tone-cyan { color: #00efff; }
 .attribute-delta { color: #b6f13a; font-size: 17rpx; }
 .attribute-track { height: 7rpx; margin-top: 12rpx; overflow: hidden; border-radius: 7rpx; background: #27332d; }
 .attribute-fill { height: 100%; border-radius: 7rpx; background: #7e8b91; transition: width 220ms ease, background-color 220ms ease; }
-.attribute-row.is-elite .attribute-fill { background: #b6f13a; }
+.attribute-fill.tone-red { background: #ff0000; }
+.attribute-fill.tone-yellow { background: #ffe600; }
+.attribute-fill.tone-green { background: #22ff00; }
+.attribute-fill.tone-cyan { background: #00efff; }
 
 .skill-list { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 24rpx; }
 .skill-chip { padding: 13rpx 17rpx; border: 2rpx solid #46545b; border-radius: 14rpx; background: #1c262b; color: #dce6e0; font-size: 21rpx; }
@@ -118,10 +124,9 @@ page { background: #0e1417; color: #f4f7f8; }
 .position-cell--CB { grid-column: 2; grid-row: 6; }
 .position-cell--RB { grid-column: 3; grid-row: 6 / span 2; }
 .position-cell--GK { grid-column: 2; grid-row: 7; }
-.position-cell.tone-high { border-color: #2f7050; background: rgba(24, 68, 46, .94); color: #71f39e; }
-.position-cell.tone-medium { border-color: #76612f; background: rgba(76, 60, 27, .92); color: #f4d45d; }
-.position-cell.tone-low { border-color: #353b40; background: rgba(37, 40, 43, .94); color: #d6dcde; }
-.position-cell.tone-empty { color: #56636a; opacity: .72; }
+.position-cell.tone-strong { border-color: #07c160; background: #07c160; color: #06140d; }
+.position-cell.tone-partial { border-color: rgba(7, 193, 96, .72); background: rgba(7, 193, 96, .4); color: #e9fff2; }
+.position-cell.tone-neutral { border-color: #353b40; background: rgba(37, 40, 43, .94); color: #d6dcde; }
 .position-cell.is-primary { border-color: #b6f13a; box-shadow: inset 0 0 0 1rpx rgba(182, 241, 58, .28), 0 0 24rpx rgba(182, 241, 58, .12); }
 .position-rating { font-size: 26rpx; font-weight: 900; }
 .position-code { margin-top: 2rpx; font-size: 14rpx; font-weight: 800; letter-spacing: 1rpx; }

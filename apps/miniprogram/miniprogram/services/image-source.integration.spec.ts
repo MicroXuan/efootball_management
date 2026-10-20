@@ -13,7 +13,8 @@ describe('mini-program image source integration', () => {
     expect(source('components/entity-artwork/index.wxml')).toContain('src="{{displaySrc}}"')
     const controller = source('components/entity-artwork/index.ts')
     expect(controller).toContain("from '../../services/image-source'")
-    expect(controller).toContain('resolveImageSource(')
+    expect(controller).toContain('cacheImageSource(')
+    expect(controller).toContain('downloadCloud: (options) => wx.cloud.downloadFile(options)')
   })
 
   it('renders the league banner from the resolved local source', () => {
@@ -22,5 +23,12 @@ describe('mini-program image source integration', () => {
     expect(controller).toContain("from '../../services/image-source'")
     expect(controller).toContain('cacheImageSource(')
     expect(controller).not.toContain('wx.getImageInfo')
+  })
+
+  it('renders transparent league logos on a light surface', () => {
+    expect(source('pages/leagues/index.wxml')).toContain('surface="light"')
+    expect(source('pages/league-detail/index.wxml')).toContain('surface="light"')
+    expect(source('components/entity-artwork/index.wxml')).toContain('artwork--{{surface}}')
+    expect(source('components/entity-artwork/index.wxss')).toContain('.artwork--light')
   })
 })

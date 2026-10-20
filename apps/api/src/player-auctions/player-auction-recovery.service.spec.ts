@@ -1,18 +1,52 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- focused recovery transaction test doubles */
 import { jest } from '@jest/globals';
+import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 
 describe('PlayerAuctionRecoveryService', () => {
   it('enters recovery once per unavailable bridge and retains the frozen lot', async () => {
     const state: any = { enterRecovery: jest.fn(async () => ({ transition: 'RECOVERY_REQUIRED', batchId: 'batch-1' })) };
-    const prisma: any = { playerAuctionBatch: { findMany: jest.fn(async () => [{ id: 'batch-1', groupBindingId: 'group-1' }]) } };
+    const prisma: any = { playerAuctionBatch: { findMany: jest.fn()
+      .mockResolvedValueOnce([{ id: 'batch-1', groupBindingId: 'group-1' }] as never)
+      .mockResolvedValueOnce([] as never) } };
     const service = new PlayerAuctionRecoveryService(prisma, state, {} as never, {} as never, {} as never, { heartbeatTimeoutMs: 30_000 } as never);
     await service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT');
     await service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT');
     expect(state.enterRecovery).toHaveBeenCalledTimes(1);
+    expect(prisma.playerAuctionBatch.findMany).toHaveBeenCalledTimes(2);
     expect(prisma.playerAuctionBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ bidChannel: 'WECHAT_GROUP' })
     }));
+  });
+
+  it('detects a newly active group auction while the same bridge remains unavailable', async () => {
+    const state: any = { enterRecovery: jest.fn(async () => ({ transition: 'RECOVERY_REQUIRED', batchId: 'batch-2' })) };
+    const prisma: any = { playerAuctionBatch: { findMany: jest.fn()
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([{ id: 'batch-2', groupBindingId: 'group-2' }] as never) } };
+    const service = new PlayerAuctionRecoveryService(prisma, state, {} as never, {} as never, {} as never, { heartbeatTimeoutMs: 30_000 } as never);
+
+    await service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT');
+    await service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT');
+
+    expect(state.enterRecovery).toHaveBeenCalledTimes(1);
+    expect(state.enterRecovery).toHaveBeenCalledWith('group-2', 'HEARTBEAT_TIMEOUT');
+  });
+
+  it('ignores a stale active-batch snapshot when another scanner already entered recovery', async () => {
+    const state: any = {
+      enterRecovery: jest.fn(async () => {
+        throw new PlayerAuctionError('AUCTION_STATE_INVALID', '当前群没有可执行该操作的拍卖', 409);
+      })
+    };
+    const prisma: any = {
+      playerAuctionBatch: {
+        findMany: jest.fn(async () => [{ id: 'batch-1', groupBindingId: 'group-1' }])
+      }
+    };
+    const service = new PlayerAuctionRecoveryService(prisma, state, {} as never, {} as never, {} as never, { heartbeatTimeoutMs: 30_000 } as never);
+
+    await expect(service.onBridgeUnavailable('device-1', 'HEARTBEAT_TIMEOUT')).resolves.toBe(0);
   });
 
   it('does not move miniprogram auctions into bridge recovery', async () => {
@@ -28,7 +62,11 @@ describe('PlayerAuctionRecoveryService', () => {
 
   it('authorized recovery performs an explicit full 30-second restart', async () => {
     const now = new Date('2026-10-09T12:00:00.000Z');
-    const batch: any = { id: 'batch-1', bidChannel: 'WECHAT_GROUP', leagueId: 'league-1', groupBindingId: 'group-1', currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED' };
+    const batch: any = {
+      id: 'batch-1', bidChannel: 'WECHAT_GROUP', leagueId: 'league-1', groupBindingId: 'group-1',
+      groupBinding: { deviceId: 'device-1', wechatGroupId: 'room@chatroom' },
+      currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED'
+    };
     const lot: any = { id: 'lot-1', status: 'PAUSED' };
     const tx: any = { playerAuctionBatch: { findUnique: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) }, playerAuctionLot: { findUnique: jest.fn(async () => lot), update: jest.fn(async ({ data }: any) => Object.assign(lot, data)) } };
     const service = new PlayerAuctionRecoveryService(

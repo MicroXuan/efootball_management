@@ -69,10 +69,22 @@ export class ValuationSubmissionsService {
       }
       const latest = await tx.valuationSubmission.findFirst({
         where: { windowId: input.windowId, leagueTeamId: teamId },
+        include: { items: { select: { snapshotId: true } } },
         orderBy: [{ attemptNumber: 'desc' }, { createdAt: 'desc' }]
       });
       let submission;
-      if (!latest || latest.status === 'REJECTED') {
+      const submittedSnapshotIds = new Set(latest?.items.map((item) => item.snapshotId) ?? []);
+      const hasUnsubmittedPlayer = teamSnapshots.some(
+        (snapshot) => !submittedSnapshotIds.has(snapshot.id)
+      );
+      const canStartAttempt = !latest
+        || latest.status === 'REJECTED'
+        || (['PUBLISHED', 'APPROVED'].includes(latest.status) && hasUnsubmittedPlayer);
+      if (canStartAttempt) {
+        if (latest && ['PUBLISHED', 'APPROVED'].includes(latest.status)
+          && latest.version !== input.expectedVersion) {
+          throw new LeagueError('VALUATION_SUBMISSION_VERSION_CONFLICT', '申报已发生变化，请刷新后重试', 409);
+        }
         submission = await tx.valuationSubmission.create({
           data: {
             windowId: input.windowId,
@@ -159,14 +171,29 @@ export class ValuationSubmissionsService {
         throw new LeagueError('VALUATION_SUBMISSION_VERSION_CONFLICT', '草稿已发生变化，请刷新后重试', 409);
       }
       const draftBySnapshot = new Map(locked.items.map((item) => [item.snapshotId, item]));
+      const currentValuations = snapshots.length
+        ? await tx.leaguePlayerValuation.findMany({
+          where: {
+            leagueId: context.leagueId,
+            footballPlayerId: { in: snapshots.map((snapshot) => snapshot.footballPlayerId) }
+          },
+          select: { footballPlayerId: true, currentValueMinor: true }
+        })
+        : [];
+      const currentValueByPlayer = new Map(
+        currentValuations.map((valuation) => [valuation.footballPlayerId, valuation.currentValueMinor])
+      );
       const prepared = snapshots.map((snapshot): PreparedItem => {
         const item = draftBySnapshot.get(snapshot.id);
-        if (!item && snapshot.baseValueMinor === null) {
+        const previousValueMinor = locked.attemptNumber > 1
+          ? currentValueByPlayer.get(snapshot.footballPlayerId) ?? snapshot.baseValueMinor
+          : snapshot.baseValueMinor;
+        if (!item && previousValueMinor === null) {
           throw new LeagueError('VALUATION_FIRST_VALUE_REQUIRED', '首次身价必须全部填写后才能发布', 422);
         }
-        const proposedValueMinor = item?.proposedValueMinor ?? snapshot.baseValueMinor!;
-        const range = valuationRange(snapshot.baseValueMinor, context.rule);
-        if (snapshot.baseValueMinor === null
+        const proposedValueMinor = item?.proposedValueMinor ?? previousValueMinor!;
+        const range = valuationRange(previousValueMinor, context.rule);
+        if (previousValueMinor === null
           && (proposedValueMinor < range.minimum || proposedValueMinor > range.maximum)) {
           throw new LeagueError(
             'VALUATION_FIRST_VALUE_OUT_OF_RANGE',
@@ -174,8 +201,8 @@ export class ValuationSubmissionsService {
             422
           );
         }
-        const unchanged = snapshot.baseValueMinor !== null
-          && proposedValueMinor === snapshot.baseValueMinor;
+        const unchanged = previousValueMinor !== null
+          && proposedValueMinor === previousValueMinor;
         if (!unchanged && (proposedValueMinor < context.rule.minimumValueMinor
           || proposedValueMinor > context.rule.maximumValueMinor)) {
           throw new LeagueError(
@@ -187,7 +214,7 @@ export class ValuationSubmissionsService {
         return {
           snapshotId: snapshot.id,
           footballPlayerId: snapshot.footballPlayerId,
-          previousValueMinor: snapshot.baseValueMinor,
+          previousValueMinor,
           proposedValueMinor,
           minimumAllowedMinor: range.minimum,
           maximumAllowedMinor: range.maximum,

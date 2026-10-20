@@ -109,16 +109,49 @@ describe('player card detail view model', () => {
     expect(view.attributes.map(({ key }) => key)).toEqual(['speed', 'passing'])
   })
 
-  it('makes elite ratings distinct and safely caps their visual bar width', () => {
-    const view = toCardDetailViewModel(detail({
-      attributes: { finishing: 104, speed: 94, stamina: 89 },
-    }))
+  it('uses PESDATA ability bands at every boundary', () => {
+    const presentation = playerCardPresentation(detail({
+      attributes: {
+        offensiveAwareness: 69,
+        ballControl: 70,
+        dribbling: 79,
+        tightPossession: 80,
+        lowPass: 89,
+        loftedPass: 90,
+      },
+    }), false)
 
-    expect(view.attributes).toEqual([
-      expect.objectContaining({ key: 'speed', value: 94, tone: 'elite', barWidth: 94 }),
-      expect.objectContaining({ key: 'finishing', value: 104, tone: 'elite', barWidth: 100 }),
-      expect.objectContaining({ key: 'stamina', value: 89, tone: 'standard', barWidth: 89 }),
-    ])
+    expect(Object.fromEntries(presentation.attributes.map(({ key, tone }) => [key, tone])))
+      .toMatchObject({
+        offensiveAwareness: 'red',
+        ballControl: 'yellow',
+        dribbling: 'yellow',
+        tightPossession: 'green',
+        lowPass: 'green',
+        loftedPass: 'cyan',
+      })
+  })
+
+  it('uses post-build values for ability tones and caps only bar width', () => {
+    const presentation = playerCardPresentation(detail({
+      attributes: { finishing: 69, passing: 79, dribbling: 89, speed: 104 },
+      autoBuild: {
+        allocation: { shooting: 1, passing: 1, dribbling: 1 },
+        maxOverall: 101,
+        dtRating: 99,
+        algorithmVersion: 'pesdata-auto-v1',
+      },
+    }), true)
+
+    expect(Object.fromEntries(presentation.attributes.map(({ key, value, tone, barWidth }) => [
+      key,
+      { value, tone, barWidth },
+    ]))).toMatchObject({
+      finishing: { value: 70, tone: 'yellow', barWidth: 70 },
+      passing: { value: 80, tone: 'green', barWidth: 80 },
+      dribbling: { value: 90, tone: 'cyan', barWidth: 90 },
+      speed: { value: 104, tone: 'cyan', barWidth: 100 },
+    })
   })
 
   it('uses explicit Chinese fallbacks when scouting metadata is missing', () => {
@@ -231,6 +264,22 @@ describe('player card detail view model', () => {
     expect(view.autoBuild).toEqual({
       available: true,
       maxOverall: 96,
+      dtRating: null,
+      allocationRows: [],
+      unavailableReason: '',
+    })
+  })
+
+  it('shows an epic card with zero progression points as a valid unchanged build', () => {
+    const view = toCardDetailViewModel(detail({
+      cardType: 'EPIC',
+      overallRating: 87,
+      attributes: { sourceMetadata: { Level: '-', maxLevel: '0' } },
+    }))
+
+    expect(view.autoBuild).toEqual({
+      available: true,
+      maxOverall: 87,
       dtRating: null,
       allocationRows: [],
       unavailableReason: '',
@@ -371,19 +420,35 @@ describe('player card detail view model', () => {
     expect(presentation.positions).toHaveLength(13)
   })
 
-  it('assigns readable heat-map tones to position ratings', () => {
+  it('maps numeric and whitespace PositionHot values by PESDATA index', () => {
     const presentation = playerCardPresentation(detail({
       position: 'CF',
       overallRating: 88,
-      attributes: { positionRatings: { CF: 88, SS: 80, AMF: 74, CMF: 69 } },
+      attributes: {
+        positionRatings: { CF: 88, SS: 80, AMF: 74, CMF: 69, GK: 45 },
+        positionHot: [1, 1, 1, 1, 1, ' 2 ', 1, 1, 1, 1, 1, 3, 3],
+      },
       autoBuild: null,
     }), false)
 
-    expect(presentation.positions.find(({ code }) => code === 'CF')).toMatchObject({ tone: 'high', isPrimary: true })
-    expect(presentation.positions.find(({ code }) => code === 'SS')?.tone).toBe('high')
-    expect(presentation.positions.find(({ code }) => code === 'AMF')?.tone).toBe('medium')
-    expect(presentation.positions.find(({ code }) => code === 'CMF')?.tone).toBe('low')
-    expect(presentation.positions.find(({ code }) => code === 'GK')?.tone).toBe('empty')
+    expect(presentation.positions.find(({ code }) => code === 'CF')).toMatchObject({
+      rating: 88, tone: 'strong', isPrimary: true,
+    })
+    expect(presentation.positions.find(({ code }) => code === 'SS')).toMatchObject({ rating: 80, tone: 'strong' })
+    expect(presentation.positions.find(({ code }) => code === 'CMF')).toMatchObject({ rating: 69, tone: 'partial' })
+    expect(presentation.positions.find(({ code }) => code === 'AMF')).toMatchObject({ rating: 74, tone: 'neutral' })
+    expect(presentation.positions.find(({ code }) => code === 'GK')).toMatchObject({ rating: 45, tone: 'neutral' })
+
+    const short = playerCardPresentation(detail({
+      attributes: { positionRatings: { GK: 45, CF: 88 }, positionHot: [3] },
+    }), false)
+    expect(short.positions.find(({ code }) => code === 'GK')?.tone).toBe('strong')
+    expect(short.positions.find(({ code }) => code === 'CF')?.tone).toBe('neutral')
+
+    const malformed = playerCardPresentation(detail({
+      attributes: { positionRatings: { CF: 88 }, positionHot: 'not-an-array' },
+    }), false)
+    expect(malformed.positions.find(({ code }) => code === 'CF')?.tone).toBe('neutral')
   })
 
   it('creates deterministic radar polygon vertices within the chart bounds', () => {

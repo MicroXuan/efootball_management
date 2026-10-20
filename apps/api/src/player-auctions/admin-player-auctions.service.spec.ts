@@ -29,8 +29,15 @@ function harness() {
       updateMany: jest.fn(async () => ({ count: 1 }))
     },
     footballPlayer: { findMany: jest.fn(async () => [{ id: 'player-1', nameZh: '车范根', nameEn: 'Cha Bum-Kun', shortName: null, nationality: '韩国', club: null }]) },
-    playerCard: { findMany: jest.fn(async () => [{ id: 'card-1', playerId: 'player-1', cardName: '传奇', position: 'CF', overallRating: 96, cardType: 'EPIC', status: 'ACTIVE' }]) },
-    leagueTeam: { findFirst: jest.fn(async () => ({ id: 'team-1', leagueId: 'league-1', name: '申花' })) },
+    playerCard: { findMany: jest.fn(async () => [{
+      id: 'card-1', playerId: 'player-1', cardName: '传奇', position: 'CF', overallRating: 96,
+      cardType: 'EPIC', status: 'ACTIVE', publishedAt: now,
+      imageUrl: 'https://img.pesdata.net/player.webp'
+    }]) },
+    leagueTeam: { findFirst: jest.fn(async () => ({
+      id: 'team-1', leagueId: 'league-1', teamNumber: 1, name: '申花',
+      owner: { displayName: '梅西' }
+    })) },
     playerAuctionReview: { create: jest.fn(async ({ data }: any) => ({ id: 'review-1', reviewedAt: now, ...data })) }
   };
   const receipts: any = { execute: jest.fn(async (_a: string, _o: string, _k: string, work: any) => work(tx)) };
@@ -77,6 +84,29 @@ describe('AdminPlayerAuctionsService', () => {
     });
   });
 
+  it('creates and prepares a miniprogram batch without a WeChat group', async () => {
+    const { service, tx, batch } = harness();
+    batch.bidChannel = 'MINIPROGRAM';
+    batch.groupBindingId = null;
+    batch.groupBinding = null;
+    batch.lots = [{ id: 'lot-1', bids: [], review: null }];
+    await expect(service.create('admin-1', 'league-1', {
+      groupBindingId: null, name: '小程序拍卖', bidChannel: 'MINIPROGRAM'
+    }, 'create-miniprogram')).resolves.toMatchObject({ groupBindingId: null, bidChannel: 'MINIPROGRAM' });
+    expect(tx.wechatGroupBinding.findFirst).not.toHaveBeenCalled();
+    expect(tx.playerAuctionBatch.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ groupBindingId: null, bidChannel: 'MINIPROGRAM' })
+    }));
+
+    tx.playerAuctionBatch.findFirst
+      .mockResolvedValueOnce(batch)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(batch);
+    await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'prepare-miniprogram'))
+      .resolves.toMatchObject({ groupBindingId: null, bidChannel: 'MINIPROGRAM' });
+    expect(tx.wechatGroupBinding.findFirst).not.toHaveBeenCalled();
+  });
+
   it('replaces draft lots with validated player/card snapshots in contiguous order', async () => {
     const { service, tx, batch } = harness();
     await service.replaceLots('admin-1', 'league-1', 'batch-1', {
@@ -84,7 +114,43 @@ describe('AdminPlayerAuctionsService', () => {
       lots: [{ playerId: 'player-1', playerCardId: 'card-1', displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
     }, 'lots-1');
     expect(tx.playerAuctionLot.createMany).toHaveBeenCalled();
-    expect(batch.lots[0]).toMatchObject({ playerNameSnapshot: '车范根', startingPrice: 50, minimumIncrement: 10 });
+    expect(batch.lots[0]).toMatchObject({
+      playerNameSnapshot: '车范根',
+      playerCardId: 'card-1',
+      startingPrice: 50,
+      minimumIncrement: 10,
+      playerSnapshot: {
+        card: {
+          id: 'card-1',
+          imageUrl: 'https://img.pesdata.net/player.webp',
+          cardName: '传奇',
+          position: 'CF',
+          overallRating: 96,
+          cardType: 'EPIC'
+        }
+      }
+    });
+  });
+
+  it('rejects a lot without a concrete active published card for its player', async () => {
+    const missing = harness();
+    await expect(missing.service.replaceLots('admin-1', 'league-1', 'batch-1', {
+      expectedVersion: 1,
+      lots: [{ playerId: 'player-1', playerCardId: undefined as any, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }, 'lots-missing-card')).rejects.toMatchObject({ code: 'AUCTION_CARD_INVALID' });
+
+    for (const card of [
+      { id: 'card-1', playerId: 'other-player', status: 'ACTIVE', publishedAt: now },
+      { id: 'card-1', playerId: 'player-1', status: 'INACTIVE', publishedAt: now },
+      { id: 'card-1', playerId: 'player-1', status: 'ACTIVE', publishedAt: null }
+    ]) {
+      const invalid = harness();
+      invalid.tx.playerCard.findMany.mockResolvedValueOnce([card]);
+      await expect(invalid.service.replaceLots('admin-1', 'league-1', 'batch-1', {
+        expectedVersion: 1,
+        lots: [{ playerId: 'player-1', playerCardId: 'card-1', displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+      }, `lots-invalid-${card.status}-${String(card.publishedAt)}`)).rejects.toMatchObject({ code: 'AUCTION_CARD_INVALID' });
+    }
   });
 
   it('rejects edits outside draft state and optimistic version conflicts', async () => {
@@ -98,6 +164,20 @@ describe('AdminPlayerAuctionsService', () => {
     await expect(service.update('admin-1', 'league-1', 'batch-1', {
       name: '新名字', bidChannel: 'MINIPROGRAM', expectedVersion: 1
     }, 'update-2')).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('detaches a draft from WeChat when it switches to the miniprogram channel', async () => {
+    const { service, batch, tx } = harness();
+    tx.playerAuctionBatch.findFirst
+      .mockResolvedValueOnce(batch)
+      .mockResolvedValueOnce({ ...batch, bidChannel: 'MINIPROGRAM', groupBindingId: null, groupBinding: null });
+
+    await expect(service.update('admin-1', 'league-1', 'batch-1', {
+      name: '小程序拍卖', bidChannel: 'MINIPROGRAM', groupBindingId: null, expectedVersion: 1
+    }, 'update-miniprogram')).resolves.toMatchObject({ bidChannel: 'MINIPROGRAM', groupBindingId: null });
+    expect(tx.playerAuctionBatch.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ bidChannel: 'MINIPROGRAM', groupBindingId: null })
+    }));
   });
 
   it('prepares only a non-empty batch and rejects another unresolved batch for the league', async () => {
@@ -173,9 +253,37 @@ describe('AdminPlayerAuctionsService', () => {
       decision: 'ADJUST', expectedVersion: 3, reviewedTeamId: 'team-1', reviewedPrice: 130, reason: '人工核对'
     }, 'review-1');
     expect(tx.playerAuctionReview.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-      computedWinnerTeamId: 'team-1', computedPrice: 120, reviewedPrice: 130
+      computedWinnerTeamId: 'team-1', computedPrice: 120, reviewedPrice: 130,
+      winnerTeamNumberSnapshot: 1,
+      winnerTeamNameSnapshot: '申花',
+      winnerDisplayNameSnapshot: '梅西'
     }) }));
     expect(result.review.computedPrice).toBe(120);
+  });
+
+  it('snapshots the confirmed winner identity independently from later team edits', async () => {
+    const { service, tx, batch } = harness();
+    batch.status = 'ACTIVE';
+    batch.lots = [{
+      id: 'lot-1', batchId: 'batch-1', status: 'PENDING_REVIEW', version: 3,
+      currentPrice: 120, currentHighestBid: { leagueTeamId: 'team-1', leagueTeam: { name: '新队名' } }
+    }];
+
+    await service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
+      decision: 'CONFIRM', expectedVersion: 3
+    }, 'review-confirm');
+
+    expect(tx.leagueTeam.findFirst).toHaveBeenCalledWith({
+      where: { id: 'team-1', leagueId: 'league-1', status: 'ACTIVE' },
+      include: { owner: { select: { displayName: true } } }
+    });
+    expect(tx.playerAuctionReview.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        winnerTeamNumberSnapshot: 1,
+        winnerTeamNameSnapshot: '申花',
+        winnerDisplayNameSnapshot: '梅西'
+      })
+    }));
   });
 
   it('confirms a no-bid result without changing the automatically active next lot', async () => {

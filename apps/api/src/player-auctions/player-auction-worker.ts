@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatOutboxService } from '../wechat-bot/wechat-outbox.service.js';
@@ -14,7 +14,10 @@ const FOLLOW_UP_PRIORITY = 500;
 
 @Injectable()
 export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger = new Logger(PlayerAuctionWorker.name);
   private timer?: NodeJS.Timeout;
+  private tickInFlight: Promise<void> | undefined;
+  private stopping = false;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -27,12 +30,24 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
 
   async onApplicationBootstrap() {
     await this.recovery.recoverOverdueOnBootstrap();
-    this.timer = setInterval(() => void this.tick(), 500);
+    this.timer = setInterval(() => this.scheduleTick(), 500);
     this.timer.unref();
   }
 
-  onModuleDestroy() {
+  async onModuleDestroy() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
+    await this.tickInFlight;
+  }
+
+  private scheduleTick() {
+    if (this.stopping || this.tickInFlight) return;
+    const tick = this.tick()
+      .catch((error: unknown) => this.logger.error('Player auction worker tick failed', error))
+      .finally(() => {
+        if (this.tickInFlight === tick) this.tickInFlight = undefined;
+      });
+    this.tickInFlight = tick;
   }
 
   async tick() {
@@ -52,6 +67,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
         continue;
       }
       if (lot.batch.bidChannel !== 'WECHAT_GROUP') continue;
+      if (!lot.batch.groupBinding) continue;
       const remainingSeconds = Math.ceil(remainingMs / 1_000);
       const previous = lot.lastCountdownMark ?? 30;
       const crossed = MARKS.filter((mark) => mark < previous && remainingSeconds <= mark);
@@ -134,6 +150,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
         });
       }
       if (batch.bidChannel !== 'WECHAT_GROUP') return true;
+      if (!batch.groupBinding) return false;
       const text = lot.currentHighestBid?.leagueTeam
         ? this.formatter.pendingReview(lot.playerNameSnapshot, lot.currentHighestBid.leagueTeam.name, lot.currentPrice ?? lot.startingPrice)
         : this.formatter.noBid(lot.playerNameSnapshot);

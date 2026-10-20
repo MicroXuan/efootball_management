@@ -149,6 +149,12 @@ select { font: inherit; }
 .page-heading .ant-tabs-tab-btn { height: 24px; display: flex; align-items: center; }
 .page-heading .ant-tabs-tab a { height: 24px; display: inline-flex; align-items: center; gap: 7px; color: inherit; line-height: 24px; white-space: nowrap; }
 .page-heading .ant-tabs-tab .admin-icon { width: 18px; height: 18px; display: block; flex: 0 0 18px; }
+.league-workspace > .page-heading { align-items: stretch; flex-direction: column; gap: 12px; }
+.league-heading-copy { min-width: 0; }
+.league-heading-copy h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.league-heading-nav { width: 100%; min-width: 0; }
+.league-heading-nav .ant-tabs { width: 100%; min-width: 0; }
+.league-heading-nav .ant-tabs-nav { margin-bottom: 0; }
 .page-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, .8fr); gap: 20px; align-items: start; }
 .page-grid--seasons { align-items: start; }
 .page-stack { display: grid; gap: 20px; }
@@ -157,6 +163,9 @@ select { font: inherit; }
 .workspace-page-title h1 { margin: 7px 0 6px; color: var(--admin-text); font-size: clamp(30px, 3vw, 40px); line-height: 1.1; letter-spacing: -.04em; }
 .workspace-page-title p { margin: 0; color: var(--admin-text-secondary); line-height: 1.6; }
 .season-enrollment-card { grid-column: 1 / -1; }
+.seasons-list-card { grid-column: 1 / -1; }
+.season-team-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.season-team-summary p { margin: 7px 0 0; color: var(--admin-text-secondary); }
 .current-season-card { grid-column: 1 / -1; overflow: hidden; border: 1px solid #cbd8c0; border-radius: 18px; background: linear-gradient(135deg, #ffffff 0%, #f7faef 100%); box-shadow: var(--admin-shadow-card); }
 .current-season-card--cancelled { border-color: #e1c8c5; background: linear-gradient(135deg, #ffffff 0%, #fbf4f3 100%); }
 .current-season-summary { display: grid; gap: 30px; }
@@ -186,6 +195,7 @@ select { font: inherit; }
 .candidate-group,
 .candidate-card-grid,
 .ant-card .ant-table-wrapper { margin-bottom: 18px; }
+.roster-readiness-alert { margin: 0 0 16px; }
 .ant-card .ant-card-head { min-height: 58px; border-bottom-color: #e6ebee; }
 .ant-card .ant-card-head-title { font-weight: 780; }
 .form-card__title { margin: 0; font-size: inherit; font-weight: inherit; line-height: inherit; }
@@ -293,6 +303,7 @@ select { font: inherit; }
 .sync-run-card__empty { margin: 0; padding: 18px 24px 0; display: grid; gap: 4px; color: var(--admin-text-secondary); }
 .sync-run-card__empty strong { color: var(--admin-text); }
 .sync-run-card__actions { padding: 20px 24px 24px; }
+.sync-run-card__actions .ant-select { min-width: 92px; }
 .player-sync-panel { margin-top: 20px; display: grid; gap: 20px; }
 .player-sync-panel > .ant-alert { margin: 0; }
 .sync-section-title { display: grid; gap: 4px; }
@@ -760,6 +771,7 @@ select { font: inherit; }
   .valuation-fields,
   .candidate-card-grid { grid-template-columns: 1fr; }
   .current-season-summary__heading { flex-direction: column; }
+  .season-team-summary { align-items: stretch; flex-direction: column; }
   .cup-command-bar .ant-card-body { align-items: stretch; flex-direction: column; }
   .cup-command-bar .ant-select { width: 100%; }
   .cup-command-bar__actions, .cup-bracket-empty .ant-card-body { align-items: stretch; flex-direction: column; }

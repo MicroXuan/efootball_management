@@ -3,10 +3,12 @@ import {
   CreateLeagueSeasonRequestSchema,
   EnrollLeagueTeamsRequestSchema,
   ResourceIdSchema,
+  SeasonTransitionRequestSchema,
   SetCurrentSeasonRequestSchema,
   UpdateLeagueSeasonRequestSchema,
   type EnrollLeagueTeamsRequest,
   type ParsedCreateLeagueSeasonRequest,
+  type SeasonTransitionRequest,
   type SetCurrentSeasonRequest,
   type UpdateLeagueSeasonRequest
 } from '@efm/contracts';
@@ -62,6 +64,28 @@ export class AdminLeagueSeasonsController {
     @Body(new ZodValidationPipe(SetCurrentSeasonRequestSchema)) body: SetCurrentSeasonRequest
   ) {
     return this.seasons.setCurrent(admin.id, leagueId, seasonId, body, this.key(key));
+  }
+
+  @Post(':seasonId/open-registration')
+  openRegistration(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(SeasonTransitionRequestSchema)) body: SeasonTransitionRequest
+  ) {
+    return this.seasons.transitionRegistration(admin.id, leagueId, seasonId, 'open-registration', body, this.key(key));
+  }
+
+  @Post(':seasonId/close-registration')
+  closeRegistration(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(SeasonTransitionRequestSchema)) body: SeasonTransitionRequest
+  ) {
+    return this.seasons.transitionRegistration(admin.id, leagueId, seasonId, 'close-registration', body, this.key(key));
   }
 
   @Post(':seasonId/teams')

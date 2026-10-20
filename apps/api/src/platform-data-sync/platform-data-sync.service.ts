@@ -1,12 +1,14 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import {
   BatchMutationResultSchema,
+  ControlledSyncRunSchema,
   ImportBatchSchema,
   PlatformDataSyncOverviewSchema,
   PlatformSyncRunPageSchema,
   PlatformSyncRunSummarySchema,
   QueuedSyncRunSchema,
   type BatchMutationResult,
+  type ControlledSyncRun,
   type ImportBatchResponse,
   PlayerSyncBatchPageSchema,
   type PlatformDataSyncOverview,
@@ -70,6 +72,20 @@ export class PlatformDataSyncService {
     return queued;
   }
 
+  async pausePlayerRun(adminId: string, runId: string): Promise<ControlledSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    return ControlledSyncRunSchema.parse(
+      await this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE').pausePlatformRun(adminId, runId)
+    );
+  }
+
+  async cancelPlayerRun(adminId: string, runId: string): Promise<ControlledSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    return ControlledSyncRunSchema.parse(
+      await this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE').cancelPlatformRun(adminId, runId)
+    );
+  }
+
   async publishPlayerBatch(adminId: string, batchId: string): Promise<ImportBatchResponse> {
     await this.authorization.requirePlatformAdmin(adminId);
     const result = await this.required(this.publisher, 'PLAYER_IMPORT_PUBLISHER_UNAVAILABLE')
@@ -105,6 +121,20 @@ export class PlatformDataSyncService {
     return queued;
   }
 
+  async pauseTeamRun(adminId: string, runId: string): Promise<ControlledSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    return ControlledSyncRunSchema.parse(
+      await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').pausePlatformRun(adminId, runId)
+    );
+  }
+
+  async cancelTeamRun(adminId: string, runId: string): Promise<ControlledSyncRun> {
+    await this.authorization.requirePlatformAdmin(adminId);
+    return ControlledSyncRunSchema.parse(
+      await this.required(this.teamSync, 'TEAM_SYNC_SERVICE_UNAVAILABLE').cancelPlatformRun(adminId, runId)
+    );
+  }
+
   publishTeamItems(adminId: string, ids: string[]): Promise<BatchMutationResult> {
     return this.mutateTeamItems(
       adminId,
@@ -138,12 +168,12 @@ export class PlatformDataSyncService {
     const [playerActive, teamActive, playerPending, playerFailed, playerPublished, teamGroups, playerLast, teamLast] =
       await Promise.all([
         this.prisma.externalSyncRun.findFirst({
-          where: { status: { in: ['PENDING', 'RUNNING'] } },
+          where: { status: { in: ['PENDING', 'RUNNING', 'PAUSED'] } },
           include: { _count: { select: { batchLinks: true } } },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
         }),
         this.prisma.teamCatalogSyncRun.findFirst({
-          where: { status: { in: ['PENDING', 'RUNNING'] } },
+          where: { status: { in: ['PENDING', 'RUNNING', 'PAUSED'] } },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
         }),
         this.prisma.importBatch.count({ where: { status: { in: ['READY', 'VALIDATED'] }, syncRunLinks: { some: {} } } }),
@@ -153,23 +183,25 @@ export class PlatformDataSyncService {
           by: ['reviewStatus'], orderBy: { reviewStatus: 'asc' }, _count: { reviewStatus: true }
         }),
         this.prisma.externalSyncRun.findFirst({
-          where: { status: { in: ['READY', 'FAILED'] } }, orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }]
+          where: { status: { in: ['READY', 'FAILED', 'CANCELLED'] } },
+          include: { _count: { select: { batchLinks: true } } },
+          orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }]
         }),
         this.prisma.teamCatalogSyncRun.findFirst({
-          where: { status: { in: ['READY', 'FAILED'] } }, orderBy: [{ completedAt: 'desc' }, { id: 'desc' }]
+          where: { status: { in: ['READY', 'FAILED', 'CANCELLED'] } }, orderBy: [{ completedAt: 'desc' }, { id: 'desc' }]
         })
       ]);
     const teamCounts = new Map(teamGroups.map((entry) => [entry.reviewStatus, entry._count.reviewStatus]));
     return PlatformDataSyncOverviewSchema.parse({
       players: {
-        activeRun: playerActive ? this.playerRun(playerActive) : null,
+        activeRun: playerActive ? this.playerRun(playerActive) : playerLast ? this.playerRun(playerLast) : null,
         pendingReview: playerPending,
         failedReview: playerFailed,
         published: playerPublished,
         lastCompletedAt: playerLast?.finishedAt?.toISOString() ?? null
       },
       teams: {
-        activeRun: teamActive ? this.teamRun(teamActive) : null,
+        activeRun: teamActive ? this.teamRun(teamActive) : teamLast ? this.teamRun(teamLast) : null,
         pendingReview: teamCounts.get('PENDING') ?? 0,
         failedReview: teamCounts.get('FAILED') ?? 0,
         published: teamCounts.get('PUBLISHED') ?? 0,
@@ -333,10 +365,16 @@ export class PlatformDataSyncService {
       mode: run.mode,
       status: run.status,
       actorAdminId: run.actorId,
+      targetCount: run.requestedLimit,
+      matchedCount: run.matchedCount,
+      chunkIndex: run.chunkIndex,
+      pauseRequested: run.pauseRequestedAt !== null,
+      completionReason: run.completionReason,
       currentPhase: run.currentPhase,
       heartbeatAt: run.heartbeatAt?.toISOString() ?? null,
       leaseExpiresAt: run.leaseExpiresAt?.toISOString() ?? null,
-      resumable: run.status === 'FAILED' && run.activeLeaseKey === null && run.leaseOwnerToken === null,
+      resumable: (run.status === 'PAUSED' && run.activeLeaseKey === 'pesdata' && run.leaseOwnerToken === null)
+        || (run.status === 'FAILED' && run.activeLeaseKey === null && run.leaseOwnerToken === null),
       counters: {
         sourceTotal: run.sourceTotal,
         scanned: run.scannedCount,
@@ -364,12 +402,18 @@ export class PlatformDataSyncService {
       mode: run.mode,
       status: run.status,
       actorAdminId: run.actorAdminId,
+      targetCount: run.requestedLimit,
+      matchedCount: run.matchedCount,
+      chunkIndex: run.chunkIndex,
+      pauseRequested: run.pauseRequestedAt !== null,
+      completionReason: run.completionReason,
       currentPhase: run.currentPhase,
       heartbeatAt: run.heartbeatAt?.toISOString() ?? null,
       leaseExpiresAt: run.leaseExpiresAt?.toISOString() ?? null,
-      resumable: run.status === 'FAILED' && run.activeLeaseKey === null && run.leaseOwnerToken === null,
+      resumable: (run.status === 'PAUSED' && run.activeLeaseKey === 'pesdata-team-catalog' && run.leaseOwnerToken === null)
+        || (run.status === 'FAILED' && run.activeLeaseKey === null && run.leaseOwnerToken === null),
       counters: {
-        sourceTotal: null,
+        sourceTotal: run.sourceTotal,
         scanned: run.scannedCount,
         fetched: 0,
         skipped: 0,
@@ -400,11 +444,11 @@ export class PlatformDataSyncService {
   }
 
   private playerStatuses(values?: string[]): ExternalSyncStatus[] | undefined {
-    return this.enumValues(values, ['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED']);
+    return this.enumValues(values, ['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED', 'CANCELLED']);
   }
 
   private teamStatuses(values?: string[]): TeamCatalogSyncStatus[] | undefined {
-    return this.enumValues(values, ['PENDING', 'RUNNING', 'READY', 'FAILED']);
+    return this.enumValues(values, ['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED', 'CANCELLED']);
   }
 
   private playerRunOrder(

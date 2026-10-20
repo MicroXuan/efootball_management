@@ -92,6 +92,9 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
       if (caught instanceof ApiError && (caught.code === 'TEAM_ROSTER_FULL' || caught.code === 'TEAM_SALARY_CAP_EXCEEDED')) {
         setError(`操作被拒绝：阵容人数 ${summary.rosterCount}/25，工资 ${summary.salaryMinor}/${summary.salaryCapMinor}`);
       } else if (caught instanceof ApiError && caught.code === 'PLAYER_ALREADY_OWNED') setError('该球员在本联赛已归属其他球队');
+      else if (caught instanceof ApiError && caught.code === 'SALARY_RULE_NOT_CONFIGURED') setError('尚未配置生效的工资规则，请先前往工资规则页面完成配置');
+      else if (caught instanceof ApiError && caught.code === 'TRANSFER_WINDOW_CLOSED') setError('当前没有开放的购买窗口，请先前往转会窗口页面完成配置');
+      else if (caught instanceof ApiError && caught.code === 'TRANSFER_OPERATION_NOT_ALLOWED') setError('当前转会窗口未开放购买球员');
       else setError('购买失败，表单已保留，请重试');
     } finally { setBusy(false); }
   };

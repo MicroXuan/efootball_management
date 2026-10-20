@@ -113,33 +113,72 @@ describe('ValuationSnapshotsService', () => {
     });
   });
 
-  it('remembers an empty snapshot so later signings cannot enter the same window', async () => {
-    const { service, tx } = harness();
+  it('adds a late signing to an already initialized open window', async () => {
+    const { service, tx, ownership, snapshot } = harness();
+    const lateOwnership = {
+      ...ownership,
+      id: 'ownership-2',
+      footballPlayerId: 'player-2',
+      footballPlayer: { ...ownership.footballPlayer, id: 'player-2', nameZh: '新签球员' }
+    };
+    const lateSnapshot = {
+      ...snapshot,
+      id: 'snapshot-2',
+      ownershipId: lateOwnership.id,
+      footballPlayerId: lateOwnership.footballPlayerId,
+      baseValueMinor: null,
+      ownership: lateOwnership
+    };
     tx.valuationRosterSnapshot.findMany.mockReset();
-    tx.valuationRosterSnapshot.findMany.mockResolvedValue([]);
-    tx.leaguePlayerOwnership.findMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: 'late-signing' }]);
-    tx.valuationWindow.findUniqueOrThrow
-      .mockResolvedValueOnce({ id: 'window-1', snapshotInitializedAt: null })
-      .mockResolvedValueOnce({ id: 'window-1', snapshotInitializedAt: at });
+    tx.valuationRosterSnapshot.findMany
+      .mockResolvedValueOnce([snapshot])
+      .mockResolvedValueOnce([snapshot, lateSnapshot]);
+    tx.leaguePlayerOwnership.findMany.mockResolvedValueOnce([ownership, lateOwnership]);
+    tx.leaguePlayerValuation.findMany.mockResolvedValueOnce([
+      { footballPlayerId: 'player-1', currentValueMinor: 1000 }
+    ]);
+    tx.valuationWindow.findUniqueOrThrow.mockResolvedValueOnce({
+      id: 'window-1', snapshotInitializedAt: at
+    });
 
-    await service.ensureWindowSnapshot('window-1', at);
-    await service.ensureWindowSnapshot('window-1', at);
+    const result = await service.ensureWindowSnapshot('window-1', at);
+
+    expect(result.map((row) => row.footballPlayerId)).toEqual(['player-1', 'player-2']);
     expect(tx.leaguePlayerOwnership.findMany).toHaveBeenCalledTimes(1);
-    expect(tx.valuationWindow.update).toHaveBeenCalledWith({
-      where: { id: 'window-1' }, data: { snapshotInitializedAt: at }
+    expect(tx.valuationRosterSnapshot.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
+        windowId: 'window-1', leagueTeamId: 'team-1', ownershipId: 'ownership-2',
+        footballPlayerId: 'player-2', baseValueMinor: null
+      })],
+      skipDuplicates: true
     });
   });
 
-  it('does not move a snapshotted player when the ownership transfers later', async () => {
-    const { service, tx, ownership } = harness();
-    const first = await service.ensureWindowSnapshot('window-1', at);
-    ownership.leagueTeamId = 'team-2';
-    const second = await service.ensureWindowSnapshot('window-1', at);
-    expect(first[0]?.leagueTeamId).toBe('team-1');
-    expect(second[0]?.leagueTeamId).toBe('team-1');
-    expect(tx.valuationRosterSnapshot.createMany).toHaveBeenCalledTimes(1);
+  it('returns a transferred player only for the current team while preserving the old snapshot', async () => {
+    const { service, tx, ownership, snapshot } = harness();
+    const movedOwnership = { ...ownership, leagueTeamId: 'team-2' };
+    const movedSnapshot = {
+      ...snapshot,
+      id: 'snapshot-2',
+      leagueTeamId: 'team-2',
+      ownership: movedOwnership
+    };
+    const historicalSnapshot = { ...snapshot, ownership: movedOwnership };
+    tx.seasonEntry.findMany.mockResolvedValueOnce([
+      { leagueTeamId: 'team-1' }, { leagueTeamId: 'team-2' }
+    ]);
+    tx.leaguePlayerOwnership.findMany.mockResolvedValueOnce([movedOwnership]);
+    tx.valuationRosterSnapshot.findMany.mockReset();
+    tx.valuationRosterSnapshot.findMany
+      .mockResolvedValueOnce([historicalSnapshot])
+      .mockResolvedValueOnce([historicalSnapshot, movedSnapshot]);
+    tx.valuationWindow.findUniqueOrThrow.mockResolvedValueOnce({
+      id: 'window-1', snapshotInitializedAt: at
+    });
+
+    const current = await service.ensureWindowSnapshot('window-1', at);
+
+    expect(current).toEqual([movedSnapshot]);
   });
 
   it('rejects non-owners and users without an approved season entry', async () => {

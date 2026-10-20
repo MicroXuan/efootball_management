@@ -27,6 +27,8 @@ import {
   LeagueSummarySchema,
   PlatformPresentationSchema,
   PlatformPageRequestSchema,
+  PlatformSyncRunSummarySchema,
+  ControlledSyncRunSchema,
   GenerateSeasonAllocationRequestSchema,
   GenerateStageScheduleRequestSchema,
   SeasonAllocationDecisionSchema,
@@ -49,6 +51,8 @@ import {
   CupBracketProposalSchema,
   CupBracketViewSchema,
   SeasonCupSummarySchema,
+  SeasonFixtureListQuerySchema,
+  SeasonFixtureListResponseSchema,
   CreatePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
@@ -211,13 +215,12 @@ describe('match result dispute contracts', () => {
 describe('action center contracts', () => {
   it('accepts all current reminders beyond the combined recent-history limit', () => {
     const items = Array.from({ length: 201 }, () => {
-      const matchId = randomUUID();
       return {
-        id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
-        source: 'MATCH_RESULT', section: 'ACTION_REQUIRED',
+        id: `application:${randomUUID()}`, version: '2026-10-15T12:00:00.000Z',
+        source: 'TRANSACTION', section: 'ACTION_REQUIRED',
         league: { id: randomUUID(), name: 'CELL 联赛' }, seasonId: randomUUID(), teamId: randomUUID(),
-        title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
-        occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
+        title: '购买申请需要重新报价', detail: '球员：劳塔罗', statusLabel: '需重新报价',
+        occurredAt: '2026-10-15T12:00:00.000Z', route: '/pages/player-market/index?view=mine'
       };
     });
     const response = ActionCenterResponseSchema.parse({ items, actionRequiredCount: 201 });
@@ -267,7 +270,7 @@ describe('action center contracts', () => {
     }));
   });
 
-  it('accepts a match-result reminder only with its internal match deep link', () => {
+  it('rejects legacy match-result reminders', () => {
     const matchId = randomUUID();
     const item = {
       id: `match-result:${matchId}`, version: '2026-10-15T12:00:00.000Z',
@@ -276,12 +279,51 @@ describe('action center contracts', () => {
       title: '确认比分', detail: '申花 对 海港', statusLabel: '待确认',
       occurredAt: '2026-10-15T12:00:00.000Z', route: `/pages/match-result/index?id=${matchId}`
     };
-    assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, true);
+    assert.equal(ActionCenterResponseSchema.safeParse({ items: [item], actionRequiredCount: 1 }).success, false);
     assert.equal(ActionCenterResponseSchema.safeParse({ items: [{ ...item, route: `/pages/match-result/index?id=${matchId}&evil=1` }], actionRequiredCount: 1 }).success, false);
+  });
+});
+
+describe('season fixture contracts', () => {
+  it('defaults to all fixtures with a twenty-item page and normalizes team search', () => {
+    assert.deepEqual(SeasonFixtureListQuerySchema.parse({}), { status: 'ALL', limit: 20 });
+    assert.deepEqual(SeasonFixtureListQuerySchema.parse({ team: '  AC Milan  ', status: 'UPCOMING', limit: '100' }), {
+      team: 'AC Milan', status: 'UPCOMING', limit: 100
+    });
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ status: 'FINISHED', limit: 1, cursor: 'opaque' }).success, true);
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ status: 'PENDING' }).success, false);
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ limit: 0 }).success, false);
+    assert.equal(SeasonFixtureListQuerySchema.safeParse({ limit: 101 }).success, false);
+  });
+
+  it('parses competition-match fixture items with a nullable continuation cursor', () => {
+    const participant = (name: string) => ({
+      id: randomUUID(), displayName: name, participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE',
+      teamNumber: 1, teamName: name, teamLogoUrl: null, ownerDisplayName: '经理'
+    });
+    const competition = {
+      id: randomUUID(), seasonId: randomUUID(), competitionType: 'DIVISION_LEAGUE', name: 'S1 分级联赛', description: '',
+      platform: 'MOBILE', serverRegion: 'GLOBAL', participantType: 'TEAM', format: 'ROUND_ROBIN', status: 'IN_PROGRESS',
+      registrationOpensAt: '2026-01-01T00:00:00.000Z', registrationClosesAt: '2026-01-02T00:00:00.000Z',
+      startsAt: '2026-01-03T00:00:00.000Z', endsAt: '2026-12-01T00:00:00.000Z', participantLimit: 30,
+      participantCount: 30, version: 1, activeRuleVersion: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
+    };
+    const match = {
+      id: randomUUID(), competitionId: competition.id, stageId: randomUUID(), stageCode: 'CHAMPION_A',
+      stageDisplayName: '冠军 A 组', roundNumber: 1, matchNumber: 1,
+      homeParticipant: participant('01-阿哈尔'), awayParticipant: participant('02-海牙'), plannedAt: null,
+      status: 'AWAITING_RESULT', resultConfirmationDeadlineAt: null, version: 1, officialResult: null,
+      resultVersions: [], createdAt: '2026-01-03T00:00:00.000Z', updatedAt: '2026-01-03T00:00:00.000Z'
+    };
+    const parsed = SeasonFixtureListResponseSchema.parse({ items: [{ competition, match }], nextCursor: null });
+    assert.equal(parsed.items[0]?.match.id, match.id);
+    assert.equal(parsed.nextCursor, null);
   });
 });
 import {
   CreatePlayerAuctionBatchRequestSchema,
+  MyPlayerAuctionSaleListQuerySchema,
+  MyPlayerAuctionSaleListResponseSchema,
   PlaceMiniprogramAuctionBidRequestSchema,
   MyPlayerAuctionRoomSchema,
   PlayerAuctionBatchDetailSchema,
@@ -413,6 +455,64 @@ describe('player market contracts', () => {
 });
 
 describe('platform data sync contracts', () => {
+  it('parses checkpointed sample progress and partial completion', () => {
+    const timestamp = new Date().toISOString();
+    const result = PlatformSyncRunSummarySchema.parse({
+      id: randomUUID(),
+      kind: 'PLAYER_CARDS',
+      mode: 'SAMPLE',
+      status: 'READY',
+      actorAdminId: randomUUID(),
+      targetCount: 100,
+      matchedCount: 60,
+      chunkIndex: 29,
+      pauseRequested: false,
+      completionReason: 'SOURCE_EXHAUSTED',
+      currentPhase: null,
+      heartbeatAt: null,
+      leaseExpiresAt: null,
+      resumable: false,
+      counters: {
+        sourceTotal: 60,
+        scanned: 1_450,
+        fetched: 60,
+        skipped: 1_390,
+        added: 60,
+        updated: 0,
+        missing: 0,
+        failed: 0,
+        batches: 3
+      },
+      errorCode: null,
+      errorMessage: null,
+      startedAt: timestamp,
+      completedAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    assert.deepEqual({
+      targetCount: result.targetCount,
+      matchedCount: result.matchedCount,
+      chunkIndex: result.chunkIndex,
+      pauseRequested: result.pauseRequested,
+      completionReason: result.completionReason
+    }, {
+      targetCount: 100,
+      matchedCount: 60,
+      chunkIndex: 29,
+      pauseRequested: false,
+      completionReason: 'SOURCE_EXHAUSTED'
+    });
+  });
+
+  it('accepts a pausing control response', () => {
+    assert.equal(ControlledSyncRunSchema.parse({
+      runId: randomUUID(),
+      status: 'PAUSING'
+    }).status, 'PAUSING');
+  });
+
   it('derives the salary ability from the PESDATA automatic build total', () => {
     assert.deepEqual(derivePesdataPositionAutoBuild({
       position: 'DMF',
@@ -2115,12 +2215,11 @@ describe('tiered league contracts', () => {
       team: { leagueTeamId: '33333333-3333-4333-8333-333333333333', name: '上海海港', shortName: '海港', logoUrl: null },
       division: { stageId: '44444444-4444-4444-8444-444444444444', stageCode: 'CHAMPION_A', displayName: '冠军 A 组' },
       currentRank: { rank: 2, points: 13, played: 6, tiePending: false },
-      nextMatch: { id: '55555555-5555-4555-8555-555555555555', roundNumber: 7, plannedAt: null, opponentName: '申花', side: 'HOME' },
       capabilities: { canViewStandings: true, canViewAssets: true, canViewFinance: true, canManageValuations: true }
     });
 
     assert.equal(workspace.currentRank?.rank, 2);
-    assert.equal(workspace.nextMatch?.opponentName, '申花');
+    assert.equal('nextMatch' in workspace, false);
   });
 
   it('rejects invalid stage codes, seeds, duplicate overrides, and empty reasons', () => {
@@ -2673,6 +2772,7 @@ describe('player auction contracts', () => {
   const batchId = '33333333-3333-4333-8333-333333333333';
   const lotId = '44444444-4444-4444-8444-444444444444';
   const playerId = '55555555-5555-4555-8555-555555555555';
+  const cardId = '88888888-8888-4888-8888-888888888888';
   const teamId = '66666666-6666-4666-8666-666666666666';
   const bidId = '77777777-7777-4777-8777-777777777777';
   const now = '2026-10-09T12:00:00.000Z';
@@ -2682,11 +2782,13 @@ describe('player auction contracts', () => {
     assert.equal(PlayerAuctionBidChannelSchema.parse('MINIPROGRAM'), 'MINIPROGRAM');
     assert.throws(() => PlayerAuctionBidChannelSchema.parse('BOTH'));
     assert.equal(CreatePlayerAuctionBatchRequestSchema.parse({
-      groupBindingId,
       name: '小程序拍卖',
-      bidChannel: 'MINIPROGRAM',
-      expectedVersion: 2
+      bidChannel: 'MINIPROGRAM'
     }).bidChannel, 'MINIPROGRAM');
+    assert.throws(() => CreatePlayerAuctionBatchRequestSchema.parse({
+      name: '微信群拍卖',
+      bidChannel: 'WECHAT_GROUP'
+    }));
   });
 
   it('parses miniprogram bid requests', () => {
@@ -2728,22 +2830,64 @@ describe('player auction contracts', () => {
     const request = ReplacePlayerAuctionLotsRequestSchema.parse({
       expectedVersion: 1,
       lots: [
-        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
-        { playerId: teamId, displayOrder: 2, startingPrice: 80, minimumIncrement: 20 }
+        { playerId, playerCardId: cardId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, playerCardId: groupBindingId, displayOrder: 2, startingPrice: 80, minimumIncrement: 20 }
       ]
     });
     assert.equal(request.lots[1]?.displayOrder, 2);
     assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
       expectedVersion: 1,
-      lots: [{ playerId, displayOrder: 1, startingPrice: 0, minimumIncrement: 10 }]
+      lots: [{ playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }));
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [{ playerId, playerCardId: null, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }));
+    assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
+      expectedVersion: 1,
+      lots: [{ playerId, playerCardId: cardId, displayOrder: 1, startingPrice: 0, minimumIncrement: 10 }]
     }));
     assert.throws(() => ReplacePlayerAuctionLotsRequestSchema.parse({
       expectedVersion: 1,
       lots: [
-        { playerId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
-        { playerId: teamId, displayOrder: 1, startingPrice: 80, minimumIncrement: 20 }
+        { playerId, playerCardId: cardId, displayOrder: 1, startingPrice: 50, minimumIncrement: 10 },
+        { playerId: teamId, playerCardId: groupBindingId, displayOrder: 1, startingPrice: 80, minimumIncrement: 20 }
       ]
     }));
+  });
+
+  it('normalizes confirmed auction sale search and parses immutable sale snapshots', () => {
+    assert.deepEqual(MyPlayerAuctionSaleListQuerySchema.parse({ keyword: '  01-阿哈尔  ', limit: '10' }), {
+      keyword: '01-阿哈尔',
+      limit: 10
+    });
+    const response = MyPlayerAuctionSaleListResponseSchema.parse({
+      items: [{
+        id: bidId,
+        batchId,
+        league: { id: leagueId, name: '九星联赛' },
+        player: {
+          id: playerId,
+          cardId,
+          name: '车范根',
+          imageUrl: 'https://img.pesdata.net/player.webp',
+          position: 'CF',
+          overallRating: 96,
+          cardType: 'EPIC'
+        },
+        winner: {
+          teamId,
+          teamNumber: 1,
+          teamName: '阿哈尔',
+          bidderDisplayName: '梅西'
+        },
+        price: 120,
+        confirmedAt: now
+      }],
+      nextCursor: null
+    });
+    assert.equal(response.items[0]?.winner.teamNumber, 1);
+    assert.equal(response.items[0]?.player.cardId, cardId);
   });
 
   it('requires reasons for adjusted and void reviews', () => {
@@ -2833,7 +2977,7 @@ describe('player auction contracts', () => {
     const detail = PlayerAuctionBatchDetailSchema.parse({
       id: batchId,
       leagueId,
-      groupBindingId,
+      groupBindingId: null,
       bidChannel: 'MINIPROGRAM',
       name: '应用内拍卖',
       status: 'ACTIVE',
@@ -2882,6 +3026,7 @@ describe('player auction contracts', () => {
       }]
     });
     assert.equal(detail.lots[0]?.bids[0]?.source, 'MINIPROGRAM');
+    assert.equal(detail.groupBindingId, null);
     assert.equal(detail.lots[0]?.bids[0]?.wechatSentAt, null);
   });
 
@@ -2901,13 +3046,28 @@ describe('player auction contracts', () => {
         displayOrder: 1,
         playerName: '车范根',
         playerSnapshot: { position: 'CF' },
+        card: {
+          id: cardId,
+          imageUrl: 'https://img.pesdata.net/player.webp',
+          cardName: '传奇',
+          position: 'CF',
+          overallRating: 96,
+          cardType: 'EPIC'
+        },
         startingPrice: 50,
         minimumIncrement: 10,
         status: 'ACTIVE',
         currentPrice: 120,
         deadlineAt: now,
         deadlineEpoch: 4,
-        bids: [{ id: bidId, teamName: '上海申花', amount: 120, submittedAt: now }]
+        bids: [{
+          id: bidId,
+          teamNumber: 1,
+          teamName: '上海申花',
+          bidderDisplayName: '梅西',
+          amount: 120,
+          submittedAt: now
+        }]
       },
       queue: [],
       sharePath: `/pages/auction-room/index?batchId=${batchId}`

@@ -4,7 +4,6 @@ import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { PlayerImportPublisher } from '../player-import/player-import.publisher.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
-import { PlayerBuildsService } from '../player-builds/player-builds.service.js';
 import { decodeCatalogCursor, encodeCatalogCursor } from './catalog-cursor.js';
 import { PlayerCatalogService } from './player-catalog.service.js';
 
@@ -38,8 +37,7 @@ describe('PlayerCatalogService', () => {
   const importer = new PlayerImportService(prisma, authorization as never);
   const publisher = new PlayerImportPublisher(
     prisma,
-    authorization as never,
-    new PlayerBuildsService(prisma)
+    authorization as never
   );
   const catalog = new PlayerCatalogService(prisma);
   const actorId = randomUUID();
@@ -202,6 +200,25 @@ describe('PlayerCatalogService', () => {
         dtRating: 99,
         algorithmVersion: 'pesdata-auto-v1',
       },
+    });
+  });
+
+  it('returns a fixed build for a published epic card with zero progression points', async () => {
+    await importAndPublish([card(4, {
+      overallRating: 87,
+      cardType: 'EPIC',
+      attributes: { sourceMetadata: { Level: '-', maxLevel: '0' } }
+    })]);
+    const [summary] = (await catalog.search({ keyword: sourceCode, limit: 20 })).items;
+
+    await expect(catalog.getCard(summary!.id)).resolves.toMatchObject({
+      overallRating: 87,
+      autoBuild: {
+        allocation: {},
+        maxOverall: 87,
+        dtRating: null,
+        algorithmVersion: 'pesdata-final-card-v1'
+      }
     });
   });
 });

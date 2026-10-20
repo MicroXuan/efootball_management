@@ -2,6 +2,7 @@ import { Alert, Spin, Tabs } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  ControlledSyncRunSchema,
   PlatformDataSyncOverviewSchema,
   QueuedSyncRunSchema,
   type PlatformDataSyncOverview
@@ -21,6 +22,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
   const [overview, setOverview] = useState<PlatformDataSyncOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
+  const [sampleLimit, setSampleLimit] = useState<10 | 100 | 500>(100);
   const [error, setError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
@@ -40,7 +42,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
 
   const section = overview?.[activeTab] ?? null;
   const refreshKey = section
-    ? `${section.activeRun?.id ?? 'idle'}:${section.activeRun?.status ?? 'idle'}:${section.lastCompletedAt ?? 'never'}`
+    ? `${section.activeRun?.id ?? 'idle'}:${section.activeRun?.status ?? 'idle'}:${section.activeRun?.chunkIndex ?? 0}:${section.activeRun?.matchedCount ?? 0}:${section.activeRun?.counters.scanned ?? 0}:${section.lastCompletedAt ?? 'never'}`
     : 'loading';
   const { refreshAfterMutation } = useSyncRun({ status: section?.activeRun?.status ?? null, refresh: loadOverview });
   const start = async (mode: 'sample' | 'incremental' | 'full') => {
@@ -48,7 +50,7 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
     setMutating(true); setError(null);
     try {
       await api.request(`/v1/admin/data-sync/${activeTab}/runs`, {
-        method: 'POST', body: { mode, ...(mode === 'sample' ? { limit: 10 } : {}) }, schema: QueuedSyncRunSchema
+        method: 'POST', body: { mode, ...(mode === 'sample' ? { limit: sampleLimit } : {}) }, schema: QueuedSyncRunSchema
       });
       await refreshAfterMutation();
     } catch { setError('同步任务启动失败，请确认没有同类任务正在执行'); }
@@ -63,6 +65,18 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
     } catch { setError('任务继续失败，请刷新后确认任务状态'); }
     finally { setMutating(false); }
   };
+  const control = async (runId: string, action: 'pause' | 'cancel') => {
+    if (mutating) return;
+    setMutating(true); setError(null);
+    try {
+      await api.request(`/v1/admin/data-sync/${activeTab}/runs/${runId}/${action}`, {
+        method: 'POST', schema: ControlledSyncRunSchema
+      });
+      await refreshAfterMutation();
+    } catch {
+      setError(action === 'pause' ? '任务暂停失败，请刷新后确认任务状态' : '任务取消失败，请刷新后确认任务状态');
+    } finally { setMutating(false); }
+  };
 
   const panel = <>
     {loading && !overview ? <div className="loading-block"><Spin /></div> : null}
@@ -73,11 +87,15 @@ export function DataSyncPage({ api = adminApi }: { api?: AdminApi }) {
       failedReview={section.failedReview}
       published={section.published}
       busy={mutating}
+      sampleLimit={sampleLimit}
+      onSampleLimitChange={setSampleLimit}
       onStart={start}
+      onPause={() => section.activeRun ? control(section.activeRun.id, 'pause') : Promise.resolve()}
       onResume={() => section.activeRun ? resume(section.activeRun.id) : Promise.resolve()}
+      onCancel={() => section.activeRun ? control(section.activeRun.id, 'cancel') : Promise.resolve()}
     /> : null}
-    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
-    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} refreshKey={refreshKey} /> : null}
+    {activeTab === 'players' ? <PlayerSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} onCancelRun={(runId) => control(runId, 'cancel')} refreshKey={refreshKey} /> : null}
+    {activeTab === 'teams' ? <TeamSyncPanel api={api} onChanged={loadOverview} onResumeRun={resume} onCancelRun={(runId) => control(runId, 'cancel')} refreshKey={refreshKey} /> : null}
   </>;
 
   return <div className="data-sync-page">

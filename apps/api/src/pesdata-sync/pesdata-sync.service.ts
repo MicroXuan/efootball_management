@@ -16,6 +16,7 @@ import {
   type PesdataSyncResult,
   type StartPesdataSyncInput
 } from './pesdata-sync.types.js';
+import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
 
 const IMPORT_CHUNK_SIZE = 5_000;
 
@@ -67,7 +68,8 @@ export class PesdataSyncService {
     @Inject(PlayerImportService) private readonly importService: PlayerImportService,
     @Inject(PesdataClient) private readonly client: PesdataClient,
     @Optional() @Inject(PESDATA_SYNC_OPTIONS) options: ServiceOptions = {},
-    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService
+    @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService,
+    @Optional() @Inject(PesdataPlayerChunkProcessor) private readonly chunkProcessor?: PesdataPlayerChunkProcessor
   ) {
     this.pageSize = options.pageSize ?? 100;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? SYNC_HEARTBEAT_INTERVAL_MS;
@@ -127,14 +129,19 @@ export class PesdataSyncService {
     const run = await this.prisma.externalSyncRun.findUnique({ where: { id: runId } });
     if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
     if (run.status === 'READY') throw new PesdataSyncError('PESDATA_RUN_ALREADY_READY', 'Synchronization run is already ready');
-    if (run.status !== 'FAILED' || run.activeLeaseKey || run.leaseOwnerToken) {
-      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only a failed, inactive synchronization run can be resumed');
+    const paused = run.status === 'PAUSED' && run.activeLeaseKey === 'pesdata' && !run.leaseOwnerToken;
+    const failed = run.status === 'FAILED' && !run.activeLeaseKey && !run.leaseOwnerToken;
+    if (!paused && !failed) {
+      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only a paused or failed inactive synchronization run can be resumed');
     }
     const now = new Date();
     try {
       const resumed = await this.prisma.$transaction(async (tx) => {
         const changed = await tx.externalSyncRun.updateMany({ where: {
-          id: runId, status: 'FAILED', activeLeaseKey: null, leaseOwnerToken: null
+          id: runId,
+          status: paused ? 'PAUSED' : 'FAILED',
+          activeLeaseKey: paused ? 'pesdata' : null,
+          leaseOwnerToken: null
         }, data: {
           status: 'PENDING',
           activeLeaseKey: 'pesdata',
@@ -143,6 +150,7 @@ export class PesdataSyncService {
           leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS),
           errorCode: null,
           errorMessage: null,
+          pauseRequestedAt: null,
           finishedAt: null
         } });
         if (changed.count === 1 && this.audit) await this.audit.record(tx, {
@@ -166,7 +174,111 @@ export class PesdataSyncService {
     }
   }
 
+  async pausePlatformRun(
+    actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'PAUSING' | 'PAUSED' }> {
+    const now = new Date();
+    const status = await this.prisma.$transaction(async (tx) => {
+      const run = await tx.externalSyncRun.findUnique({ where: { id: runId } });
+      if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
+      if (!['PENDING', 'RUNNING'].includes(run.status) || run.activeLeaseKey !== 'pesdata') {
+        throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only an active synchronization run can be paused');
+      }
+      const pausing = run.status === 'RUNNING';
+      const updated = await tx.externalSyncRun.updateMany({
+        where: { id: runId, status: run.status, activeLeaseKey: 'pesdata' },
+        data: pausing ? {
+          pauseRequestedAt: now,
+          currentPhase: 'PAUSING',
+          heartbeatAt: now
+        } : {
+          status: 'PAUSED',
+          pauseRequestedAt: null,
+          currentPhase: 'PAUSED',
+          heartbeatAt: now,
+          leaseOwnerToken: null,
+          leaseExpiresAt: null
+        }
+      });
+      if (updated.count !== 1) {
+        throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Synchronization run state changed while pausing');
+      }
+      if (this.audit) await this.audit.record(tx, {
+        actorAdminId,
+        action: pausing ? 'REQUEST_PAUSE_PLAYER_CARD_SYNC' : 'PAUSE_PLAYER_CARD_SYNC',
+        resourceType: 'ExternalSyncRun',
+        resourceId: runId,
+        metadata: { runId, status: pausing ? 'PAUSING' : 'PAUSED' }
+      });
+      return pausing ? 'PAUSING' as const : 'PAUSED' as const;
+    });
+    return { runId, status };
+  }
+
+  async cancelPlatformRun(
+    actorAdminId: string,
+    runId: string
+  ): Promise<{ runId: string; status: 'CANCELLED' }> {
+    const now = new Date();
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const run = await tx.externalSyncRun.findUnique({ where: { id: runId } });
+      if (!run) throw new PesdataSyncError('PESDATA_RUN_NOT_FOUND', 'Synchronization run was not found');
+      const updated = await tx.externalSyncRun.updateMany({
+        where: {
+          id: runId,
+          leaseOwnerToken: null,
+          OR: [
+            { status: 'PAUSED', activeLeaseKey: 'pesdata' },
+            { status: 'FAILED', activeLeaseKey: null }
+          ]
+        },
+        data: {
+          status: 'CANCELLED',
+          activeLeaseKey: null,
+          currentPhase: 'CANCELLED',
+          heartbeatAt: now,
+          leaseExpiresAt: null,
+          finishedAt: now
+        }
+      });
+      if (updated.count !== 1) return 0;
+      if (this.audit) await this.audit.record(tx, {
+        actorAdminId,
+        action: 'CANCEL_PLAYER_CARD_SYNC',
+        resourceType: 'ExternalSyncRun',
+        resourceId: runId,
+        metadata: { runId }
+      });
+      return 1;
+    });
+    if (changed !== 1) {
+      throw new PesdataSyncError('PESDATA_SYNC_CONFLICT', 'Only a paused or failed inactive synchronization run can be cancelled');
+    }
+    return { runId, status: 'CANCELLED' };
+  }
+
   async executePlatformRun(runId: string): Promise<PesdataSyncResult> {
+    if (this.chunkProcessor) {
+      let outcome = await this.chunkProcessor.processNextChunk(runId);
+      while (outcome.disposition === 'CONTINUE') {
+        outcome = await this.chunkProcessor.processNextChunk(runId);
+      }
+      const completed = await this.prisma.externalSyncRun.findUniqueOrThrow({
+        where: { id: runId }, include: { batchLinks: { orderBy: { chunkIndex: 'asc' } } }
+      });
+      return {
+        runId,
+        status: completed.status === 'READY' ? 'READY' : 'FAILED',
+        sourceTotal: completed.sourceTotal,
+        scannedCount: completed.scannedCount,
+        fetchedCount: completed.fetchedCount,
+        skippedCount: completed.skippedCount,
+        failedCount: completed.failedCount,
+        batchIds: completed.batchLinks.map(({ batchId }) => batchId),
+        dryRun: false
+      };
+    }
     const run = await this.prisma.externalSyncRun.findUnique({
       where: { id: runId },
       include: { items: { orderBy: { createdAt: 'asc' } }, batchLinks: { orderBy: { chunkIndex: 'asc' } } }
@@ -496,10 +608,14 @@ export class PesdataSyncService {
     const seenExternalIds = state.initial?.seenExternalIds ?? new Set<string>();
     let offset = state.offset;
 
-    while (state.limit === undefined || counters.scannedCount < state.limit) {
+    while (state.limit === undefined || (state.mode === 'sample'
+      ? counters.fetchedCount < state.limit
+      : counters.scannedCount < state.limit)) {
       const remaining = state.limit === undefined
         ? this.pageSize
-        : Math.min(this.pageSize, state.limit - counters.scannedCount);
+        : Math.min(this.pageSize, state.limit - (state.mode === 'sample'
+          ? counters.fetchedCount
+          : counters.scannedCount));
       const page = await this.client.listPlayers({ start: offset, limit: remaining, order: 'DESC' });
       state.assertLeaseHealthy?.();
       if (state.runId && state.leaseOwnerToken) await this.touchLease(state.runId, state.leaseOwnerToken);
@@ -514,10 +630,14 @@ export class PesdataSyncService {
         seenExternalIds.add(externalId);
         counters.scannedCount += 1;
         try {
-          const prior = state.mode === 'incremental' && state.runId
+          const prior = (state.mode === 'incremental' || state.mode === 'sample') && state.runId
             ? await this.latestSuccessfulItem(state.runId, externalId)
             : null;
-          if (prior?.summaryChecksum === summaryChecksum && prior.normalizedJson && state.runId) {
+          if (state.mode === 'sample' && prior?.normalizedJson && state.runId) {
+            const row = prior.normalizedJson as RawImportRow;
+            counters.skippedCount += 1;
+            await this.persistSkippedItem(state.runId, externalId, summaryChecksum, prior, row, state.leaseOwnerToken);
+          } else if (prior?.summaryChecksum === summaryChecksum && prior.normalizedJson && state.runId) {
             const row = prior.normalizedJson as RawImportRow;
             rows.push(row);
             counters.skippedCount += 1;

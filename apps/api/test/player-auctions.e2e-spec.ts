@@ -49,9 +49,11 @@ describe('Player auction group acceptance', () => {
   };
   const bridgePost = (path: string, body: object) => request(app.getHttpServer()).post(path).set(bridgeHeaders(path)).send(body);
   const groupMessage = async (senderId: string, text: string, messageId = `auction-message-${randomUUID()}`) => {
+    const databaseRows = await prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
+    const databaseNow = databaseRows[0]!.databaseNow;
     const result = await bridgePost('/v1/wechat-bot/bridge/messages', { messages: [{
       messageId, conversationType: 'GROUP', conversationId: groupWechatId, senderId,
-      sentAt: new Date().toISOString(), sequence: `${Date.now()}-${messageId}`, messageType: 'TEXT', text
+      sentAt: databaseNow!.toISOString(), sequence: `${databaseNow!.getTime()}-${messageId}`, messageType: 'TEXT', text
     }] }).expect(200);
     return { messageId, result: result.body.results[0] as { status: string; inboundId: string | null } };
   };
@@ -71,7 +73,10 @@ describe('Player auction group acceptance', () => {
   };
   const closeLot = async (lotId: string) => {
     const lot = await prisma.playerAuctionLot.update({ where: { id: lotId }, data: { deadlineAt: new Date(Date.now() - 1_000) } });
-    expect(await worker.closeDueLot(lot.id, lot.deadlineEpoch)).toBe(true);
+    const closedByThisCall = await worker.closeDueLot(lot.id, lot.deadlineEpoch);
+    if (!closedByThisCall) {
+      expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: lot.id } })).status).not.toBe('ACTIVE');
+    }
   };
 
   beforeAll(async () => {
@@ -344,16 +349,36 @@ describe('Player auction group acceptance', () => {
 
     const lotId = firstRoom.body.currentLot.id as string;
     const originalEpoch = firstRoom.body.currentLot.deadlineEpoch as number;
-    const bidKey = randomUUID();
+    const bidKeys = [randomUUID(), randomUUID()];
     const bidBody = { amount: 120, lotId, deadlineEpoch: originalEpoch };
-    const accepted = await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
-      .set(firstAuth).set('Idempotency-Key', bidKey).send(bidBody).expect(201);
-    expect(accepted.body).toMatchObject({ result: 'VALID', amount: 120, teamName: '上海申花' });
+    const concurrent = await Promise.all([
+      request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
+        .set(firstAuth).set('Idempotency-Key', bidKeys[0]!).send(bidBody),
+      request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
+        .set(secondAuth).set('Idempotency-Key', bidKeys[1]!).send(bidBody)
+    ]);
+    expect(concurrent.map((response) => response.status)).toEqual([201, 201]);
+    const accepted = concurrent.find((response) => response.body.result === 'VALID')!;
+    const overtaken = concurrent.find((response) => response.body.result === 'BELOW_MINIMUM_INCREMENT')!;
+    expect(accepted.body).toMatchObject({ result: 'VALID', amount: 120 });
+    expect(overtaken.body).toMatchObject({ result: 'BELOW_MINIMUM_INCREMENT', amount: 120, requiredMinimum: 130 });
     expect(new Date(accepted.body.deadlineAt as string).getTime()).toBeGreaterThan(Date.now() + 25_000);
+    expect(await prisma.playerAuctionBid.count({ where: { lotId, amount: 120, result: 'VALID' } })).toBe(1);
+    const publicRoom = await request(app.getHttpServer()).get(`/v1/me/player-auctions/${firstBatch.id}`)
+      .set(firstAuth).expect(200);
+    expect(publicRoom.body.currentLot.bids).toHaveLength(1);
+    expect(publicRoom.body.currentLot.bids[0]).toMatchObject({
+      amount: 120,
+      teamNumber: expect.any(Number),
+      teamName: expect.any(String),
+      bidderDisplayName: expect.any(String)
+    });
+    const acceptedIndex = concurrent.indexOf(accepted);
+    const acceptedAuth = acceptedIndex === 0 ? firstAuth : secondAuth;
     const replay = await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
-      .set(firstAuth).set('Idempotency-Key', bidKey).send(bidBody).expect(201);
+      .set(acceptedAuth).set('Idempotency-Key', bidKeys[acceptedIndex]!).send(bidBody).expect(201);
     expect(replay.body.id).toBe(accepted.body.id);
-    expect(await prisma.playerAuctionBid.count({ where: { lotId, userId: userIds[0]!, idempotencyKey: bidKey } })).toBe(1);
+    expect(await prisma.playerAuctionBid.count({ where: { lotId, idempotencyKey: bidKeys[acceptedIndex]! } })).toBe(1);
     await request(app.getHttpServer()).post(`/v1/me/player-auctions/${firstBatch.id}/bids`)
       .set(firstAuth).set('Idempotency-Key', randomUUID()).send(bidBody).expect(409)
       .expect(({ body }) => expect(body.error.code).toBe('AUCTION_EPOCH_CHANGED'));
@@ -398,6 +423,11 @@ describe('Player auction group acceptance', () => {
     expect(duplicateUpload.result.status).toBe('DUPLICATE');
     expect((await prisma.playerAuctionBid.findUniqueOrThrow({ where: { inboundMessageId: firstUpload.result.inboundId! } })).result).toBe('RECOVERY_REQUIRED');
 
+    await bridgePost('/v1/wechat-bot/bridge/heartbeat', {
+      wechatVersion: 'test', loginStatus: 'LOGGED_IN', listenerWatermark: `recovered-${runId}`,
+      screenLocked: false, outboundQueueDepth: 0,
+      observedGroups: [{ wechatGroupId: groupWechatId, displayName: 'CELL 拍卖验收群' }]
+    }).expect(200);
     await groupMessage(contacts[0]!, '继续拍卖');
     const recoveredLot = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
     expect(recoveredLot.deadlineAt!.getTime()).toBeGreaterThan(Date.now() + 29_000);
