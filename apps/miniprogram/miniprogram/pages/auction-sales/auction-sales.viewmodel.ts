@@ -21,6 +21,10 @@ export function isLatestSalesRequest(current: number, request: number, unloaded:
   return !unloaded && current === request
 }
 
+export function shouldShowAuctionSalesBackToTop(scrollTop: number) {
+  return scrollTop >= 700
+}
+
 export function auctionSaleCardPath(cardId: string) {
   return `/pages/player-card-detail/index?id=${encodeURIComponent(cardId)}`
 }

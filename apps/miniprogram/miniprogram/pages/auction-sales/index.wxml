@@ -13,4 +13,5 @@
     <text wx:if="{{errorMessage}}" class="inline-error">{{errorMessage}}</text><button wx:if="{{errorMessage}}" class="retry-link efm-retry-button" bindtap="retry">重新加载</button>
     <loading-state wx:if="{{loadingMore}}" label="继续加载" /><text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部成交 —</text>
   </view>
+  <view wx:if="{{showBackToTop}}" class="back-to-top" bindtap="backToTop" role="button" aria-label="回到顶部"><text class="back-to-top-arrow">↑</text><text>顶部</text></view>
 </view>

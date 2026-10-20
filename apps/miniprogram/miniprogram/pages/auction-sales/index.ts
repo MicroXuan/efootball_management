@@ -1,6 +1,6 @@
 import type { MyPlayerAuctionSale } from '@efm/contracts'
 import { listMyPlayerAuctionSales } from '../../services/player-auctions'
-import { auctionSaleCardPath, auctionSaleRows, isLatestSalesRequest, mergeAuctionSales, type AuctionSalesState } from './auction-sales.viewmodel'
+import { auctionSaleCardPath, auctionSaleRows, isLatestSalesRequest, mergeAuctionSales, shouldShowAuctionSalesBackToTop, type AuctionSalesState } from './auction-sales.viewmodel'
 
 type InputEvent = { detail: { value: string } }
 type CardTapEvent = { currentTarget: { dataset: { cardId?: string } } }
@@ -14,12 +14,21 @@ Page({
     keyword: '', errorMessage: '', loadingMore: false,
     items: [] as ReturnType<typeof auctionSaleRows>,
     nextCursor: null as string | null, hasMore: true,
+    showBackToTop: false,
   },
 
   onLoad() { unloaded = false; void this.loadSales('refresh') },
   onUnload() { unloaded = true; requestToken += 1; if (searchTimer) clearTimeout(searchTimer) },
   onPullDownRefresh() { void this.loadSales('refresh').finally(() => wx.stopPullDownRefresh()) },
   onReachBottom() { if (!this.data.loadingMore && this.data.hasMore) void this.loadSales('append') },
+  onPageScroll(event: { scrollTop: number }) {
+    const showBackToTop = shouldShowAuctionSalesBackToTop(event.scrollTop)
+    if (showBackToTop !== this.data.showBackToTop) this.setData({ showBackToTop })
+  },
+  backToTop() {
+    this.setData({ showBackToTop: false })
+    wx.pageScrollTo({ scrollTop: 0, duration: 250 })
+  },
   onKeywordInput(event: InputEvent) {
     this.setData({ keyword: event.detail.value })
     if (searchTimer) clearTimeout(searchTimer)
@@ -38,7 +47,7 @@ Page({
       const response = await listMyPlayerAuctionSales({
         keyword: this.data.keyword.trim() || undefined,
         cursor: mode === 'append' ? this.data.nextCursor ?? undefined : undefined,
-        limit: 20,
+        limit: 30,
       })
       if (!isLatestSalesRequest(requestToken, token, unloaded)) return
       const previous: AuctionSalesState = { items: this.data.items as MyPlayerAuctionSale[], nextCursor: this.data.nextCursor, hasMore: this.data.hasMore }

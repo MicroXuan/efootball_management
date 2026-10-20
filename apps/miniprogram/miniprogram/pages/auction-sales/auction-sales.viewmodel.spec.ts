@@ -1,6 +1,6 @@
 import type { MyPlayerAuctionSale } from '@efm/contracts'
 import { describe, expect, it } from 'vitest'
-import { auctionSaleCardPath, auctionSaleRows, isLatestSalesRequest, mergeAuctionSales } from './auction-sales.viewmodel'
+import { auctionSaleCardPath, auctionSaleRows, isLatestSalesRequest, mergeAuctionSales, shouldShowAuctionSalesBackToTop } from './auction-sales.viewmodel'
 
 const sale = (id: string): MyPlayerAuctionSale => ({
   id, batchId: '22222222-2222-4222-8222-222222222222',
@@ -29,5 +29,10 @@ describe('auction sales view model', () => {
       teamLabel: '7号 · 上海申花', price: 170,
       winner: { bidderDisplayName: '小宣' },
     })
+  })
+
+  it('reveals the top shortcut only after the list has scrolled one screen', () => {
+    expect(shouldShowAuctionSalesBackToTop(699)).toBe(false)
+    expect(shouldShowAuctionSalesBackToTop(700)).toBe(true)
   })
 })
