@@ -8,11 +8,13 @@ import { AdminModule } from '../admin/admin.module.js';
 import { LeagueRostersModule } from '../league-rosters/league-rosters.module.js';
 import { AdminDisappearanceController } from './admin-disappearance.controller.js';
 import { DisappearanceReviewService } from './disappearance-review.service.js';
+import { TransferProposalService } from './transfer-proposal.service.js';
+import { MyTransferCandidatesController, MyTransferProposalsController } from './my-transfer-proposals.controller.js';
 
 @Module({
   imports: [PlayerMarketModule, AdminAuthModule, AdminModule, LeagueRostersModule],
-  controllers: [MyPlayerRequestsController, MyDisappearanceSubmitController, AdminDisappearanceController],
-  providers: [DisappearanceService, DisappearanceReviewService, MutationReceiptService],
+  controllers: [MyPlayerRequestsController, MyDisappearanceSubmitController, AdminDisappearanceController, MyTransferProposalsController, MyTransferCandidatesController],
+  providers: [DisappearanceService, DisappearanceReviewService, TransferProposalService, MutationReceiptService],
   exports: [DisappearanceService]
 })
 export class PlayerRequestsModule {}

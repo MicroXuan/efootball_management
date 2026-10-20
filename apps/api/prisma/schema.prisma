@@ -93,6 +93,16 @@ enum DisappearanceRequestStatus {
   INVALIDATED
 }
 
+enum TransferProposalStatus {
+  PENDING_COUNTERPARTY
+  PENDING_ADMIN
+  REJECTED
+  WITHDRAWN
+  APPROVED
+  EXPIRED
+  INVALIDATED
+}
+
 enum ValuationSubmissionStatus {
   DRAFT
   PUBLISHED
@@ -846,6 +856,7 @@ model League {
   playerApplications        PlayerAcquisitionApplication[]
   playerReleaseRestrictions PlayerReleaseRestriction[]
   disappearanceRequests     DisappearanceRequest[]
+  transferProposals         TransferProposal[]
 
   @@index([isDeleted, status, createdAt, id], map: "leagues_public_list_idx")
   @@index([createdById], map: "leagues_creator_idx")
@@ -911,6 +922,9 @@ model LeagueTeam {
   sourcedPlayerApplications  PlayerAcquisitionApplication[] @relation("PlayerApplicationSourceTeam")
   playerReleaseRestrictions  PlayerReleaseRestriction[]
   disappearanceRequests      DisappearanceRequest[]
+  outgoingTransferProposals TransferProposal[] @relation("TransferProposalSource")
+  incomingTransferProposals TransferProposal[] @relation("TransferProposalTarget")
+  initiatedTransferProposals TransferProposal[] @relation("TransferProposalInitiator")
   playerNominations          PlayerNomination[]
 
   @@unique([leagueId, ownerUserId], map: "league_teams_owner_unique")
@@ -1079,6 +1093,7 @@ model LeagueSeason {
   acquiredPlayerOwnerships  LeaguePlayerOwnership[]        @relation("OwnershipAcquisitionSeason")
   playerReleaseRestrictions PlayerReleaseRestriction[]
   disappearanceRequests     DisappearanceRequest[]
+  transferProposals         TransferProposal[]
 
   @@unique([leagueId, seasonNumber], map: "league_seasons_number_unique")
   @@index([leagueId, status], map: "league_seasons_status_idx")
@@ -1209,6 +1224,7 @@ model LeaguePlayerOwnership {
   valuationSnapshots  ValuationRosterSnapshot[]
   forcedApplications  PlayerAcquisitionApplication[]
   disappearanceRequests DisappearanceRequest[]
+  transferProposals TransferProposal[]
 
   @@unique([leagueId, footballPlayerId], map: "league_player_ownerships_player_unique")
   @@index([leagueTeamId, status], map: "league_player_ownerships_team_status_idx")
@@ -1259,6 +1275,56 @@ model DisappearanceRequestEvent {
 
   @@index([requestId, createdAt, id], map: "disappearance_request_events_timeline_idx")
   @@map("disappearance_request_events")
+}
+
+model TransferProposal {
+  id                       String                 @id @default(uuid()) @db.Char(36)
+  leagueId                 String                 @map("league_id") @db.Char(36)
+  seasonId                 String                 @map("season_id") @db.Char(36)
+  ownershipId              String                 @map("ownership_id") @db.Char(36)
+  sourceTeamId             String                 @map("source_team_id") @db.Char(36)
+  targetTeamId             String                 @map("target_team_id") @db.Char(36)
+  initiatorTeamId          String                 @map("initiator_team_id") @db.Char(36)
+  initiatorUserId          String                 @map("initiator_user_id") @db.Char(36)
+  counterpartyUserId       String?                @map("counterparty_user_id") @db.Char(36)
+  expectedOwnershipVersion Int                    @map("expected_ownership_version") @db.UnsignedInt
+  amountMinor              Int                    @map("amount_minor") @db.UnsignedInt
+  status                   TransferProposalStatus @default(PENDING_COUNTERPARTY)
+  reason                   String?                @db.VarChar(512)
+  reviewReason             String?                @map("review_reason") @db.VarChar(512)
+  reviewedByAdminId        String?                @map("reviewed_by_admin_id") @db.Char(36)
+  reviewedAt               DateTime?              @map("reviewed_at")
+  version                  Int                    @default(1) @db.UnsignedInt
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+  league                   League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  season                   LeagueSeason          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  ownership                LeaguePlayerOwnership @relation(fields: [ownershipId], references: [id], onDelete: Restrict)
+  sourceTeam               LeagueTeam             @relation("TransferProposalSource", fields: [sourceTeamId], references: [id], onDelete: Restrict)
+  targetTeam               LeagueTeam             @relation("TransferProposalTarget", fields: [targetTeamId], references: [id], onDelete: Restrict)
+  initiatorTeam            LeagueTeam             @relation("TransferProposalInitiator", fields: [initiatorTeamId], references: [id], onDelete: Restrict)
+  events                   TransferProposalEvent[]
+
+  @@index([leagueId, status, createdAt], map: "transfer_proposals_queue_idx")
+  @@index([sourceTeamId, status], map: "transfer_proposals_source_idx")
+  @@index([targetTeamId, status], map: "transfer_proposals_target_idx")
+  @@index([ownershipId, status], map: "transfer_proposals_ownership_idx")
+  @@map("transfer_proposals")
+}
+
+model TransferProposalEvent {
+  id           String                 @id @default(uuid()) @db.Char(36)
+  proposalId   String                 @map("proposal_id") @db.Char(36)
+  fromStatus   TransferProposalStatus? @map("from_status")
+  toStatus     TransferProposalStatus
+  actorUserId  String?                @map("actor_user_id") @db.Char(36)
+  actorAdminId String?                @map("actor_admin_id") @db.Char(36)
+  reason       String?                @db.VarChar(512)
+  createdAt    DateTime               @default(now()) @map("created_at")
+  proposal     TransferProposal       @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt, id], map: "transfer_proposal_events_timeline_idx")
+  @@map("transfer_proposal_events")
 }
 
 model RosterTransaction {

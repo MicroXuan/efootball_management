@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ExpectedVersionSchema, ResourceIdSchema } from './common.js';
+import { MoneyMinorSchema } from './league-roster.js';
 
 export const DisappearanceRequestStatusSchema = z.enum(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN', 'INVALIDATED']);
 export const SubmitDisappearanceRequestSchema = z.object({
@@ -36,3 +37,53 @@ export const AdminDisappearanceRequestListSchema = z.object({ items: z.array(Adm
 export type SubmitDisappearanceRequest = z.infer<typeof SubmitDisappearanceRequestSchema>;
 export type DisappearanceRequest = z.infer<typeof DisappearanceRequestSchema>;
 export type ReviewDisappearanceRequest = z.infer<typeof ReviewDisappearanceRequestSchema>;
+
+export const TransferProposalStatusSchema = z.enum(['PENDING_COUNTERPARTY', 'PENDING_ADMIN', 'REJECTED', 'WITHDRAWN', 'APPROVED', 'EXPIRED', 'INVALIDATED']);
+export const SubmitTransferProposalSchema = z.object({
+  seasonId: ResourceIdSchema,
+  initiatorTeamId: ResourceIdSchema,
+  ownershipId: ResourceIdSchema,
+  targetTeamId: ResourceIdSchema,
+  amountMinor: MoneyMinorSchema,
+  expectedOwnershipVersion: ExpectedVersionSchema,
+  reason: z.string().trim().max(512).optional()
+});
+export const RespondTransferProposalSchema = z.object({
+  decision: z.enum(['CONFIRM', 'REJECT', 'WITHDRAW']),
+  expectedVersion: ExpectedVersionSchema,
+  reason: z.string().trim().max(512).optional()
+});
+export const TransferCandidateSchema = z.object({
+  ownershipId: ResourceIdSchema,
+  ownershipVersion: ExpectedVersionSchema,
+  sourceTeamId: ResourceIdSchema,
+  sourceTeamNumber: z.number().int().nullable(),
+  sourceTeamName: z.string(),
+  eligible: z.boolean(),
+  reason: z.string().nullable()
+});
+export const TransferProposalSchema = z.object({
+  id: ResourceIdSchema,
+  leagueId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  ownershipId: ResourceIdSchema,
+  playerName: z.string(),
+  sourceTeamId: ResourceIdSchema,
+  sourceTeamName: z.string(),
+  sourceTeamNumber: z.number().int().nullable(),
+  targetTeamId: ResourceIdSchema,
+  targetTeamName: z.string(),
+  targetTeamNumber: z.number().int().nullable(),
+  initiatorTeamId: ResourceIdSchema,
+  amountMinor: MoneyMinorSchema,
+  status: TransferProposalStatusSchema,
+  reason: z.string().nullable(),
+  reviewReason: z.string().nullable(),
+  version: ExpectedVersionSchema,
+  createdAt: z.iso.datetime(),
+  reviewedAt: z.iso.datetime().nullable()
+});
+export const TransferProposalListSchema = z.object({ items: z.array(TransferProposalSchema) });
+export type SubmitTransferProposal = z.infer<typeof SubmitTransferProposalSchema>;
+export type RespondTransferProposal = z.infer<typeof RespondTransferProposalSchema>;
+export type TransferProposal = z.infer<typeof TransferProposalSchema>;
