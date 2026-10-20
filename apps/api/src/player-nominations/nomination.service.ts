@@ -92,14 +92,14 @@ export class NominationService {
     await this.authorization.requireLeagueManager(adminId, leagueId);
     const rows = await this.prisma.playerNomination.findMany({
       where: { windowId, withdrawnAt: null },
-      include: { footballPlayer: true, leagueTeam: true },
+      include: { footballPlayer: { include: { cards: { where: { status: 'ACTIVE', publishedAt: { not: null } }, select: { id: true, cardName: true } } } }, leagueTeam: true },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
     });
     const grouped = new Map<string, NominationCandidate>();
     for (const row of rows) {
       let candidate = grouped.get(row.footballPlayerId);
       if (!candidate) {
-        candidate = { playerId: row.footballPlayerId, playerName: row.footballPlayer.nameZh ?? row.footballPlayer.nameEn ?? '未知球员', nominatorCount: 0, nominators: [], eligible: row.footballPlayer.publishedAt !== null };
+        candidate = { playerId: row.footballPlayerId, sourceNominationId: row.id, playerName: row.footballPlayer.nameZh ?? row.footballPlayer.nameEn ?? '未知球员', nominatorCount: 0, nominators: [], cards: row.footballPlayer.cards, eligible: row.footballPlayer.publishedAt !== null && row.footballPlayer.cards.length > 0 };
         grouped.set(row.footballPlayerId, candidate);
       }
       candidate.nominatorCount += 1;

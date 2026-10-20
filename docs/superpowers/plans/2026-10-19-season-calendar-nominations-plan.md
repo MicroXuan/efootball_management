@@ -72,7 +72,7 @@
 
 ### Task 4: Nomination window administration
 
-**Files:** Modify `apps/api/prisma/schema.prisma`; create `apps/api/prisma/migrations/202610200001_nomination_windows/migration.sql`, `packages/contracts/src/player-nomination.ts`, `apps/api/src/player-nominations/{player-nominations.module.ts,admin-nomination.controller.ts,nomination-window.service.ts,nomination-window.service.spec.ts}`; modify `packages/contracts/src/index.ts`, `apps/api/src/app.module.ts`, `apps/admin-web/src/app.tsx`; add admin window form under `apps/admin-web/src/leagues/` with test.
+**Files:** Modify `apps/api/prisma/schema.prisma`; create `apps/api/prisma/migrations/202610200003_nomination_windows/migration.sql`, `packages/contracts/src/player-nomination.ts`, `apps/api/src/player-nominations/{player-nominations.module.ts,admin-nomination.controller.ts,nomination-window.service.ts,nomination-window.service.spec.ts}`; modify `packages/contracts/src/index.ts`, `apps/api/src/app.module.ts`, `apps/admin-web/src/app.tsx`; add admin window form under `apps/admin-web/src/leagues/` with test.
 
 **Interfaces:** `NominationWindow {id,leagueId,seasonId,startsAt,endsAt,perTeamLimit,version}`; admin create/update endpoints under `/admin/leagues/:leagueId/seasons/:seasonId/nomination-windows`; positive integer limit and `startsAt < endsAt`.
 
@@ -84,7 +84,7 @@
 
 ### Task 5: Team nominations and admin shortlist
 
-**Files:** Extend nomination Prisma migration/model and contracts; create `apps/api/src/player-nominations/{my-nominations.controller.ts,nomination.service.ts,nomination.service.spec.ts}`, `apps/miniprogram/miniprogram/services/nominations.ts`, `pages/player-nominations/index.{ts,wxml,wxss,json}` and tests; create `apps/admin-web/src/auctions/nomination-shortlist-page.tsx` and test; modify `apps/miniprogram/miniprogram/app.json`, `pages/league-detail/index.{ts,wxml}`, and `apps/admin-web/src/app.tsx` to register routes.
+**Files:** Add `apps/api/prisma/migrations/202610200004_player_nominations/migration.sql`, extend nomination Prisma model and contracts; create `apps/api/src/player-nominations/{my-nominations.controller.ts,nomination.service.ts,nomination.service.spec.ts}`, `apps/miniprogram/miniprogram/services/nominations.ts`, `pages/player-nominations/index.{ts,wxml,wxss,json}` and tests; create `apps/admin-web/src/auctions/nomination-shortlist-page.tsx` and test; modify `apps/miniprogram/miniprogram/app.json`, `pages/league-detail/index.{ts,wxml}`, and `apps/admin-web/src/app.tsx` to register routes.
 
 **Interfaces:** `POST /me/nomination-windows/:windowId/nominations {playerId}`; `DELETE /me/nomination-windows/:windowId/nominations/:id`; admin `GET /admin/leagues/:leagueId/nomination-windows/:windowId/candidates` returns one row per player with nominators/count/eligibility.
 
@@ -96,7 +96,7 @@
 
 ### Task 6: Import shortlist into an auction draft
 
-**Files:** Modify `apps/api/prisma/schema.prisma`, add `apps/api/prisma/migrations/202610200004_nomination_auction_source/migration.sql`; modify `packages/contracts/src/player-auction.ts`, `apps/api/src/player-auctions/admin-player-auctions.service.ts`, `.spec.ts`, `apps/admin-web/src/auctions/auction-editor-page.tsx`, `.spec.tsx`, nomination shortlist page/test.
+**Files:** Modify `apps/api/prisma/schema.prisma`, add `apps/api/prisma/migrations/202610200005_nomination_auction_source/migration.sql`; modify `packages/contracts/src/player-auction.ts`, `apps/api/src/player-auctions/admin-player-auctions.service.ts`, `.spec.ts`, `apps/admin-web/src/auctions/auction-editor-page.tsx`, `.spec.tsx`, nomination shortlist page/test.
 
 **Interfaces:** `PlayerAuctionLotInputSchema` gains optional `nominationId`; `PlayerAuctionLot.nominationId` is nullable. `AdminPlayerAuctionsService.replaceLots(...)` remains the only write path; shortlist UI includes `nominationId` after card/price/increment/order selection.
 

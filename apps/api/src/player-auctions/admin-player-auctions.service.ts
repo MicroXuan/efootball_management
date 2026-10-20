@@ -162,6 +162,7 @@ export class AdminPlayerAuctionsService {
           throw new PlayerAuctionError('AUCTION_CARD_INVALID', '球员卡不存在、不可用或不属于该球员', 409);
         }
       }
+      await this.requireEligibleNominations(tx, leagueId, input.lots);
       await tx.playerAuctionLot.deleteMany({ where: { batchId } });
       await tx.playerAuctionLot.createMany({
         data: input.lots.map((lot) => {
@@ -172,6 +173,7 @@ export class AdminPlayerAuctionsService {
             batchId,
             footballPlayerId: player.id,
             playerCardId: card.id,
+            nominationId: lot.nominationId ?? null,
             displayOrder: lot.displayOrder,
             playerNameSnapshot,
             playerSnapshot: {
@@ -203,6 +205,7 @@ export class AdminPlayerAuctionsService {
       this.requireDraft(batch);
       if (batch.lots.length === 0) throw new PlayerAuctionError('AUCTION_LOTS_REQUIRED', '至少配置一名拍卖球员', 409);
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`;
+      await this.requireEligibleNominations(tx, leagueId, batch.lots.map((lot) => ({ nominationId: lot.nominationId, playerId: lot.footballPlayerId })));
       if (batch.bidChannel === 'WECHAT_GROUP') {
         if (!batch.groupBindingId) {
           throw new PlayerAuctionError('AUCTION_GROUP_INVALID', '微信群拍卖缺少通知群', 409);
@@ -392,6 +395,25 @@ export class AdminPlayerAuctionsService {
     if (batch.status !== 'DRAFT') throw new PlayerAuctionError('AUCTION_DRAFT_REQUIRED', '只有草稿拍卖可以编辑', 409);
   }
 
+  private async requireEligibleNominations(client: AuctionClient, leagueId: string, lots: Array<{ nominationId?: string | null | undefined; playerId: string }>) {
+    const sourced = lots.filter((lot): lot is { nominationId: string; playerId: string } => Boolean(lot.nominationId));
+    if (!sourced.length) return;
+    const ids = [...new Set(sourced.map((lot) => lot.nominationId))];
+    const nominations = await client.playerNomination.findMany({
+      where: { id: { in: ids }, withdrawnAt: null, window: { season: { leagueId } } },
+      select: { id: true, footballPlayerId: true }
+    });
+    const byId = new Map(nominations.map((nomination) => [nomination.id, nomination.footballPlayerId]));
+    if (byId.size !== ids.length || sourced.some((lot) => byId.get(lot.nominationId) !== lot.playerId)) {
+      throw new PlayerAuctionError('AUCTION_NOMINATION_INELIGIBLE', '提名来源失效或与球员不匹配，请刷新候选名单', 409);
+    }
+    const ownerships = await client.leaguePlayerOwnership.findMany({
+      where: { leagueId, footballPlayerId: { in: [...new Set(sourced.map((lot) => lot.playerId))] }, status: 'ACTIVE' },
+      select: { footballPlayerId: true }
+    });
+    if (ownerships.length) throw new PlayerAuctionError('AUCTION_NOMINATION_INELIGIBLE', '提名球员已被签约，不能导入或准备拍卖', 409);
+  }
+
   private summary(batch: BatchSummaryInput) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
@@ -416,7 +438,7 @@ export class AdminPlayerAuctionsService {
   private lotView(lot: LotRecord) {
     return {
       id: lot.id, displayOrder: lot.displayOrder, playerId: lot.footballPlayerId,
-      playerCardId: lot.playerCardId, playerName: lot.playerNameSnapshot,
+      playerCardId: lot.playerCardId, nominationId: lot.nominationId, playerName: lot.playerNameSnapshot,
       playerSnapshot: lot.playerSnapshot, startingPrice: lot.startingPrice,
       minimumIncrement: lot.minimumIncrement, status: lot.status, currentPrice: lot.currentPrice,
       currentHighestBidId: lot.currentHighestBidId, deadlineAt: lot.deadlineAt?.toISOString() ?? null,

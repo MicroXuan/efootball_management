@@ -75,6 +75,7 @@ export const PlayerAuctionTransitionRequestSchema = z.object({
 export const PlayerAuctionLotInputSchema = z.object({
   playerId: ResourceIdSchema,
   playerCardId: ResourceIdSchema,
+  nominationId: ResourceIdSchema.optional(),
   displayOrder: z.number().int().positive().max(10_000),
   startingPrice: PositiveMoneySchema,
   minimumIncrement: PositiveMoneySchema
@@ -269,6 +270,7 @@ export const PlayerAuctionLotSchema = z.object({
   displayOrder: z.number().int().positive(),
   playerId: ResourceIdSchema,
   playerCardId: ResourceIdSchema.nullable(),
+  nominationId: ResourceIdSchema.nullable().default(null),
   playerName: z.string().trim().min(1).max(128),
   playerSnapshot: z.record(z.string(), z.unknown()),
   startingPrice: PositiveMoneySchema,

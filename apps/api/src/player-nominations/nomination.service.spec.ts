@@ -3,7 +3,7 @@ import { NominationService } from './nomination.service.js';
 
 const window = { id: 'window-1', seasonId: 'season-1', startsAt: new Date('2026-10-20T00:00:00.000Z'), endsAt: new Date('2026-10-25T00:00:00.000Z'), perTeamLimit: 2, season: { leagueId: 'league-1' } };
 const scope = { leagueId: 'league-1', seasonId: 'season-1', leagueTeamId: 'team-1' };
-const player = { id: '11111111-1111-4111-8111-111111111111', nameZh: '瓦拉内', nameEn: 'Raphaël Varane', publishedAt: new Date() };
+const player = { id: '11111111-1111-4111-8111-111111111111', nameZh: '瓦拉内', nameEn: 'Raphaël Varane', publishedAt: new Date(), cards: [{ id: '44444444-4444-4444-8444-444444444444', cardName: '传奇' }] };
 const player2 = '22222222-2222-4222-8222-222222222222';
 const player3 = '33333333-3333-4333-8333-333333333333';
 

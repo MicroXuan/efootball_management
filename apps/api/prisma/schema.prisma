@@ -1164,6 +1164,7 @@ model PlayerNomination {
   window           NominationWindow @relation(fields: [windowId], references: [id], onDelete: Restrict)
   leagueTeam       LeagueTeam       @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
   footballPlayer   FootballPlayer   @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
+  auctionLots      PlayerAuctionLot[]
 
   @@unique([windowId, leagueTeamId, footballPlayerId], map: "player_nominations_unique")
   @@index([windowId, withdrawnAt, footballPlayerId], map: "player_nominations_candidates_idx")
@@ -2936,6 +2937,7 @@ model PlayerAuctionLot {
   batchId             String                 @map("batch_id") @db.Char(36)
   footballPlayerId    String                 @map("football_player_id") @db.Char(36)
   playerCardId        String?                @map("player_card_id") @db.Char(36)
+  nominationId        String?                @map("nomination_id") @db.Char(36)
   displayOrder        Int                    @map("display_order") @db.UnsignedInt
   playerNameSnapshot  String                 @map("player_name_snapshot") @db.VarChar(128)
   playerSnapshot      Json                   @map("player_snapshot")
@@ -2958,6 +2960,7 @@ model PlayerAuctionLot {
   currentForBatch     PlayerAuctionBatch?    @relation("PlayerAuctionCurrentLot")
   footballPlayer      FootballPlayer         @relation(fields: [footballPlayerId], references: [id], onDelete: Restrict)
   playerCard          PlayerCard?            @relation(fields: [playerCardId], references: [id], onDelete: Restrict)
+  nomination          PlayerNomination?      @relation(fields: [nominationId], references: [id], onDelete: Restrict)
   currentHighestBid   PlayerAuctionBid?      @relation("PlayerAuctionLotHighestBid", fields: [currentHighestBidId], references: [id], onDelete: Restrict)
   bids                PlayerAuctionBid[]     @relation("PlayerAuctionLotBids")
   review              PlayerAuctionReview?
@@ -2966,6 +2969,7 @@ model PlayerAuctionLot {
   @@index([batchId, status], map: "player_auction_lots_batch_status_idx")
   @@index([footballPlayerId], map: "player_auction_lots_player_idx")
   @@index([playerCardId], map: "player_auction_lots_card_idx")
+  @@index([nominationId], map: "player_auction_lots_nomination_idx")
   @@index([status, deadlineAt], map: "player_auction_lots_deadline_idx")
   @@map("player_auction_lots")
 }

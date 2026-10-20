@@ -13,7 +13,7 @@ import {
 import { featureFlags } from '../config/features';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
 
-type DraftLot = { playerId: string; playerCardId: string; playerName: string; cardName: string; startingPrice: number; minimumIncrement: number };
+type DraftLot = { playerId: string; playerCardId: string; nominationId?: string; playerName: string; cardName: string; startingPrice: number; minimumIncrement: number };
 const key = () => crypto.randomUUID();
 
 export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
@@ -44,7 +44,7 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
       setGroupBindingId(existing?.groupBindingId ?? eligibleGroups[0]?.id);
       if (existing) {
         setBatch(existing); setName(existing.name); setBidChannel(existing.bidChannel);
-        setLots(existing.lots.map((lot) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId ?? '', playerName: lot.playerName, cardName: String((lot.playerSnapshot.card as { cardName?: string } | null)?.cardName ?? '默认卡'), startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement }))
+        setLots(existing.lots.map((lot) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId ?? '', nominationId: lot.nominationId ?? undefined, playerName: lot.playerName, cardName: String((lot.playerSnapshot.card as { cardName?: string } | null)?.cardName ?? '默认卡'), startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement }))
       ); }
     }).catch(() => setError('拍卖草稿加载失败，请返回列表重试'));
   }, [api, batchId, leagueId]);
@@ -83,7 +83,7 @@ export function AuctionEditorPage({ api = adminApi }: { api?: AdminApi }) {
       let current = batch;
       if (!current) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions`, { method: 'POST', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: bidChannel === 'WECHAT_GROUP' ? { groupBindingId, name: name.trim(), bidChannel, expectedVersion: group?.version } : { groupBindingId: null, name: name.trim(), bidChannel } });
       else if (current.name !== name.trim() || current.bidChannel !== bidChannel || (bidChannel === 'WECHAT_GROUP' && current.groupBindingId !== groupBindingId)) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}`, { method: 'PATCH', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: bidChannel === 'WECHAT_GROUP' ? { name: name.trim(), bidChannel, groupBindingId, groupBindingVersion: group?.version, expectedVersion: current.version } : { name: name.trim(), bidChannel, groupBindingId: null, expectedVersion: current.version } });
-      current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}/lots`, { method: 'PUT', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { expectedVersion: current.version, lots: lots.map((lot, index) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId, displayOrder: index + 1, startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement })) } });
+      current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}/lots`, { method: 'PUT', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { expectedVersion: current.version, lots: lots.map((lot, index) => ({ playerId: lot.playerId, playerCardId: lot.playerCardId, nominationId: lot.nominationId, displayOrder: index + 1, startingPrice: lot.startingPrice, minimumIncrement: lot.minimumIncrement })) } });
       if (prepare) current = await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${current.id}/prepare`, { method: 'POST', headers: { 'Idempotency-Key': key() }, schema: PlayerAuctionBatchDetailSchema, body: { expectedVersion: current.version } });
       setBatch(current); setDirty(false); setNotice(prepare ? '拍卖已准备完成，可在详情页开始。' : '草稿已保存。');
       if (prepare) navigate(`/leagues/${leagueId}/auctions/${current.id}`);

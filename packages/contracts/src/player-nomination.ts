@@ -45,9 +45,11 @@ export const MyNominationWorkspaceSchema = z.object({
 });
 export const NominationCandidateSchema = z.object({
   playerId: ResourceIdSchema,
+  sourceNominationId: ResourceIdSchema,
   playerName: z.string().min(1),
   nominatorCount: z.number().int().positive(),
   nominators: z.array(z.object({ leagueTeamId: ResourceIdSchema, teamNumber: z.number().int().nullable(), teamName: z.string(), ownerAlias: z.string() })),
+  cards: z.array(z.object({ id: ResourceIdSchema, cardName: z.string().min(1) })),
   eligible: z.boolean()
 });
 export const NominationCandidateListSchema = z.object({ items: z.array(NominationCandidateSchema) });
