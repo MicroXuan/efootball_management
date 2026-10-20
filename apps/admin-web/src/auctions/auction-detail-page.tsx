@@ -36,6 +36,15 @@ const MoneyAmount = ({ value }: { value: number | null }) => value === null
 const miniprogramEnvLabel = { release: '正式版小程序码', trial: '体验版小程序码', develop: '开发版小程序码' } as const;
 const identity = (teamNumber: number | null | undefined, teamName: string | null | undefined, bidderName: string | null | undefined) =>
   `${teamNumber === null || teamNumber === undefined ? '未编号' : `${teamNumber}号`} · ${teamName ?? '未识别球队'} · ${bidderName ?? '未知用户'}`;
+const reviewFailure: Record<string, string> = {
+  TEAM_ROSTER_FULL: '获胜球队阵容已满 25 人，审核未通过；请先处理阵容人数。',
+  TEAM_SALARY_CAP_EXCEEDED: '获胜球队加入该球员后会超过工资帽，审核未通过。',
+  TEAM_SALARY_CAP_UNSET: '获胜球队尚未设置工资帽，审核未通过。',
+  PLAYER_ALREADY_OWNED: '球员已归属本联赛其他球队，审核未通过；请先核对归属。',
+  SALARY_RULE_NOT_CONFIGURED: '当前没有生效的工资规则，审核未通过。',
+  AUCTION_SEASON_REQUIRED: '联赛尚无当前赛季，无法完成拍卖入队。',
+  PLAYER_AUTO_BUILD_MISSING: '球员卡缺少自动加点结果，无法加入阵容。'
+};
 
 export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '', batchId = '' } = useParams();
@@ -97,9 +106,9 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
       await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}/lots/${lot.id}/review`, {
         method: 'POST', headers: { 'Idempotency-Key': requestKey() }, schema: reviewResponseSchema, body
       });
-      setNotice(`${lot.playerName}的拍卖结果已记录。`); await load();
+      setNotice(decision === 'VOID' || lot.status === 'NO_BID' ? `${lot.playerName}的拍卖结果已记录。` : `${lot.playerName}已加入成交球队，并按成交价扣款。`); await load();
     } catch (caught) {
-      setError(caught instanceof ApiError && caught.code === 'VERSION_CONFLICT' ? '结果已被其他管理员处理，页面已刷新' : '审核提交失败，输入内容已保留');
+      setError(caught instanceof ApiError && caught.code === 'VERSION_CONFLICT' ? '结果已被其他管理员处理，页面已刷新' : caught instanceof ApiError ? reviewFailure[caught.code] ?? '审核提交失败，输入内容已保留' : '审核提交失败，输入内容已保留');
       if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') await load();
     } finally { setBusyLotId(undefined); }
   };
@@ -134,7 +143,7 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
   return <div className="auction-detail-page">
     <header className="auction-page__header"><div><span className="section-kicker">人工拍卖审核台</span><h2>{batch.name}</h2><p>{batch.bidChannel === 'WECHAT_GROUP' ? '微信群接收纯数字出价，管理台保留记录并由管理员确认最终结果。' : '小程序大厅接收实时出价；群通知不可用时，拍卖仍会继续。'}</p></div><div className="auction-header-tools"><div className="auction-header-actions">{batch.status === 'DRAFT' ? <Link className="ant-btn" to={`/leagues/${leagueId}/auctions/${batch.id}/edit`}>编辑草稿</Link> : null}{batch.status === 'READY' ? <Button type="primary" loading={busyAction === 'start'} onClick={() => void transition('start')}>开始拍卖</Button> : null}{batch.status === 'ACTIVE' ? <Button loading={busyAction === 'pause'} onClick={() => void transition('pause')}>暂停拍卖</Button> : null}{batch.status === 'PAUSED' ? <Button type="primary" loading={busyAction === 'resume'} onClick={() => void transition('resume')}>继续拍卖</Button> : null}<Button onClick={() => void load()}>刷新</Button></div><div className="auction-status-panel" role="status" aria-label="当前拍卖状态"><span>当前状态</span><Tag color={batch.status === 'ACTIVE' ? 'processing' : batch.status === 'RECOVERY_REQUIRED' ? 'error' : batch.status === 'COMPLETED' ? 'success' : 'default'}>{statusLabel[batch.status] ?? batch.status}</Tag></div></div></header>
     {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}{notice ? <Alert role="status" type="success" showIcon title={notice} /> : null}
-    <Alert className="auction-review-boundary" type="info" showIcon title={batch.bidChannel === 'MINIPROGRAM' ? '倒计时结束后，最高有效出价即为成交结果。' : '审核员记录结果，不会自动修改资金或阵容。'} description={`当前有 ${pendingCount} 位球员可核对；后台记录或纠错不会自动修改资金或阵容，也不会阻塞后续拍卖。`} />
+    <Alert className="auction-review-boundary" type="info" showIcon title={batch.bidChannel === 'MINIPROGRAM' ? '倒计时结束后，最高有效出价进入待审核。' : '审核员确认成交结果后完成入队与扣款。'} description={`当前有 ${pendingCount} 位球员可核对；确认或调整成交结果会检查球员归属、阵容人数和工资帽，并同时完成入队与成交价扣款。条件不满足时保持待审核。`} />
     {batch.bidChannel === 'MINIPROGRAM' ? <Card className="auction-share-card" title="分享小程序拍卖大厅"><div className="auction-share-card__content"><div className="auction-share-card__code">{shareCode ? <img src={shareCode} alt={`${batch.name}小程序码`} /> : <span>{batch.status === 'DRAFT' ? '准备拍卖后生成小程序码' : shareCodeError ? '小程序码暂时无法生成' : '正在生成小程序码…'}</span>}</div><div className="auction-share-card__instructions"><div className="auction-share-card__heading"><strong>电脑后台分享步骤</strong>{shareCodeEnvVersion ? <span>{miniprogramEnvLabel[shareCodeEnvVersion]}</span> : null}</div><p>用手机微信扫码进入拍卖大厅后，点击“分享拍卖”，选择微信群。无需报名联赛；无参赛球队时只能查看和分享。</p><div className="auction-share-path"><code>{`/pages/auction-room/index?batchId=${batch.id}`}</code><Button type="text" size="small" className="auction-copy-path" aria-label="复制页面路径" title="复制页面路径" onClick={() => { void navigator.clipboard.writeText(`/pages/auction-room/index?batchId=${batch.id}`).then(() => setNotice('小程序页面路径已复制。')).catch(() => setError('复制失败，请手动选择页面路径')); }}><span className="auction-copy-icon" aria-hidden="true" /></Button></div><div className="auction-share-card__actions">{shareCode ? <a className="ant-btn" href={shareCode} download={`拍卖大厅-${batch.id}.png`}>下载小程序码</a> : null}</div></div></div></Card> : null}
     {!['COMPLETED', 'CANCELLED'].includes(batch.status) ? <Card className="auction-cancel-card" title="终止本批次"><div><p>仅在误建批次或无法继续时使用，取消后不可恢复。</p><Input aria-label="取消原因" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div><Popconfirm title="确认取消整个拍卖批次？" description="该操作会立即停止本批次，且不能撤销。" okText="确认取消" cancelText="返回" onConfirm={() => void cancelBatch()}><Button danger loading={busyLotId === 'cancel'}>取消拍卖</Button></Popconfirm></Card> : null}
     {batch.lots.length === 0 ? <Card><Empty description="尚未配置拍卖球员" /></Card> : <PaginatedRecords items={batch.lots} label="拍卖球员分页" initialPage={Math.floor(Math.max(0, batch.lots.findIndex((lot) => lot.id === batch.currentLotId)) / 10) + 1} render={(pageLots) => <>
@@ -151,9 +160,9 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
           { title: '判定', dataIndex: 'result', render: (value: string) => <Tag color={value === 'VALID' ? 'success' : 'default'}>{resultLabel[value] ?? value}</Tag> }
         ]} />
         {lot.review ? <div className="auction-reviewed"><strong>结果记录：{lot.review.decision === 'CONFIRM' ? '确认' : lot.review.decision === 'ADJUST' ? '调整' : '作废'}</strong><span>{lot.review.reviewedWinnerTeamName ? identity(lot.review.reviewedWinnerTeamNumber, lot.review.reviewedWinnerTeamName, lot.review.reviewedWinnerDisplayName) : '无归属'} · <MoneyAmount value={lot.review.reviewedPrice} /></span>{lot.review.reason ? <p>{lot.review.reason}</p> : null}</div> : null}
-        {['PENDING_REVIEW', 'NO_BID'].includes(lot.status) ? <section className="auction-review-form" aria-label={`${lot.playerName}审核`}><h3>结果核对与纠错</h3><Radio.Group value={decision} onChange={(event) => { const next = event.target.value as ReviewDecision; setDecisionByLot((current) => ({ ...current, [lot.id]: next })); if (next === 'ADJUST') void loadTeams(); }}><Radio.Button value="CONFIRM">{lot.status === 'NO_BID' ? '记录流拍' : '记录成交结果'}</Radio.Button>{lot.status === 'PENDING_REVIEW' ? <Radio.Button value="ADJUST">调整结果</Radio.Button> : null}<Radio.Button value="VOID">作废</Radio.Button></Radio.Group>
+        {['PENDING_REVIEW', 'NO_BID'].includes(lot.status) ? <section className="auction-review-form" aria-label={`${lot.playerName}审核`}><h3>结果核对与纠错</h3><Radio.Group value={decision} onChange={(event) => { const next = event.target.value as ReviewDecision; setDecisionByLot((current) => ({ ...current, [lot.id]: next })); if (next === 'ADJUST') void loadTeams(); }}><Radio.Button value="CONFIRM">{lot.status === 'NO_BID' ? '记录流拍' : '确认成交并入队扣款'}</Radio.Button>{lot.status === 'PENDING_REVIEW' ? <Radio.Button value="ADJUST">调整成交并入队扣款</Radio.Button> : null}<Radio.Button value="VOID">作废</Radio.Button></Radio.Group>
           {decision === 'ADJUST' ? <div className="auction-adjust-grid"><label>最终球队<Select aria-label="最终球队" loading={!teams} value={teamByLot[lot.id]} onChange={(value) => setTeamByLot((current) => ({ ...current, [lot.id]: value }))} options={(teams ?? []).map((team) => ({ value: team.id, label: identity(team.teamNumber, team.name, team.ownerAlias) }))} /></label><label>最终价格<InputNumber aria-label="最终价格" min={1} precision={0} value={priceByLot[lot.id] ?? lot.currentPrice ?? lot.startingPrice} onChange={(value) => setPriceByLot((current) => ({ ...current, [lot.id]: value ?? 1 }))} /></label></div> : null}
-          <label>{decision === 'CONFIRM' ? '备注（可选）' : '原因'}<Input.TextArea aria-label="审核原因" rows={2} value={reasonByLot[lot.id]} onChange={(event) => setReasonByLot((current) => ({ ...current, [lot.id]: event.target.value }))} /></label><Button type="primary" loading={busyLotId === lot.id} onClick={() => void submitReview(lot)}>记录审核结果</Button></section> : null}
+          <label>{decision === 'CONFIRM' ? '备注（可选）' : '原因'}<Input.TextArea aria-label="审核原因" rows={2} value={reasonByLot[lot.id]} onChange={(event) => setReasonByLot((current) => ({ ...current, [lot.id]: event.target.value }))} /></label><Button type="primary" loading={busyLotId === lot.id} onClick={() => void submitReview(lot)}>{decision === 'VOID' ? '确认作废' : lot.status === 'NO_BID' ? '确认流拍' : '确认成交并入队扣款'}</Button></section> : null}
       </Card>;
     })}</>} />}
   </div>;

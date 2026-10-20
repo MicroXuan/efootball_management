@@ -13,6 +13,7 @@ import {
   projectAuctionQueue,
   reconnectState,
   roomShare,
+  salePresentation,
   shouldResyncRoom,
 } from './auction-room.viewmodel'
 
@@ -138,7 +139,24 @@ describe('auction room view model', () => {
       winner: { teamNumber: 1, teamName: '阿哈尔', bidderDisplayName: '小宣', price: 210 },
     })]
     expect(projectAuctionQueue(queue).completed[0]).toMatchObject({
-      resultLabel: '已成交', winnerLabel: '1号 · 阿哈尔 · 小宣', priceLabel: '210 资金',
+      resultLabel: '成交待审核', winnerLabel: '1号 · 阿哈尔 · 小宣', priceLabel: '210 资金',
     })
+  })
+
+  it('announces a server-confirmed sale when the active lot closes', () => {
+    const previous = room()
+    const closed = queueLot({ status: 'PENDING_REVIEW', winner: { teamNumber: 1, teamName: '阿哈尔', bidderDisplayName: '小宣', price: 210 } })
+    expect(salePresentation(previous, room({ currentLot: null, queue: [closed] }))).toEqual({
+      sale: { id: closed.id, playerName: '车范根', winnerLabel: '1号 · 阿哈尔 · 小宣', priceLabel: '210 资金', approved: false },
+      celebrate: true,
+    })
+    expect(salePresentation(undefined, room({ currentLot: null, queue: [closed] })).celebrate).toBe(false)
+  })
+
+  it('does not declare a winner at zero seconds until the server closes the lot', () => {
+    const previous = room()
+    const stillActive = room({ currentLot: lot({ deadlineAt: '2026-10-10T12:00:00.000Z' }) })
+    expect(salePresentation(previous, stillActive)).toEqual({ sale: null, celebrate: false })
+    expect(salePresentation(previous, room({ currentLot: null, queue: [queueLot({ status: 'NO_BID' })] }))).toEqual({ sale: null, celebrate: false })
   })
 })

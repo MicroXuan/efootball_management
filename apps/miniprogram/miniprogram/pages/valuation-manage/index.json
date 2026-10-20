@@ -1,1 +1,1 @@
-{"navigationBarTitleText":"身价管理","usingComponents":{"loading-state":"/components/loading-state/index"}}
+{"navigationBarTitleText":"身价管理","usingComponents":{"entity-artwork":"/components/entity-artwork/index","loading-state":"/components/loading-state/index"}}

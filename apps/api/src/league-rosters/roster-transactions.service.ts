@@ -69,160 +69,180 @@ export class RosterTransactionsService {
 
     try {
       return await this.receipts.execute(adminId, 'ROSTER_PLAYER_ACQUIRE', input.idempotencyKey,
-        async (tx) => {
-          await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
-          await this.locks.lockTeam(tx, input.targetLeagueTeamId);
-          const lockedScope = await this.loadScopeWithClient(
-            tx,
-            input.seasonId,
-            input.targetLeagueTeamId
-          );
-          await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'BUY', at);
-
-          const build = await this.playerBuilds.resolveOrDeriveWithClient(tx, input.playerCardId);
-          if (!build) {
-            throw new LeagueRosterError(
-              'PLAYER_AUTO_BUILD_MISSING',
-              'The selected player card has no automatic build',
-              422
-            );
-          }
-          const footballPlayerId = build.playerCard.playerId;
-          await this.locks.lockOwnership(tx, lockedScope.leagueId, footballPlayerId);
-          const existing = await tx.leaguePlayerOwnership.findUnique({
-            where: {
-              leagueId_footballPlayerId: { leagueId: lockedScope.leagueId, footballPlayerId }
-            }
-          });
-          if (existing?.status === 'ACTIVE') {
-            throw this.playerAlreadyOwned(existing.leagueTeamId);
-          }
-
-          const roster = await tx.leaguePlayerOwnership.aggregate({
-            where: { leagueTeamId: input.targetLeagueTeamId, status: 'ACTIVE' },
-            _count: { _all: true },
-            _sum: { salaryMinor: true }
-          });
-          if (roster._count._all >= MAX_ROSTER_SIZE) {
-            throw new LeagueRosterError(
-              'TEAM_ROSTER_FULL',
-              `A team may register at most ${MAX_ROSTER_SIZE} players`,
-              409,
-              { rosterCount: roster._count._all, rosterLimit: MAX_ROSTER_SIZE }
-            );
-          }
-
-          const quote = await this.salaryRules.quoteWithClient(
-            tx,
-            lockedScope.leagueId,
-            build.maxOverall,
-            at
-          );
-          const currentSalaryMinor = roster._sum.salaryMinor ?? 0;
-          const projectedSalaryMinor = currentSalaryMinor + quote.salaryMinor;
-          const salaryCapMinor = await this.teamSalaryCaps.requireWithClient(tx, input.targetLeagueTeamId);
-          if (projectedSalaryMinor > salaryCapMinor) {
-            throw new LeagueRosterError(
-              'TEAM_SALARY_CAP_EXCEEDED',
-              'The acquisition would exceed the team salary cap',
-              409,
-              {
-                currentSalaryMinor,
-                playerSalaryMinor: quote.salaryMinor,
-                projectedSalaryMinor,
-                salaryCapMinor
-              }
-            );
-          }
-
-          const ownership = existing
-            ? await tx.leaguePlayerOwnership.update({
-              where: { id: existing.id },
-              data: {
-                leagueTeamId: input.targetLeagueTeamId,
-                currentPlayerCardId: input.playerCardId,
-                maxOverallSnapshot: build.maxOverall,
-                salaryRuleVersionId: quote.salaryRuleVersionId,
-                salaryMinor: quote.salaryMinor,
-                acquiredAt: at,
-                status: 'ACTIVE',
-                version: { increment: 1 }
-              }
-            })
-            : await tx.leaguePlayerOwnership.create({
-              data: {
-                leagueId: lockedScope.leagueId,
-                leagueTeamId: input.targetLeagueTeamId,
-                footballPlayerId,
-                currentPlayerCardId: input.playerCardId,
-                maxOverallSnapshot: build.maxOverall,
-                salaryRuleVersionId: quote.salaryRuleVersionId,
-                salaryMinor: quote.salaryMinor,
-                acquiredAt: at
-              }
-            });
-          const transaction = await tx.rosterTransaction.create({
-            data: {
-              leagueId: lockedScope.leagueId,
-              seasonId: input.seasonId,
-              type: 'BUY',
-              footballPlayerId,
-              targetLeagueTeamId: input.targetLeagueTeamId,
-              newPlayerCardId: input.playerCardId,
-              newSalaryMinor: quote.salaryMinor,
-              amountMinor: input.amountMinor,
-              reason: input.reason,
-              createdByAdminId: adminId,
-              createdAt: at
-            }
-          });
-          await tx.financeLedgerEntry.create({
-            data: {
-              leagueId: lockedScope.leagueId,
-              leagueTeamId: input.targetLeagueTeamId,
-              seasonId: input.seasonId,
-              rosterTransactionId: transaction.id,
-              direction: 'DEBIT',
-              type: 'PLAYER_PURCHASE',
-              amountMinor: input.amountMinor,
-              note: input.reason,
-              createdAt: at
-            }
-          });
-          await this.audit.record(tx, {
-            actorAdminId: adminId,
-            leagueId: lockedScope.leagueId,
-            action: 'ROSTER_PLAYER_ACQUIRED',
-            resourceType: 'LEAGUE_PLAYER_OWNERSHIP',
-            resourceId: ownership.id,
-            reason: input.reason,
-            metadata: {
-              seasonId: input.seasonId,
-              leagueTeamId: input.targetLeagueTeamId,
-              footballPlayerId,
-              playerCardId: input.playerCardId,
-              amountMinor: input.amountMinor
-            }
-          });
-          await this.setRosterStatus(
-            tx,
-            input.targetLeagueTeamId,
-            projectedSalaryMinor,
-            salaryCapMinor
-          );
-
-          return this.result(ownership, transaction, {
-            rosterCount: roster._count._all + 1,
-            salaryMinor: projectedSalaryMinor,
-            salaryCapMinor
-          });
-        }, input);
+        async (tx) => this.acquireWithClient(tx, input, adminId, at, true), input);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw this.playerAlreadyOwned();
       }
       throw error;
     }
+  }
+
+  async acquireAuctionWithClient(tx: Prisma.TransactionClient, raw: AcquirePlayerRequest, adminId: string, at = new Date()) {
+    const input = AcquirePlayerRequestSchema.parse(raw);
+    try {
+      return await this.acquireWithClient(tx, input, adminId, at, false);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw this.playerAlreadyOwned();
+      }
+      throw error;
+    }
+  }
+
+  private async acquireWithClient(
+    tx: Prisma.TransactionClient,
+    input: AcquirePlayerRequest,
+    adminId: string,
+    at: Date,
+    checkTransferWindow: boolean
+  ) {
+    await this.valuationSnapshots.synchronizeSeasonBeforeRosterMutation(tx, input.seasonId);
+    await this.locks.lockTeam(tx, input.targetLeagueTeamId);
+    const lockedScope = await this.loadScopeWithClient(
+      tx,
+      input.seasonId,
+      input.targetLeagueTeamId
+    );
+    if (checkTransferWindow) await this.transferWindows.requireAllowedWithClient(tx, input.seasonId, 'BUY', at);
+
+    const build = await this.playerBuilds.resolveOrDeriveWithClient(tx, input.playerCardId);
+    if (!build) {
+      throw new LeagueRosterError(
+        'PLAYER_AUTO_BUILD_MISSING',
+        'The selected player card has no automatic build',
+        422
+      );
+    }
+    const footballPlayerId = build.playerCard.playerId;
+    await this.locks.lockOwnership(tx, lockedScope.leagueId, footballPlayerId);
+    const existing = await tx.leaguePlayerOwnership.findUnique({
+      where: {
+        leagueId_footballPlayerId: { leagueId: lockedScope.leagueId, footballPlayerId }
+      }
+    });
+    if (existing?.status === 'ACTIVE') {
+      throw this.playerAlreadyOwned(existing.leagueTeamId);
+    }
+
+    const roster = await tx.leaguePlayerOwnership.aggregate({
+      where: { leagueTeamId: input.targetLeagueTeamId, status: 'ACTIVE' },
+      _count: { _all: true },
+      _sum: { salaryMinor: true }
+    });
+    if (roster._count._all >= MAX_ROSTER_SIZE) {
+      throw new LeagueRosterError(
+        'TEAM_ROSTER_FULL',
+        `A team may register at most ${MAX_ROSTER_SIZE} players`,
+        409,
+        { rosterCount: roster._count._all, rosterLimit: MAX_ROSTER_SIZE }
+      );
+    }
+
+    const quote = await this.salaryRules.quoteWithClient(
+      tx,
+      lockedScope.leagueId,
+      build.maxOverall,
+      at
+    );
+    const currentSalaryMinor = roster._sum.salaryMinor ?? 0;
+    const projectedSalaryMinor = currentSalaryMinor + quote.salaryMinor;
+    const salaryCapMinor = await this.teamSalaryCaps.requireWithClient(tx, input.targetLeagueTeamId);
+    if (projectedSalaryMinor > salaryCapMinor) {
+      throw new LeagueRosterError(
+        'TEAM_SALARY_CAP_EXCEEDED',
+        'The acquisition would exceed the team salary cap',
+        409,
+        {
+          currentSalaryMinor,
+          playerSalaryMinor: quote.salaryMinor,
+          projectedSalaryMinor,
+          salaryCapMinor
+        }
+      );
+    }
+
+    const ownership = existing
+      ? await tx.leaguePlayerOwnership.update({
+        where: { id: existing.id },
+        data: {
+          leagueTeamId: input.targetLeagueTeamId,
+          currentPlayerCardId: input.playerCardId,
+          maxOverallSnapshot: build.maxOverall,
+          salaryRuleVersionId: quote.salaryRuleVersionId,
+          salaryMinor: quote.salaryMinor,
+          acquiredAt: at,
+          status: 'ACTIVE',
+          version: { increment: 1 }
+        }
+      })
+      : await tx.leaguePlayerOwnership.create({
+        data: {
+          leagueId: lockedScope.leagueId,
+          leagueTeamId: input.targetLeagueTeamId,
+          footballPlayerId,
+          currentPlayerCardId: input.playerCardId,
+          maxOverallSnapshot: build.maxOverall,
+          salaryRuleVersionId: quote.salaryRuleVersionId,
+          salaryMinor: quote.salaryMinor,
+          acquiredAt: at
+        }
+      });
+    const transaction = await tx.rosterTransaction.create({
+      data: {
+        leagueId: lockedScope.leagueId,
+        seasonId: input.seasonId,
+        type: 'BUY',
+        footballPlayerId,
+        targetLeagueTeamId: input.targetLeagueTeamId,
+        newPlayerCardId: input.playerCardId,
+        newSalaryMinor: quote.salaryMinor,
+        amountMinor: input.amountMinor,
+        reason: input.reason,
+        createdByAdminId: adminId,
+        createdAt: at
+      }
+    });
+    await tx.financeLedgerEntry.create({
+      data: {
+        leagueId: lockedScope.leagueId,
+        leagueTeamId: input.targetLeagueTeamId,
+        seasonId: input.seasonId,
+        rosterTransactionId: transaction.id,
+        direction: 'DEBIT',
+        type: 'PLAYER_PURCHASE',
+        amountMinor: input.amountMinor,
+        note: input.reason,
+        createdAt: at
+      }
+    });
+    await this.audit.record(tx, {
+      actorAdminId: adminId,
+      leagueId: lockedScope.leagueId,
+      action: 'ROSTER_PLAYER_ACQUIRED',
+      resourceType: 'LEAGUE_PLAYER_OWNERSHIP',
+      resourceId: ownership.id,
+      reason: input.reason,
+      metadata: {
+        seasonId: input.seasonId,
+        leagueTeamId: input.targetLeagueTeamId,
+        footballPlayerId,
+        playerCardId: input.playerCardId,
+        amountMinor: input.amountMinor
+      }
+    });
+    await this.setRosterStatus(
+      tx,
+      input.targetLeagueTeamId,
+      projectedSalaryMinor,
+      salaryCapMinor
+    );
+
+    return this.result(ownership, transaction, {
+      rosterCount: roster._count._all + 1,
+      salaryMinor: projectedSalaryMinor,
+      salaryCapMinor
+    });
   }
 
   async release(raw: ReleasePlayerRequest, adminId: string, at = new Date()) {

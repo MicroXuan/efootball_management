@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminModule } from '../admin/admin.module.js';
+import { LeagueRostersModule } from '../league-rosters/league-rosters.module.js';
 import { AdminPlayerAuctionsController } from './admin-player-auctions.controller.js';
 import { AdminPlayerAuctionsService } from './admin-player-auctions.service.js';
 import { AuctionShareCodeService } from './auction-share-code.service.js';
@@ -21,7 +22,7 @@ import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
 
 @Global()
 @Module({
-  imports: [AdminAuthModule, AdminModule, AuthorizationModule, WechatBotModule],
+  imports: [AdminAuthModule, AdminModule, AuthorizationModule, LeagueRostersModule, WechatBotModule],
   controllers: [AdminPlayerAuctionsController, MyPlayerAuctionsController],
   providers: [
     AdminPlayerAuctionsService,

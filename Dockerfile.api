@@ -6,7 +6,8 @@ ENV PATH=$PNPM_HOME:$PATH
 # This build-only URL is never contacted and is not copied into the runtime image.
 ENV DATABASE_URL=mysql://build:build@127.0.0.1:3306/build
 
-RUN apk add --no-cache ca-certificates openssl \
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tencent.com/g' /etc/apk/repositories \
+  && apk add --no-cache ca-certificates openssl \
   && corepack enable \
   && corepack prepare pnpm@11.23.0 --activate
 
@@ -28,7 +29,8 @@ RUN pnpm --filter @efm/contracts build \
 
 FROM node:24-alpine AS runtime
 
-RUN apk add --no-cache ca-certificates openssl dumb-init
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tencent.com/g' /etc/apk/repositories \
+  && apk add --no-cache ca-certificates openssl dumb-init
 
 ENV NODE_ENV=production
 ENV PORT=3000

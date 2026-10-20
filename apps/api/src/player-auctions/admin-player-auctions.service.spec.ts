@@ -34,6 +34,8 @@ function harness() {
       cardType: 'EPIC', status: 'ACTIVE', publishedAt: now,
       imageUrl: 'https://img.pesdata.net/player.webp'
     }]) },
+    leaguePlayerOwnership: { findMany: jest.fn(async () => []), findFirst: jest.fn(async () => null) },
+    league: { findUnique: jest.fn(async () => ({ currentSeasonId: 'season-1' })) },
     leagueTeam: { findFirst: jest.fn(async () => ({
       id: 'team-1', leagueId: 'league-1', teamNumber: 1, name: '申花',
       owner: { displayName: '梅西' }
@@ -46,11 +48,34 @@ function harness() {
   const state: any = {
     startBatch: jest.fn(), pauseBatch: jest.fn(), resumeBatch: jest.fn()
   };
-  const service = new AdminPlayerAuctionsService(tx, authorization, receipts, audit, state);
-  return { service, tx, batch, audit, state };
+  const worker: any = { closeDueLot: jest.fn(async () => {
+    batch.status = 'COMPLETED';
+    batch.currentLotId = null;
+    batch.lots[0].status = 'PENDING_REVIEW';
+    batch.lots[0].deadlineAt = null;
+    return true;
+  }) };
+  const rosterTransactions: any = { acquireAuctionWithClient: jest.fn(async () => ({ ownership: { id: 'ownership-1' } })) };
+  const service = new AdminPlayerAuctionsService(tx, authorization, receipts, audit, state, worker, rosterTransactions);
+  return { service, tx, batch, audit, state, worker, rosterTransactions };
 }
 
 describe('AdminPlayerAuctionsService', () => {
+  it('refreshes an overdue miniprogram batch before showing its admin status', async () => {
+    const { service, batch, tx, worker } = harness();
+    batch.bidChannel = 'MINIPROGRAM';
+    batch.status = 'ACTIVE';
+    batch.currentLotId = 'lot-1';
+    batch.lots = [{ id: 'lot-1', status: 'ACTIVE', deadlineAt: now, deadlineEpoch: 4, bids: [], review: null }];
+    tx.$queryRaw.mockResolvedValueOnce([{ databaseNow: now }]);
+
+    const result = await service.detail('admin-1', 'league-1', 'batch-1');
+
+    expect(result.status).toBe('COMPLETED');
+    expect(result.lots[0]?.status).toBe('PENDING_REVIEW');
+    expect(worker.closeDueLot).toHaveBeenCalledWith('lot-1', 4);
+  });
+
   it('exposes the full team number, team, and bidder name in the bid audit', async () => {
     const { service, batch } = harness();
     batch.lots = [{
@@ -146,6 +171,29 @@ describe('AdminPlayerAuctionsService', () => {
         }
       }
     });
+  });
+
+  it('rejects an already owned player in an ordinary draft lot', async () => {
+    const { service, tx } = harness();
+    tx.leaguePlayerOwnership.findFirst.mockResolvedValueOnce({ footballPlayerId: 'player-1' });
+
+    await expect(service.replaceLots('admin-1', 'league-1', 'batch-1', {
+      expectedVersion: 1,
+      lots: [{ playerId: 'player-1', playerCardId: 'card-1', displayOrder: 1, startingPrice: 50, minimumIncrement: 10 }]
+    }, 'owned-lot')).rejects.toMatchObject({ code: 'AUCTION_PLAYER_ALREADY_OWNED' });
+    expect(tx.playerAuctionLot.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rechecks ordinary draft lots when preparing after another team signs the player', async () => {
+    const { service, tx, batch } = harness();
+    batch.bidChannel = 'MINIPROGRAM';
+    batch.groupBindingId = null;
+    batch.lots = [{ id: 'lot-1', footballPlayerId: 'player-1', nominationId: null, bids: [], review: null }];
+    tx.leaguePlayerOwnership.findFirst.mockResolvedValueOnce({ footballPlayerId: 'player-1' });
+
+    await expect(service.prepare('admin-1', 'league-1', 'batch-1', { expectedVersion: 1 }, 'owned-prepare'))
+      .rejects.toMatchObject({ code: 'AUCTION_PLAYER_ALREADY_OWNED' });
+    expect(tx.playerAuctionBatch.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a lot without a concrete active published card for its player', async () => {
@@ -262,7 +310,7 @@ describe('AdminPlayerAuctionsService', () => {
     const { service, tx, batch } = harness();
     batch.status = 'ACTIVE';
     batch.lots = [{
-      id: 'lot-1', batchId: 'batch-1', status: 'PENDING_REVIEW', version: 3,
+      id: 'lot-1', batchId: 'batch-1', playerCardId: 'card-1', status: 'PENDING_REVIEW', version: 3,
       currentPrice: 120, currentHighestBid: { leagueTeamId: 'team-1', leagueTeam: { name: '申花' } }
     }];
     const result = await service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
@@ -278,10 +326,10 @@ describe('AdminPlayerAuctionsService', () => {
   });
 
   it('snapshots the confirmed winner identity independently from later team edits', async () => {
-    const { service, tx, batch } = harness();
+    const { service, tx, batch, rosterTransactions } = harness();
     batch.status = 'ACTIVE';
     batch.lots = [{
-      id: 'lot-1', batchId: 'batch-1', status: 'PENDING_REVIEW', version: 3,
+      id: 'lot-1', batchId: 'batch-1', playerCardId: 'card-1', status: 'PENDING_REVIEW', version: 3,
       currentPrice: 120, currentHighestBid: { leagueTeamId: 'team-1', leagueTeam: { name: '新队名' } }
     }];
 
@@ -300,6 +348,22 @@ describe('AdminPlayerAuctionsService', () => {
         winnerDisplayNameSnapshot: '梅西'
       })
     }));
+    expect(rosterTransactions.acquireAuctionWithClient).toHaveBeenCalledWith(tx, expect.objectContaining({
+      seasonId: 'season-1', targetLeagueTeamId: 'team-1', playerCardId: 'card-1', amountMinor: 120
+    }), 'admin-1');
+  });
+
+  it('does not confirm or charge a winning lot when the roster cannot accept the player', async () => {
+    const { service, tx, batch, rosterTransactions } = harness();
+    batch.lots = [{ id: 'lot-1', batchId: 'batch-1', playerCardId: 'card-1', status: 'PENDING_REVIEW', version: 3,
+      currentPrice: 120, currentHighestBid: { leagueTeamId: 'team-1', leagueTeam: { name: '申花' } } }];
+    rosterTransactions.acquireAuctionWithClient.mockRejectedValueOnce({ code: 'TEAM_ROSTER_FULL' });
+
+    await expect(service.reviewLot('admin-1', 'league-1', 'batch-1', 'lot-1', {
+      decision: 'CONFIRM', expectedVersion: 3
+    }, 'review-roster-full')).rejects.toMatchObject({ code: 'TEAM_ROSTER_FULL' });
+    expect(tx.playerAuctionReview.create).not.toHaveBeenCalled();
+    expect(tx.playerAuctionLot.updateMany).not.toHaveBeenCalled();
   });
 
   it('confirms a no-bid result without changing the automatically active next lot', async () => {
