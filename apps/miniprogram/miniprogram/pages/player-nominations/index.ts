@@ -8,7 +8,7 @@ type PlayerTap = { currentTarget: { dataset: { playerId?: string; nominationId?:
 
 Page({
   data: {
-    state: 'loading' as 'loading' | 'loaded' | 'error', errorMessage: '',
+    state: 'loading' as 'loading' | 'loaded' | 'empty' | 'error', errorMessage: '',
     leagueId: '', seasonId: '', windowId: '', workspace: null as MyNominationWorkspace | null,
     open: false, keyword: '', players: [] as PlayerMarketPlayerSummary[], searching: false, busy: false,
   },
@@ -27,7 +27,10 @@ Page({
         const response = await nominationsApi.listWindows(this.data.leagueId, this.data.seasonId)
         const now = Date.now()
         windowId = response.items.find((item) => Date.parse(item.startsAt) <= now && now < Date.parse(item.endsAt))?.id ?? response.items[0]?.id ?? ''
-        if (!windowId) { this.setData({ state: 'error', errorMessage: '本赛季尚未设置提名期' }); return }
+        if (!windowId) {
+          this.setData({ state: 'empty', windowId: '', workspace: null, open: false, players: [] })
+          return
+        }
       }
       const workspace = await nominationsApi.workspace(windowId)
       this.setData({ state: 'loaded', windowId, workspace, open: workspace.isOpen })

@@ -16,4 +16,8 @@ page { background: #0e1417; color: #f4f7f8; }
 .player-name { display: block; font-size: 22rpx; font-weight: 700; }
 .player-meta { display: block; margin-top: 5rpx; color: #8a9aa0; font-size: 18rpx; }
 .empty,.state { color: #9fadb2; font-size: 21rpx; }
+.state--empty { padding: 30rpx; border-color: #3b4a42; background: #19231f; }
+.state-eyebrow { display: block; color: #b6f13a; font-size: 17rpx; font-weight: 750; letter-spacing: 2rpx; }
+.state-title { display: block; margin-top: 12rpx; color: #f4f7f8; font-size: 27rpx; font-weight: 800; line-height: 1.35; }
+.state-copy { display: block; margin-top: 11rpx; color: #aab5ba; font-size: 20rpx; line-height: 1.55; }
 .error { margin: 16rpx 0; color: #ff9d91; font-size: 21rpx; }

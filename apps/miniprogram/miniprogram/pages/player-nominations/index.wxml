@@ -2,6 +2,7 @@
   <view class="hero"><text class="eyebrow">赛季提名</text><text class="title">想拍谁，由球队提名</text><text class="sub">管理员汇总候选后再安排拍卖；提名本身不代表获得球员。</text></view>
   <view wx:if="{{state === 'loading'}}" class="state">正在加载提名期…</view>
   <view wx:elif="{{state === 'error'}}" class="state"><text>{{errorMessage}}</text><button class="efm-retry-button" bindtap="loadPage">重试</button></view>
+  <view wx:elif="{{state === 'empty'}}" class="state state--empty"><text class="state-eyebrow">提名尚未开放</text><text class="state-title">本赛季尚未设置提名期</text><text class="state-copy">联赛管理员设置提名时间后，就可以在这里选择想提名的球员。下拉页面可刷新状态。</text></view>
   <block wx:else>
     <view class="window-card"><text class="label">本队提名余额</text><text class="count">{{workspace.remainingSlots}} / {{workspace.window.perTeamLimit}}</text><text class="window-status">{{open ? '提名进行中' : '当前不在提名期'}}</text><text class="sub">截止：{{workspace.window.endsAt}}</text></view>
     <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
