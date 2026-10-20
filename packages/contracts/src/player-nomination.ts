@@ -36,12 +36,24 @@ export const PlayerNominationSchema = z.object({
   createdAt: z.iso.datetime(),
   withdrawnAt: z.iso.datetime().nullable()
 });
+export const NominationWorkspaceItemSchema = PlayerNominationSchema.extend({
+  player: z.object({
+    clubLabel: z.string(),
+    nationalityLabel: z.string(),
+    card: z.object({
+      cardName: z.string(),
+      imageUrl: z.string().nullable(),
+      position: z.string(),
+      maxOverall: z.number().int().nullable()
+    }).nullable()
+  })
+});
 export const MyNominationWorkspaceSchema = z.object({
   window: NominationWindowSchema,
   leagueTeamId: ResourceIdSchema,
   isOpen: z.boolean(),
   remainingSlots: z.number().int().min(0),
-  nominations: z.array(PlayerNominationSchema)
+  nominations: z.array(NominationWorkspaceItemSchema)
 });
 export const NominationCandidateSchema = z.object({
   playerId: ResourceIdSchema,
@@ -55,5 +67,6 @@ export const NominationCandidateSchema = z.object({
 export const NominationCandidateListSchema = z.object({ items: z.array(NominationCandidateSchema) });
 export type SubmitNominationRequest = z.infer<typeof SubmitNominationRequestSchema>;
 export type PlayerNomination = z.infer<typeof PlayerNominationSchema>;
+export type NominationWorkspaceItem = z.infer<typeof NominationWorkspaceItemSchema>;
 export type MyNominationWorkspace = z.infer<typeof MyNominationWorkspaceSchema>;
 export type NominationCandidate = z.infer<typeof NominationCandidateSchema>;

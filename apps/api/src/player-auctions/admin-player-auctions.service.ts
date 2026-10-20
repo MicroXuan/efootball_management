@@ -20,7 +20,7 @@ const DETAIL_INCLUDE = {
   groupBinding: { select: { displayName: true } },
   lots: {
     include: {
-      bids: { include: { leagueTeam: { select: { name: true } } }, orderBy: [{ wechatSentAt: 'asc' }, { wechatSortKey: 'asc' }, { wechatMessageId: 'asc' }] },
+      bids: { include: { leagueTeam: { select: { teamNumber: true, name: true } }, user: { select: { displayName: true } } }, orderBy: [{ wechatSentAt: 'asc' }, { wechatSortKey: 'asc' }, { wechatMessageId: 'asc' }] },
       review: {
         include: {
           computedWinnerTeam: { select: { name: true } },
@@ -444,8 +444,9 @@ export class AdminPlayerAuctionsService {
       currentHighestBidId: lot.currentHighestBidId, deadlineAt: lot.deadlineAt?.toISOString() ?? null,
       deadlineEpoch: lot.deadlineEpoch, pausedRemainingMs: lot.pausedRemainingMs, version: lot.version,
       bids: lot.bids.map((bid) => ({
-        id: bid.id, leagueTeamId: bid.leagueTeamId, teamName: bid.leagueTeam?.name ?? null,
-        userId: bid.userId, source: bid.source, amount: bid.amount,
+        id: bid.id, leagueTeamId: bid.leagueTeamId, teamNumber: bid.leagueTeam?.teamNumber ?? null,
+        teamName: bid.leagueTeam?.name ?? null, userId: bid.userId,
+        bidderDisplayName: bid.user?.displayName ?? null, source: bid.source, amount: bid.amount,
         result: bid.result, rejectionReason: bid.rejectionReason,
         wechatMessageId: bid.wechatMessageId, wechatSortKey: bid.wechatSortKey,
         wechatSentAt: bid.wechatSentAt?.toISOString() ?? null,
@@ -462,7 +463,9 @@ export class AdminPlayerAuctionsService {
       id: review.id, decision: review.decision, computedWinnerTeamId: review.computedWinnerTeamId,
       computedWinnerTeamName: review.computedWinnerTeam?.name ?? null, computedPrice: review.computedPrice,
       reviewedWinnerTeamId: review.reviewedWinnerTeamId,
-      reviewedWinnerTeamName: review.reviewedWinnerTeam?.name ?? null, reviewedPrice: review.reviewedPrice,
+      reviewedWinnerTeamNumber: review.winnerTeamNumberSnapshot,
+      reviewedWinnerTeamName: review.winnerTeamNameSnapshot ?? null, reviewedPrice: review.reviewedPrice,
+      reviewedWinnerDisplayName: review.winnerDisplayNameSnapshot,
       reason: review.reason, reviewedByAdminId: review.reviewedByAdminId,
       reviewedAt: review.reviewedAt.toISOString()
     };

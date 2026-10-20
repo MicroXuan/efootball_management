@@ -82,14 +82,15 @@ export function playerAuctionAccess(loggedIn: boolean, hasLeagueTeam: boolean) {
 export function workspaceSummary(workspace: LeagueWorkspaceResponse) {
   const rank = workspace.currentRank
     ? String(workspace.currentRank.rank)
-    : '—'
+    : ''
   return {
     teamName: workspace.team.name,
     teamShortName: workspace.team.shortName,
     divisionName: workspace.division?.displayName ?? '等待正式分组',
+    hasRank: workspace.currentRank !== null,
     rank,
     rankNotice: workspace.currentRank?.tiePending ? '同分待定' : '',
-    rankMeta: workspace.currentRank ? `${workspace.currentRank.played} 场 · ${workspace.currentRank.points} 分` : '排名尚未产生',
+    rankMeta: workspace.currentRank ? `${workspace.currentRank.played} 场 · ${workspace.currentRank.points} 分` : '比赛结果录入后显示',
     scheduleTitle: '全部赛程',
     scheduleHint: '按队伍和状态查找比赛',
   }
@@ -152,7 +153,7 @@ export function workspaceModules(workspace: LeagueWorkspaceResponse, auctionEnab
     },
     ...(auctionEnabled ? [auctionModule] : []),
     {
-      key: 'nominations', marker: '提', label: '球员提名', description: '选择想上拍的球员',
+      key: 'nominations', marker: '提', label: '球员提名', description: '选择想提名的球员',
       stateLabel: '可查看', enabled: true, tone: 'active',
     },
     standard({

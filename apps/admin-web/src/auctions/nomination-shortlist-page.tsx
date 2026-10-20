@@ -83,7 +83,7 @@ export function NominationShortlistPage({ api = adminApi }: { api?: AdminApi }) 
     {error ? <Alert role="alert" showIcon type="error" title={error} /> : null}
     {notice ? <Alert role="status" showIcon type="info" title={notice} /> : null}
     <Typography.Paragraph type="secondary">同一球员只显示一次。选择球员、卡片、起拍价和最低加价后，可追加到现有草稿；不会自动准备或开拍。</Typography.Paragraph>
-    <Table rowKey="playerId" pagination={false} dataSource={items} locale={{ emptyText: '暂无球队提名' }} columns={[
+    <Table rowKey="playerId" pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} dataSource={items} locale={{ emptyText: '暂无球队提名' }} columns={[
       { title: '选择', render: (_, row) => <Checkbox aria-label={`选择${row.playerName}`} checked={Boolean(selected[row.playerId])} disabled={!row.eligible} onChange={(event) => choose(row, event.target.checked)} /> },
       { title: '球员', dataIndex: 'playerName' },
       { title: '提名球队数', dataIndex: 'nominatorCount' },

@@ -280,7 +280,8 @@ export const FinanceLedgerEntrySchema = z.object({
   createdAt: TimestampSchema
 });
 export const FinanceLedgerListItemSchema = FinanceLedgerEntrySchema.extend({
-  teamName: z.string().min(1)
+  teamName: z.string().min(1),
+  teamNumber: z.number().int().nonnegative().nullable().optional()
 });
 export const FinanceLedgerListResponseSchema = z.object({
   items: z.array(FinanceLedgerListItemSchema),

@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   CompetitionMatchResponse,
+  CreateStageMatchRequest,
   GenerateStageScheduleRequest,
   PublishStageScheduleRequest
 } from '@efm/contracts';
@@ -85,6 +86,12 @@ export class SchedulesService {
         throw new CompetitionError('SCHEDULE_ALREADY_PUBLISHED', '赛程已发布，不能重新生成', 409);
       }
       assertExpectedVersion(stage.version, input.expectedStageVersion, 'Stage');
+      const manualMatch = await transaction.competitionMatch.findFirst({
+        where: { stageId, plannedAt: { not: null } }, select: { id: true }
+      });
+      if (manualMatch) {
+        throw new CompetitionError('SCHEDULE_MANUAL_MATCHES_PRESENT', '当前组别已有手动安排的比赛，不能自动覆盖', 409);
+      }
       const participantIds = stage.participants.map((membership) => membership.participant.id);
       const pairings = this.generator(participantIds);
       await transaction.competitionMatch.deleteMany({ where: { stageId } });
@@ -186,6 +193,85 @@ export class SchedulesService {
     const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
     if (stageLeagueId !== leagueId) throw this.visibility.notFound();
     return this.readStagePreview(this.prisma, stageId);
+  }
+
+  async stageParticipantsForLeague(leagueId: string, stageId: string) {
+    const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
+    if (stageLeagueId !== leagueId) throw this.visibility.notFound();
+    const members = await this.prisma.stageParticipant.findMany({
+      where: { stageId },
+      include: { participant: { include: { seasonEntry: { include: { leagueTeam: true } } } } },
+      orderBy: [{ seed: 'asc' }, { id: 'asc' }]
+    });
+    return members.map(({ participant }) => ({
+      id: participant.id,
+      displayName: participant.displayNameSnapshot,
+      teamNumber: participant.seasonEntry?.teamNumberSnapshot ?? participant.seasonEntry?.leagueTeam.teamNumber ?? null,
+      ownerDisplayName: participant.seasonEntry?.leagueTeam.ownerAlias ?? null,
+      teamName: participant.seasonEntry?.teamNameSnapshot ?? participant.seasonEntry?.leagueTeam.name ?? null
+    }));
+  }
+
+  async createStageMatch(actorAdminId: string, leagueId: string, stageId: string, input: CreateStageMatchRequest, key: string) {
+    const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
+    if (stageLeagueId !== leagueId) throw this.visibility.notFound();
+    return this.requireAdminReceipts().execute(actorAdminId, `competition-stage.schedule.match.create:${stageId}`, key, async (transaction) => {
+      await transaction.$queryRaw`SELECT id FROM competition_stages WHERE id = ${stageId} FOR UPDATE`;
+      const stage = await transaction.competitionStage.findUnique({
+        where: { id: stageId },
+        include: { competition: { include: { season: true } }, participants: true }
+      });
+      this.assertManagedStage(stage, leagueId);
+      if (stage.competition.competitionType !== 'DIVISION_LEAGUE') {
+        throw new CompetitionError('SCHEDULE_MANUAL_MATCH_NOT_ALLOWED', '当前组别不支持手动添加比赛', 409);
+      }
+      assertExpectedVersion(stage.version, input.expectedStageVersion, 'Stage');
+      const participantIds = new Set(stage.participants.map(({ participantId }) => participantId));
+      if (!participantIds.has(input.homeParticipantId) || !participantIds.has(input.awayParticipantId)
+        || input.homeParticipantId === input.awayParticipantId) {
+        throw new CompetitionError('SCHEDULE_PARTICIPANTS_INVALID', '只能选择当前组别内的两支不同球队', 400);
+      }
+      const pairingKey = [input.homeParticipantId, input.awayParticipantId].sort().join(':');
+      const existing = await transaction.competitionMatch.findUnique({
+        where: { stageId_pairingKey: { stageId, pairingKey } }, select: { id: true }
+      });
+      if (existing) throw new CompetitionError('SCHEDULE_PAIR_ALREADY_EXISTS', '这两支球队已有一场比赛', 409);
+      const roundConflict = await transaction.competitionMatch.findFirst({
+        where: {
+          stageId, roundNumber: input.roundNumber,
+          OR: [
+            { homeParticipantId: { in: [input.homeParticipantId, input.awayParticipantId] } },
+            { awayParticipantId: { in: [input.homeParticipantId, input.awayParticipantId] } }
+          ]
+        }, select: { id: true }
+      });
+      if (roundConflict) throw new CompetitionError('SCHEDULE_ROUND_CONFLICT', '同一轮中每支球队只能参加一场比赛', 409);
+      const lastMatch = await transaction.competitionMatch.findFirst({
+        where: { stageId }, orderBy: { matchNumber: 'desc' }, select: { matchNumber: true }
+      });
+      await transaction.competitionMatch.create({
+        data: {
+          stageId,
+          roundNumber: input.roundNumber,
+          matchNumber: (lastMatch?.matchNumber ?? 0) + 1,
+          pairingKey,
+          homeParticipantId: input.homeParticipantId,
+          awayParticipantId: input.awayParticipantId,
+          plannedAt: new Date(input.plannedAt)
+        }
+      });
+      const updated = await transaction.competitionStage.updateMany({
+        where: { id: stageId, version: input.expectedStageVersion },
+        data: { version: { increment: 1 } }
+      });
+      if (updated.count !== 1) throw new CompetitionError('VERSION_CONFLICT', '组别已被其他管理员修改，请刷新后重试', 409);
+      if (this.audit) await this.audit.record(transaction, {
+        actorAdminId, leagueId, action: 'admin.competition-stage.schedule.match.create',
+        resourceType: 'CompetitionStage', resourceId: stageId,
+        metadata: { pairingKey, roundNumber: input.roundNumber, plannedAt: input.plannedAt }
+      });
+      return this.readStagePreview(transaction, stageId);
+    }, input);
   }
 
   async generate(actorId: string, competitionId: string, key: string): Promise<SchedulePreview> {

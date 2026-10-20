@@ -10,7 +10,7 @@
     <view class="hero">
       <text class="kicker">联赛交易 · TRANSFER LEDGER</text>
       <text class="title">交易记录</text>
-      <text class="hero-copy">正式交易、身价快照与手续费统一留痕，记录确认后不可修改。</text>
+      <text class="hero-copy">本队在当前联赛所有赛季的正式交易，记录确认后不可修改。</text>
       <view class="hero-stat">
         <text>{{allItems.length}}</text>
         <label>已加载正式记录</label>

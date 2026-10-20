@@ -614,6 +614,7 @@ model User {
   mutationReceipts                 MutationReceipt[]                      @relation("MutationReceiptActor")
   ownedTeamProfile                 TeamProfile?                           @relation("TeamProfileOwner")
   leagueTeams                      LeagueTeam[]                           @relation("LeagueTeamOwner")
+  personalFinanceEntries           PersonalFinanceEntry[]
   createdLeagues                   League[]                               @relation("LeagueCreator")
   createdLeagueSeasons             LeagueSeason[]                         @relation("LeagueSeasonCreator")
   seasonEntries                    SeasonEntry[]                          @relation("SeasonEntryOwner")
@@ -623,6 +624,7 @@ model User {
   valuationSubmissions             ValuationSubmission[]                  @relation("ValuationSubmissionSubmitter")
   auditLogs                        AuditLog[]                             @relation("AuditUserActor")
   playerFavorites                  UserPlayerFavorite[]
+  playerFavoriteGroups             UserPlayerFavoriteGroup[]
   wechatIdentityBindings           WechatIdentityBinding[]                @relation("WechatIdentityUser")
   wechatBindingCodes               WechatBindingCode[]                    @relation("WechatBindingCodeUser")
   playerAuctionBids                PlayerAuctionBid[]                     @relation("PlayerAuctionBidUser")
@@ -857,6 +859,7 @@ model League {
   playerOwnerships          LeaguePlayerOwnership[]
   rosterTransactions        RosterTransaction[]
   financeLedgerEntries      FinanceLedgerEntry[]
+  personalFinanceEntries    PersonalFinanceEntry[]
   playerValuations          LeaguePlayerValuation[]
   playerValuationHistory    PlayerValuationHistory[]
   transactionFeeRules       LeagueTransactionFeeRuleVersion[]
@@ -920,6 +923,7 @@ model LeagueTeam {
   outgoingRosterTransactions RosterTransaction[]            @relation("RosterTransactionSourceTeam")
   incomingRosterTransactions RosterTransaction[]            @relation("RosterTransactionTargetTeam")
   financeLedgerEntries       FinanceLedgerEntry[]
+  personalFinanceEntries     PersonalFinanceEntry[]
   valuationSnapshots         ValuationRosterSnapshot[]
   valuationSubmissions       ValuationSubmission[]
   shellHistory               LeagueTeamShellHistory[]       @relation("ShellHistoryTeam")
@@ -1099,6 +1103,7 @@ model LeagueSeason {
   valuationWindows          ValuationWindow[]
   financeLedgerEntries      FinanceLedgerEntry[]
   competitions              Competition[]
+  personalFinanceEntries    PersonalFinanceEntry[]
   allocationProposals       SeasonAllocationProposal[]
   playerApplications        PlayerAcquisitionApplication[]
   acquiredPlayerOwnerships  LeaguePlayerOwnership[]        @relation("OwnershipAcquisitionSeason")
@@ -1370,7 +1375,7 @@ model TransferProposalEvent {
   id           String                 @id @default(uuid()) @db.Char(36)
   proposalId   String                 @map("proposal_id") @db.Char(36)
   fromStatus   TransferProposalStatus? @map("from_status")
-  toStatus     TransferProposalStatus
+  toStatus     TransferProposalStatus  @map("to_status")
   actorUserId  String?                @map("actor_user_id") @db.Char(36)
   actorAdminId String?                @map("actor_admin_id") @db.Char(36)
   reason       String?                @db.VarChar(512)
@@ -1521,6 +1526,29 @@ model PlayerReleaseRestriction {
   @@index([leagueId, seasonId, footballPlayerId], map: "player_release_restrictions_player_idx")
   @@index([createdByUserId, createdAt], map: "player_release_restrictions_user_idx")
   @@map("player_release_restrictions")
+}
+
+model PersonalFinanceEntry {
+  id           String                 @id @default(uuid()) @db.Char(36)
+  userId       String                 @map("user_id") @db.Char(36)
+  leagueId     String                 @map("league_id") @db.Char(36)
+  leagueTeamId String                 @map("league_team_id") @db.Char(36)
+  seasonId     String                 @map("season_id") @db.Char(36)
+  direction    FinanceLedgerDirection
+  amountMinor  Int                    @map("amount_minor") @db.UnsignedInt
+  title        String                 @db.VarChar(80)
+  note         String                 @default("") @db.VarChar(300)
+  occurredOn   DateTime               @map("occurred_on") @db.Date
+  version      Int                    @default(1) @db.UnsignedInt
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  league       League                 @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueTeam   LeagueTeam             @relation(fields: [leagueTeamId], references: [id], onDelete: Restrict)
+  season       LeagueSeason           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+
+  @@index([userId, leagueTeamId, seasonId, occurredOn, id], map: "personal_finance_entries_scope_idx")
+  @@map("personal_finance_entries")
 }
 
 model FinanceLedgerEntry {
@@ -1883,15 +1911,32 @@ model UserPlayerFavorite {
   id               String         @id @default(uuid()) @db.Char(36)
   userId           String         @map("user_id") @db.Char(36)
   footballPlayerId String         @map("football_player_id") @db.Char(36)
+  groupId          String?        @map("group_id") @db.Char(36)
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   footballPlayer   FootballPlayer @relation(fields: [footballPlayerId], references: [id], onDelete: Cascade)
+  group            UserPlayerFavoriteGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@unique([userId, footballPlayerId], map: "user_player_favorites_user_player_unique")
   @@index([userId, createdAt, id], map: "user_player_favorites_user_created_idx")
   @@index([footballPlayerId], map: "user_player_favorites_player_idx")
+  @@index([userId, groupId, createdAt, id], map: "user_player_favorites_group_created_idx")
   @@map("user_player_favorites")
+}
+
+model UserPlayerFavoriteGroup {
+  id        String               @id @default(uuid()) @db.Char(36)
+  userId    String               @map("user_id") @db.Char(36)
+  name      String               @db.VarChar(24)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favorites UserPlayerFavorite[]
+
+  @@unique([userId, name], map: "user_player_favorite_groups_user_name_unique")
+  @@index([userId, createdAt, id], map: "user_player_favorite_groups_user_created_idx")
+  @@map("user_player_favorite_groups")
 }
 
 model FootballPlayerSource {

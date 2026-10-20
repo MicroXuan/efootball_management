@@ -105,7 +105,13 @@ export const PlayerMarketPlayerSummarySchema = z.object({
   playerId: ResourceIdSchema,
   playerName: z.string().min(1),
   nationality: z.string().nullable(),
+  nationalityZh: z.string().nullable().optional(),
   club: z.string().nullable(),
+  clubZh: z.string().nullable().optional(),
+  age: z.number().int().positive().nullable().optional(),
+  heightCm: z.number().int().positive().nullable().optional(),
+  weightKg: z.number().int().positive().nullable().optional(),
+  preferredFoot: z.string().nullable().optional(),
   currentOwner: PlayerMarketTeamSummarySchema.nullable(),
   ownershipId: ResourceIdSchema.nullable(),
   ownershipVersion: z.number().int().positive().nullable(),
@@ -191,12 +197,13 @@ export const PlayerApplicationListResponseSchema = z.object({
 
 export const PlayerMarketAnnouncementSchema = z.object({
   id: ResourceIdSchema,
-  kind: z.enum(['NORMAL_PURCHASE', 'FORCED_TRANSFER', 'RELEASE', 'APPLICATION_CLOSED']),
+  kind: z.enum(['NORMAL_PURCHASE', 'FORCED_TRANSFER', 'TRANSFER', 'RELEASE', 'APPLICATION_CLOSED']),
   playerId: ResourceIdSchema,
   playerName: z.string().min(1),
   sourceTeam: PlayerMarketTeamSummarySchema.nullable(),
   targetTeam: PlayerMarketTeamSummarySchema.nullable(),
   amountMinor: NonNegativeMoneyMinorSchema.nullable(),
+  valuationSnapshotMinor: NonNegativeMoneyMinorSchema.nullable().optional(),
   message: z.string().min(1),
   createdAt: TimestampSchema
 });

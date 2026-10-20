@@ -10,7 +10,7 @@ function date(value: string | null) {
   return value ? value.slice(0, 10).replace(/-/g, '.') : null
 }
 
-export function teamAssetsView(assets: TeamAssetOverview | PublicTeamAssets, viewer?: { teamId: string; seasonId: string } | null, pendingDisappearanceIds: string[] = []) {
+export function teamAssetsView(assets: TeamAssetOverview | PublicTeamAssets, viewer?: { teamId: string; seasonId: string; teamName?: string; teamNumber?: number | null } | null, pendingDisappearanceIds: string[] = []) {
   const owner = 'ownerPublicUserNo' in assets ? assets : null
   const nextOpening = date(owner?.nextTransferWindowStartAt ?? null)
   const players = assets.players.map((player) => {
@@ -31,13 +31,14 @@ export function teamAssetsView(assets: TeamAssetOverview | PublicTeamAssets, vie
     footCopy: player.preferredFoot ?? '—',
     atCopy: player.atRating === null ? '—' : String(player.atRating),
     salaryCopy: money(player.salaryMinor),
+    tagLabels: player.tags?.includes('FIXED_B') ? ['固B'] : [],
     valueCopy: player.currentValueMinor === null ? '待设置' : money(player.currentValueMinor),
     valuationCopy: player.lastEffectiveAt === null ? '暂无正式身价' : `更新于 ${date(player.lastEffectiveAt)}`,
     releaseEnabled: Boolean(owner) && player.rosterStatus === 'ACTIVE' && canRelease === true
       && Boolean(ownershipId && ownershipVersion && owner?.seasonId && owner?.activeTransferWindowId),
     pendingDisappearance: Boolean(ownershipId && pendingDisappearanceIds.includes(ownershipId)),
     disappearanceEnabled: Boolean(owner) && player.rosterStatus === 'ACTIVE' && Boolean(ownershipId && ownershipVersion && owner?.seasonId) && !pendingDisappearanceIds.includes(ownershipId ?? ''),
-    transferVisible: player.rosterStatus === 'ACTIVE' && (Boolean(owner) || Boolean(viewer && viewer.teamId !== assets.teamId)),
+    transferVisible: !owner && player.rosterStatus === 'ACTIVE' && Boolean(viewer && viewer.teamId !== assets.teamId),
     forcedVisible: !owner && player.rosterStatus === 'ACTIVE' && Boolean(viewer && viewer.teamId !== assets.teamId),
     releaseDisabledCopy: !owner ? '' : player.rosterStatus !== 'ACTIVE'
       ? '仅现役球员可下放'
@@ -56,6 +57,8 @@ export function teamAssetsView(assets: TeamAssetOverview | PublicTeamAssets, vie
     isOwner: Boolean(owner),
     seasonId: owner?.seasonId ?? viewer?.seasonId ?? null,
     viewerTeamId: owner?.teamId ?? viewer?.teamId ?? null,
+    viewerTeamName: owner?.teamName ?? viewer?.teamName ?? null,
+    viewerTeamNumber: owner?.teamNumber ?? viewer?.teamNumber ?? null,
     activeTransferWindowId: owner?.activeTransferWindowId ?? null,
     ownerPublicUserNo: owner?.ownerPublicUserNo ?? null,
     ownerAvatarUrl: owner?.ownerAvatarUrl ?? null,
@@ -71,11 +74,11 @@ export function teamAssetsView(assets: TeamAssetOverview | PublicTeamAssets, vie
     shellCopy: money(assets.shellValueMinor),
     salaryCopy: `${money(assets.activeSalaryMinor)} / ${assets.salaryCapMinor === null ? '待管理员设置' : money(assets.salaryCapMinor)}`,
     playerValueCopy: `${money(assets.knownPlayerValueMinor)}${valueSuffix}`,
-    tabs: owner ? [
+    tabs: [
       { key: 'ACTIVE' as const, label: '一线阵容', count: active.length },
       { key: 'DISAPPEARED' as const, label: '已消失', count: disappeared.length },
       { key: 'RETIRED' as const, label: '已退役', count: retired.length }
-    ] : [{ key: 'ACTIVE' as const, label: '一线阵容', count: active.length }],
+    ],
     active, disappeared, retired
   }
 }

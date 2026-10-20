@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { requestMyLeaguesTab } from './league-list-navigation'
 
 const mocks = vi.hoisted(() => ({
   listLeagues: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('../../services/api', () => ({ ApiError: class ApiError extends Error {}
 
 type LeaguesPage = {
   data: Record<string, unknown>
+  onShow(): void
   loadLeagues(showLoading?: boolean): Promise<void>
 }
 
@@ -63,5 +65,23 @@ describe('league banner presentation', () => {
 
     expect(instance.data.bannerDisplayUrl).toBe('https://media.example/banner.webp')
     expect(instance.data.bannerMode).toBe('image')
+  })
+})
+
+describe('My Leagues shortcut', () => {
+  it('selects My Leagues for one tab visit without changing later visits', () => {
+    const instance = {
+      ...context(),
+      getTabBar: () => ({ setData: vi.fn() }),
+      loadLeagues: vi.fn(async () => undefined),
+    }
+
+    requestMyLeaguesTab()
+    page.onShow.call(instance)
+    expect(instance.data.activeTab).toBe('mine')
+
+    instance.data.activeTab = 'all'
+    page.onShow.call(instance)
+    expect(instance.data.activeTab).toBe('all')
   })
 })

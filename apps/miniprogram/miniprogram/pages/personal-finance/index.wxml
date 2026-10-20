@@ -1,0 +1,33 @@
+<view class="page-shell">
+    <view class="personal-card">
+      <text class="section-index">我的记录 · PRIVATE LEDGER</text>
+      <text class="section-title">个人记账本</text>
+      <text class="personal-hint">仅自己可见，金额由你填写，不计入球队官方财务与赛季结算。</text>
+      <text wx:if="{{personalState === 'loading'}}" class="personal-empty">正在加载个人账本…</text>
+      <view wx:if="{{personalState === 'error'}}" class="personal-error"><text>{{personalErrorMessage}}</text><view role="button" bindtap="loadPersonal">重试</view></view>
+      <view wx:elif="{{personalState === 'loaded'}}">
+        <view class="personal-summary"><text>收入 +{{personal.creditTotalMinor}}</text><text>支出 -{{personal.debitTotalMinor}}</text><text>结余 {{personal.balanceMinor}}</text></view>
+        <view class="personal-form">
+          <view class="personal-tabs">
+            <view class="personal-tab {{direction === 'DEBIT' ? 'is-active' : ''}}" role="button" data-direction="DEBIT" bindtap="setDirection">支出</view>
+            <view class="personal-tab {{direction === 'CREDIT' ? 'is-active' : ''}}" role="button" data-direction="CREDIT" bindtap="setDirection">收入</view>
+          </view>
+          <input aria-label="项目名称" value="{{title}}" maxlength="80" placeholder="项目名称，如奖金、报名费" bindinput="onTitle" />
+          <input aria-label="金额" value="{{amount}}" type="number" placeholder="金额（整数）" bindinput="onAmount" />
+          <input aria-label="备注" value="{{note}}" maxlength="300" placeholder="备注（可选）" bindinput="onNote" />
+          <picker mode="date" value="{{occurredOn}}" bindchange="onDate"><view class="personal-date"><text class="personal-date__value">日期 {{occurredOn}}</text><view class="personal-date__chevron" aria-hidden="true"></view></view></picker>
+          <view class="personal-actions">
+            <view class="personal-save {{saving ? 'is-disabled' : ''}}" role="button" aria-disabled="{{saving}}" bindtap="savePersonal">{{saving ? '保存中…' : editingId ? '保存修改' : '记一笔'}}</view>
+            <view wx:if="{{editingId}}" class="personal-cancel" role="button" bindtap="resetPersonal">取消编辑</view>
+          </view>
+        </view>
+        <text wx:if="{{!personalEntries.length}}" class="personal-empty">还没有个人记录，先记下第一笔。</text>
+        <view wx:for="{{personalEntries}}" wx:key="id" class="personal-entry">
+          <view class="personal-entry-main"><text>{{item.title}}</text><text class="{{item.direction === 'DEBIT' ? 'is-debit' : ''}}">{{item.amountCopy}}</text></view>
+          <text class="personal-entry-note">{{item.occurredOn}} · {{item.note}}</text>
+          <view class="personal-entry-actions"><view role="button" data-id="{{item.id}}" bindtap="editPersonal">编辑</view><view role="button" data-id="{{item.id}}" bindtap="deletePersonal">删除</view></view>
+        </view>
+      </view>
+    </view>
+
+</view>

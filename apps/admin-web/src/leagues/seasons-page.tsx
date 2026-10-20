@@ -253,7 +253,7 @@ export function SeasonsPage({ api = adminApi }: { api?: AdminApi }) {
 
     <Card title="全部赛季" className="data-card seasons-list-card">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
-      {seasons.length === 0 ? <Empty description="暂无赛季" /> : <Table rowKey="id" pagination={false} dataSource={seasons} columns={[
+      {seasons.length === 0 ? <Empty description="暂无赛季" /> : <Table rowKey="id" pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} dataSource={seasons} columns={[
         { title: '赛季', dataIndex: 'displayName' },
         { title: '时间', render: (_, row) => `${row.startsAt.slice(0, 10)} 至 ${row.endsAt.slice(0, 10)}` },
         { title: '参赛球队', dataIndex: 'approvedEntryCount' },

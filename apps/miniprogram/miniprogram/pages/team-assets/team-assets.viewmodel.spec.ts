@@ -10,7 +10,7 @@ it('presents team identity, owner, totals and three roster groups', () => {
     ownerCopy: '梅西（小宣） · 100069',
     ownerAvatarUrl: null,
     playerValueCopy: '1,000+',
-    active: [{ playerId: '一线', releaseEnabled: true, forcedTransferLabel: '本赛季强报' }],
+    active: [{ playerId: '一线', releaseEnabled: true, transferVisible: false, forcedTransferLabel: '本赛季强报' }],
     disappeared: [{ playerId: '消失', releaseEnabled: false }],
     retired: [{ playerId: '退役' }],
   })
@@ -25,7 +25,7 @@ it('presents every player asset field with Chinese labels and readable fallbacks
     activePlayerCount: 2, activeSalaryMinor: 450, salaryCapMinor: 1000, salaryCapConfirmed: true,
     players: [
       {
-        playerId: 'player-1', playerName: '莱昂内尔·梅西', cardName: '史诗高光',
+        playerId: 'player-1', playerName: '莱昂内尔·梅西', cardName: '史诗高光', tags: ['FIXED_B'],
         cardImageUrl: 'https://example.com/player.png', position: 'RWF', nationality: '阿根廷', club: '迈阿密国际',
         age: 39, heightCm: 170, preferredFoot: '左脚', atRating: 103,
         acquiredAt: '2026-10-01T12:30:00.000Z', salaryMinor: 300, rosterStatus: 'ACTIVE',
@@ -60,11 +60,11 @@ it('presents every player asset field with Chinese labels and readable fallbacks
   expect(view.active[0]).toMatchObject({
     playerName: '莱昂内尔·梅西', positionCopy: 'RWF', originCopy: '阿根廷 · 迈阿密国际',
     joinedCopy: '2026.10.01', ageCopy: '39 岁', heightCopy: '170 cm', footCopy: '左脚', atCopy: '103',
-    salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02'
+    salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02', tagLabels: ['固B']
   })
   expect(view.active[1]).toMatchObject({
     positionCopy: '位置待补', originCopy: '国籍待补 · 俱乐部待补', ageCopy: '—', heightCopy: '—',
-    footCopy: '—', atCopy: '—', valueCopy: '待设置', valuationCopy: '暂无正式身价'
+    footCopy: '—', atCopy: '—', valueCopy: '待设置', valuationCopy: '暂无正式身价', tagLabels: []
   })
 })
 
@@ -77,7 +77,15 @@ it('shows an unset cap honestly and keeps a public team roster read-only', () =>
     players: [{ playerId: 'player-1', playerName: '球员', cardName: '精选卡', cardImageUrl: null,
       position: 'CB', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
       atRating: null, acquiredAt: '2026-10-01T00:00:00.000Z', salaryMinor: 800,
-      rosterStatus: 'ACTIVE', currentValueMinor: 1500, lastEffectiveAt: null }]
+      rosterStatus: 'ACTIVE', currentValueMinor: 1500, lastEffectiveAt: null },
+      { playerId: 'player-2', playerName: '已消失球员', cardName: '旧卡', cardImageUrl: null,
+        position: 'AMF', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
+        atRating: null, acquiredAt: '2026-09-01T00:00:00.000Z', salaryMinor: 100,
+        rosterStatus: 'DISAPPEARED', currentValueMinor: null, lastEffectiveAt: null },
+      { playerId: 'player-3', playerName: '已退役球员', cardName: '旧卡', cardImageUrl: null,
+        position: 'GK', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
+        atRating: null, acquiredAt: '2026-08-01T00:00:00.000Z', salaryMinor: 100,
+        rosterStatus: 'RETIRED', currentValueMinor: null, lastEffectiveAt: null }]
   }
   const view = teamAssetsView(value)
   expect(view).toMatchObject({ isOwner: false, salaryCopy: '800 / 待管理员设置', overCap: false })
@@ -90,7 +98,13 @@ it('shows an unset cap honestly and keeps a public team roster read-only', () =>
   expect(forcedOfferRoute(view, 'player-1')).toBeNull()
   const ownPublicView = teamAssetsView(value, { teamId: 'team-2', seasonId: 'season-1' })
   expect(ownPublicView.active[0]).toMatchObject({ transferVisible: false, forcedVisible: false })
-  expect(view.tabs).toEqual([{ key: 'ACTIVE', label: '一线阵容', count: 1 }])
+  expect(view.disappeared[0]).toMatchObject({ playerName: '已消失球员', transferVisible: false, forcedVisible: false, disappearanceEnabled: false })
+  expect(view.retired[0]).toMatchObject({ playerName: '已退役球员', transferVisible: false, forcedVisible: false, releaseEnabled: false })
+  expect(view.tabs).toEqual([
+    { key: 'ACTIVE', label: '一线阵容', count: 1 },
+    { key: 'DISAPPEARED', label: '已消失', count: 1 },
+    { key: 'RETIRED', label: '已退役', count: 1 }
+  ])
 })
 
 it('shows the next transfer opening when release is unavailable', () => {

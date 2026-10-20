@@ -52,6 +52,11 @@ function harness() {
   const prisma = {
     leagueTeam: { findUnique: jest.fn(async () => team), findMany: jest.fn(async () => [team]) },
     leaguePlayerOwnership: { findMany: jest.fn(async (args?: { where?: { status?: string } }) => args?.where?.status === 'ACTIVE' ? ownerships.filter((ownership) => ownership.status === 'ACTIVE') : ownerships), groupBy: jest.fn(async () => [{ leagueTeamId: 'team-1', _count: { _all: 2 }, _sum: { salaryMinor: 1200 } }]) },
+    playerCard: { findMany: jest.fn(async () => [
+      { playerId: 'player-1', attributes: { attributesJson: { sourceMetadata: { condition: 'A' } } } },
+      { playerId: 'player-1', attributes: { attributesJson: { sourceMetadata: { condition: 'B' } } } },
+      { playerId: 'player-2', attributes: { attributesJson: { sourceMetadata: { condition: 'A', condition_scale: [{ key: 'B', value: '61%' }] } } } }
+    ]) },
     leaguePlayerValuation: { findMany: jest.fn(async () => [
       { footballPlayerId: 'player-1', currentValueMinor: 8000, effectiveAt: at },
       { footballPlayerId: 'player-3', currentValueMinor: 9999, effectiveAt: at }
@@ -86,7 +91,7 @@ describe('TeamAssetsService', () => {
   });
 
   it('aggregates three roster states while valuing and paying only active players', async () => {
-    const { service } = harness();
+    const { service, prisma } = harness();
     const result = await service.getTeamAssets('user-1', 'team-1');
 
     expect(result).toMatchObject({
@@ -103,6 +108,10 @@ describe('TeamAssetsService', () => {
       atRating: 103, salaryMinor: 800, currentValueMinor: 8000,
       ownershipId: 'ownership-1', ownershipVersion: 2, canRelease: true, forcedTransferBadge: true
     });
+    expect(result.players.map(({ tags }) => tags)).toEqual([['FIXED_B'], [], [], []]);
+    expect(prisma.playerCard.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { playerId: { in: ['player-1', 'player-2', 'player-3', 'player-4'] }, status: 'ACTIVE', publishedAt: { not: null } }
+    }));
     expect(result.players[2]?.currentValueMinor).toBe(9999);
   });
 
@@ -119,7 +128,12 @@ describe('TeamAssetsService', () => {
     expect(JSON.stringify(directory)).not.toContain('publicUserNo');
     const assets = await service.getPublicTeamAssets('other-user', 'league-1', 'team-1');
     expect(assets).toMatchObject({ salaryCapMinor: 1500, salaryCapConfirmed: false, activeSalaryMinor: 1200 });
-    expect(assets.players).toHaveLength(2);
+    expect(assets.players.map(({ rosterStatus }) => rosterStatus))
+      .toEqual(['ACTIVE', 'ACTIVE', 'DISAPPEARED', 'RETIRED']);
+    expect(assets.activePlayerCount).toBe(2);
+    expect(assets.activeSalaryMinor).toBe(1200);
+    expect(assets.knownPlayerValueMinor).toBe(8000);
+    expect(assets.players.map(({ tags }) => tags)).toEqual([['FIXED_B'], [], [], []]);
     for (const privateField of ['ownershipId', 'ownershipVersion', 'ownerPublicUserNo', 'activeTransferWindowId', 'canRelease']) {
       expect(JSON.stringify(assets)).not.toContain(privateField);
     }

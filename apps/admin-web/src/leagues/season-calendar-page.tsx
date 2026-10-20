@@ -4,10 +4,11 @@ import { Link, useParams } from 'react-router-dom';
 import { SeasonAgendaResponseSchema, SeasonCalendarNoteSchema,
   type SeasonAgendaItem, type SeasonAgendaResponse } from '@efm/contracts';
 import { adminApi, type AdminApi } from '../lib/api';
+import { PaginatedRecords } from '../components/paginated-records';
 
 const eightHours = 8 * 60 * 60 * 1000;
 const currentBeijingMonth = () => new Date(Date.now() + eightHours).toISOString().slice(0, 7);
-const kindLabel = { TRANSFER: '转会', FORCED_OFFER: '强报', VALUATION: '身价', NOMINATION: '提名', MANUAL: '事项' } as const;
+const kindLabel = { TRANSFER: '转会期', FORCED_OFFER: '强报期', VALUATION: '身价窗口', NOMINATION: '提名期', MANUAL: '事项' } as const;
 const sourcePath = { TRANSFER: 'transfer-windows', FORCED_OFFER: 'forced-offer-windows', VALUATION: 'valuation-windows', NOMINATION: 'nomination-windows' } as const;
 const noteKinds = [{ value: 'NOTICE', label: '普通说明' }, { value: 'HOLIDAY', label: '节假日' }, { value: 'MAINTENANCE', label: '维护日' }] as const;
 type NoteKind = typeof noteKinds[number]['value'];
@@ -124,13 +125,13 @@ export function SeasonCalendarPage({ api = adminApi }: { api?: AdminApi }) {
     <div className="season-phase-sidebar">
       <Card title="本月阶段与事项" className="season-phase-summary">
         {response?.seasonId && response.items.length === 0 && <Typography.Text type="secondary">本月暂无赛季阶段或事项</Typography.Text>}
-        {response?.items.map((item) => <div key={`${item.kind}:${item.id}`} className={`season-phase-summary-row kind-${item.kind.toLowerCase().replace('_', '-')}`}>
+        <PaginatedRecords items={response?.items ?? []} label="本月事项分页" render={(pageItems) => pageItems.map((item) => <div key={`${item.kind}:${item.id}`} className={`season-phase-summary-row kind-${item.kind.toLowerCase().replace('_', '-')}`}>
           <div className="season-phase-summary-head"><span className="season-phase-kind">{kindLabel[item.kind]}</span><strong>{item.title}</strong></div>
           <Typography.Text type="secondary">{displayRange(item)}{item.kind === 'MANUAL' ? ' · 北京时间' : ''}</Typography.Text>
           {item.description && <Typography.Paragraph>{item.description}</Typography.Paragraph>}
           {item.kind === 'MANUAL' ? <Space><Button type="link" onClick={() => edit(item)}>编辑{item.title}</Button><Button type="link" danger disabled={busy} onClick={() => void remove(item)}>删除{item.title}</Button></Space>
             : <Link to={`/leagues/${leagueId}/${sourcePath[item.kind]}`}>来自窗口设置 · 查看</Link>}
-        </div>)}
+        </div>)} />
       </Card>
       {response?.seasonId && <Card title={editing ? '编辑全天事项' : '新增全天事项'}>
         <Form layout="vertical">

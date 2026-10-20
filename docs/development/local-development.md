@@ -152,6 +152,7 @@ DATABASE_URL=mysql://<test-user>:<test-password>@<test-external-host>:<port>/<te
 WECHAT_GATEWAY_MODE=http
 WECHAT_APP_ID=<小程序 AppID>
 WECHAT_APP_SECRET=<小程序 AppSecret>
+WECHAT_MINIPROGRAM_ENV_VERSION=develop
 STORAGE_PROVIDER=cloudbase
 CLOUDBASE_ENV_ID=cloud1-d0g1gwk2aefd9f1e8
 CLOUDBASE_SECRET_ID=<仅保存在本机的 SecretId>

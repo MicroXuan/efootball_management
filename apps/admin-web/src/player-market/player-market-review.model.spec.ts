@@ -30,6 +30,16 @@ it('orders forced transfers by first valid time and only unlocks the queue head'
   expect(group.applications.map((item) => item.canReview)).toEqual([true, false]);
 });
 
+it('shows applications awaiting review before finished applications and groups', () => {
+  const finished = application({ id: id(31), status: 'WITHDRAWN', type: 'FORCED_TRANSFER', firstValidSubmittedAt: '2026-10-14T11:00:00.000Z' });
+  const pending = application({ id: id(32), type: 'FORCED_TRANSFER', firstValidSubmittedAt: '2026-10-14T12:00:00.000Z' });
+  const finishedGroup = application({ id: id(33), playerId: id(34), status: 'REJECTED', type: 'FORCED_TRANSFER' });
+  const groups = buildReviewGroups([finishedGroup, finished, pending]);
+  expect(groups.map((group) => group.playerId)).toEqual([pending.playerId, finishedGroup.playerId]);
+  expect(groups[0]?.applications.map((item) => item.id)).toEqual([pending.id, finished.id]);
+  expect(groups[0]?.applications[0]?.canReview).toBe(true);
+});
+
 it.each([
   ['REQUOTE_REQUIRED', '官方身价已变化，需要申请队补价'],
   ['OWNERSHIP_CHANGED', '球员归属已变化'],

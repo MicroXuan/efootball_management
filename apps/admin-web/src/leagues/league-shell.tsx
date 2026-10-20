@@ -8,7 +8,7 @@ import { leagueNavigationItems, resolveLeagueNavigation } from './league-navigat
 
 const groupIcons = {
   teams: 'teams', seasons: 'seasons', allocation: 'allocation', cups: 'cup',
-  windows: 'transfer', reviews: 'review', finance: 'finance', auctions: 'review', more: 'bot',
+  windows: 'transfer', reviews: 'review', 'salary-rules': 'salary', finance: 'finance', auctions: 'review', more: 'bot',
 } as const;
 
 export function LeagueShell() {

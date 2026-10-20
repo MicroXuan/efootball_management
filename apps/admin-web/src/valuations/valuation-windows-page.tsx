@@ -188,7 +188,7 @@ export function ValuationWindowsPage({ api = adminApi }: { api?: AdminApi }) {
         />
         <Table
           scroll={{ x: 920 }}
-          pagination={false}
+          pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }}
           rowKey="id"
           dataSource={windows}
           columns={[

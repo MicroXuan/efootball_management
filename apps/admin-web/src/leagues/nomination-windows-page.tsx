@@ -63,7 +63,7 @@ export function NominationWindowsPage({ api = adminApi }: { api?: AdminApi }) {
     <Card title="赛季提名期" extra={<Tag color="green">提名供管理员筛选，不会自动开拍</Tag>}>
       {error ? <Alert role="alert" showIcon type="warning" title={error} /> : null}
       <Select aria-label="选择赛季" value={seasonId || undefined} onChange={(value) => { setSeasonId(value); setEditing(null); setFields(empty); }} options={seasons.map((season) => ({ value: season.id, label: season.displayName }))} />
-      <Table pagination={false} rowKey="id" dataSource={windows} columns={[
+      <Table pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} rowKey="id" dataSource={windows} columns={[
         { title: '开始', dataIndex: 'startsAt', render: (value: string) => formatDateTime(value) },
         { title: '结束', dataIndex: 'endsAt', render: (value: string) => formatDateTime(value) },
         { title: '每队名额', dataIndex: 'perTeamLimit' },

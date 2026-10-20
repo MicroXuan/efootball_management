@@ -131,8 +131,10 @@ export const ReviewPlayerAuctionLotRequestSchema = z.discriminatedUnion('decisio
 export const PlayerAuctionBidSchema = z.object({
   id: ResourceIdSchema,
   leagueTeamId: ResourceIdSchema.nullable(),
+  teamNumber: z.number().int().min(0).max(9_999).nullable().default(null),
   teamName: z.string().trim().min(1).max(128).nullable(),
   userId: ResourceIdSchema.nullable(),
+  bidderDisplayName: z.string().trim().min(1).max(32).nullable().default(null),
   source: PlayerAuctionBidChannelSchema,
   amount: PositiveMoneySchema,
   result: PlayerAuctionBidResultSchema,
@@ -194,6 +196,12 @@ export const MyPlayerAuctionLotSummarySchema = z.object({
   minimumIncrement: PositiveMoneySchema,
   status: PlayerAuctionLotStatusSchema,
   currentPrice: PositiveMoneySchema.nullable(),
+  winner: z.object({
+    teamNumber: z.number().int().min(0).max(9_999).nullable(),
+    teamName: z.string().trim().min(1).max(128),
+    bidderDisplayName: z.string().trim().min(1).max(32),
+    price: PositiveMoneySchema
+  }).nullable(),
   deadlineAt: NullableTimestampSchema,
   deadlineEpoch: z.number().int().min(0),
   bids: z.array(MyPlayerAuctionPublicBidSchema)
@@ -206,7 +214,7 @@ export const MyPlayerAuctionRoomSchema = z.object({
   bidChannel: z.literal('MINIPROGRAM'),
   serverNow: TimestampSchema,
   league: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(64) }),
-  team: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(128) }),
+  team: z.object({ id: ResourceIdSchema, name: z.string().trim().min(1).max(128) }).nullable(),
   canBid: z.boolean(),
   minimumValidPrice: PositiveMoneySchema.nullable(),
   currentLot: MyPlayerAuctionLotSummarySchema.nullable(),
@@ -258,7 +266,9 @@ export const PlayerAuctionReviewSchema = z.object({
   computedWinnerTeamName: z.string().trim().min(1).max(128).nullable(),
   computedPrice: PositiveMoneySchema.nullable(),
   reviewedWinnerTeamId: ResourceIdSchema.nullable(),
+  reviewedWinnerTeamNumber: z.number().int().min(0).max(9_999).nullable().default(null),
   reviewedWinnerTeamName: z.string().trim().min(1).max(128).nullable(),
+  reviewedWinnerDisplayName: z.string().trim().min(1).max(32).nullable().default(null),
   reviewedPrice: PositiveMoneySchema.nullable(),
   reason: z.string().max(512).nullable(),
   reviewedByAdminId: ResourceIdSchema,

@@ -3,7 +3,8 @@ import { NominationService } from './nomination.service.js';
 
 const window = { id: 'window-1', seasonId: 'season-1', startsAt: new Date('2026-10-20T00:00:00.000Z'), endsAt: new Date('2026-10-25T00:00:00.000Z'), perTeamLimit: 2, season: { leagueId: 'league-1' } };
 const scope = { leagueId: 'league-1', seasonId: 'season-1', leagueTeamId: 'team-1' };
-const player = { id: '11111111-1111-4111-8111-111111111111', nameZh: '瓦拉内', nameEn: 'Raphaël Varane', publishedAt: new Date(), cards: [{ id: '44444444-4444-4444-8444-444444444444', cardName: '传奇' }] };
+const player = { id: '11111111-1111-4111-8111-111111111111', nameZh: '瓦拉内', nameEn: 'Raphaël Varane', nationality: 'France', club: 'Como', clubZh: '科莫', publishedAt: new Date(), bestCard: null,
+  cards: [{ id: '44444444-4444-4444-8444-444444444444', cardName: '传奇', imageUrl: 'https://example.com/varane.png', position: 'CB', overallRating: 85, autoBuilds: [{ maxOverall: 96 }] }] };
 const player2 = '22222222-2222-4222-8222-222222222222';
 const player3 = '33333333-3333-4333-8333-333333333333';
 
@@ -57,6 +58,27 @@ describe('NominationService', () => {
     const { service } = harness();
     expect((await service.workspace('user-1', window.id, window.startsAt)).isOpen).toBe(true);
     expect((await service.workspace('user-1', window.id, window.endsAt)).isOpen).toBe(false);
+  });
+
+  it('returns artwork and basic details with each nomination in one workspace response', async () => {
+    const { service, nominations, prisma } = harness();
+    nominations.push({ id: 'n1', windowId: window.id, leagueTeamId: scope.leagueTeamId, footballPlayerId: player.id,
+      footballPlayer: player, createdAt: new Date('2026-10-20T00:00:00.000Z'), withdrawnAt: null });
+    const workspace = await service.workspace('user-1', window.id);
+    expect(workspace.nominations[0]).toMatchObject({
+      playerName: '瓦拉内', player: { clubLabel: '科莫', nationalityLabel: '法国', card: { imageUrl: 'https://example.com/varane.png', cardName: '传奇', position: 'CB', maxOverall: 96 } }
+    });
+    expect(prisma.playerNomination.findMany).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ footballPlayer: expect.any(Object) }) }));
+  });
+
+  it('uses the selected best card for a nomination when available', async () => {
+    const { service, nominations } = harness();
+    const selected = { ...player, bestCard: { playerCard: { cardName: '史诗', imageUrl: 'https://example.com/epic.png', position: 'DMF', overallRating: 90 }, autoBuild: { maxOverall: 99 } } };
+    nominations.push({ id: 'n1', windowId: window.id, leagueTeamId: scope.leagueTeamId, footballPlayerId: player.id,
+      footballPlayer: selected, createdAt: new Date('2026-10-20T00:00:00.000Z'), withdrawnAt: null });
+    expect((await service.workspace('user-1', window.id)).nominations[0]?.player.card).toMatchObject({
+      cardName: '史诗', imageUrl: 'https://example.com/epic.png', position: 'DMF', maxOverall: 99
+    });
   });
 
   it('aggregates two teams nominating one player into one admin candidate', async () => {

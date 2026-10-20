@@ -37,10 +37,13 @@ describe('my matches template', () => {
     expect(pageConfig.usingComponents?.['entity-artwork']).toBe('/components/entity-artwork/index')
   })
 
-  it('keeps search and all three status controls inside narrow-screen gutters', () => {
+  it('keeps search and all four equal-width status controls inside narrow-screen gutters', () => {
     expect(markup).toContain('class="status-filter-bar"')
+    expect(markup.match(/class="status-filter \{\{/g)).toHaveLength(4)
     expect(styles).toMatch(/\.team-search button\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/s)
-    expect(styles).toMatch(/\.status-filter\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/s)
+    expect(styles).toMatch(/\.status-filter-bar\s*\{[^}]*display:\s*flex/s)
+    expect(styles).toMatch(/\.status-filter\s*\{[^}]*flex:\s*1\s+1\s+0[^}]*width:\s*0[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/s)
+    expect(styles).toMatch(/\.status-filter\s*\{[^}]*overflow:\s*hidden/s)
     expect(styles).toMatch(/@media\s*\(max-width:340px\)[\s\S]*\.team-search\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\)\s+104rpx/s)
   })
 })

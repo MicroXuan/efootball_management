@@ -207,7 +207,7 @@ export class AdminRosterQueriesService {
     };
   }
 
-  async ledger(leagueId: string, teamId?: string): Promise<FinanceLedgerListResponse> {
+  async ledger(leagueId: string, teamId?: string, cursor?: string, limit = 30): Promise<FinanceLedgerListResponse> {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     if (teamId) {
       const teamLeagueId = await this.visibility.requireVisible({ type: 'TEAM', id: teamId });
@@ -215,17 +215,20 @@ export class AdminRosterQueriesService {
     }
     const entries = await this.prisma.financeLedgerEntry.findMany({
       where: { leagueId, ...(teamId ? { leagueTeamId: teamId } : {}) },
-      include: { leagueTeam: { select: { name: true } } },
+      include: { leagueTeam: { select: { name: true, teamNumber: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 100
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: limit + 1
     });
+    const page = entries.slice(0, limit);
     return {
-      items: entries.map((entry) => ({
+      items: page.map((entry) => ({
         id: entry.id,
         leagueId: entry.leagueId,
         leagueTeamId: entry.leagueTeamId,
         seasonId: entry.seasonId,
         teamName: entry.leagueTeam.name,
+        teamNumber: entry.leagueTeam.teamNumber,
         rosterTransactionId: entry.rosterTransactionId,
         direction: entry.direction,
         type: entry.type,
@@ -234,7 +237,7 @@ export class AdminRosterQueriesService {
         note: entry.note,
         createdAt: entry.createdAt.toISOString()
       })),
-      nextCursor: null
+      nextCursor: entries.length > limit ? page.at(-1)?.id ?? null : null
     };
   }
 

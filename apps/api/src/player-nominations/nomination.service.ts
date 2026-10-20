@@ -6,6 +6,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { Prisma, type NominationWindow, type PlayerNomination as DbNomination } from '../generated/prisma/client.js';
 import { PlayerMarketAccessService } from '../player-market/player-market-access.service.js';
 import { LeagueError } from '../leagues/league.errors.js';
+import { nationalityLabelZh } from '../player-market/nationality-label.js';
 
 type Window = NominationWindow & { season: { leagueId: string } };
 
@@ -31,13 +32,33 @@ export class NominationService {
     const team = await this.access.requireParticipant(userId, window.season.leagueId, window.seasonId);
     const nominations = await this.prisma.playerNomination.findMany({
       where: { windowId, leagueTeamId: team.leagueTeamId, withdrawnAt: null },
-      include: { footballPlayer: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      include: { footballPlayer: { include: {
+        bestCard: { include: { playerCard: true, autoBuild: true } },
+        cards: { where: { status: 'ACTIVE', publishedAt: { not: null } }, orderBy: [{ overallRating: 'desc' }, { id: 'asc' }], take: 1,
+          include: { autoBuilds: { orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }], take: 1 } } }
+      } } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
     });
     return {
       window: this.presentWindow(window), leagueTeamId: team.leagueTeamId,
       isOpen: now >= window.startsAt && now < window.endsAt,
       remainingSlots: Math.max(0, window.perTeamLimit - nominations.length),
-      nominations: nominations.map((nomination) => this.present(nomination, nomination.footballPlayer.nameZh ?? nomination.footballPlayer.nameEn ?? '未知球员'))
+      nominations: nominations.map((nomination) => {
+        const player = nomination.footballPlayer;
+        const bestCard = player.bestCard?.playerCard;
+        const fallbackCard = player.cards[0];
+        const card = bestCard ?? fallbackCard;
+        return {
+          ...this.present(nomination, player.nameZh ?? player.nameEn ?? '未知球员'),
+          player: {
+            clubLabel: player.clubZh || player.club || '俱乐部未知',
+            nationalityLabel: nationalityLabelZh(player.nationality) || '国籍未知',
+            card: card ? {
+              cardName: card.cardName, imageUrl: card.imageUrl, position: card.position,
+              maxOverall: bestCard ? player.bestCard!.autoBuild.maxOverall : fallbackCard?.autoBuilds[0]?.maxOverall ?? card.overallRating
+            } : null
+          }
+        };
+      })
     };
   }
 

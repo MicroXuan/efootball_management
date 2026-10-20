@@ -125,6 +125,7 @@ export const CreatePlayerFavoriteRequestSchema = z.object({
 
 export const PlayerFavoriteListQuerySchema = z.object({
   keyword: z.string().trim().min(1).max(80).optional(),
+  groupId: z.union([ResourceIdSchema, z.literal('ungrouped')]).optional(),
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20)
 });
@@ -137,6 +138,7 @@ export const PlayerFavoriteStatusQuerySchema = z.object({
 
 export const PlayerFavoriteItemSchema = z.object({
   playerId: ResourceIdSchema,
+  groupId: ResourceIdSchema.nullable(),
   favoritedAt: z.iso.datetime(),
   card: PlayerCardSummarySchema
 });
@@ -148,6 +150,24 @@ export const PlayerFavoriteListResponseSchema = z.object({
 
 export const PlayerFavoriteStatusResponseSchema = z.object({
   favoritePlayerIds: z.array(ResourceIdSchema)
+});
+
+export const PlayerFavoriteGroupSchema = z.object({
+  id: ResourceIdSchema,
+  name: z.string(),
+  createdAt: z.iso.datetime()
+});
+
+export const CreatePlayerFavoriteGroupRequestSchema = z.object({
+  name: z.string().trim().min(1).max(24)
+});
+
+export const MovePlayerFavoriteRequestSchema = z.object({
+  groupId: ResourceIdSchema.nullable()
+});
+
+export const PlayerFavoriteGroupsResponseSchema = z.object({
+  items: z.array(PlayerFavoriteGroupSchema)
 });
 
 export type PlayerPosition = z.infer<typeof PlayerPositionSchema>;
@@ -168,3 +188,7 @@ export type PlayerFavoriteStatusQuery = z.output<typeof PlayerFavoriteStatusQuer
 export type PlayerFavoriteItem = z.infer<typeof PlayerFavoriteItemSchema>;
 export type PlayerFavoriteListResponse = z.infer<typeof PlayerFavoriteListResponseSchema>;
 export type PlayerFavoriteStatusResponse = z.infer<typeof PlayerFavoriteStatusResponseSchema>;
+export type PlayerFavoriteGroup = z.infer<typeof PlayerFavoriteGroupSchema>;
+export type CreatePlayerFavoriteGroupRequest = z.infer<typeof CreatePlayerFavoriteGroupRequestSchema>;
+export type MovePlayerFavoriteRequest = z.infer<typeof MovePlayerFavoriteRequestSchema>;
+export type PlayerFavoriteGroupsResponse = z.infer<typeof PlayerFavoriteGroupsResponseSchema>;

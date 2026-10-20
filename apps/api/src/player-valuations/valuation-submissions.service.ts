@@ -276,8 +276,7 @@ export class ValuationSubmissionsService {
         reviewedByAdmin: true,
         items: { include: { snapshot: { include: { footballPlayer: true } } } }
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 100
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
     });
     return {
       items: submissions.map((submission) => ({

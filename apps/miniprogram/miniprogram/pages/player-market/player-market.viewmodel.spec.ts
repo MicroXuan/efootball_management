@@ -12,6 +12,7 @@ const player = (overrides: Partial<PlayerMarketPlayerSummary> = {}): PlayerMarke
   playerId: 'player-1', playerName: 'Michele Di Gregorio', nationality: 'Italy', club: 'Juventus',
   currentOwner: null, ownershipId: null, ownershipVersion: null, officialValueMinor: 500, valuationVersion: 2,
   card: { playerCardId: 'card-1', cardName: '精选', imageUrl: null, position: 'GK', maxOverall: 96, salaryMinor: 300 },
+  salary: { kind: 'PROJECTED', salaryMinor: 300, basisOverall: 96, salaryRuleVersionId: 'rule-1', currentTier: null, unavailableReason: null },
   forcedTransferBadge: false, action: 'APPLY', disabledReason: null, ...overrides,
 })
 
@@ -55,6 +56,31 @@ describe('player market list view model', () => {
     expect(marketPlayerCard(player({ action: 'DISABLED', disabledReason: 'OWNERSHIP_CHANGED' })).actionLabel).toBe('归属已变化')
   })
 
+  it('shows Chinese club, localized nationality and league salary status', () => {
+    expect(marketPlayerCard(player({ nationality: 'Italy', clubZh: '尤文图斯' }))).toMatchObject({
+      nationalityLabel: '意大利', clubLabel: '尤文图斯', salaryLabel: '300', salaryHeading: '预计签入工资',
+    })
+    expect(marketPlayerCard(player({ nationality: null, club: null, card: null,
+      salary: { kind: 'UNAVAILABLE', salaryMinor: null, basisOverall: null, salaryRuleVersionId: null, currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING' } }))).toMatchObject({
+      nationalityLabel: '国籍未知', clubLabel: '俱乐部未知', salaryLabel: '暂无可靠报价', salaryHeading: '预计签入工资',
+    })
+    expect(marketPlayerCard(player({ salary: { kind: 'ACTUAL', salaryMinor: 400, basisOverall: 96, salaryRuleVersionId: 'old-rule', currentTier: null, unavailableReason: null } })))
+      .toMatchObject({ salaryHeading: '实际工资', salaryLabel: '400' })
+  })
+
+  it('shows only recorded age, height, weight and preferred foot', () => {
+    expect(marketPlayerCard(player({ age: 39, heightCm: 170, weightKg: 67, preferredFoot: 'LEFT' })).profileFacts)
+      .toEqual([
+        { key: 'age', label: '年龄', value: '39岁' },
+        { key: 'height', label: '身高', value: '170cm' },
+        { key: 'weight', label: '体重', value: '67kg' },
+        { key: 'foot', label: '惯用脚', value: '左脚' },
+      ])
+    expect(marketPlayerCard(player({ preferredFoot: 'RIGHT' })).profileFacts)
+      .toEqual([{ key: 'foot', label: '惯用脚', value: '右脚' }])
+    expect(marketPlayerCard(player()).profileFacts).toEqual([])
+  })
+
   it('keeps team number, crest fallback, name and league alias for long owner names', () => {
     const card = marketPlayerCard(player({ currentOwner: {
       teamId: 'team-2', teamNumber: 18, name: '一支名称非常非常长的测试球队', logoUrl: null, ownerAlias: '公开联赛称呼',
@@ -91,6 +117,16 @@ describe('player market list view model', () => {
 
   it('maps transparent transaction announcements', () => {
     const notice: PlayerMarketAnnouncement = { id: 'n-1', kind: 'FORCED_TRANSFER', playerId: 'p-1', playerName: '球员甲', sourceTeam: null, targetTeam: null, amountMinor: 500, message: '强报成交', createdAt: '2026-10-14T00:00:00.000Z' }
-    expect(announcementCard(notice)).toMatchObject({ kindLabel: '强报成交', amountLabel: '500', message: '强报成交' })
+    expect(announcementCard(notice)).toMatchObject({ kindLabel: '强报新闻', amountLabel: '500', message: '强报成交' })
+    expect(announcementCard(notice)).toMatchObject({ sourceLabel: '原球队未记录', targetLabel: '新球队未记录',
+      source: { numberCopy: '', fallback: '?', hasTeam: false }, target: { numberCopy: '', hasTeam: false } })
+    expect(announcementCard({ ...notice, kind: 'NORMAL_PURCHASE' })).toMatchObject({
+      sourceLabel: '自由球员', source: { name: '自由球员', numberCopy: '', fallback: '自', hasTeam: false },
+    })
+    expect(announcementCard({ ...notice, kind: 'RELEASE' })).toMatchObject({ targetLabel: '自由球员', target: { name: '自由球员', hasTeam: false } })
+    expect(announcementCard({ ...notice, sourceTeam: application().applicantTeam, targetTeam: { ...application().applicantTeam, name: '海牙', ownerAlias: '海牙老板', logoUrl: 'https://example.com/crest.png' }, valuationSnapshotMinor: 400 }))
+      .toMatchObject({ sourceLabel: '巴塞罗那（小新（潇洒））', targetLabel: '海牙（海牙老板）', valuationLabel: '400',
+        source: { numberCopy: '4 号', fallback: '巴', name: '巴塞罗那', ownerAlias: '小新（潇洒）' },
+        target: { numberCopy: '4 号', logoUrl: 'https://example.com/crest.png', name: '海牙', ownerAlias: '海牙老板' } })
   })
 })

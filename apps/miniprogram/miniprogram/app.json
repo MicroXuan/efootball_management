@@ -23,6 +23,7 @@
     "pages/transfer-proposals/index",
     "pages/league-transactions/index",
     "pages/team-finance/index",
+    "pages/personal-finance/index",
     "pages/player-market/index",
     "pages/player-market-detail/index",
     "pages/favorites/index",

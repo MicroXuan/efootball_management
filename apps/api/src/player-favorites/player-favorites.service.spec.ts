@@ -13,6 +13,7 @@ type FavoriteRow = {
   id: string;
   userId: string;
   footballPlayerId: string;
+  groupId: string | null;
   createdAt: Date;
   footballPlayer: { nameZh: string | null; nameEn: string | null; shortName: string | null; bestCard: { playerCardId: string } | null };
 };
@@ -66,21 +67,25 @@ function createPrisma() {
   const rows: FavoriteRow[] = [
     {
       id: 'a0000000-0000-4000-8000-000000000001', userId: userA, footballPlayerId: playerA,
+      groupId: null,
       createdAt: new Date('2026-10-02T12:00:00.000Z'),
       footballPlayer: { nameZh: '梅西', nameEn: 'Lionel Messi', shortName: '梅西', bestCard: { playerCardId: inactiveBest } }
     },
     {
       id: 'a0000000-0000-4000-8000-000000000002', userId: userA, footballPlayerId: playerB,
+      groupId: null,
       createdAt: new Date('2026-10-02T12:00:00.000Z'),
       footballPlayer: { nameZh: '伊涅斯塔', nameEn: 'Iniesta', shortName: '小白', bestCard: { playerCardId: cardB } }
     },
     {
       id: 'a0000000-0000-4000-8000-000000000003', userId: userA, footballPlayerId: playerHidden,
+      groupId: null,
       createdAt: new Date('2026-10-01T12:00:00.000Z'),
       footballPlayer: { nameZh: '无卡球员', nameEn: null, shortName: null, bestCard: null }
     },
     {
       id: 'a0000000-0000-4000-8000-000000000004', userId: userB, footballPlayerId: playerA,
+      groupId: null,
       createdAt: new Date('2026-09-30T12:00:00.000Z'),
       footballPlayer: { nameZh: '梅西', nameEn: 'Lionel Messi', shortName: '梅西', bestCard: null }
     }
@@ -104,6 +109,7 @@ function createPrisma() {
         const created = {
           id: `b0000000-0000-4000-8000-${String(rows.length).padStart(12, '0')}`,
           ...create,
+          groupId: null,
           createdAt: new Date('2026-10-03T00:00:00.000Z'),
           footballPlayer: { nameZh: null, nameEn: null, shortName: null, bestCard: null }
         };
@@ -120,6 +126,7 @@ function createPrisma() {
         where: {
           userId: string;
           footballPlayerId?: { in: string[] };
+          groupId?: string | null;
           footballPlayer?: unknown;
           OR?: Array<{ createdAt?: Date | { lt: Date }; id?: { lt: string } }>;
         };
@@ -127,6 +134,7 @@ function createPrisma() {
         select?: unknown;
       }) => {
         let found = rows.filter((row) => row.userId === args.where.userId);
+        if (args.where.groupId !== undefined) found = found.filter((row) => row.groupId === args.where.groupId);
         if (args.where.footballPlayerId) {
           found = found.filter((row) => args.where.footballPlayerId!.in.includes(row.footballPlayerId));
         }
@@ -206,5 +214,16 @@ describe('PlayerFavoritesService', () => {
     expect(first.items).toHaveLength(1);
     expect(second.items).toHaveLength(1);
     expect(second.items[0]?.playerId).not.toBe(first.items[0]?.playerId);
+  });
+
+  it('filters groups before pagination and returns each saved group', async () => {
+    const prisma = createPrisma();
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    prisma.rows[0]!.groupId = groupId;
+    const service = new PlayerFavoritesService(prisma as never);
+    const grouped = await service.list(userA, { groupId, limit: 20 });
+    const ungrouped = await service.list(userA, { groupId: 'ungrouped', limit: 20 });
+    expect(grouped.items.map((item) => [item.playerId, item.groupId])).toEqual([[playerA, groupId]]);
+    expect(ungrouped.items.map((item) => item.playerId)).toEqual([playerB]);
   });
 });

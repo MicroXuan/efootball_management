@@ -8,7 +8,7 @@ import {
   withdrawPlayerApplication,
 } from '../../services/player-market'
 import { applicationCard } from '../player-market/player-market.viewmodel'
-import { buildPlayerApplicationInput, canEditPlayerApplication, detailAction, marketErrorAction, playerMarketDetailView } from './player-market-detail.viewmodel'
+import { buildPlayerApplicationInput, canEditPlayerApplication, detailAction, marketErrorAction, playerMarketDetailView, rejectedApplicationAction } from './player-market-detail.viewmodel'
 import { activeForcedOfferCopy } from './forced-offer-copy'
 
 type LoadOptions = { leagueId?: string; seasonId?: string; teamId?: string; playerId?: string }
@@ -22,6 +22,7 @@ Page({
     player: null as ReturnType<typeof playerMarketDetailView> | null,
     publicApplications: [] as ReturnType<typeof applicationCard>[],
     myApplication: null as ReturnType<typeof applicationCard> | null,
+    reapply: null as ReturnType<typeof rejectedApplicationAction>,
     showComposer: false, amount: '', amountHint: '', submitting: false,
     recoveryLabel: '', recoveryRoute: '',
     forcedCopyText: '',
@@ -56,8 +57,10 @@ Page({
           canEdit: canEditPlayerApplication(detail, detail.myApplication),
           canWithdraw: detail.myApplication.status === 'PENDING' || detail.myApplication.status === 'REQUOTE_REQUIRED',
         } : null,
+        reapply: rejectedApplicationAction(detail),
         publicApplications: detail.publicApplications.map(applicationCard),
-        amount: detail.myApplication ? String(detail.myApplication.amountMinor) : String(player.minimumAmountMinor),
+        amount: detail.myApplication && canEditPlayerApplication(detail, detail.myApplication)
+          ? String(detail.myApplication.amountMinor) : String(player.minimumAmountMinor),
         amountHint: detail.action === 'FORCE_SIGN' ? `强报不得低于官方身价 ${player.minimumAmountMinor}` : '请输入本次申请金额',
         showComposer: false, errorMessage: '', recoveryLabel: '', recoveryRoute: '',
         forcedCopyText: activeForcedOfferCopy(detail.myApplication, detail.playerEnglishName) ?? '',
@@ -135,7 +138,7 @@ Page({
   },
 
   confirmComposer() {
-    if (this.detail?.myApplication) void this.amendApplication()
+    if (this.detail?.myApplication && canEditPlayerApplication(this.detail, this.detail.myApplication)) void this.amendApplication()
     else void this.submitApplication()
   },
 

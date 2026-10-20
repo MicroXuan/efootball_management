@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Headers, HttpCode, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import {
   GenerateStageScheduleRequestSchema,
+  CreateStageMatchRequestSchema,
   PublishStageScheduleRequestSchema,
   ResourceIdSchema,
   type GenerateStageScheduleRequest,
+  type CreateStageMatchRequest,
   type PublishStageScheduleRequest
 } from '@efm/contracts';
 import { z } from 'zod';
@@ -81,6 +83,28 @@ export class SchedulesController {
     @Param('stageId', new ZodValidationPipe(ResourceIdSchema)) stageId: string
   ) {
     return this.schedules.previewStageForLeague(leagueId, stageId);
+  }
+
+  @Get('admin/leagues/:leagueId/competition-stages/:stageId/participants')
+  @UseGuards(AdminAuthGuard, AdminScopeGuard)
+  stageParticipants(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('stageId', new ZodValidationPipe(ResourceIdSchema)) stageId: string
+  ) {
+    return this.schedules.stageParticipantsForLeague(leagueId, stageId);
+  }
+
+  @Post('admin/leagues/:leagueId/competition-stages/:stageId/matches')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard, AdminScopeGuard)
+  createStageMatch(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('stageId', new ZodValidationPipe(ResourceIdSchema)) stageId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(CreateStageMatchRequestSchema)) body: CreateStageMatchRequest
+  ) {
+    return this.schedules.createStageMatch(admin.id, leagueId, stageId, body, this.key(key));
   }
 
   @Post('admin/leagues/:leagueId/competition-stages/:stageId/schedule/publish')

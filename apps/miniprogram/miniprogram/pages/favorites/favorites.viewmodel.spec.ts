@@ -8,6 +8,7 @@ import {
 
 const item = (playerId: string, cardId: string): PlayerFavoriteItem => ({
   playerId,
+  groupId: null,
   favoritedAt: '2026-10-03T00:00:00.000Z',
   card: {
     id: cardId,
@@ -52,6 +53,8 @@ describe('favorite page view model', () => {
   it('trims search and drops the old cursor for a fresh search', () => {
     expect(buildFavoriteQuery({ keyword: '  梅西  ', cursor: 'old', limit: 20 }, true))
       .toEqual({ keyword: '梅西', limit: 20 })
+    expect(buildFavoriteQuery({ groupId: 'ungrouped', limit: 20 }, true))
+      .toEqual({ groupId: 'ungrouped', limit: 20 })
   })
 
   it('keeps explicit Chinese empty and error states', () => {

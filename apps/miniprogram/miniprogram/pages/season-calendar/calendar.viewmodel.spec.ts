@@ -22,12 +22,15 @@ it('projects inclusive phases into seven equal day cells with complete monthly s
   expect(calendar.weeks.every((week) => week.days.length === 7)).toBe(true)
   expect(calendar.weeks[0]?.days[0]).toMatchObject({ date: '2026-09-28', inMonth: false })
   const days = calendar.weeks.flatMap((week) => week.days)
-  expect(days.find((day) => day.date === '2026-10-01')?.markers.map((marker) => marker.label)).toEqual(['转会', '强报'])
-  expect(days.find((day) => day.date === '2026-10-02')?.markers.map((marker) => marker.label)).toEqual(['转会', '强报'])
+  expect(days.find((day) => day.date === '2026-10-01')?.markers.map((marker) => marker.label)).toEqual(['转会期', '强报期'])
+  expect(days.find((day) => day.date === '2026-10-02')?.markers.map((marker) => marker.label)).toEqual(['转会期', '强报期'])
   expect(days.find((day) => day.date === '2026-10-31')?.markers.map((marker) => marker.label)).toEqual(['事项'])
   expect(calendar.summary).toHaveLength(3)
   expect(calendar.summary[2]).toMatchObject({ title: '月底说明', range: '10月31日 · 全天', description: '截止前完成操作' })
   expect(calendar.summary[0]?.range).toContain('北京时间')
+  expect(buildMonthCalendar({ ...response, items: response.items.map((item) =>
+    item.kind === 'TRANSFER' ? { ...item, kind: 'VALUATION' as const } : item.kind === 'FORCED_OFFER' ? { ...item, kind: 'NOMINATION' as const } : item,
+  ) }).summary.map((item) => item.kind)).toEqual(['身价窗口', '提名期', '事项'])
 })
 
 it('uses Beijing month regardless of device timezone and handles a missing current season', () => {

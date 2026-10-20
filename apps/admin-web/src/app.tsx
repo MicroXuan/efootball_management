@@ -87,6 +87,7 @@ export function App() {
               <Route path="nomination-windows/:windowId/candidates" element={deferred(<NominationShortlistPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
               <Route path="player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
+              <Route path="forced-player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
               <Route path="disappearance-requests" element={deferred(<DisappearanceReviewPage api={adminApi} />)} />
               <Route path="transfer-proposals" element={deferred(<TransferProposalsPage api={adminApi} />)} />
               <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />

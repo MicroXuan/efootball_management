@@ -57,6 +57,8 @@ import {
   SeasonAgendaResponseSchema,
   CreateSeasonCalendarNoteRequestSchema,
   CreatePlayerFavoriteRequestSchema,
+  CreatePlayerFavoriteGroupRequestSchema,
+  MovePlayerFavoriteRequestSchema,
   CreateLeagueRequestSchema,
   CreateLeagueSeasonRequestSchema,
   CreateLeagueTeamRequestSchema,
@@ -1321,6 +1323,18 @@ describe('shared API contracts', () => {
     assert.equal(query.limit, 20);
     assert.equal(PlayerFavoriteListQuerySchema.parse({ limit: 100 }).limit, 100);
     assert.throws(() => PlayerFavoriteListQuerySchema.parse({ limit: 101 }));
+    assert.equal(PlayerFavoriteListQuerySchema.parse({ groupId: 'ungrouped' }).groupId, 'ungrouped');
+    assert.equal(PlayerFavoriteListQuerySchema.parse({ groupId: playerId }).groupId, playerId);
+    assert.throws(() => PlayerFavoriteListQuerySchema.parse({ groupId: 'other' }));
+  });
+
+  it('accepts one manually named group and one destination per favorite', () => {
+    const groupId = '22222222-2222-4222-8222-222222222222';
+    assert.equal(CreatePlayerFavoriteGroupRequestSchema.parse({ name: ' 自由球员 ' }).name, '自由球员');
+    assert.throws(() => CreatePlayerFavoriteGroupRequestSchema.parse({ name: ' '.repeat(3) }));
+    assert.throws(() => CreatePlayerFavoriteGroupRequestSchema.parse({ name: '球'.repeat(25) }));
+    assert.equal(MovePlayerFavoriteRequestSchema.parse({ groupId }).groupId, groupId);
+    assert.equal(MovePlayerFavoriteRequestSchema.parse({ groupId: null }).groupId, null);
   });
 
   it('rejects oversized favorite status queries', () => {
@@ -3220,6 +3234,7 @@ describe('player auction contracts', () => {
         minimumIncrement: 10,
         status: 'ACTIVE',
         currentPrice: 120,
+        winner: null,
         deadlineAt: now,
         deadlineEpoch: 4,
         bids: [{

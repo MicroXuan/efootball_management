@@ -70,6 +70,7 @@ export class TeamAssetsService {
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
     const active = ownerships.filter(({ status }) => status === 'ACTIVE');
+    const fixedBPlayerIds = await this.fixedBPlayerIds(ownerships.map(({ footballPlayerId }) => footballPlayerId));
     const now = new Date();
     const releaseWindow = team.league.currentSeasonId
       ? await this.prisma.transferWindow.findFirst({
@@ -139,6 +140,7 @@ export class TeamAssetsService {
             ?? '未命名球员',
           cardName: ownership.currentPlayerCard.cardName,
           cardImageUrl: ownership.currentPlayerCard.imageUrl,
+          tags: fixedBPlayerIds.has(ownership.footballPlayerId) ? ['FIXED_B'] : [],
           position: ownership.currentPlayerCard.position ?? null,
           nationality: ownership.footballPlayer.nationality,
           club: ownership.footballPlayer.club,
@@ -192,20 +194,22 @@ export class TeamAssetsService {
     const team = await this.prisma.leagueTeam.findUnique({ where: { id: teamId } });
     if (!team || team.leagueId !== leagueId || team.status !== 'ACTIVE') throw this.visibility.notFound();
     const ownerships = await this.prisma.leaguePlayerOwnership.findMany({
-      where: { leagueTeamId: teamId, status: 'ACTIVE' },
+      where: { leagueTeamId: teamId, status: { in: ['ACTIVE', 'DISAPPEARED', 'RETIRED'] } },
       include: {
         footballPlayer: true,
         currentPlayerCard: { include: { attributes: true, autoBuilds: { orderBy: [{ calculatedAt: 'desc' }, { createdAt: 'desc' }], take: 1 } } }
       },
       orderBy: [{ acquiredAt: 'asc' }, { id: 'asc' }]
     });
+    const active = ownerships.filter(({ status }) => status === 'ACTIVE');
+    const fixedBPlayerIds = await this.fixedBPlayerIds(ownerships.map(({ footballPlayerId }) => footballPlayerId));
     const valuations = await this.prisma.leaguePlayerValuation.findMany({
       where: { leagueId, footballPlayerId: { in: ownerships.map(({ footballPlayerId }) => footballPlayerId) } }
     });
     const valueByPlayer = new Map(valuations.map((value) => [value.footballPlayerId, value]));
-    const knownPlayerValueMinor = ownerships.reduce((total, ownership) =>
+    const knownPlayerValueMinor = active.reduce((total, ownership) =>
       total + (valueByPlayer.get(ownership.footballPlayerId)?.currentValueMinor ?? 0), 0);
-    const missingValuationCount = ownerships.filter((ownership) => !valueByPlayer.has(ownership.footballPlayerId)).length;
+    const missingValuationCount = active.filter((ownership) => !valueByPlayer.has(ownership.footballPlayerId)).length;
     return {
       leagueId,
       teamId,
@@ -213,8 +217,8 @@ export class TeamAssetsService {
       teamNumber: team.teamNumber,
       teamLogoUrl: team.logoUrl,
       ownerAlias: team.ownerAlias,
-      activePlayerCount: ownerships.length,
-      activeSalaryMinor: ownerships.reduce((total, ownership) => total + ownership.salaryMinor, 0),
+      activePlayerCount: active.length,
+      activeSalaryMinor: active.reduce((total, ownership) => total + ownership.salaryMinor, 0),
       salaryCapMinor: team.salaryCapMinor,
       salaryCapConfirmed: Boolean(team.salaryCapConfirmedAt),
       knownPlayerValueMinor,
@@ -230,6 +234,7 @@ export class TeamAssetsService {
           playerName: ownership.footballPlayer.nameZh ?? ownership.footballPlayer.nameEn ?? ownership.footballPlayer.shortName ?? '未命名球员',
           cardName: ownership.currentPlayerCard.cardName,
           cardImageUrl: ownership.currentPlayerCard.imageUrl,
+          tags: fixedBPlayerIds.has(ownership.footballPlayerId) ? ['FIXED_B'] : [],
           position: ownership.currentPlayerCard.position ?? null,
           nationality: ownership.footballPlayer.nationality,
           club: ownership.footballPlayer.club,
@@ -292,6 +297,18 @@ export class TeamAssetsService {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
       ? value as Record<string, unknown>
       : {};
+  }
+
+  private async fixedBPlayerIds(playerIds: string[]): Promise<Set<string>> {
+    if (playerIds.length === 0) return new Set();
+    const cards = await this.prisma.playerCard.findMany({
+      where: { playerId: { in: [...new Set(playerIds)] }, status: 'ACTIVE', publishedAt: { not: null } },
+      select: { playerId: true, attributes: { select: { attributesJson: true } } }
+    });
+    return new Set(cards.filter((card) => {
+      const metadata = this.attributes(this.attributes(card.attributes?.attributesJson).sourceMetadata);
+      return typeof metadata.condition === 'string' && metadata.condition.trim().toUpperCase() === 'B';
+    }).map((card) => card.playerId));
   }
 
   private integer(value: unknown): number | null {

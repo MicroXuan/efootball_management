@@ -9,7 +9,7 @@ export function forcedOfferCopy(application: PlayerAcquisitionApplication, playe
   const player = playerEnglishName && playerEnglishName !== application.playerName
     ? `${playerEnglishName}（${application.playerName}）`
     : application.playerName
-  return `强报申请 #${application.id}\n${team(application.applicantTeam)} 强报 ${team(application.sourceTeam)} 的球员 ${player}，本次强报报价 ${application.amountMinor}。\n待管理员审核；此金额是本次报价，不是球员的新官方身价。`
+  return `${team(application.applicantTeam)} 强报 ${team(application.sourceTeam)} 的球员 ${player}，本次强报报价 ${application.amountMinor}。`
 }
 
 export function activeForcedOfferCopy(application: PlayerAcquisitionApplication | null, playerEnglishName: string | null): string | null {

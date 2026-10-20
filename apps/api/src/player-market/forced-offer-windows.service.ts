@@ -8,8 +8,8 @@ import {
   type UpdateForcedOfferWindowRequest,
 } from '@efm/contracts';
 import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
 import { AuditLogService } from '../admin/audit-log.service.js';
-import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma, type ForcedOfferWindow as WindowRow } from '../generated/prisma/client.js';
 import { playerMarketError } from './player-market.errors.js';
@@ -20,7 +20,7 @@ export class ForcedOfferWindowsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AdminAuthorizationService) private readonly authorization: AdminAuthorizationService,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
+    @Inject(AdminMutationReceiptService) private readonly receipts: AdminMutationReceiptService,
   ) {}
 
   async list(adminId: string, leagueId: string, seasonId: string): Promise<ForcedOfferWindowListResponse> {
@@ -48,7 +48,7 @@ export class ForcedOfferWindowsService {
         metadata: { seasonId, startsAt: input.startsAt, endsAt: input.endsAt },
       });
       return this.view(created);
-    });
+    }, input);
   }
 
   async update(adminId: string, leagueId: string, seasonId: string, windowId: string, raw: UpdateForcedOfferWindowRequest, key: string): Promise<ForcedOfferWindow> {
@@ -78,7 +78,7 @@ export class ForcedOfferWindowsService {
         metadata: { seasonId, version: updated.version, startsAt: input.startsAt, endsAt: input.endsAt },
       });
       return this.view(updated);
-    });
+    }, input);
   }
 
   private parseCreate(raw: CreateForcedOfferWindowRequest) {

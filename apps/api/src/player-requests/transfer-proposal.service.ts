@@ -65,8 +65,8 @@ export class TransferProposalService {
       if (ownership.version !== input.expectedOwnershipVersion) throw new LeagueError('TRANSFER_OWNERSHIP_CHANGED', '球员归属已变化', 409);
       const sourceTeamId = ownership.leagueTeamId;
       if (input.targetTeamId === sourceTeamId) throw new LeagueError('TRANSFER_SELF_NOT_ALLOWED', '不能向本队转会', 400);
-      if (input.initiatorTeamId !== sourceTeamId && input.initiatorTeamId !== input.targetTeamId) {
-        throw new LeagueError('TRANSFER_PARTICIPANT_REQUIRED', '只能由转出或转入球队发起', 403);
+      if (input.initiatorTeamId !== input.targetTeamId) {
+        throw new LeagueError('TRANSFER_BUYER_REQUIRED', '只有转入球队可以申请购买球员', 403);
       }
       const target = await tx.leagueTeam.findUnique({ where: { id: input.targetTeamId }, include: { seasonEntries: { where: { seasonId: input.seasonId, status: 'APPROVED' }, take: 1 } } });
       if (!target || target.leagueId !== scope.leagueId || target.status !== 'ACTIVE' || target.seasonEntries.length === 0) {

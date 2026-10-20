@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
@@ -13,13 +13,13 @@ it('renders immutable categorized real-time finance data and management entry po
       id: '44444444-4444-4444-8444-444444444444', leagueId: '11111111-1111-4111-8111-111111111111',
       seasonId: '55555555-5555-4555-8555-555555555555', type: 'TRANSFER',
       playerId: '66666666-6666-4666-8666-666666666666', playerName: '扬·范赫克',
-      sourceLeagueTeamId: '77777777-7777-4777-8777-777777777777', sourceTeamName: '上海申花',
-      targetLeagueTeamId: '88888888-8888-4888-8888-888888888888', targetTeamName: '亚特兰大',
+      sourceLeagueTeamId: '77777777-7777-4777-8777-777777777777', sourceTeamName: '上海申花', sourceTeamNumber: 3,
+      targetLeagueTeamId: '88888888-8888-4888-8888-888888888888', targetTeamName: '亚特兰大', targetTeamNumber: 8,
       amountMinor: 3000, valuationSnapshotMinor: 1500, transactionFeeMinor: 30,
       transactionFeeRuleVersionId: '99999999-9999-4999-8999-999999999999', reason: '管理员确认转会',
       createdByAdminId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', createdAt: '2026-09-19T12:08:31.000Z'
     }], nextCursor: null };
-    return { items: [{ id: '22222222-2222-4222-8222-222222222222', leagueId: '11111111-1111-4111-8111-111111111111', leagueTeamId: '33333333-3333-4333-8333-333333333333', teamName: '巴塞罗那', seasonId: null, rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', amountMinor: 800, note: '购买博努奇', createdAt: '2026-09-29T00:00:00.000Z' }], nextCursor: null };
+    return { items: [{ id: '22222222-2222-4222-8222-222222222222', leagueId: '11111111-1111-4111-8111-111111111111', leagueTeamId: '33333333-3333-4333-8333-333333333333', teamName: '巴塞罗那', teamNumber: 7, seasonId: null, rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX', amountMinor: 800, note: '购买博努奇', createdAt: '2026-09-29T00:00:00.000Z' }], nextCursor: null };
   }) as unknown as AdminApi['request'];
   const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
   render(<MemoryRouter initialEntries={['/leagues/11111111-1111-4111-8111-111111111111/ledger']}><Routes><Route path="/leagues/:leagueId/ledger" element={<LedgerPage api={api} />} /></Routes></MemoryRouter>);
@@ -33,7 +33,8 @@ it('renders immutable categorized real-time finance data and management entry po
   expect(screen.getByRole('button', { name: '赛季结算金额' })).toBeInTheDocument();
   expect(screen.getByText('阵容交易历史')).toBeInTheDocument();
   expect(screen.getByText('扬·范赫克')).toBeInTheDocument();
-  expect(screen.getByText('上海申花 → 亚特兰大')).toBeInTheDocument();
+  expect(screen.getByText('3号 上海申花 → 8号 亚特兰大')).toBeInTheDocument();
+  expect(screen.getByText('7号 巴塞罗那')).toBeInTheDocument();
   expect(screen.getByText('1,500 → 3,000')).toBeInTheDocument();
   expect(screen.getByText('手续费 30')).toBeInTheDocument();
   expect(request).toHaveBeenCalledWith('/v1/admin/leagues/11111111-1111-4111-8111-111111111111/transactions', expect.any(Object));
@@ -115,4 +116,29 @@ it('uses season names instead of editable foreign-key ids for finance entries', 
   await user.click(screen.getByRole('button', { name: '新增财务项目' }));
   expect(screen.getByRole('combobox', { name: '赛季' })).toBeInTheDocument();
   expect(screen.queryByRole('textbox', { name: /赛季 ID/ })).not.toBeInTheDocument();
+});
+
+it('shows free-agent transactions and loads older ledger and transaction pages', async () => {
+  const leagueId = '11111111-1111-4111-8111-111111111111';
+  const entry = (id: string, note: string) => ({ id, leagueId, leagueTeamId: '33333333-3333-4333-8333-333333333333', teamName: '海牙', teamNumber: 4, seasonId: null, rosterTransactionId: null, direction: 'DEBIT', type: 'PLAYER_PURCHASE', amountMinor: 100, note, createdAt: '2026-09-29T00:00:00.000Z' });
+  const transaction = (id: string, playerName: string) => ({ id, leagueId, seasonId: '55555555-5555-4555-8555-555555555555', type: 'BUY', playerId: '66666666-6666-4666-8666-666666666666', playerName, sourceLeagueTeamId: null, sourceTeamName: null, sourceTeamNumber: null, targetLeagueTeamId: '33333333-3333-4333-8333-333333333333', targetTeamName: '海牙', targetTeamNumber: 4, amountMinor: 100, valuationSnapshotMinor: 100, transactionFeeMinor: 0, transactionFeeRuleVersionId: null, reason: '购买', createdByAdminId: null, createdAt: '2026-09-29T00:00:00.000Z' });
+  const request = vi.fn(async (path: string) => {
+    if (path.endsWith('/roster-seasons')) return [];
+    if (path.endsWith('/teams')) return { items: [], nextCursor: null };
+    if (path.endsWith('/transaction-fee-rules')) return { items: [] };
+    if (path.includes('/transactions')) return path.includes('cursor=')
+      ? { items: [transaction('tx-older', '第二页球员')], nextCursor: null }
+      : { items: Array.from({ length: 30 }, (_, index) => transaction(`tx-${index + 1}`, `第一页球员${index + 1}`)), nextCursor: 'tx-30' };
+    return path.includes('cursor=')
+      ? { items: [entry('entry-older', '第二页流水')], nextCursor: null }
+      : { items: Array.from({ length: 30 }, (_, index) => entry(`entry-${index + 1}`, `第一页流水${index + 1}`)), nextCursor: 'entry-30' };
+  }) as unknown as AdminApi['request'];
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/ledger`]}><Routes><Route path="/leagues/:leagueId/ledger" element={<LedgerPage api={{ request } as unknown as AdminApi} />} /></Routes></MemoryRouter>);
+  expect((await screen.findAllByText('自由球员 → 4号 海牙')).length).toBeGreaterThan(0);
+  await userEvent.click(within(screen.getByRole('list', { name: '财务流水分页' })).getByRole('listitem', { name: '2' }));
+  expect(await screen.findByText('第二页流水')).toBeInTheDocument();
+  await userEvent.click(within(screen.getByRole('list', { name: '交易历史分页' })).getByRole('listitem', { name: '2' }));
+  expect(await screen.findByText('第二页球员')).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith(expect.stringContaining('/ledger?cursor=entry-30'), expect.anything());
+  expect(request).toHaveBeenCalledWith(expect.stringContaining('/transactions?cursor=tx-30'), expect.anything());
 });

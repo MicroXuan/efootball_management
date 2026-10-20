@@ -12,6 +12,7 @@ import {
 } from '@efm/contracts';
 import { z } from 'zod';
 import { adminApi, ApiError, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 import { useMutationKey } from '../lib/mutation-key';
 
 const SeasonListSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
@@ -27,10 +28,24 @@ const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
   version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(CompetitionMatchResponseSchema)
 });
+const StageParticipantsSchema = z.array(z.object({
+  id: z.string(), displayName: z.string(), teamNumber: z.number().nullable().default(null),
+  ownerDisplayName: z.string().nullable().default(null), teamName: z.string().nullable().default(null)
+}));
 type Confirmed = z.infer<typeof ConfirmedSchema>;
 type SchedulePreview = z.infer<typeof SchedulePreviewSchema>;
 
 const stageLabel = (code: string) => code === 'SUPER' ? '超级组' : `冠军 ${code.replace('CHAMPION_', '')} 组`;
+const championCode = (index: number) => {
+  let value = index + 1;
+  let letters = '';
+  while (value > 0) {
+    value -= 1;
+    letters = String.fromCharCode(65 + value % 26) + letters;
+    value = Math.floor(value / 26);
+  }
+  return `CHAMPION_${letters}`;
+};
 
 function TeamCrest({ name, url }: { name: string; url: string | null }) {
   const [failed, setFailed] = useState(false);
@@ -72,6 +87,7 @@ function ScheduleBoard({ preview, onEditScore }: {
           <div className="fixture-match__versus">
             <span>{match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</span>
             <small>#{match.matchNumber}</small>
+            {match.plannedAt ? <small>{formatDateTime(match.plannedAt)}</small> : null}
             {onEditScore ? <Button
               size="small"
               type="link"
@@ -111,6 +127,13 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const [awayScore, setAwayScore] = useState<number | null>(null);
   const [correctionReason, setCorrectionReason] = useState('');
   const [scoreBusy, setScoreBusy] = useState(false);
+  const [matchStageId, setMatchStageId] = useState<string | null>(null);
+  const [matchParticipants, setMatchParticipants] = useState<z.infer<typeof StageParticipantsSchema>>([]);
+  const [matchHomeId, setMatchHomeId] = useState<string | null>(null);
+  const [matchAwayId, setMatchAwayId] = useState<string | null>(null);
+  const [matchRound, setMatchRound] = useState<number | null>(1);
+  const [matchTime, setMatchTime] = useState('');
+  const [matchBusy, setMatchBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,22 +187,28 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const stageOptions = useMemo(() => {
     const codes = new Set(proposal?.rows.map((row) => row.suggestedStageCode) ?? []);
     if (!season?.isFirstSeason) codes.add('SUPER');
-    const championCount = Math.max(2, [...codes].filter((code) => code.startsWith('CHAMPION_')).length + 1);
-    for (let index = 0; index < championCount; index += 1) codes.add(`CHAMPION_${String.fromCharCode(65 + index)}`);
+    const championCount = Math.max(2,
+      Math.ceil((proposal?.rows.length ?? 0) / Math.max(1, season?.championCapacity ?? 18)) + 1,
+      [...codes].filter((code) => code.startsWith('CHAMPION_')).length + 1);
+    for (let index = 0; index < championCount; index += 1) codes.add(championCode(index));
     return [...codes].sort().map((code) => ({ label: stageLabel(code), value: code }));
   }, [proposal, season]);
+  const matchParticipantOptions = useMemo(() => matchParticipants.map((item) => ({
+    label: `${item.teamNumber === null ? '未编号' : `${item.teamNumber}号`} · ${item.ownerDisplayName ?? '未知用户'} · ${item.teamName ?? item.displayName}`,
+    value: item.id
+  })), [matchParticipants]);
 
-  const generate = async () => {
+  const generate = async (mode: 'AUTO' | 'MANUAL' = 'AUTO') => {
     if (!season) return;
     setSubmitting(true); setError(null);
     try {
       const result = await api.request(`/v1/admin/leagues/${leagueId}/seasons/${season.id}/allocation-proposals`, {
         method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SeasonAllocationProposalSchema,
-        body: { expectedSeasonVersion: season.version, randomSeed: Date.now() % 2_147_483_647 || 1 }
+        body: { expectedSeasonVersion: season.version, randomSeed: Date.now() % 2_147_483_647 || 1, mode }
       });
-      mutationKey.reset(); setProposal(result);
+      mutationKey.reset(); setProposal(result); setConfirmed(null); setReasons({});
       setTargets(Object.fromEntries(result.rows.map((row) => [row.seasonEntryId, row.suggestedStageCode])));
-    } catch { setError('生成建议失败，请确认赛季已进入分组确认阶段'); }
+    } catch { setError(mode === 'MANUAL' ? '创建手动分组失败，请确认赛季已进入分组确认阶段' : '生成建议失败，请确认赛季已进入分组确认阶段'); }
     finally { setSubmitting(false); }
   };
 
@@ -227,8 +256,10 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
           ? { ...item, version: preview.version, matchCount: preview.matchCount }
           : item)
       } : current);
-    } catch {
-      setError('生成赛程预览失败，请刷新后重试');
+    } catch (caught) {
+      setError(caught instanceof ApiError && caught.code === 'SCHEDULE_MANUAL_MATCHES_PRESENT'
+        ? '已有手动安排的比赛，不能自动覆盖'
+        : '生成赛程预览失败，请刷新后重试');
     } finally {
       setScheduleBusyStageId(null);
     }
@@ -243,6 +274,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
     });
     mutationKey.reset();
     setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+    setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
     setConfirmed((current) => current ? {
       ...current,
       status: 'IN_PROGRESS',
@@ -251,6 +283,59 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
         ? { ...stage, version: preview.version, status: 'PUBLISHED' }
         : stage)
     } : current);
+  };
+
+  const openMatchEditor = async (stageId: string) => {
+    setError(null);
+    try {
+      const participants = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/participants`, {
+        schema: StageParticipantsSchema
+      });
+      setMatchParticipants(participants);
+      setMatchHomeId(null); setMatchAwayId(null); setMatchRound(1); setMatchTime('');
+      setMatchStageId(stageId);
+    } catch { setError('组别球队加载失败，请重试'); }
+  };
+
+  const submitMatch = async () => {
+    if (!matchStageId || !matchHomeId || !matchAwayId || !matchRound || !matchTime) {
+      setError('请选择双方球队、轮次和开赛时间'); return;
+    }
+    if (matchHomeId === matchAwayId) { setError('主队和客队不能相同'); return; }
+    const plannedAt = new Date(`${matchTime}:00+08:00`);
+    if (Number.isNaN(plannedAt.valueOf())) { setError('开赛时间无效'); return; }
+    const stage = confirmed?.stages.find((item) => item.id === matchStageId);
+    setMatchBusy(true); setError(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${matchStageId}/matches`, {
+        method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
+        body: {
+          expectedStageVersion: stage?.version ?? scheduleVersions[matchStageId] ?? 1,
+          roundNumber: matchRound,
+          homeParticipantId: matchHomeId,
+          awayParticipantId: matchAwayId,
+          plannedAt: plannedAt.toISOString()
+        }
+      });
+      mutationKey.reset();
+      setSchedulePreviews((current) => ({ ...current, [matchStageId]: preview }));
+      setScheduleVersions((current) => ({ ...current, [matchStageId]: preview.version }));
+      setConfirmed((current) => current ? {
+        ...current,
+        stages: current.stages.map((item) => item.id === matchStageId
+          ? { ...item, matchCount: preview.matchCount, version: preview.version } : item)
+      } : current);
+      setActiveScheduleStageId(matchStageId);
+      setScheduleModes((current) => ({ ...current, [matchStageId]: 'view' }));
+      setMatchStageId(null);
+      setNotice('比赛已加入赛程');
+    } catch (caught) {
+      setError(caught instanceof ApiError && caught.code === 'SCHEDULE_PAIR_ALREADY_EXISTS'
+        ? '这两支球队已有一场比赛'
+        : caught instanceof ApiError && caught.code === 'SCHEDULE_ROUND_CONFLICT'
+          ? '同一轮中每支球队只能参加一场比赛'
+          : '新增比赛失败，请检查组别和版本后重试');
+    } finally { setMatchBusy(false); }
   };
 
   const openPublishedSchedule = async (stageId: string, mode: 'view' | 'manage') => {
@@ -349,19 +434,25 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   return <div className="allocation-workspace">
     <Card className="allocation-toolbar">
       <Space wrap><strong>分组与赛程</strong><Select aria-label="选择赛季" value={seasonId || undefined} placeholder="选择赛季" options={seasons.map((item) => ({ label: item.displayName, value: item.id }))} onChange={(value) => { setSeasonId(value); setConfirmed(null); void loadProposal(value); }} />
-        <Button type="primary" disabled={season?.status !== 'ALLOCATION_REVIEW'} loading={submitting} onClick={() => void generate()}>生成分组建议</Button></Space>
-      <p>先审阅系统建议，再确认正式组别；赛程发布后不可换组。</p>
+        <Button type="primary" disabled={season?.status !== 'ALLOCATION_REVIEW'} loading={submitting} onClick={() => void generate('AUTO')}>生成分组建议</Button>
+        <Button disabled={season?.status !== 'ALLOCATION_REVIEW'} loading={submitting} onClick={() => void generate('MANUAL')}>手动创建分组</Button></Space>
+      <p>可采用系统建议或手动分组；组别确认后可逐场安排比赛，赛程发布后不可换组。</p>
     </Card>
     {error ? <Alert role="alert" showIcon type="error" title={error} /> : null}
     {notice ? <Alert role="status" showIcon type="success" title={notice} /> : null}
-    {!proposal ? <Card><Empty description="当前赛季暂无分组建议" /></Card> : <Card title={`建议版本 ${proposal.version}`} className="data-card">
+    {!proposal ? <Card><Empty description="当前赛季暂无分组草案" /></Card> : <Card title={`${proposal.algorithmVersion === 'manual-v1' ? '手动分组' : '建议'}版本 ${proposal.version}`} className="data-card">
       {season?.isFirstSeason ? <Alert type="info" showIcon title="首赛季仅设置冠军组，不创建超级组" /> : null}
-      <Table rowKey="seasonEntryId" pagination={false} dataSource={proposal.rows} columns={[
+      <Table rowKey="seasonEntryId" pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} dataSource={proposal.rows} columns={[
         { title: '球队', render: (_, row) => <span className="allocation-team-identity"><strong>{row.teamName}</strong><small>玩家：{row.ownerDisplayName}</small></span> },
-        { title: '系统建议', render: (_, row) => <Tag>{stageLabel(row.suggestedStageCode)}</Tag> },
-        { title: '最终组别', render: (_, row) => <Select aria-label={`${row.teamName}最终组别`} disabled={Boolean(confirmed)} value={targets[row.seasonEntryId]} options={stageOptions} onChange={(value) => setTargets((current) => ({ ...current, [row.seasonEntryId]: value }))} /> },
-        { title: '调整说明', render: (_, row) => targets[row.seasonEntryId] !== row.suggestedStageCode ? <Input aria-label={`${row.teamName}调整原因`} disabled={Boolean(confirmed)} placeholder="必填调整原因" value={reasons[row.seasonEntryId] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [row.seasonEntryId]: event.target.value }))} /> : <span className="muted-copy">沿用建议</span> },
-        { title: '状态', render: (_, row) => targets[row.seasonEntryId] !== row.suggestedStageCode ? <Tag color="gold">人工调整</Tag> : <Tag color="green">系统建议</Tag> }
+        { title: proposal.algorithmVersion === 'manual-v1' ? '初始组别' : '系统建议', render: (_, row) => <Tag>{stageLabel(row.suggestedStageCode)}</Tag> },
+        { title: '最终组别', render: (_, row) => <Select aria-label={`${row.teamName}最终组别`} disabled={Boolean(confirmed)} value={targets[row.seasonEntryId]} options={stageOptions} onChange={(value) => {
+          setTargets((current) => ({ ...current, [row.seasonEntryId]: value }));
+          if (proposal.algorithmVersion === 'manual-v1' && value !== row.suggestedStageCode) {
+            setReasons((current) => ({ ...current, [row.seasonEntryId]: current[row.seasonEntryId] || '管理员手动分组' }));
+          }
+        }} /> },
+        { title: '调整说明', render: (_, row) => targets[row.seasonEntryId] !== row.suggestedStageCode ? <Input aria-label={`${row.teamName}调整原因`} disabled={Boolean(confirmed)} placeholder="必填调整原因" value={reasons[row.seasonEntryId] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [row.seasonEntryId]: event.target.value }))} /> : <span className="muted-copy">{proposal.algorithmVersion === 'manual-v1' ? '保留当前组别' : '沿用建议'}</span> },
+        { title: '状态', render: (_, row) => targets[row.seasonEntryId] !== row.suggestedStageCode ? <Tag color="gold">人工调整</Tag> : <Tag color={proposal.algorithmVersion === 'manual-v1' ? 'blue' : 'green'}>{proposal.algorithmVersion === 'manual-v1' ? '手动分组' : '系统建议'}</Tag> }
       ]} />
       <Button type="primary" disabled={Boolean(confirmed)} loading={submitting} onClick={() => void confirm()}>确认正式分组</Button>
     </Card>}
@@ -375,13 +466,18 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
             <span className="muted-copy">{stage.status === 'PUBLISHED' ? '赛程已发布' : stage.matchCount ? `${stage.matchCount} 场待发布` : '尚未生成赛程'}</span>
           </div>
           <Space>
+            <Button onClick={() => void openMatchEditor(stage.id)}>逐场添加比赛</Button>
             {stage.status === 'PUBLISHED'
               ? <>
                 <Button loading={scheduleBusyStageId === stage.id && !preview} onClick={() => void openPublishedSchedule(stage.id, 'view')}>{scheduleModes[stage.id] === 'view' ? '收起赛程' : '查看赛程'}</Button>
                 <Button type={scheduleModes[stage.id] === 'manage' ? 'primary' : 'default'} loading={scheduleBusyStageId === stage.id && !preview} onClick={() => void openPublishedSchedule(stage.id, 'manage')}>{scheduleModes[stage.id] === 'manage' ? '收起比分管理' : '比分管理'}</Button>
               </>
-              : <Button loading={scheduleBusyStageId === stage.id} onClick={() => void generateSchedule(stage.id)}>{preview ? '重新生成预览' : '生成预览'}</Button>}
-            <Button type="primary" disabled={stage.status === 'PUBLISHED' || stage.matchCount === 0} onClick={() => void publishSchedule(stage.id)}>发布赛程</Button>
+              : <Button loading={scheduleBusyStageId === stage.id}
+                  disabled={Boolean(preview?.matches.some((match) => match.plannedAt))}
+                  onClick={() => void generateSchedule(stage.id)}>
+                  {preview?.matches.some((match) => match.plannedAt) ? '已有手动比赛' : preview ? '重新生成预览' : '生成预览'}
+                </Button>}
+            <Button type="primary" disabled={stage.status === 'PUBLISHED'} onClick={() => void publishSchedule(stage.id)}>{stage.matchCount === 0 ? '发布组别（暂不安排比赛）' : '发布赛程'}</Button>
           </Space>
         </article>;
       })}</div>
@@ -393,6 +489,22 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
         <ScheduleBoard preview={activeSchedulePreview} onEditScore={scheduleModes[activeScheduleStage.id] === 'manage' ? openScoreEditor : undefined} />
       </section> : null}
     </Card> : null}
+    <Modal open={Boolean(matchStageId)} title="逐场添加比赛" okText="添加比赛" cancelText="取消"
+      confirmLoading={matchBusy} onOk={() => void submitMatch()} onCancel={() => { if (!matchBusy) setMatchStageId(null); }}>
+      <div className="match-editor">
+        <div className="match-editor__teams">
+          <label>主队<Select aria-label="主队" placeholder="选择主队" value={matchHomeId} showSearch optionFilterProp="label"
+            options={matchParticipantOptions} onChange={setMatchHomeId} /></label>
+          <label>客队<Select aria-label="客队" placeholder="选择客队" value={matchAwayId} showSearch optionFilterProp="label"
+            options={matchParticipantOptions} onChange={setMatchAwayId} /></label>
+        </div>
+        <div className="match-editor__details">
+          <label>比赛轮次<InputNumber aria-label="轮次" min={1} precision={0} value={matchRound} onChange={setMatchRound} /></label>
+          <label>开赛时间（北京时间）<Input aria-label="开赛时间（北京时间）" type="datetime-local" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} /></label>
+        </div>
+        <p className="match-editor__hint">轮次 1 表示第 1 轮；同一轮每支球队只能参加一场比赛。</p>
+      </div>
+    </Modal>
     <Modal
       open={Boolean(scoreEditor)}
       title={scoreEditor?.officialResult ? '修改官方比分' : '录入官方比分'}

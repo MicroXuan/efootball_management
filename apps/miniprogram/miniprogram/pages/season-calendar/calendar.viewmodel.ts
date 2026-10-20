@@ -1,6 +1,6 @@
 import type { SeasonAgendaItem, SeasonAgendaResponse } from '@efm/contracts'
 
-const labels = { TRANSFER: '转会', FORCED_OFFER: '强报', VALUATION: '身价', NOMINATION: '提名', MANUAL: '事项' } as const
+const labels = { TRANSFER: '转会期', FORCED_OFFER: '强报期', VALUATION: '身价窗口', NOMINATION: '提名期', MANUAL: '事项' } as const
 const statusLabels = { UPCOMING: '未开始', ACTIVE: '进行中', ENDED: '已结束' } as const
 const beijingOffset = 8 * 60 * 60 * 1000
 

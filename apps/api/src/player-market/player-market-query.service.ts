@@ -9,6 +9,8 @@ import {
   type PlayerMarketListResponse,
   type PlayerMarketPlayerDetail,
   type PlayerMarketPlayerSummary,
+  type PlayerMarketSalaryDisplay,
+  type PlayerMarketSalaryImpact,
   type PlayerMarketQuery,
   type PlayerMarketTeamSummary
 } from '@efm/contracts';
@@ -20,6 +22,8 @@ import { AdminAuthorizationService } from '../admin/admin-authorization.service.
 import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
 import { expireClosedPlayerApplications } from './player-market-application-reconciliation.js';
 import { sortForcedQueue } from './forced-transfer-policy.js';
+import { nationalityLabelZh } from './nationality-label.js';
+import { findActiveSalaryRule, matchSalaryTier } from '../league-rosters/salary-quote.js';
 
 export type MarketActionContext = {
   owned: boolean;
@@ -28,6 +32,7 @@ export type MarketActionContext = {
   rosterStatus: 'COMPLIANT' | 'OVER_CAP';
   transferWindowOpen: boolean;
   forcedOfferWindowOpen: boolean;
+  officialValueMinor: number | null;
   releasedByMe: boolean;
 };
 
@@ -39,9 +44,9 @@ export function resolvePlayerMarketAction(context: MarketActionContext): {
   if (context.rosterCount >= 25) return { action: 'DISABLED', disabledReason: 'ROSTER_CAPACITY_REACHED' };
   if (context.rosterStatus !== 'COMPLIANT') return { action: 'DISABLED', disabledReason: 'ROSTER_NON_COMPLIANT' };
   if (context.owned) {
-    return context.forcedOfferWindowOpen
-      ? { action: 'FORCE_SIGN', disabledReason: null }
-      : { action: 'DISABLED', disabledReason: 'FORCED_OFFER_WINDOW_CLOSED' };
+    if (!context.forcedOfferWindowOpen) return { action: 'DISABLED', disabledReason: 'FORCED_OFFER_WINDOW_CLOSED' };
+    if (context.officialValueMinor === null) return { action: 'DISABLED', disabledReason: 'OFFICIAL_VALUE_REQUIRED' };
+    return { action: 'FORCE_SIGN', disabledReason: null };
   }
   if (!context.transferWindowOpen) return { action: 'DISABLED', disabledReason: 'TRANSFER_WINDOW_CLOSED' };
   if (context.releasedByMe) return { action: 'DISABLED', disabledReason: 'RELEASED_BY_TEAM_IN_WINDOW' };
@@ -59,7 +64,7 @@ type ApplicationRow = Prisma.PlayerAcquisitionApplicationGetPayload<{
 }>;
 
 type MarketPlayerRow = Prisma.FootballPlayerGetPayload<{
-  include: { bestCard: { include: { playerCard: true; autoBuild: true } } };
+  include: { bestCard: { include: { playerCard: { include: { attributes: true } }; autoBuild: true } } };
 }>;
 
 type MarketFallbackCard = Prisma.PlayerCardGetPayload<{
@@ -74,6 +79,14 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function positiveInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function nonEmptyText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 @Injectable()
@@ -134,7 +147,7 @@ export class PlayerMarketQueryService {
     const playerWhere: Prisma.FootballPlayerWhereInput = { AND: filters };
     const players = await this.prisma.footballPlayer.findMany({
       where: playerWhere,
-      include: { bestCard: { include: { playerCard: true, autoBuild: true } } },
+      include: { bestCard: { include: { playerCard: { include: { attributes: true } }, autoBuild: true } } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: query.limit + 1
     });
@@ -151,19 +164,53 @@ export class PlayerMarketQueryService {
     const scope = await this.access.requireParticipant(userId, leagueId, seasonId);
     const player = await this.prisma.footballPlayer.findFirst({
       where: { id: playerId, publishedAt: { not: null } },
-      include: { bestCard: { include: { playerCard: true, autoBuild: true } } }
+      include: { bestCard: { include: { playerCard: { include: { attributes: true } }, autoBuild: true } } }
     });
     if (!player) throw playerMarketError('FOOTBALL_PLAYER_NOT_FOUND', '球员不存在', 404);
     const result = await this.marketPlayers(scope, leagueId, seasonId, [player], this.clock());
     const summary = result.items[0];
     if (!summary) throw playerMarketError('FOOTBALL_PLAYER_NOT_FOUND', '球员不存在', 404);
     const applications = await this.listApplications(userId, leagueId, { seasonId, playerId, scope: 'PUBLIC', limit: 100 });
+    const ownWhere = { leagueId, seasonId, footballPlayerId: playerId, applicantLeagueTeamId: scope.leagueTeamId };
+    const ownInclude = {
+      applicantLeagueTeam: true,
+      sourceLeagueTeam: true,
+      footballPlayer: true,
+      playerCard: { include: { autoBuilds: { orderBy: [{ calculatedAt: 'desc' as const }, { id: 'desc' as const }], take: 1 } } },
+      events: { include: { actorUser: true, actorAdmin: true }, orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }] }
+    };
+    const ownOrder = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+    const activeOwn = await this.prisma.playerAcquisitionApplication.findFirst({
+      where: { ...ownWhere, status: { in: ['PENDING', 'REQUOTE_REQUIRED'] } }, include: ownInclude, orderBy: ownOrder
+    });
+    const latestOwn = activeOwn ?? await this.prisma.playerAcquisitionApplication.findFirst({
+      where: ownWhere, include: ownInclude, orderBy: ownOrder
+    });
+    const [team, roster] = await Promise.all([
+      this.prisma.leagueTeam.findUnique({ where: { id: scope.leagueTeamId }, select: { salaryCapMinor: true } }),
+      this.prisma.leaguePlayerOwnership.aggregate({
+        where: { leagueTeamId: scope.leagueTeamId, status: 'ACTIVE' },
+        _sum: { salaryMinor: true }
+      })
+    ]);
+    const currentSalaryMinor = roster._sum.salaryMinor ?? 0;
+    const salaryCapMinor = team?.salaryCapMinor ?? null;
+    const incomingSalaryMinor = summary.currentOwner?.teamId === scope.leagueTeamId ? null : summary.salary.salaryMinor;
+    const projectedSalaryMinor = incomingSalaryMinor === null ? null : currentSalaryMinor + incomingSalaryMinor;
+    const salaryImpact: PlayerMarketSalaryImpact = {
+      currentSalaryMinor,
+      salaryCapMinor,
+      projectedSalaryMinor,
+      overCapMinor: projectedSalaryMinor === null || salaryCapMinor === null
+        ? null : Math.max(0, projectedSalaryMinor - salaryCapMinor)
+    };
     return {
       ...summary,
+      salaryImpact,
       playerEnglishName: player.nameEn,
       activeTransferWindowId: result.activeTransferWindowId,
       activeForcedOfferWindowId: result.activeForcedOfferWindowId,
-      myApplication: applications.items.find((item) => item.applicantTeam.teamId === scope.leagueTeamId) ?? null,
+      myApplication: latestOwn ? this.application(latestOwn, applications.items.find((item) => item.id === latestOwn.id)?.queuePosition ?? null) : null,
       publicApplications: applications.items
     };
   }
@@ -180,7 +227,7 @@ export class PlayerMarketQueryService {
     const [ownerships, valuations, window, forcedWindow, rosterCount, salaryRule, fallbackCards] = await Promise.all([
       this.prisma.leaguePlayerOwnership.findMany({
         where: { leagueId, footballPlayerId: { in: playerIds }, status: 'ACTIVE' },
-        include: { leagueTeam: true, currentPlayerCard: { include: { autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } }
+        include: { leagueTeam: true, currentPlayerCard: { include: { attributes: true, autoBuilds: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } }
       }),
       this.prisma.leaguePlayerValuation.findMany({ where: { leagueId, footballPlayerId: { in: playerIds } } }),
       this.prisma.transferWindow.findFirst({
@@ -192,7 +239,7 @@ export class PlayerMarketQueryService {
         orderBy: [{ startsAt: 'desc' }, { id: 'asc' }]
       }),
       this.prisma.leaguePlayerOwnership.count({ where: { leagueTeamId: scope.leagueTeamId, status: 'ACTIVE' } }),
-      this.prisma.leagueSalaryRuleVersion.findFirst({ where: { leagueId, status: 'ACTIVE', effectiveAt: { lte: now } }, include: { tiers: true }, orderBy: { version: 'desc' } }),
+      findActiveSalaryRule(this.prisma, leagueId, now),
       missingBestCardPlayerIds.length === 0 ? Promise.resolve([]) : this.prisma.playerCard.findMany({
         where: {
           playerId: { in: missingBestCardPlayerIds },
@@ -223,12 +270,45 @@ export class PlayerMarketQueryService {
       const valuation = valuationByPlayer.get(player.id);
       const fallbackCard = player.bestCard ? null : this.fallbackCard(fallbackCardsByPlayer.get(player.id) ?? []);
       const selectedCard = ownership?.currentPlayerCard ?? player.bestCard?.playerCard ?? fallbackCard?.card ?? null;
+      const attributes = objectRecord(selectedCard?.attributes?.attributesJson);
       const maxOverall = ownership?.maxOverallSnapshot
         ?? player.bestCard?.autoBuild.maxOverall
         ?? fallbackCard?.maxOverall
         ?? selectedCard?.overallRating
         ?? null;
-      const salaryMinor = ownership?.salaryMinor ?? this.salaryFor(maxOverall, salaryRule?.tiers ?? []);
+      const storedBuild = player.bestCard?.playerCard.id === selectedCard?.id
+        ? player.bestCard?.autoBuild
+        : fallbackCard?.card.id === selectedCard?.id ? fallbackCard?.card.autoBuilds[0] : null;
+      const quoteOverall = storedBuild?.allocationJson != null && nonEmptyText(storedBuild.algorithmVersion)
+        ? storedBuild.maxOverall : null;
+      const basisOverall = ownership?.maxOverallSnapshot ?? quoteOverall;
+      const tier = basisOverall === null || !salaryRule ? null : matchSalaryTier(salaryRule.tiers, basisOverall);
+      const currentTier = tier && salaryRule ? {
+        salaryMinor: tier.salaryMinor,
+        minOverall: tier.minOverall,
+        maxOverall: tier.maxOverall,
+        salaryRuleVersionId: salaryRule.id,
+        version: salaryRule.version,
+        effectiveAt: salaryRule.effectiveAt.toISOString()
+      } : null;
+      const salary: PlayerMarketSalaryDisplay = ownership ? {
+        kind: 'ACTUAL',
+        salaryMinor: ownership.salaryMinor,
+        basisOverall: ownership.maxOverallSnapshot,
+        salaryRuleVersionId: ownership.salaryRuleVersionId,
+        currentTier,
+        unavailableReason: currentTier ? null : !salaryRule ? 'SALARY_RULE_NOT_CONFIGURED' : 'SALARY_TIER_NOT_CONFIGURED'
+      } : quoteOverall === null ? {
+        kind: 'UNAVAILABLE', salaryMinor: null, basisOverall: null,
+        salaryRuleVersionId: null, currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING'
+      } : !salaryRule || !tier ? {
+        kind: 'UNAVAILABLE', salaryMinor: null, basisOverall: quoteOverall,
+        salaryRuleVersionId: null, currentTier: null,
+        unavailableReason: !salaryRule ? 'SALARY_RULE_NOT_CONFIGURED' : 'SALARY_TIER_NOT_CONFIGURED'
+      } : {
+        kind: 'PROJECTED', salaryMinor: tier.salaryMinor, basisOverall: quoteOverall,
+        salaryRuleVersionId: salaryRule.id, currentTier: null, unavailableReason: null
+      };
       const action = resolvePlayerMarketAction({
         owned: Boolean(ownership),
         ownedByMe: ownership?.leagueTeamId === scope.leagueTeamId,
@@ -236,13 +316,20 @@ export class PlayerMarketQueryService {
         rosterStatus: scope.rosterStatus,
         transferWindowOpen: Boolean(window),
         forcedOfferWindowOpen: Boolean(forcedWindow),
+        officialValueMinor: valuation?.currentValueMinor ?? null,
         releasedByMe: restrictedPlayers.has(player.id)
       });
       return {
         playerId: player.id,
         playerName: player.nameZh ?? player.nameEn ?? player.shortName ?? '未命名球员',
         nationality: player.nationality,
+        nationalityZh: nationalityLabelZh(player.nationality),
         club: player.club,
+        clubZh: player.clubZh,
+        age: positiveInteger(attributes?.age),
+        heightCm: positiveInteger(attributes?.heightCm ?? attributes?.height),
+        weightKg: positiveInteger(attributes?.weightKg ?? attributes?.weight),
+        preferredFoot: nonEmptyText(attributes?.preferredFoot ?? attributes?.foot),
         currentOwner: ownership ? this.team(ownership.leagueTeam) : null,
         ownershipId: ownership?.id ?? null,
         ownershipVersion: ownership?.version ?? null,
@@ -254,8 +341,9 @@ export class PlayerMarketQueryService {
           imageUrl: selectedCard.imageUrl,
           position: selectedCard.position,
           maxOverall,
-          salaryMinor
+          salaryMinor: salary.salaryMinor
         } : null,
+        salary,
         forcedTransferBadge: ownership?.acquisitionType === 'FORCED_TRANSFER' && ownership.acquisitionSeasonId === seasonId,
         ...action
       };
@@ -344,11 +432,11 @@ export class PlayerMarketQueryService {
       where: {
         leagueId,
         seasonId: query.seasonId,
-        type: { in: ['BUY', 'FORCED_TRANSFER', 'RELEASE'] },
-        ...(cursor ? { OR: [{ createdAt: { gt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { gt: cursor.id } }] } : {})
+        type: { in: ['BUY', 'SELL', 'TRANSFER', 'FORCED_TRANSFER', 'RELEASE'] },
+        ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {})
       },
       include: { footballPlayer: true, sourceLeagueTeam: true, targetLeagueTeam: true },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: query.limit + 1
     });
     const page = rows.slice(0, query.limit);
@@ -358,6 +446,8 @@ export class PlayerMarketQueryService {
         const playerName = row.footballPlayer.nameZh ?? row.footballPlayer.nameEn ?? row.footballPlayer.shortName ?? '未命名球员';
         const kind = row.type === 'FORCED_TRANSFER'
           ? 'FORCED_TRANSFER' as const
+          : row.type === 'TRANSFER' || row.type === 'SELL'
+            ? 'TRANSFER' as const
           : row.type === 'RELEASE'
             ? 'RELEASE' as const
             : 'NORMAL_PURCHASE' as const;
@@ -369,7 +459,8 @@ export class PlayerMarketQueryService {
           sourceTeam: row.sourceLeagueTeam ? this.team(row.sourceLeagueTeam) : null,
           targetTeam: row.targetLeagueTeam ? this.team(row.targetLeagueTeam) : null,
           amountMinor: row.amountMinor,
-          message: row.type === 'RELEASE' ? `${playerName} 已被下放` : `${playerName} 已完成${row.type === 'FORCED_TRANSFER' ? '强报' : '签约'}`,
+          valuationSnapshotMinor: row.valuationSnapshotMinor,
+          message: row.type === 'RELEASE' ? `${playerName} 已被下放` : `${playerName} 已完成${row.type === 'FORCED_TRANSFER' ? '强报' : row.type === 'TRANSFER' || row.type === 'SELL' ? '转会' : '签约'}`,
           createdAt: row.createdAt.toISOString()
         };
       }),
@@ -400,11 +491,6 @@ export class PlayerMarketQueryService {
     }).sort((left, right) => right.maxOverall - left.maxOverall
       || right.releaseDate - left.releaseDate
       || left.card.externalId.localeCompare(right.card.externalId, 'en-US'))[0] ?? null;
-  }
-
-  private salaryFor(overall: number | null, tiers: Array<{ minOverall: number; maxOverall: number; salaryMinor: number }>): number | null {
-    if (overall === null) return null;
-    return tiers.find((tier) => overall >= tier.minOverall && overall <= tier.maxOverall)?.salaryMinor ?? null;
   }
 
   private application(row: ApplicationRow, queuePosition: number | null): PlayerAcquisitionApplication {

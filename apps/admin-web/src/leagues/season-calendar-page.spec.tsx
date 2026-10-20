@@ -32,8 +32,11 @@ it('shows the current season month with all four phases, notes and no fixtures',
   renderPage(request);
   expect(await screen.findByText('强报窗口')).toBeInTheDocument();
   expect(screen.getByText('转会窗口')).toBeInTheDocument();
-  expect(screen.getByText('身价窗口')).toBeInTheDocument();
+  expect(screen.getAllByText('身价窗口').length).toBeGreaterThan(0);
   expect(screen.getByText('提名窗口')).toBeInTheDocument();
+  expect(Array.from(document.querySelectorAll('.season-phase-marker'), (marker) => marker.textContent)).toEqual(
+    expect.arrayContaining(['转会期', '强报期', '身价窗口', '提名期']),
+  );
   expect(screen.getAllByText('假期').length).toBeGreaterThan(0);
   expect(screen.getAllByText(/北京时间/).length).toBeGreaterThan(0);
   expect(screen.queryByText(/比赛赛程/)).not.toBeInTheDocument();

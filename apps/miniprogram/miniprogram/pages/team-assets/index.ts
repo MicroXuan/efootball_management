@@ -11,6 +11,7 @@ type AssetsView = ReturnType<typeof teamAssetsView>
 type ReleaseEvent = { currentTarget: { dataset: { ownershipId?: string; playerName?: string } } }
 type PlayerEvent = { currentTarget: { dataset: { playerId?: string; ownershipId?: string; playerName?: string } } }
 type Target = { teamId: string; teamName: string; teamNumber: number | null }
+type DisappearanceDraft = { ownershipId: string; expectedOwnershipVersion: number; playerName: string }
 
 function releaseKey(): string {
   return `release-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
@@ -38,6 +39,8 @@ Page({
     returnTo: '',
     releasingOwnershipId: '',
     submittingRequest: false,
+    disappearanceDraft: null as DisappearanceDraft|null,
+    transferLoadingPlayerId: '',
     transferCandidate: null as TransferCandidate|null,
     transferPlayerName: '',
     transferTargets: [] as Target[],
@@ -65,7 +68,7 @@ Page({
         ? await economyApi.publicAssets(this.data.leagueId, this.data.teamId)
         : await economyApi.assets(this.data.teamId)
       const viewer = this.data.publicView
-        ? await leagueTeamsApi.mine().then((mine) => { const team = mine.items.find((item) => item.leagueId === this.data.leagueId && item.currentSeason?.id); return team?.currentSeason ? { teamId: team.id, seasonId: team.currentSeason.id } : null }).catch(() => null)
+        ? await leagueTeamsApi.mine().then((mine) => { const team = mine.items.find((item) => item.leagueId === this.data.leagueId && item.currentSeason?.id); return team?.currentSeason ? { teamId: team.id, seasonId: team.currentSeason.id, teamName: team.name, teamNumber: team.teamNumber } : null }).catch(() => null)
         : null
       const ownerSeasonId = !this.data.publicView ? (assets as TeamAssetOverview).seasonId : null
       const pendingIds = ownerSeasonId
@@ -81,22 +84,22 @@ Page({
     const ownershipId = event.currentTarget.dataset.ownershipId
     const playerName = event.currentTarget.dataset.playerName
     const player = this.data.assets?.active.find((item) => item.ownershipId === ownershipId)
-    if (!ownershipId || !player?.disappearanceEnabled || this.data.submittingRequest) return
-    wx.showModal({ title: `申请标记 ${playerName ?? '球员'} 为已消失`, content: '提交后仍在一线阵容，管理员批准后才移入已消失。',
-      editable: true, placeholderText: '填写消失原因（必填）', confirmText: '提交审核',
-      success: ({ confirm, content }) => {
-        if (!confirm) return
-        if (!content?.trim()) { wx.showToast({ title: '请填写原因', icon: 'none' }); return }
-        void this.submitDisappearance(ownershipId, player.ownershipVersion!, content.trim())
-      } })
+    if (!ownershipId || !player?.disappearanceEnabled || !player.ownershipVersion || this.data.submittingRequest) return
+    this.setData({ errorMessage: '', disappearanceDraft: { ownershipId, expectedOwnershipVersion: player.ownershipVersion, playerName: playerName ?? player.playerName } })
   },
-  async submitDisappearance(ownershipId: string, expectedOwnershipVersion: number, reason: string) {
+  closeDisappearance() { if (!this.data.submittingRequest) this.setData({ disappearanceDraft: null, errorMessage: '' }) },
+  submitDisappearanceDraft() {
+    const draft = this.data.disappearanceDraft
+    if (draft && !this.data.submittingRequest) void this.submitDisappearance(draft.ownershipId, draft.expectedOwnershipVersion)
+  },
+  async submitDisappearance(ownershipId: string, expectedOwnershipVersion: number) {
     const seasonId = this.data.assets?.seasonId
     if (!seasonId) return
     this.setData({ submittingRequest: true, errorMessage: '' })
     try {
-      await playerRequestsApi.submitDisappearance(this.data.teamId, ownershipId, { seasonId, reason, expectedOwnershipVersion }, releaseKey())
+      await playerRequestsApi.submitDisappearance(this.data.teamId, ownershipId, { seasonId, reason: '球队申请标记消失', expectedOwnershipVersion }, releaseKey())
       await this.loadPage(false)
+      this.setData({ disappearanceDraft: null })
       wx.showToast({ title: '已提交管理员审核', icon: 'success' })
     } catch (error) {
       this.setData({ errorMessage: error instanceof ApiError ? error.message : '申请失败，请稍后重试' })
@@ -107,21 +110,20 @@ Page({
     const playerId = event.currentTarget.dataset.playerId
     const playerName = event.currentTarget.dataset.playerName ?? '球员'
     const assets = this.data.assets
-    if (!playerId || !assets?.viewerTeamId || !assets.seasonId || this.data.submittingRequest) return
-    this.setData({ submittingRequest: true, errorMessage: '' })
+    if (!playerId || !assets?.viewerTeamId || !assets.seasonId || assets.isOwner || this.data.submittingRequest || this.data.transferLoadingPlayerId) return
+    this.setData({ transferLoadingPlayerId: playerId, errorMessage: '' })
     try {
       const candidate = await playerRequestsApi.transferCandidate(assets.leagueId, assets.seasonId, playerId)
       if (!candidate.eligible) { this.setData({ errorMessage: candidate.reason ?? '当前不能发起转会' }); return }
-      const targets = assets.isOwner
-        ? await leagueTeamsApi.directory(assets.leagueId).then((result) => result.items.filter((item) => item.teamId !== assets.teamId).map((item) => ({ teamId: item.teamId, teamName: item.teamName, teamNumber: item.teamNumber })))
-        : [{ teamId: assets.viewerTeamId, teamName: '我的球队', teamNumber: null }]
-      if (!targets.length) { this.setData({ errorMessage: '暂无可转入的球队' }); return }
+      if (candidate.sourceTeamId !== assets.teamId) { this.setData({ errorMessage: '球员归属已变化，请刷新后重试' }); return }
+      const targets: Target[] = [{ teamId: assets.viewerTeamId,
+        teamName: `${assets.viewerTeamNumber === null ? '待编号' : `${assets.viewerTeamNumber}号`} ${assets.viewerTeamName ?? '我的球队'}`,
+        teamNumber: assets.viewerTeamNumber }]
       this.setData({ transferCandidate: candidate, transferPlayerName: playerName, transferTargets: targets,
         transferTargetIndex: 0, transferAmount: '', transferReason: '' })
     } catch (error) { this.setData({ errorMessage: error instanceof ApiError ? error.message : '转会资格查询失败' }) }
-    finally { this.setData({ submittingRequest: false }) }
+    finally { this.setData({ transferLoadingPlayerId: '' }) }
   },
-  onTransferTargetChange(event: { detail: { value: string } }) { this.setData({ transferTargetIndex: Number(event.detail.value) || 0 }) },
   onTransferAmountInput(event: { detail: { value: string } }) { this.setData({ transferAmount: event.detail.value.replace(/\D/g, '') }) },
   onTransferReasonInput(event: { detail: { value: string } }) { this.setData({ transferReason: event.detail.value }) },
   closeTransfer() { if (!this.data.submittingRequest) this.setData({ transferCandidate: null }) },
@@ -138,7 +140,7 @@ Page({
         ownershipId: candidate.ownershipId, targetTeamId: target.teamId, amountMinor,
         expectedOwnershipVersion: candidate.ownershipVersion, reason: this.data.transferReason.trim() || undefined }, releaseKey())
       this.setData({ transferCandidate: null })
-      wx.showToast({ title: '已发送给对方确认', icon: 'success' })
+      wx.showModal({ title: '提交成功', content: '已发送给对方确认', showCancel: false })
     } catch (error) {
       this.setData({ errorMessage: error instanceof ApiError ? error.message : '转会申请失败，请稍后重试' })
       if (error instanceof ApiError && /CHANGED|CONFLICT|WINDOW/.test(error.code)) await this.loadPage(false)
@@ -153,6 +155,10 @@ Page({
   openTransferList() {
     const seasonId = this.data.assets?.seasonId
     if (seasonId && this.data.assets?.viewerTeamId) wx.navigateTo({ url: `/pages/transfer-proposals/index?seasonId=${encodeURIComponent(seasonId)}` })
+  },
+  openTeamDirectory() {
+    const leagueId = this.data.assets?.leagueId
+    if (leagueId) wx.navigateTo({ url: `/pages/league-team-directory/index?leagueId=${encodeURIComponent(leagueId)}` })
   },
   switchRoster(event: WechatMiniprogram.BaseEvent) {
     const status = event.currentTarget.dataset.status as AssetStatus|undefined

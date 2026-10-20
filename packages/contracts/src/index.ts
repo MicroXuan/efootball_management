@@ -11,6 +11,7 @@ export * from './match-result-dispute.js';
 export * from './game-account.js';
 export * from './league.js';
 export * from './league-economy.js';
+export * from './personal-finance.js';
 export * from './league-roster.js';
 export * from './league-team.js';
 export * from './team-catalog.js';

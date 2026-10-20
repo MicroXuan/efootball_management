@@ -12,8 +12,8 @@ page { background:#0e1417; color:#f4f7f8; }
 .team-search input { box-sizing:border-box; height:78rpx; padding:0 22rpx; border:2rpx solid #344047; border-radius:16rpx; color:#f4f7f8; background:#0e1417; font-size:21rpx; }
 .team-search button { width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:78rpx;margin:0;padding:0;border:0;border-radius:16rpx;color:#10160f;background:#b6f13a;font-size:21rpx;font-weight:800;line-height:1; }
 .team-search button::after,.status-filter::after,.load-more::after,.pagination-error button::after { border:0; }
-.status-filter-bar { width:100%;box-sizing:border-box;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6rpx;margin-top:14rpx;padding:6rpx;border:2rpx solid #344047;border-radius:18rpx;background:#0e1417; }
-.status-filter { width:100%;min-width:0;box-sizing:border-box;height:62rpx;margin:0;padding:0;border:0;border-radius:13rpx;color:#aab5ba;background:transparent;font-size:18rpx;line-height:62rpx; }
+.status-filter-bar { width:100%;box-sizing:border-box;display:flex;align-items:stretch;gap:6rpx;margin-top:14rpx;padding:6rpx;overflow:hidden;border:2rpx solid #344047;border-radius:18rpx;background:#0e1417; }
+.status-filter { flex:1 1 0;width:0;min-width:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:62rpx;margin:0;padding:0 2rpx;overflow:hidden;border:0;border-radius:13rpx;color:#aab5ba;background:transparent;font-size:18rpx;line-height:1;white-space:nowrap; }
 .status-filter-active { color:#111810;background:#b6f13a;font-weight:850; }
 .mine-picker { display:block; margin-top:14rpx; }
 .mine-picker-row { display:flex; align-items:center; justify-content:space-between; gap:20rpx; min-height:76rpx; margin-top:14rpx; padding:0 20rpx; border:2rpx solid #445743; border-radius:16rpx; color:#aab5ba; background:#1a2420; font-size:19rpx; }

@@ -15,6 +15,9 @@ type DetailPage = {
   detail: any
   submitApplication(): Promise<void>
   withdrawApplication(): Promise<void>
+  confirmComposer(): void
+  openComposer(): void
+  amendApplication(): Promise<void>
 }
 let page: DetailPage
 
@@ -38,8 +41,12 @@ function context() {
       activeTransferWindowId: null, activeForcedOfferWindowId: 'forced-1',
       currentOwner: { teamId: 'team-2', teamNumber: 2, name: '对手队', logoUrl: null, ownerAlias: '对手' }, ownershipId: 'own-1', ownershipVersion: 3,
       card: { playerCardId: 'card-1' }, officialValueMinor: 500, myApplication: null,
+      salary: { kind: 'ACTUAL', salaryMinor: 300, basisOverall: 95, salaryRuleVersionId: 'rule-1', currentTier: null, unavailableReason: null },
+      salaryImpact: { currentSalaryMinor: 700, salaryCapMinor: 1000, projectedSalaryMinor: 1000, overCapMinor: 0 },
     } as Record<string, any>,
     setData(update: Record<string, unknown>) { Object.assign(this.data, update) },
+    submitApplication: page.submitApplication,
+    amendApplication: page.amendApplication,
     loadDetail: vi.fn(async () => undefined),
     handleMutationError: vi.fn(async () => undefined),
   }
@@ -60,5 +67,25 @@ describe('player market detail page', () => {
     await page.submitApplication.call(instance)
     expect(mocks.submit).not.toHaveBeenCalled()
     expect(instance.data.errorMessage).toContain('强报期')
+  })
+
+  it('submits a new forced offer after rejection instead of amending the rejected one', async () => {
+    const instance = context()
+    instance.detail.myApplication = { status: 'REJECTED', type: 'FORCED_TRANSFER', amountMinor: 300, forcedOfferWindowId: 'forced-1' }
+    page.openComposer.call(instance)
+    expect(instance.data).toMatchObject({ showComposer: true, amount: '500' })
+    page.confirmComposer.call(instance)
+    await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+    expect(mocks.amend).not.toHaveBeenCalled()
+  })
+
+  it('submits a new forced offer after withdrawal instead of amending the withdrawn one', async () => {
+    const instance = context()
+    instance.detail.myApplication = { status: 'WITHDRAWN', type: 'FORCED_TRANSFER', amountMinor: 300, forcedOfferWindowId: 'forced-1' }
+    page.openComposer.call(instance)
+    expect(instance.data).toMatchObject({ showComposer: true, amount: '500' })
+    page.confirmComposer.call(instance)
+    await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+    expect(mocks.amend).not.toHaveBeenCalled()
   })
 })

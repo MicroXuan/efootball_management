@@ -1,6 +1,6 @@
 <view class="favorites-page">
   <view class="page-head">
-    <view><text class="head-kicker">个人球探簿</text><text class="head-title">我的收藏</text></view>
+    <text class="head-kicker">个人球探簿</text>
     <text class="head-mark">BEST · 11</text>
   </view>
 
@@ -8,6 +8,25 @@
     <text class="search-icon">⌕</text>
     <input value="{{keyword}}" placeholder="搜索收藏球员或卡片" placeholder-class="search-placeholder" bindinput="onKeywordInput" />
   </view>
+
+  <view class="group-controls">
+    <view class="group-dropdown">
+      <view class="group-dropdown__trigger {{showGroupDropdown ? 'is-open' : ''}}" role="button" aria-label="选择收藏分组，当前{{activeGroupName}}" bindtap="onToggleGroupDropdown">
+        <text class="group-dropdown__value">{{activeGroupName}}</text><text class="group-dropdown__chevron">⌄</text>
+      </view>
+      <view wx:if="{{showGroupDropdown}}" class="group-dropdown__menu">
+        <scroll-view class="group-dropdown__list" scroll-y="true">
+          <view class="group-dropdown__option {{activeGroupId === '' ? 'is-active' : ''}}" role="button" data-group-id="" bindtap="onSelectGroup"><text>全部</text><text wx:if="{{activeGroupId === ''}}" class="group-dropdown__check">✓</text></view>
+          <view class="group-dropdown__option {{activeGroupId === 'ungrouped' ? 'is-active' : ''}}" role="button" data-group-id="ungrouped" bindtap="onSelectGroup"><text>未分组</text><text wx:if="{{activeGroupId === 'ungrouped'}}" class="group-dropdown__check">✓</text></view>
+          <view wx:for="{{groups}}" wx:key="id" class="group-dropdown__option {{activeGroupId === item.id ? 'is-active' : ''}}" role="button" aria-label="选择{{item.name}}" data-group-id="{{item.id}}" bindtap="onSelectGroup">
+            <text class="group-dropdown__name">{{item.name}}</text><text wx:if="{{activeGroupId === item.id}}" class="group-dropdown__check">✓</text><view class="group-dropdown__delete" role="button" aria-label="删除分组{{item.name}}" data-group-id="{{item.id}}" catchtap="onDeleteGroup">删除</view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+    <view class="group-create" role="button" aria-label="新建分组" bindtap="onCreateGroup"><text class="group-create__plus">＋</text><text>新建分组</text></view>
+  </view>
+  <view wx:if="{{showGroupDropdown}}" class="group-dropdown__mask" bindtap="onCloseGroupDropdown"></view>
 
   <loading-state wx:if="{{state === 'loading' && cards.length === 0}}" label="正在整理收藏球员" />
 
@@ -25,11 +44,24 @@
   </view>
 
   <view wx:else class="favorite-grid">
-    <view wx:for="{{cards}}" wx:key="playerId" class="favorite-cell">
-      <player-card card="{{item}}" bind:cardtap="onCardTap" />
+    <view wx:for="{{items}}" wx:key="playerId" class="favorite-cell">
+      <player-card card="{{cards[index]}}" bind:cardtap="onCardTap" />
       <button class="remove-button" data-player-id="{{item.playerId}}" catchtap="onRemoveFavorite" aria-label="取消收藏">★</button>
+      <view class="favorite-group" role="button" data-player-id="{{item.playerId}}" bindtap="onOpenGroupPicker">{{item.groupId ? (groupNames[item.groupId] || '分组') : '未分组'}} <text>⌄</text></view>
     </view>
     <loading-state wx:if="{{loadingMore}}" label="继续加载收藏" />
     <text wx:elif="{{!hasMore}}" class="list-end">— 已显示全部收藏 —</text>
+  </view>
+
+  <view wx:if="{{showGroupPicker}}" class="group-picker">
+    <view class="group-picker__mask" bindtap="onCloseGroupPicker"></view>
+    <view class="group-picker__sheet">
+      <view class="group-picker__head"><text>移动到分组</text><view role="button" bindtap="onCloseGroupPicker">关闭</view></view>
+      <scroll-view class="group-picker__list" scroll-y="true">
+        <view wx:if="{{movingPlayerHasGroup}}" class="group-picker__item group-picker__remove" role="button" data-group-id="" bindtap="onPickGroup">移出分组</view>
+        <view wx:for="{{groups}}" wx:key="id" class="group-picker__item" role="button" data-group-id="{{item.id}}" bindtap="onPickGroup">{{item.name}}</view>
+      </scroll-view>
+      <view class="group-picker__create" role="button" bindtap="onCreateGroup">＋ 新建分组</view>
+    </view>
   </view>
 </view>

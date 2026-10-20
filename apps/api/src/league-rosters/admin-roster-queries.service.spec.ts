@@ -1,9 +1,25 @@
+import { jest } from '@jest/globals';
 import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 
 const leagueId = '11111111-1111-4111-8111-111111111111';
 const packId = '22222222-2222-4222-8222-222222222222';
 
 describe('AdminRosterQueriesService candidate filters', () => {
+  it('paginates finance records and includes the team number', async () => {
+    const findMany = jest.fn(async () => [1, 2].map((number) => ({
+      id: `entry-${number}`, leagueId, leagueTeamId: 'team-1', seasonId: null,
+      rosterTransactionId: null, direction: 'DEBIT', type: 'LUXURY_TAX',
+      settlementCategory: null, amountMinor: 100, note: 'test', createdAt: new Date(),
+      leagueTeam: { name: '甲队', teamNumber: 3 }
+    })));
+    const service = new AdminRosterQueriesService({ financeLedgerEntry: { findMany } } as never, {
+      requireVisible: async () => leagueId
+    } as never);
+    const result = await service.ledger(leagueId, undefined, undefined, 1);
+    expect(result).toMatchObject({ items: [{ id: 'entry-1', teamNumber: 3 }], nextCursor: 'entry-1' });
+    await service.ledger(leagueId, undefined, 'entry-1', 1);
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: { id: 'entry-1' }, skip: 1, take: 2 }));
+  });
   it('shows the selected team cap instead of the league rule cap in a roster', async () => {
     const prisma = {
       leagueTeam: { findFirst: async () => ({ id: 'team-1', name: 'Team One', salaryCapMinor: 500 }) },

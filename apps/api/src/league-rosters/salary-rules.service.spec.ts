@@ -84,6 +84,25 @@ describe('SalaryRulesService', () => {
     })).rejects.toThrow();
   });
 
+  it('quotes salary by the administrator-defined score ranges', async () => {
+    const { admin, league } = await fixture();
+    await service.createVersion(admin.id, league.id, {
+      salaryCapMinor: 10_000,
+      tiers: [
+        { minOverall: 0, maxOverall: 88, salaryMinor: 100 },
+        { minOverall: 89, maxOverall: 91, salaryMinor: 200 },
+        { minOverall: 92, maxOverall: 100, salaryMinor: 500 },
+        { minOverall: 101, maxOverall: 120, salaryMinor: 1100 }
+      ],
+      effectiveAt: new Date(Date.now() - 1_000).toISOString(),
+      expectedCurrentVersion: 0
+    });
+
+    for (const [overall, salaryMinor] of [[88, 100], [89, 200], [91, 200], [92, 500], [101, 1100]] as const) {
+      await expect(service.quote(league.id, overall)).resolves.toMatchObject({ salaryMinor });
+    }
+  });
+
   it('quotes league-specific overrides and never mutates an older version', async () => {
     const first = await fixture();
     const second = await fixture();

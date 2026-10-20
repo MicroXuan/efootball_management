@@ -19,12 +19,21 @@ function context() {
 
 it('chooses the active window and loads remaining slots and own nominations', async () => {
   mocks.listWindows.mockResolvedValueOnce({ items: [window] })
-  mocks.workspace.mockResolvedValueOnce({ window, leagueTeamId: 'team-1', isOpen: true, remainingSlots: 1, nominations: [{ id: 'n1', playerName: '瓦拉内' }] })
+  mocks.workspace.mockResolvedValueOnce({ window, leagueTeamId: 'team-1', isOpen: true, remainingSlots: 1, nominations: [{ id: 'n1', playerId: 'player-1', playerName: '瓦拉内', player: { clubLabel: '科莫', nationalityLabel: '法国', card: { cardName: '精选', imageUrl: 'https://example.com/player.png', position: 'CB', maxOverall: 96 } } }] })
   const instance = context()
   await page.loadPage.call(instance)
   expect(mocks.workspace).toHaveBeenCalledWith('window-1')
   expect(instance.data.workspace.remainingSlots).toBe(1)
   expect(instance.data.open).toBe(true)
+  expect(instance.data.deadlineLabel).toMatch(/^\d{2}月\d{2}日 \d{2}:\d{2}$/)
+  expect(instance.data.nominationCards[0]).toMatchObject({ portraitUrl: 'https://example.com/player.png', clubLabel: '科莫', position: 'CB', overallLabel: '96' })
+})
+
+it('ignores a second search while one is in progress', async () => {
+  const instance = context()
+  instance.data = { ...instance.data, workspace: { window, nominations: [] }, open: true, searching: true }
+  await page.searchPlayers.call(instance)
+  expect(mocks.listPlayerMarket).not.toHaveBeenCalled()
 })
 
 it('shows an empty state when the season has no nomination window', async () => {
@@ -39,6 +48,7 @@ it('shows an empty state when the season has no nomination window', async () => 
   expect(instance.data.workspace).toBeNull()
   expect(instance.data.open).toBe(false)
   expect(instance.data.players).toEqual([])
+  expect(instance.data.nominationCards).toEqual([])
   expect(mocks.workspace).not.toHaveBeenCalled()
 })
 
@@ -48,6 +58,15 @@ it('keeps a rejected window request as a retryable error', async () => {
   await page.loadPage.call(instance)
   expect(instance.data.state).toBe('error')
   expect(instance.data.errorMessage).toBe('提名信息加载失败')
+})
+
+it('keeps older workspace responses readable before the detail endpoint is deployed', async () => {
+  mocks.listWindows.mockResolvedValueOnce({ items: [window] })
+  mocks.workspace.mockResolvedValueOnce({ window, leagueTeamId: 'team-1', isOpen: true, remainingSlots: 1,
+    nominations: [{ id: 'n1', playerId: 'player-1', playerName: '瓦拉内' }] })
+  const instance = context()
+  await page.loadPage.call(instance)
+  expect(instance.data.nominationCards[0]).toMatchObject({ portraitFallback: '瓦', clubLabel: '俱乐部未知', cardName: '球员卡待补充', overallLabel: '—' })
 })
 
 it('loads a past window as read-only rather than empty', async () => {
@@ -67,6 +86,26 @@ it('only searches free players and blocks new nominations when slots run out', a
   mocks.listPlayerMarket.mockResolvedValueOnce({ items: [], nextCursor: null })
   await page.searchPlayers.call(instance)
   expect(mocks.listPlayerMarket).toHaveBeenCalledWith('league-1', expect.objectContaining({ seasonId: 'season-1', keyword: '瓦拉内', ownership: 'FREE' }))
+  await page.nominate.call(instance, { currentTarget: { dataset: { playerId: 'player-1' } } })
+  expect(mocks.submit).not.toHaveBeenCalled()
+})
+
+it('keeps full player details and disables an already nominated search result', async () => {
+  const instance = context()
+  instance.data = { ...instance.data, windowId: 'window-1', workspace: { window, remainingSlots: 1, nominations: [{ playerId: 'player-1' }] }, open: true, keyword: '瓦拉内' }
+  mocks.listPlayerMarket.mockResolvedValueOnce({ items: [{
+    playerId: 'player-1', playerName: '拉斐尔·瓦拉内', nationality: 'France', nationalityZh: '法国', club: 'Como', clubZh: '科莫',
+    currentOwner: null, ownershipId: null, ownershipVersion: null, officialValueMinor: 800,
+    valuationVersion: 1, card: { playerCardId: 'card-1', cardName: '精选', imageUrl: 'https://example.com/varane.png', position: 'CB', maxOverall: 96, salaryMinor: 100 },
+    salary: { kind: 'PROJECTED', salaryMinor: 100, basisOverall: 96, salaryRuleVersionId: 'rule-1', currentTier: null, unavailableReason: null },
+    forcedTransferBadge: false, action: 'APPLY', disabledReason: null,
+  }], nextCursor: null })
+  await page.searchPlayers.call(instance)
+  expect(instance.data.searched).toBe(true)
+  expect(instance.data.players[0]).toMatchObject({
+    playerName: '拉斐尔·瓦拉内', portraitUrl: 'https://example.com/varane.png', clubLabel: '科莫',
+    nationalityLabel: '法国', position: 'CB', overallLabel: '96', nominated: true,
+  })
   await page.nominate.call(instance, { currentTarget: { dataset: { playerId: 'player-1' } } })
   expect(mocks.submit).not.toHaveBeenCalled()
 })

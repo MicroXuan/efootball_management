@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
@@ -32,6 +32,79 @@ function renderPage(request: ReturnType<typeof vi.fn>) {
     <Route path="/leagues/:leagueId/allocation" element={<AllocationPage api={{ request } as unknown as AdminApi} />} />
   </Routes></MemoryRouter>);
 }
+
+it('starts a manual grouping draft without requesting a system proposal', async () => {
+  const manualProposal = { ...proposal, algorithmVersion: 'manual-v1', rows: proposal.rows.map((row) => ({
+    ...row, source: 'NEW_ENTRY' as const, reason: '管理员手动分组，待指定最终组别'
+  })) };
+  const request = vi.fn(async (path: string, options?: { method?: string }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) throw { status: 404 };
+    if (path.endsWith('/allocation-proposals') && options?.method === 'POST') return manualProposal;
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+  await userEvent.click(await screen.findByRole('button', { name: '手动创建分组' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    `/v1/admin/leagues/${leagueId}/seasons/${seasonId}/allocation-proposals`,
+    expect.objectContaining({ body: expect.objectContaining({ mode: 'MANUAL' }) })
+  ));
+  expect(await screen.findByText('手动分组版本 1')).toBeInTheDocument();
+});
+
+it('publishes an empty group and adds its first match later', async () => {
+  const stageId = '77777777-7777-4777-8777-777777777777';
+  const homeId = '88888888-8888-4888-8888-888888888888';
+  const awayId = '99999999-9999-4999-8999-999999999999';
+  const confirmedProposal = { ...proposal, status: 'CONFIRMED' as const,
+    confirmedAllocation: {
+      competitionId: '66666666-6666-4666-8666-666666666666', seasonVersion: 4,
+      seasonStatus: 'READY' as const,
+      decisions: [{ seasonEntryId: entryId, finalStageCode: 'CHAMPION_A', reason: null }],
+      stages: [{ id: stageId, stageCode: 'CHAMPION_A', displayName: '冠军 A 组',
+        participantCount: 2, matchCount: 0, status: 'DRAFT', version: 1 }]
+    }
+  };
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/seasons')) return { items: [season], nextCursor: null };
+    if (path.endsWith('/allocation-proposals/latest')) return confirmedProposal;
+    if (path.endsWith('/schedule/publish') && options?.method === 'POST') return {
+      id: stageId, competitionId: confirmedProposal.confirmedAllocation.competitionId,
+      status: 'PUBLISHED', version: 2, roundCount: 0, matchCount: 0, matches: []
+    };
+    if (path.endsWith('/participants')) return [
+      { id: homeId, displayName: '甲队', teamNumber: 7, ownerDisplayName: '甲玩家', teamName: '甲队' },
+      { id: awayId, displayName: '乙队', teamNumber: 8, ownerDisplayName: '乙玩家', teamName: '乙队' }
+    ];
+    if (path.endsWith('/matches') && options?.method === 'POST') return {
+      id: stageId, competitionId: confirmedProposal.confirmedAllocation.competitionId,
+      status: 'PUBLISHED', version: 3, roundCount: 1, matchCount: 1, matches: []
+    };
+    throw new Error(`unexpected ${path}`);
+  });
+  renderPage(request);
+  await userEvent.click(await screen.findByRole('button', { name: '发布组别（暂不安排比赛）' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    expect.stringContaining(`${stageId}/schedule/publish`),
+    expect.objectContaining({ body: { expectedStageVersion: 1, expectedSeasonVersion: 4 } })
+  ));
+  await userEvent.click(screen.getByRole('button', { name: '逐场添加比赛' }));
+  expect(screen.getByText('轮次 1 表示第 1 轮；同一轮每支球队只能参加一场比赛。')).toBeInTheDocument();
+  expect(screen.getByLabelText('轮次')).toHaveValue('1');
+  await userEvent.click(await screen.findByLabelText('主队'));
+  await userEvent.click(await screen.findByText('7号 · 甲玩家 · 甲队'));
+  await userEvent.click(screen.getByLabelText('客队'));
+  await userEvent.click((await screen.findAllByText('8号 · 乙玩家 · 乙队')).at(-1)!);
+  fireEvent.change(screen.getByLabelText('开赛时间（北京时间）'), { target: { value: '2026-10-21T20:00' } });
+  await userEvent.click(screen.getByRole('button', { name: '添加比赛' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    expect.stringContaining(`${stageId}/matches`),
+    expect.objectContaining({ body: expect.objectContaining({
+      expectedStageVersion: 2, roundNumber: 1, homeParticipantId: homeId, awayParticipantId: awayId,
+      plannedAt: '2026-10-21T12:00:00.000Z'
+    }) })
+  ));
+});
 
 it('shows the first-season champion-only hint and requires a reason for manual adjustment', async () => {
   const request = vi.fn(async (path: string) => {

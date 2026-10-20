@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused Prisma transaction doubles */
 import { randomUUID } from 'node:crypto';
 import { jest } from '@jest/globals';
 import { SeasonCalendarNoteService } from './season-calendar-note.service.js';

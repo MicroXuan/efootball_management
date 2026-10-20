@@ -2,7 +2,7 @@
   <loading-state wx:if="{{state === 'loading'}}" label="正在读取球员拍卖" />
   <view wx:elif="{{state === 'error'}}" class="state-card efm-empty-state"><text class="efm-empty-state__kicker">连接失败</text><text class="efm-empty-state__title">暂时无法读取拍卖</text><text class="efm-empty-state__copy">{{errorMessage}}</text><button class="outline-button efm-retry-button" bindtap="loadAuctions">重新加载</button></view>
   <block wx:else>
-    <view class="page-head"><view class="page-head__row"><view><text class="page-kicker">我的联赛</text><text class="page-title">球员拍卖</text></view><button class="sales-entry" bindtap="openSales">成交纪录 ›</button></view><text class="page-copy">每个联赛独立进行；进入大厅后由服务端统一裁定倒计时和出价。</text></view>
+    <view class="page-head"><view class="page-head__row"><view><text class="page-kicker">我的联赛</text><text class="page-title">球员拍卖</text></view><button class="sales-entry" bindtap="openSales">成交纪录 ›</button></view><text class="page-copy">可进入已结束的拍卖大厅查看每位球员的成交结果。</text></view>
     <view wx:if="{{!groups.length}}" class="state-card efm-empty-state"><text class="efm-empty-state__kicker">暂无拍卖</text><text class="efm-empty-state__title">当前没有可参与的拍卖</text><text class="efm-empty-state__copy">管理员发布小程序拍卖批次后会显示在这里。</text></view>
     <view wx:for="{{groups}}" wx:key="leagueId" class="league-group">
       <view class="group-head"><text class="group-name">{{item.leagueName}}</text><text class="group-count">{{item.items.length}} 个批次</text></view>

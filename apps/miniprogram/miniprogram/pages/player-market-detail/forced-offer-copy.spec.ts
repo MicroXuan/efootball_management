@@ -6,13 +6,15 @@ const application = { id: 'request-123', type: 'FORCED_TRANSFER', status: 'PENDI
   applicantTeam: { teamId: 'team-4', teamNumber: 4, name: '巴塞罗那', ownerAlias: '小新（潇洒）', logoUrl: null },
   sourceTeam: { teamId: 'team-3', teamNumber: 3, name: '阿贾克斯', ownerAlias: '嗷呜凶一个（tidus）', logoUrl: null } } as PlayerAcquisitionApplication
 
-it('copies the returned bid amount, application ID, both teams, and both player names', () => {
+it('copies the bid amount, both teams, and both player names without internal ID or review text', () => {
   const text = forcedOfferCopy(application, 'Raphaël Varane')
-  expect(text).toContain('request-123')
+  expect(text).not.toContain('request-123')
   expect(text).toContain('4号（巴塞罗那-小新（潇洒））')
   expect(text).toContain('3号（阿贾克斯-嗷呜凶一个（tidus））')
   expect(text).toContain('Raphaël Varane（拉斐尔·瓦拉内）')
   expect(text).toContain('本次强报报价 15000')
+  expect(text).not.toContain('待管理员审核')
+  expect(text).not.toContain('此金额是本次报价')
   expect(text).not.toContain('新标价')
 })
 

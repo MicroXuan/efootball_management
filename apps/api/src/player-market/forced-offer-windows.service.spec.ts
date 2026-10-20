@@ -1,7 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- focused Prisma transaction doubles */
 import { randomUUID } from 'node:crypto';
 import { jest } from '@jest/globals';
 import { ForcedOfferWindowsService } from './forced-offer-windows.service.js';
 import { AdminForcedOfferWindowsController } from './admin-forced-offer-windows.controller.js';
+import { Test } from '@nestjs/testing';
+import { PrismaService } from '../database/prisma.service.js';
+import { AdminAuthorizationService } from '../admin/admin-authorization.service.js';
+import { AuditLogService } from '../admin/audit-log.service.js';
+import { AdminMutationReceiptService } from '../admin/admin-mutation-receipt.service.js';
+import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
 
 describe('ForcedOfferWindowsService', () => {
   const adminId = randomUUID();
@@ -108,5 +115,31 @@ describe('ForcedOfferWindowsService', () => {
     const controller = new AdminForcedOfferWindowsController(service);
     expect((await controller.list({ id: adminId } as any, leagueId, seasonId)).items).toHaveLength(1);
     expect(authorization.requireLeagueManager).toHaveBeenCalledWith(adminId, leagueId);
+  });
+
+  it('stores an admin creation receipt against the admin account, not the user receipt table', async () => {
+    const row = { id: randomUUID(), seasonId, createdByAdminId: adminId, name: '第一轮强报',
+      startsAt: new Date('2027-01-01T00:00:00.000Z'), endsAt: new Date('2027-01-02T00:00:00.000Z'),
+      version: 1, createdAt: new Date(), updatedAt: new Date() };
+    const tx: any = {
+      adminMutationReceipt: { create: jest.fn(async () => ({ id: randomUUID() })), update: jest.fn(async () => ({})) },
+      $queryRaw: jest.fn(async () => []),
+      forcedOfferWindow: { findFirst: jest.fn(async () => null), create: jest.fn(async () => row) },
+    };
+    const prisma: any = {
+      leagueSeason: { findFirst: jest.fn(async () => ({ id: seasonId })) },
+      adminMutationReceipt: { findUnique: jest.fn(async () => null) },
+      mutationReceipt: { findUnique: jest.fn(async () => { throw new Error('ordinary user receipt selected'); }) },
+      $transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx)),
+    };
+    const module = await Test.createTestingModule({ providers: [
+      ForcedOfferWindowsService, AdminMutationReceiptService, MutationReceiptService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: AdminAuthorizationService, useValue: { requireLeagueManager: jest.fn(async () => ({})) } },
+      { provide: AuditLogService, useValue: { record: jest.fn(async () => ({})) } },
+    ] }).compile();
+    const service = module.get(ForcedOfferWindowsService);
+    await expect(service.create(adminId, leagueId, seasonId, period(), 'admin-key')).resolves.toMatchObject({ id: row.id });
+    expect(tx.adminMutationReceipt.create).toHaveBeenCalled();
   });
 });

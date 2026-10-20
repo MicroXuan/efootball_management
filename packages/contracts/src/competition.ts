@@ -279,6 +279,16 @@ export const PublishStageScheduleRequestSchema = z.object({
   expectedSeasonVersion: ExpectedVersionSchema
 });
 
+export const CreateStageMatchRequestSchema = z.object({
+  expectedStageVersion: ExpectedVersionSchema,
+  roundNumber: z.number().int().positive(),
+  homeParticipantId: ResourceIdSchema,
+  awayParticipantId: ResourceIdSchema,
+  plannedAt: TimestampSchema
+}).refine((value) => value.homeParticipantId !== value.awayParticipantId, {
+  path: ['awayParticipantId'], message: 'home and away teams must differ'
+});
+
 export const CupProposalStatusSchema = z.enum(['DRAFT', 'CONFIRMED', 'SUPERSEDED']);
 
 export const GenerateCupGroupProposalRequestSchema = z.object({
@@ -729,6 +739,7 @@ export type ReviewRegistrationRequest = z.input<typeof ReviewRegistrationRequest
 export type VersionedMutationRequest = z.input<typeof VersionedMutationRequestSchema>;
 export type GenerateStageScheduleRequest = z.infer<typeof GenerateStageScheduleRequestSchema>;
 export type PublishStageScheduleRequest = z.infer<typeof PublishStageScheduleRequestSchema>;
+export type CreateStageMatchRequest = z.infer<typeof CreateStageMatchRequestSchema>;
 export type GenerateCupGroupProposalRequest = z.infer<typeof GenerateCupGroupProposalRequestSchema>;
 export type ConfirmCupGroupProposalRequest = z.infer<typeof ConfirmCupGroupProposalRequestSchema>;
 export type CupGroupProposal = z.infer<typeof CupGroupProposalSchema>;

@@ -14,11 +14,16 @@
         <image wx:if="{{assets.ownerAvatarUrl}}" class="owner-avatar" src="{{assets.ownerAvatarUrl}}" mode="aspectFill" />
       </view>
       <view class="hero-copy">
-        <text class="kicker">球队资产</text>
-        <text class="title">{{assets.teamName}}</text>
+        <view class="hero-topline">
+          <text class="kicker">球队资产</text>
+          <text wx:if="{{assets.divisionCopy}}" class="division">{{assets.divisionCopy}}</text>
+        </view>
+        <view class="hero-name-row">
+          <text class="title">{{assets.teamName}}</text>
+          <text wx:if="{{assets.isOwner}}" class="owner-number">微信用户编号 {{assets.ownerPublicUserNo}}</text>
+        </view>
         <text class="identity">{{assets.identityCopy}}</text>
-        <text wx:if="{{assets.divisionCopy}}" class="division">{{assets.divisionCopy}}</text>
-        <text wx:if="{{assets.isOwner}}" class="owner-number">微信用户编号 {{assets.ownerPublicUserNo}}</text>
+        <button wx:if="{{assets.leagueId}}" class="team-directory-link" bindtap="openTeamDirectory">浏览联赛球队 ›</button>
       </view>
     </view>
 
@@ -28,15 +33,17 @@
       <view class="metric"><text>{{assets.playerValueCopy}}</text><label>球员总身价</label></view>
       <view class="metric"><text>{{assets.shellCopy}}</text><label>队壳价值</label></view>
     </view>
-    <button wx:if="{{assets.viewerTeamId && assets.seasonId}}" class="transfer-list-link" bindtap="openTransferList">查看我的协商转会 →</button>
     <view wx:if="{{errorMessage}}" class="release-error">{{errorMessage}}</view>
 
     <view class="roster-head">
-      <view>
+      <view class="roster-heading">
         <text class="section-index">球员资产</text>
-        <text class="section-title">阵容档案</text>
+        <view class="roster-title-line">
+          <text class="section-title">阵容档案</text>
+          <text class="roster-count">{{rosterPlayers.length}} 人</text>
+        </view>
       </view>
-      <text class="roster-count">{{rosterPlayers.length}} 人</text>
+      <button wx:if="{{assets.viewerTeamId && assets.seasonId}}" class="transfer-list-link" bindtap="openTransferList">我的协商转会 →</button>
     </view>
 
     <view class="roster-tabs efm-equal-tabs">
@@ -61,6 +68,7 @@
           <view wx:else class="player-image image-placeholder">{{item.position || '—'}}</view>
           <view class="player-copy">
             <text class="player-name">{{item.playerName}}</text>
+            <view wx:if="{{item.tagLabels.length}}" class="player-tags"><text wx:for="{{item.tagLabels}}" wx:for-item="tag" wx:key="*this" class="player-tag">{{tag}}</text></view>
             <text wx:if="{{item.forcedTransferLabel}}" class="forced-transfer-badge">本赛季强报</text>
             <text class="card-copy">{{item.positionCopy}}</text>
             <text class="origin-copy">{{item.originCopy}}</text>
@@ -80,30 +88,39 @@
           <view><label>AT</label><text>{{item.atCopy}}</text></view>
           <view><label>工资</label><text>{{item.salaryCopy}}</text></view>
         </view>
-        <view wx:if="{{assets.isOwner && selectedStatus === 'ACTIVE'}}" class="release-row">
-          <text>{{item.releaseEnabled ? '下放后立即释放 1 个阵容名额' : item.releaseDisabledCopy}}</text>
-          <button class="release-button" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmRelease" loading="{{releasingOwnershipId === item.ownershipId}}" disabled="{{!item.releaseEnabled || !!releasingOwnershipId}}">下放</button>
-        </view>
         <view wx:if="{{assets.isOwner && selectedStatus === 'ACTIVE'}}" class="asset-actions">
-          <button class="asset-action" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmDisappearance" disabled="{{!item.disappearanceEnabled || submittingRequest}}">{{item.pendingDisappearance ? '消失申请待审核' : '申请标记消失'}}</button>
-          <button class="asset-action" data-player-id="{{item.playerId}}" data-player-name="{{item.playerName}}" bindtap="openTransfer" disabled="{{!item.transferVisible || submittingRequest}}">发起转会</button>
+          <button class="asset-action asset-action--release" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmRelease" loading="{{releasingOwnershipId === item.ownershipId}}" disabled="{{!item.releaseEnabled || !!releasingOwnershipId}}">下放</button>
+          <button class="asset-action" data-ownership-id="{{item.ownershipId}}" data-player-name="{{item.playerName}}" bindtap="confirmDisappearance" disabled="{{!item.disappearanceEnabled || submittingRequest}}">{{item.pendingDisappearance ? '消失申请待审核' : '标记消失'}}</button>
         </view>
+        <text wx:if="{{assets.isOwner && selectedStatus === 'ACTIVE' && !item.releaseEnabled && item.releaseDisabledCopy}}" class="release-disabled">{{item.releaseDisabledCopy}}</text>
         <view wx:if="{{!assets.isOwner && selectedStatus === 'ACTIVE' && item.transferVisible}}" class="asset-actions">
-          <button class="asset-action" data-player-id="{{item.playerId}}" data-player-name="{{item.playerName}}" bindtap="openTransfer" disabled="{{submittingRequest}}">协商转会</button>
+          <button class="asset-action" data-player-id="{{item.playerId}}" data-player-name="{{item.playerName}}" bindtap="openTransfer" loading="{{transferLoadingPlayerId === item.playerId}}" disabled="{{!!transferLoadingPlayerId || submittingRequest}}">申请转会</button>
           <button wx:if="{{item.forcedVisible}}" class="asset-action asset-action--strong" data-player-id="{{item.playerId}}" bindtap="openForcedOffer">发起强报</button>
         </view>
       </view>
     </view>
+    <view wx:if="{{disappearanceDraft}}" class="disappearance-shade">
+      <view class="disappearance-dialog" role="dialog" aria-modal="true">
+        <text class="disappearance-kicker">球员状态申请</text>
+        <text class="disappearance-title">标记消失</text>
+        <text class="disappearance-player">{{disappearanceDraft.playerName}}</text>
+        <text class="disappearance-copy">提交后球员仍留在一线阵容。管理员审核通过后，球员才会移入已消失。</text>
+        <text wx:if="{{errorMessage}}" class="transfer-error">{{errorMessage}}</text>
+        <view class="disappearance-buttons"><button bindtap="closeDisappearance" disabled="{{submittingRequest}}">取消</button><button class="disappearance-submit" bindtap="submitDisappearanceDraft" loading="{{submittingRequest}}" disabled="{{submittingRequest}}">提交审核</button></view>
+      </view>
+    </view>
     <view wx:if="{{transferCandidate}}" class="transfer-shade">
       <view class="transfer-composer">
-        <text class="transfer-title">协商转会 · {{transferPlayerName}}</text>
-        <text class="transfer-hint">双方确认后仍需管理员终审；申请阶段不会转移球员或扣除资金。</text>
-        <text class="transfer-label">转入球队</text>
-        <picker range="{{transferTargets}}" range-key="teamName" value="{{transferTargetIndex}}" bindchange="onTransferTargetChange"><view class="transfer-field">{{transferTargets[transferTargetIndex].teamName}} ⌄</view></picker>
+        <text class="transfer-title">申请转会</text>
+        <text class="transfer-player">{{transferPlayerName}} · {{transferCandidate.sourceTeamName}}</text>
+        <text class="transfer-hint">原球队确认、管理员终审通过后，球员才会转入你的球队并记账。</text>
+        <text class="transfer-label">转入我的球队</text>
+        <view class="transfer-field transfer-field--fixed">{{transferTargets[0].teamName}}</view>
         <text class="transfer-label">本次协商报价</text>
         <input class="transfer-field" type="number" value="{{transferAmount}}" placeholder="输入报价" bindinput="onTransferAmountInput" />
         <text class="transfer-label">备注（选填）</text>
         <input class="transfer-field" value="{{transferReason}}" maxlength="512" placeholder="补充协商说明" bindinput="onTransferReasonInput" />
+        <text wx:if="{{errorMessage}}" class="transfer-error">{{errorMessage}}</text>
         <view class="transfer-buttons"><button bindtap="closeTransfer" disabled="{{submittingRequest}}">取消</button><button class="transfer-submit" bindtap="submitTransfer" loading="{{submittingRequest}}" disabled="{{!transferAmount || submittingRequest}}">发送给对方确认</button></view>
       </view>
     </view>

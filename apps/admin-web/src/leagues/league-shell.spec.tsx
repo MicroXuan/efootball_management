@@ -80,17 +80,30 @@ describe('role-aware administration navigation', () => {
     expect(title.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(navigation).toHaveClass('league-heading-nav');
     for (const name of [
-      '用户与球队', '赛季管理', '分组与赛程', '杯赛中心', '窗口设置',
-      '审核', '财务', '球员拍卖',
+      '球队管理', '赛季管理', '赛程管理', '杯赛中心', '窗口设置',
+      '审核模块', '工资规则', '财务模块', '球员拍卖',
     ]) {
       expect(screen.getByRole('link', { name }).querySelector('.admin-icon')).toBeInTheDocument();
     }
   });
 
   it.each([
+    ['salary-rules', '工资规则', '/salary-rules'],
+    ['ledger', '财务模块', '/ledger'],
+  ])('opens %s as a top-level tab without secondary navigation', async (path, label, suffix) => {
+    renderLeague(path);
+    const topNav = await screen.findByRole('navigation', { name: '联赛工作区导航' });
+    expect(screen.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', `/leagues/${leagueId}${suffix}`);
+    expect(topNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+    expect(screen.queryByRole('navigation', { name: '联赛分组导航' })).not.toBeInTheDocument();
+  });
+
+  it.each([
     ['valuation-windows', '窗口设置', '身价窗口'],
-    ['disappearance-requests', '审核', '消失审核'],
-    ['ledger', '财务', '财务与交易'],
+    ['disappearance-requests', '审核模块', '消失审核'],
+    ['player-market', '审核模块', '普通购买'],
+    ['forced-player-market', '审核模块', '强报队列'],
     ['nomination-windows/w1/candidates', '窗口设置', '提名期'],
   ])('selects %s in the top and secondary navigation', async (path, topLabel, childLabel) => {
     renderLeague(path);

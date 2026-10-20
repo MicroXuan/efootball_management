@@ -20,6 +20,7 @@ export const TeamAssetPlayerSchema = z.object({
   playerName: z.string().min(1),
   cardName: z.string().min(1),
   cardImageUrl: z.string().nullable(),
+  tags: z.array(z.enum(['FIXED_B'])).optional(),
   position: z.string().nullable(),
   nationality: z.string().nullable(),
   club: z.string().nullable(),
@@ -75,7 +76,7 @@ export const PublicLeagueTeamDirectorySchema = z.object({
 });
 
 export const PublicTeamAssetPlayerSchema = TeamAssetPlayerSchema.pick({
-  playerId: true, playerName: true, cardName: true, cardImageUrl: true, position: true,
+  playerId: true, playerName: true, cardName: true, cardImageUrl: true, tags: true, position: true,
   nationality: true, club: true, age: true, heightCm: true, preferredFoot: true,
   atRating: true, acquiredAt: true, salaryMinor: true, rosterStatus: true,
   currentValueMinor: true, lastEffectiveAt: true
@@ -122,8 +123,10 @@ export const LeagueTransactionListItemSchema = z.object({
   playerName: z.string().min(1),
   sourceLeagueTeamId: ResourceIdSchema.nullable(),
   sourceTeamName: z.string().nullable(),
+  sourceTeamNumber: z.number().int().nonnegative().nullable().optional(),
   targetLeagueTeamId: ResourceIdSchema.nullable(),
   targetTeamName: z.string().nullable(),
+  targetTeamNumber: z.number().int().nonnegative().nullable().optional(),
   amountMinor: ValuationMoneyMinorSchema.nullable(),
   valuationSnapshotMinor: ValuationMoneyMinorSchema.nullable(),
   transactionFeeMinor: ValuationMoneyMinorSchema.nullable(),
@@ -136,7 +139,8 @@ export const LeagueTransactionListItemSchema = z.object({
 
 export const LeagueTransactionListResponseSchema = z.object({
   items: z.array(LeagueTransactionListItemSchema),
-  nextCursor: z.string().nullable()
+  nextCursor: z.string().nullable(),
+  teamId: ResourceIdSchema.nullable().optional()
 });
 
 export const TeamFinanceSummarySchema = z.object({

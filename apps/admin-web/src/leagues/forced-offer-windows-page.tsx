@@ -95,7 +95,7 @@ export function ForcedOfferWindowsPage({ api = adminApi }: { api?: AdminApi }) {
       <Typography.Paragraph type="secondary">强报期独立于转会窗口；截止后不能新提交或修改报价，已提交申请仍可审核。所有时间均为北京时间。</Typography.Paragraph>
       {error && <Alert role="alert" type="error" showIcon title={error} action={<Button onClick={() => void load()}>重试</Button>} />}
       <Select aria-label="选择赛季" value={seasonId || undefined} onChange={(value) => { setSeasonId(value); setEditing(null); setFields(empty); }} options={seasons.map((season) => ({ value: season.id, label: season.displayName }))} />
-      <Table loading={loading} pagination={false} rowKey="id" scroll={{ x: 620 }} dataSource={windows}
+      <Table loading={loading} pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} rowKey="id" scroll={{ x: 620 }} dataSource={windows}
         locale={{ emptyText: '暂无强报期' }} columns={[
           { title: '名称', dataIndex: 'name' },
           { title: '开始（北京时间）', dataIndex: 'startsAt', render: (value: string) => displayTime(value) },

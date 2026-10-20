@@ -56,7 +56,7 @@
     <view class="action-center-entry" bindtap="openActionCenter" role="button">
       <view class="action-center-entry__marker">待</view>
       <view class="action-center-entry__copy">
-        <view class="action-center-entry__top"><text class="action-center-entry__title">待办中心</text><text class="action-center-entry__count">{{actionCenter.attentionCount}}</text></view>
+        <view class="action-center-entry__top"><text class="action-center-entry__title">待办中心</text><text wx:if="{{actionCenter.attentionCount > 0}}" class="action-center-entry__count">{{actionCenter.attentionCount}}</text></view>
         <text class="action-center-entry__detail">{{actionCenter.attentionCount ? '跨联赛待处理与状态更新' : '当前没有需要关注的业务'}}</text>
         <view class="action-center-entry__tags"><text wx:if="{{actionCenter.actionRequiredCount}}">待处理 {{actionCenter.actionRequiredCount}}</text><text wx:if="{{actionCenter.auctionCount}}">拍卖 {{actionCenter.auctionCount}}</text></view>
       </view>
@@ -69,10 +69,10 @@
         <text class="quick-actions__mark">MATCH DESK</text>
       </view>
       <view class="quick-actions__grid">
-        <view class="quick-action" bindtap="openMyMatches" role="button">
-          <text class="quick-action__marker">赛</text>
-          <text class="quick-action__title">我的赛程</text>
-          <text class="quick-action__detail">待赛与结果</text>
+        <view class="quick-action" bindtap="openMyLeagues" role="button">
+          <text class="quick-action__marker">联</text>
+          <text class="quick-action__title">我的联赛</text>
+          <text class="quick-action__detail">查看参赛联赛</text>
         </view>
         <view class="quick-action" bindtap="openPlayerAuctions" role="button">
           <text class="quick-action__marker">拍</text>

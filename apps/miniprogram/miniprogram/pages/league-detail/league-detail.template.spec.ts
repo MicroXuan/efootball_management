@@ -94,10 +94,39 @@ describe('league detail module cards', () => {
     expect(page).toContain('seasonId=')
   })
 
+  it('keeps the schedule controls shrinkable inside their grid card', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.wxss'), 'utf8')
+    const linksRule = styles.match(/\.workspace-schedule-links\s*\{([^}]*)\}/)?.[1] ?? ''
+    const linkRule = styles.match(/\.schedule-link\s*\{([^}]*)\}/)?.[1] ?? ''
+
+    expect(linksRule).toMatch(/min-width:\s*0/)
+    expect(linkRule).toMatch(/align-self:\s*stretch/)
+    expect(linkRule).not.toMatch(/width:\s*100%/)
+    expect(markup).toMatch(/<view class="schedule-link" bindtap="openFixtures" role="button">/)
+    expect(markup).toMatch(/<view class="schedule-link" bindtap="openSeasonCalendar" role="button">/)
+    expect(markup).not.toMatch(/<button class="schedule-link"/)
+  })
+
   it('shows the team identity once and gives rank and fixtures distinct dashboard cards', () => {
     expect(markup).not.toContain('class="workspace-title">{{workspaceView.teamName}}')
     expect(markup).toContain('class="workspace-title">赛季工作台</text>')
     expect(markup).toContain('class="workspace-metric workspace-metric--rank"')
     expect(markup).toContain('class="workspace-schedule-links"')
+  })
+
+  it('shows a clear waiting state until a rank exists', () => {
+    expect(markup).toContain('wx:if="{{workspaceView.hasRank}}" class="workspace-rank-row"')
+    expect(markup).toContain('wx:else class="workspace-rank-empty">等待排名</text>')
+    expect(markup).toContain('{{workspaceView.rankMeta}}')
+  })
+
+  it('places the workbench title directly in its heading without the redundant league eyebrow', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'miniprogram/pages/league-detail/index.wxss'), 'utf8')
+    const titleRule = styles.match(/\.workspace-title\s*\{([^}]*)\}/)?.[1] ?? ''
+
+    expect(markup).toMatch(/<view class="workspace-head">\s*<text class="workspace-title">赛季工作台<\/text>/)
+    expect(markup).not.toContain('class="section-kicker">我的联赛</text>')
+    expect(titleRule).not.toMatch(/margin-top:\s*9rpx/)
+    expect(markup).toContain('class="workspace-division"')
   })
 })

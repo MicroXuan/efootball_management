@@ -109,7 +109,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .state-title { margin-top: 18rpx; font-size: 32rpx; font-weight: 800; }
 .outline-button { min-height: 76rpx; margin: 26rpx 0 0; padding: 0 26rpx; font-size: 23rpx; font-weight: 750; }
 .workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
-.workspace-title { display: block; margin-top: 9rpx; font-size: 34rpx; font-weight: 850; }
+.workspace-title { display: block; font-size: 34rpx; font-weight: 850; }
 .workspace-division { padding: 10rpx 15rpx; border: 2rpx solid #546b37; border-radius: 18rpx; background: #202c25; color: #d9efac; font-size: 18rpx; font-weight: 800; }
 .workspace-metrics { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14rpx; margin-top: 26rpx; }
 .workspace-metrics > view { min-width: 0; min-height: 164rpx; box-sizing: border-box; display: flex; flex-direction: column; padding: 22rpx; border: 2rpx solid #2d393f; border-radius: 18rpx; background: #1c262b; }
@@ -118,12 +118,12 @@ page { background: #0e1417; color: #f4f7f8; }
 .workspace-metric__label,
 .workspace-metric__meta { display: block; color: #aab5ba; font-size: 17rpx; }
 .workspace-rank-row { display: flex; align-items: center; gap: 10rpx; }
+.workspace-rank-empty { display: block; margin-top: 14rpx; color: #9caaad; font-size: 25rpx; font-weight: 750; }
 .workspace-rank { display: block; margin-top: 8rpx; color: #b6f13a; font-size: 52rpx; font-weight: 900; line-height: 1; }
 .workspace-rank-notice { margin-top: 10rpx; padding: 4rpx 8rpx; border: 1rpx solid #6d7c56; border-radius: 8rpx; color: #d9efac; background: #202c25; font-size: 15rpx; font-weight: 750; }
 .workspace-metric__meta { margin-top: auto; padding-top: 10rpx; line-height: 1.4; }
-.workspace-schedule-links { display: flex; flex-direction: column; gap: 8rpx; margin-top: 12rpx; }
-.schedule-link { display: flex; align-items: center; justify-content: space-between; gap: 6rpx; width: 100%; min-width: 0; min-height: 53rpx; box-sizing: border-box; margin: 0; padding: 0 12rpx; border: 1rpx solid #4a5a50; border-radius: 11rpx; color: #e7efd8; background: #202c29; font-size: 19rpx; font-weight: 750; line-height: 1.2; text-align: left; }
-.schedule-link::after { border: 0; }
+.workspace-schedule-links { display: flex; flex-direction: column; min-width: 0; gap: 8rpx; margin-top: 12rpx; }
+.schedule-link { display: flex; align-self: stretch; align-items: center; justify-content: space-between; gap: 6rpx; min-width: 0; min-height: 53rpx; box-sizing: border-box; margin: 0; padding: 0 12rpx; border: 1rpx solid #4a5a50; border-radius: 11rpx; color: #e7efd8; background: #202c29; font-size: 19rpx; font-weight: 750; line-height: 1.2; text-align: left; }
 .schedule-link text { flex: none; color: #b6f13a; font-size: 27rpx; line-height: 1; }
 .schedule-link:active { border-color: #7eaa28; background: #27392a; }
 

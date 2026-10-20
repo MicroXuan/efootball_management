@@ -78,7 +78,8 @@ it('renames a current non-draft season without exposing locked timeline fields',
 
   const row = (await screen.findByRole('cell', { name: '经营验收赛季' })).closest('tr') as HTMLElement;
   await userEvent.click(within(row).getByRole('button', { name: '修改名称' }));
-  const dialog = screen.getByRole('dialog', { name: '修改赛季名称' });
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('修改赛季名称')).toBeInTheDocument();
   const input = within(dialog).getByLabelText('新赛季名称');
   await userEvent.clear(input);
   await userEvent.type(input, '经营正式赛季');
@@ -108,7 +109,8 @@ it('keeps the season form hidden until the top-level create action is used', asy
   await screen.findByRole('heading', { name: 'S1' });
   expect(screen.queryByLabelText('赛季名称')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '新建赛季' }));
-  expect(screen.getByRole('dialog', { name: '新建赛季' })).toBeInTheDocument();
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('新建赛季')).toBeInTheDocument();
   expect(screen.getByLabelText('赛季名称')).toBeInTheDocument();
 });
 
@@ -147,7 +149,8 @@ it('shows only teams not yet enrolled inside the add-team dialog', async () => {
   </Routes></MemoryRouter>);
 
   await userEvent.click(await screen.findByRole('button', { name: '添加球队' }));
-  const dialog = screen.getByRole('dialog', { name: '添加球队' });
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('添加球队')).toBeInTheDocument();
   expect(within(dialog).queryByText(/上海申花/)).not.toBeInTheDocument();
   expect(within(dialog).getByRole('checkbox', { name: /北京国安/ })).not.toBeChecked();
 });

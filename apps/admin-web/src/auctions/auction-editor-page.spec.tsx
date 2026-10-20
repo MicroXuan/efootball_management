@@ -18,7 +18,7 @@ it('searches a player, adds pricing, and exposes keyboard ordering controls', as
   await userEvent.click(screen.getByRole('button', { name: '搜索' }));
   await userEvent.click(await screen.findByRole('button', { name: /添加车范根/ }));
   expect(screen.getByLabelText('上移车范根')).toBeInTheDocument();
-  expect(screen.getByText('⭐50⭐')).toBeInTheDocument();
+  expect(screen.getByText('50 资金')).toBeInTheDocument();
 });
 
 it('lists only enabled auction-capable groups', async () => {
