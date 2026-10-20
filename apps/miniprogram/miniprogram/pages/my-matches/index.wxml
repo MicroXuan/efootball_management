@@ -9,16 +9,21 @@
       <view class="season-picker-row"><text>查看赛季</text><text>{{seasonLabels[selectedSeasonIndex]}}⌄</text></view>
     </picker>
 
-    <view class="team-search">
+    <view wx:if="{{fixtureScope === 'ALL'}}" class="team-search">
       <input value="{{teamInput}}" placeholder="搜索队伍名称或编号" confirm-type="search" bindinput="onTeamInput" bindconfirm="search" />
       <button bindtap="search">搜索</button>
     </view>
 
     <view class="status-filter-bar">
-      <button class="status-filter {{status === 'ALL' ? 'status-filter-active' : ''}}" data-status="ALL" bindtap="changeStatus">全部</button>
-      <button class="status-filter {{status === 'UPCOMING' ? 'status-filter-active' : ''}}" data-status="UPCOMING" bindtap="changeStatus">未开始</button>
-      <button class="status-filter {{status === 'FINISHED' ? 'status-filter-active' : ''}}" data-status="FINISHED" bindtap="changeStatus">已结束</button>
+      <button class="status-filter {{fixtureScope === 'ALL' && status === 'ALL' ? 'status-filter-active' : ''}}" data-status="ALL" bindtap="changeStatus">全部</button>
+      <button class="status-filter {{fixtureScope === 'ALL' && status === 'UPCOMING' ? 'status-filter-active' : ''}}" data-status="UPCOMING" bindtap="changeStatus">未开始</button>
+      <button class="status-filter {{fixtureScope === 'ALL' && status === 'FINISHED' ? 'status-filter-active' : ''}}" data-status="FINISHED" bindtap="changeStatus">已结束</button>
+      <button class="status-filter {{fixtureScope === 'MINE' ? 'status-filter-active' : ''}}" bindtap="showMine">我的赛程</button>
     </view>
+    <picker wx:if="{{fixtureScope === 'MINE' && mineTeamLabels.length > 1}}" class="mine-picker" mode="selector" range="{{mineTeamLabels}}" value="{{selectedMineTeamIndex}}" bindchange="changeMineTeam">
+      <view class="mine-picker-row"><text>查看球队</text><text>{{mineTeamLabels[selectedMineTeamIndex]}}⌄</text></view>
+    </picker>
+    <view wx:if="{{fixtureScope === 'MINE' && mineTeamLabels.length === 1}}" class="mine-picker-row"><text>我的球队</text><text>{{mineTeamLabels[0]}}</text></view>
   </view>
 
   <loading-state wx:if="{{loading && items.length === 0}}" label="正在整理赛程" />
@@ -28,10 +33,15 @@
     <text class="efm-empty-state__copy">{{errorMessage}}</text>
     <button class="outline-button efm-retry-button" bindtap="retry">重新加载</button>
   </view>
+  <view wx:elif="{{fixtureScope === 'MINE' && !mineTeams.length}}" class="state-card efm-empty-state">
+    <text class="efm-empty-state__kicker">我的赛程</text>
+    <text class="efm-empty-state__title">当前联赛暂无我的球队</text>
+    <text class="efm-empty-state__copy">由联赛管理员确认球队和赛季资格后，这里会显示你的比赛。</text>
+  </view>
   <view wx:elif="{{!loading && items.length === 0}}" class="state-card efm-empty-state">
     <text class="efm-empty-state__kicker">暂无赛程</text>
     <text class="efm-empty-state__title">没有符合条件的比赛</text>
-    <text class="efm-empty-state__copy">可以更换队伍关键词、比赛状态或赛季后再试。</text>
+    <text class="efm-empty-state__copy">{{fixtureScope === 'MINE' ? '可以切换球队或赛季后再试。' : '可以更换队伍关键词、比赛状态或赛季后再试。'}}</text>
   </view>
   <view wx:else class="match-list">
     <view wx:for="{{items}}" wx:key="matchId" class="match-card">
