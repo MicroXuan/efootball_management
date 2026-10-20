@@ -10,7 +10,7 @@ export function LeagueShell() {
   const { identity } = useAdminSession();
   const grant = identity?.leagueGrants.find((item) => item.leagueId === leagueId);
   if (!identity?.platformAdmin && !grant) return <Alert showIcon type="error" title="你没有此联赛的管理权限" />;
-  const activeKey = location.pathname.includes('/player-market') ? 'player-market' : location.pathname.includes('/auctions') ? 'auctions' : location.pathname.includes('/wechat-bot') ? 'wechat-bot' : location.pathname.includes('/cups') ? 'cups' : location.pathname.includes('/allocation') ? 'allocation' : location.pathname.includes('/valuation-reviews') ? 'valuation-reviews' : location.pathname.includes('/valuation-windows') ? 'valuation-windows' : location.pathname.includes('/seasons') ? 'seasons' : location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams';
+  const activeKey = location.pathname.includes('/nomination-windows') ? 'nomination-windows' : location.pathname.includes('/player-market') ? 'player-market' : location.pathname.includes('/auctions') ? 'auctions' : location.pathname.includes('/wechat-bot') ? 'wechat-bot' : location.pathname.includes('/cups') ? 'cups' : location.pathname.includes('/allocation') ? 'allocation' : location.pathname.includes('/valuation-reviews') ? 'valuation-reviews' : location.pathname.includes('/valuation-windows') ? 'valuation-windows' : location.pathname.includes('/seasons') ? 'seasons' : location.pathname.includes('/salary-rules') ? 'salary' : location.pathname.includes('/transfer-windows') ? 'windows' : location.pathname.includes('/ledger') ? 'ledger' : 'teams';
   return <div className="league-workspace">
     <div className="page-heading">
       <div className="league-heading-copy"><span className="section-kicker">联赛工作区</span><h1>{grant?.leagueName ?? '联赛工作区'}</h1><p>管理球队、赛季、赛果与联赛规则。</p></div>
@@ -22,6 +22,7 @@ export function LeagueShell() {
         { key: 'salary', label: <Link aria-current={activeKey === 'salary' ? 'page' : undefined} to={`/leagues/${leagueId}/salary-rules`}><AdminIcon name="salary" />工资规则</Link> },
         { key: 'windows', label: <Link aria-current={activeKey === 'windows' ? 'page' : undefined} to={`/leagues/${leagueId}/transfer-windows`}><AdminIcon name="transfer" />转会窗口</Link> },
         { key: 'valuation-windows', label: <Link aria-current={activeKey === 'valuation-windows' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-windows`}><AdminIcon name="valuation" />身价窗口</Link> },
+        { key: 'nomination-windows', label: <Link aria-current={activeKey === 'nomination-windows' ? 'page' : undefined} to={`/leagues/${leagueId}/nomination-windows`}><AdminIcon name="review" />提名期</Link> },
         { key: 'valuation-reviews', label: <Link aria-current={activeKey === 'valuation-reviews' ? 'page' : undefined} to={`/leagues/${leagueId}/valuation-reviews`}><AdminIcon name="review" />身价审核</Link> },
         { key: 'player-market', label: <Link aria-current={activeKey === 'player-market' ? 'page' : undefined} to={`/leagues/${leagueId}/player-market`}><AdminIcon name="market" />球员申请</Link> },
         { key: 'ledger', label: <Link aria-current={activeKey === 'ledger' ? 'page' : undefined} to={`/leagues/${leagueId}/ledger`}><AdminIcon name="finance" />财务与交易</Link> },

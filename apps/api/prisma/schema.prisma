@@ -728,6 +728,7 @@ model AdminAccount {
   mutationReceipts               AdminMutationReceipt[]
   createdSalaryRules             LeagueSalaryRuleVersion[]
   createdTransferWindows         TransferWindow[]
+  createdNominationWindows       NominationWindow[]
   rosterTransactions             RosterTransaction[]                 @relation("RosterTransactionAdminCreator")
   createdValuationWindows        ValuationWindow[]                   @relation("ValuationWindowCreator")
   createdValuationRules          ValuationWindowRuleVersion[]        @relation("ValuationRuleCreator")
@@ -1057,6 +1058,7 @@ model LeagueSeason {
   entries                   SeasonEntry[]
   statusHistory             LeagueSeasonStatusHistory[]
   transferWindows           TransferWindow[]
+  nominationWindows         NominationWindow[]
   rosterTransactions        RosterTransaction[]
   valuationWindows          ValuationWindow[]
   financeLedgerEntries      FinanceLedgerEntry[]
@@ -1129,6 +1131,24 @@ model TransferWindow {
   @@index([seasonId, startsAt, endsAt], map: "transfer_windows_timeline_idx")
   @@index([createdByAdminId], map: "transfer_windows_creator_idx")
   @@map("transfer_windows")
+}
+
+model NominationWindow {
+  id               String        @id @default(uuid()) @db.Char(36)
+  seasonId         String        @map("season_id") @db.Char(36)
+  startsAt         DateTime      @map("starts_at")
+  endsAt           DateTime      @map("ends_at")
+  perTeamLimit     Int           @map("per_team_limit") @db.UnsignedSmallInt
+  createdByAdminId String        @map("created_by_admin_id") @db.Char(36)
+  version          Int           @default(1) @db.UnsignedInt
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  season           LeagueSeason  @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminAccount  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([seasonId, startsAt, endsAt], map: "nomination_windows_season_timeline_idx")
+  @@index([createdByAdminId], map: "nomination_windows_creator_idx")
+  @@map("nomination_windows")
 }
 
 model LeaguePlayerOwnership {

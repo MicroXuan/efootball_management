@@ -30,7 +30,7 @@ export class SeasonCalendarService {
     }
     const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
     const monthEnd = new Date(Date.UTC(year, monthNumber, 1));
-    const [fixtures, transfers, valuations] = await Promise.all([
+    const [fixtures, transfers, valuations, nominations] = await Promise.all([
       this.prisma.competitionMatch.findMany({
         where: {
           stage: { status: 'PUBLISHED', competition: { seasonId } },
@@ -49,6 +49,10 @@ export class SeasonCalendarService {
       this.prisma.valuationWindow.findMany({
         where: { seasonId, startsAt: { lt: monthEnd }, endsAt: { gt: monthStart } },
         select: { id: true, name: true, startsAt: true, endsAt: true, closedAt: true }
+      }),
+      this.prisma.nominationWindow.findMany({
+        where: { seasonId, startsAt: { lt: monthEnd }, endsAt: { gt: monthStart } },
+        select: { id: true, startsAt: true, endsAt: true }
       })
     ]);
     const items: SeasonAgendaItem[] = [
@@ -75,7 +79,13 @@ export class SeasonCalendarService {
           startsAt: window.startsAt.toISOString(), endsAt: endsAt.toISOString(),
           status: this.status(window.startsAt, endsAt, now), targetPath: null
         };
-      })
+      }),
+      ...nominations.map((window) => ({
+        id: window.id, kind: 'NOMINATION' as const, title: '球员提名期',
+        startsAt: window.startsAt.toISOString(), endsAt: window.endsAt.toISOString(),
+        status: this.status(window.startsAt, window.endsAt, now),
+        targetPath: null
+      }))
     ];
     items.sort((left, right) => left.startsAt.localeCompare(right.startsAt) || left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id));
     return { month, items };

@@ -26,6 +26,7 @@ const TransferWindowsPage = lazy(() => import('./leagues/transfer-windows-page')
 const RosterPage = lazy(() => import('./rosters/roster-page').then((module) => ({ default: module.RosterPage })));
 const LedgerPage = lazy(() => import('./rosters/ledger-page').then((module) => ({ default: module.LedgerPage })));
 const ValuationWindowsPage = lazy(() => import('./valuations/valuation-windows-page').then((module) => ({ default: module.ValuationWindowsPage })));
+const NominationWindowsPage = lazy(() => import('./leagues/nomination-windows-page').then((module) => ({ default: module.NominationWindowsPage })));
 const ValuationReviewsPage = lazy(() => import('./valuations/valuation-reviews-page').then((module) => ({ default: module.ValuationReviewsPage })));
 const WechatBotPage = lazy(() => import('./leagues/wechat-bot-page').then((module) => ({ default: module.WechatBotPage })));
 const AuctionListPage = lazy(() => import('./auctions/auction-list-page').then((module) => ({ default: module.AuctionListPage })));
@@ -75,6 +76,7 @@ export function App() {
               <Route path="transfer-windows" element={deferred(<TransferWindowsPage api={adminApi} />)} />
               <Route path="ledger" element={deferred(<LedgerPage api={adminApi} />)} />
               <Route path="valuation-windows" element={deferred(<ValuationWindowsPage api={adminApi} />)} />
+              <Route path="nomination-windows" element={deferred(<NominationWindowsPage api={adminApi} />)} />
               <Route path="valuation-reviews" element={deferred(<ValuationReviewsPage api={adminApi} />)} />
               <Route path="player-market" element={deferred(<PlayerMarketReviewPage api={adminApi} />)} />
               <Route path="wechat-bot" element={deferred(<WechatBotPage api={adminApi} />)} />

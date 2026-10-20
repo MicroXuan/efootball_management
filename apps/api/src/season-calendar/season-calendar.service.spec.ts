@@ -18,6 +18,9 @@ function harness() {
     ]) },
     valuationWindow: { findMany: jest.fn(async () => [
       { id: 'valuation-1', name: '身价调整', startsAt: new Date('2026-10-01T00:00:00.000Z'), endsAt: new Date('2026-10-10T00:00:00.000Z'), closedAt: null }
+    ]) },
+    nominationWindow: { findMany: jest.fn(async () => [
+      { id: 'nomination-1', startsAt: new Date('2026-10-15T00:00:00.000Z'), endsAt: new Date('2026-10-18T00:00:00.000Z') }
     ]) }
   };
   const visibility = { requireVisible: jest.fn(async () => 'league-1'), notFound: () => new LeagueError('LEAGUE_NOT_FOUND', 'not found', 404) };
@@ -29,9 +32,10 @@ describe('SeasonCalendarService', () => {
     const { service, prisma } = harness();
     const result = await service.list('user-1', 'league-1', 'season-1', '2026-10', now);
     expect(result.items.map((item) => [item.kind, item.status])).toEqual([
-      ['VALUATION', 'ENDED'], ['TRANSFER', 'ACTIVE'], ['FIXTURE', 'UPCOMING']
+      ['VALUATION', 'ENDED'], ['NOMINATION', 'ENDED'], ['TRANSFER', 'ACTIVE'], ['FIXTURE', 'UPCOMING']
     ]);
-    expect(result.items[2]).toMatchObject({ title: '阿哈尔 vs 阿贾克斯', targetPath: expect.stringContaining('/pages/my-matches/index') });
+    expect(result.items[3]).toMatchObject({ title: '阿哈尔 vs 阿贾克斯', targetPath: expect.stringContaining('/pages/my-matches/index') });
+    expect(result.items[1]).toMatchObject({ title: '球员提名期', targetPath: null });
     expect(prisma.competitionMatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ stage: expect.objectContaining({ status: 'PUBLISHED' }) })
     }));

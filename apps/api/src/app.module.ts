@@ -32,11 +32,13 @@ import { PlayerAuctionsModule } from './player-auctions/player-auctions.module.j
 import { PlayerMarketModule } from './player-market/player-market.module.js';
 import { ActionCenterModule } from './action-center/action-center.module.js';
 import { SeasonCalendarModule } from './season-calendar/season-calendar.module.js';
+import { PlayerNominationsModule } from './player-nominations/player-nominations.module.js';
 
 @Module({
   imports: [
     ActionCenterModule,
     SeasonCalendarModule,
+    PlayerNominationsModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['../../.env', '.env'],

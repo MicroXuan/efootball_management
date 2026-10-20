@@ -5,6 +5,7 @@ export * from './auth.js';
 export * from './common.js';
 export * from './competition.js';
 export * from './season-calendar.js';
+export * from './player-nomination.js';
 export * from './match-result-dispute.js';
 export * from './game-account.js';
 export * from './league.js';
