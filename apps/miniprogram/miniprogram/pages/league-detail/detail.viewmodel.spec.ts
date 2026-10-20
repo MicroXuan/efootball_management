@@ -90,8 +90,8 @@ describe('league detail view model', () => {
 
   it('presents enrolled workspace data and stable empty states', () => {
     const workspace = workspaceFixture()
-    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', rank: '2', rankNotice: '同分待定', scheduleTitle: '全部赛程', scheduleHint: '按队伍和状态查找比赛' })
-    expect(workspaceSummary({ ...workspace, division: null, currentRank: null })).toMatchObject({ divisionName: '等待正式分组', rank: '—', scheduleTitle: '全部赛程' })
+    expect(workspaceSummary(workspace)).toMatchObject({ divisionName: '冠军 A 组', hasRank: true, rank: '2', rankNotice: '同分待定', rankMeta: '6 场 · 13 分', scheduleTitle: '全部赛程', scheduleHint: '按队伍和状态查找比赛' })
+    expect(workspaceSummary({ ...workspace, division: null, currentRank: null })).toMatchObject({ divisionName: '等待正式分组', hasRank: false, rank: '', rankMeta: '比赛结果录入后显示', scheduleTitle: '全部赛程' })
   })
 
   it('exposes the complete Chinese league operations matrix without hiding a closed valuation window', () => {
@@ -109,9 +109,11 @@ describe('league detail view model', () => {
 
     expect(buildModules?.(workspace)).toEqual([
       expect.objectContaining({ key: 'standings', label: '积分榜', stateLabel: '可查看', enabled: true }),
-      expect.objectContaining({ key: 'assets', label: '球队资产', stateLabel: '可查看', enabled: true }),
+      expect.objectContaining({ key: 'assets', label: '球队资产', stateLabel: '可查看', enabled: true, wide: true }),
       expect.objectContaining({ key: 'transactions', label: '交易记录', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'playerMarket', label: '球员市场', stateLabel: '公开透明', enabled: true, wide: false }),
+      expect.objectContaining({ key: 'playerAuctions', label: '球员拍卖', enabled: true }),
+      expect.objectContaining({ key: 'nominations', label: '球员提名', description: '选择想提名的球员', enabled: true }),
       expect.objectContaining({ key: 'finance', label: '球队财务', stateLabel: '可查看', enabled: true }),
       expect.objectContaining({ key: 'valuations', label: '身价管理', stateLabel: '窗口未开放', enabled: false }),
       expect.objectContaining({ key: 'cups', label: '杯赛中心', stateLabel: '可查看', enabled: true }),
@@ -130,9 +132,16 @@ describe('league detail view model', () => {
     ])
     expect(groups.map((group) => group.modules.map((module) => module.key))).toEqual([
       ['standings', 'cups'],
-      ['assets', 'valuations'],
-      ['playerMarket', 'transactions', 'finance'],
+      ['assets', 'finance', 'valuations'],
+      ['playerMarket', 'playerAuctions', 'nominations', 'transactions'],
       ['favorites'],
+    ])
+  })
+
+  it('keeps auctions hidden when the account lacks the existing auction access', () => {
+    const groups = workspaceModuleGroups(workspaceModules(workspaceFixture(), false))
+    expect(groups.find((group) => group.key === 'transactions')?.modules.map((module) => module.key)).toEqual([
+      'playerMarket', 'nominations', 'transactions',
     ])
   })
 
@@ -151,6 +160,8 @@ describe('league detail view model', () => {
 
     expect(routeFor?.('transactions', workspace)).toBe('/pages/league-transactions/index?leagueId=league-1')
     expect(routeFor?.('playerMarket', workspace)).toBe('/pages/player-market/index?leagueId=league-1&seasonId=season-1&teamId=team-1')
+    expect(routeFor?.('playerAuctions', workspace)).toBe('/pages/player-auctions/index')
+    expect(routeFor?.('nominations', workspace)).toBe('/pages/player-nominations/index?leagueId=league-1&seasonId=season-1')
     expect(routeFor?.('finance', workspace)).toBe('/pages/team-finance/index?teamId=team-1&seasonId=season-1')
     expect(routeFor?.('cups', workspace, '中国超级联赛')).toBe('/pages/competitions/index?seasonId=season-1&leagueName=%E4%B8%AD%E5%9B%BD%E8%B6%85%E7%BA%A7%E8%81%94%E8%B5%9B')
     expect(routeFor?.('favorites', workspace)).toBe('/pages/favorites/index')

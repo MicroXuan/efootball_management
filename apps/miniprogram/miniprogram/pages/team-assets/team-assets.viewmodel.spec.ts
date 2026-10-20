@@ -1,16 +1,16 @@
-import type { TeamAssetOverview } from '@efm/contracts'
+import type { PublicTeamAssets, TeamAssetOverview } from '@efm/contracts'
 import { expect, it } from 'vitest'
-import { teamAssetsView } from './team-assets.viewmodel'
+import { forcedOfferRoute, teamAssetsView } from './team-assets.viewmodel'
 
 it('presents team identity, owner, totals and three roster groups', () => {
   const player = (rosterStatus: 'ACTIVE'|'DISAPPEARED'|'RETIRED', playerId: string) => ({ ownershipId: `ownership-${playerId}`, ownershipVersion: 2, playerId, playerName: playerId, cardName: '卡片', cardImageUrl: null, position: 'CF', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null, atRating: null, acquiredAt: '2026-10-01T00:00:00.000Z', salaryMinor: 100, rosterStatus, currentValueMinor: rosterStatus === 'ACTIVE' ? 1000 : null, lastEffectiveAt: null, canRelease: rosterStatus === 'ACTIVE', releaseDisabledReason: rosterStatus === 'ACTIVE' ? null : 'OWNERSHIP_NOT_ACTIVE', forcedTransferBadge: playerId === '一线' })
-  const value: TeamAssetOverview = { leagueId: 'league-1', teamId: 'team-1', seasonId: 'season-1', activeTransferWindowId: 'window-1', teamName: '海港竞技', teamNumber: 7, divisionName: null, teamLogoUrl: null, ownerAlias: '梅西（小宣）', ownerDisplayName: '实况玩家', ownerPublicUserNo: '100069', ownerAvatarUrl: null, shellValueMinor: 5000, knownPlayerValueMinor: 1000, totalKnownValueMinor: 6000, valuationCompleteness: 'INCOMPLETE', missingValuationCount: 1, activePlayerCount: 1, activeSalaryMinor: 100, players: [player('ACTIVE', '一线'), player('DISAPPEARED', '消失'), player('RETIRED', '退役')] }
+  const value: TeamAssetOverview = { leagueId: 'league-1', teamId: 'team-1', seasonId: 'season-1', activeTransferWindowId: 'window-1', nextTransferWindowStartAt: null, teamName: '海港竞技', teamNumber: 7, divisionName: null, teamLogoUrl: null, ownerAlias: '梅西（小宣）', ownerDisplayName: '实况玩家', ownerPublicUserNo: '100069', ownerAvatarUrl: null, shellValueMinor: 5000, knownPlayerValueMinor: 1000, totalKnownValueMinor: 6000, valuationCompleteness: 'INCOMPLETE', missingValuationCount: 1, activePlayerCount: 1, activeSalaryMinor: 100, salaryCapMinor: 1000, salaryCapConfirmed: true, players: [player('ACTIVE', '一线'), player('DISAPPEARED', '消失'), player('RETIRED', '退役')] }
   expect(teamAssetsView(value)).toMatchObject({
     identityCopy: '07号-海港竞技-梅西（小宣）',
     ownerCopy: '梅西（小宣） · 100069',
     ownerAvatarUrl: null,
     playerValueCopy: '1,000+',
-    active: [{ playerId: '一线', releaseEnabled: true, forcedTransferLabel: '本赛季强报' }],
+    active: [{ playerId: '一线', releaseEnabled: true, transferVisible: false, forcedTransferLabel: '本赛季强报' }],
     disappeared: [{ playerId: '消失', releaseEnabled: false }],
     retired: [{ playerId: '退役' }],
   })
@@ -18,14 +18,14 @@ it('presents team identity, owner, totals and three roster groups', () => {
 
 it('presents every player asset field with Chinese labels and readable fallbacks', () => {
   const value: TeamAssetOverview = {
-    leagueId: 'league-1', teamId: 'team-1', seasonId: 'season-1', activeTransferWindowId: 'window-1', teamName: '海港竞技', teamNumber: 7, divisionName: '冠军 A 组',
+    leagueId: 'league-1', teamId: 'team-1', seasonId: 'season-1', activeTransferWindowId: 'window-1', nextTransferWindowStartAt: null, teamName: '海港竞技', teamNumber: 7, divisionName: '冠军 A 组',
     teamLogoUrl: 'https://example.com/team.png', ownerAlias: '梅西（小宣）', ownerDisplayName: '实况玩家', ownerPublicUserNo: '100069',
     ownerAvatarUrl: 'https://example.com/owner.png', shellValueMinor: 5000, knownPlayerValueMinor: 8800,
     totalKnownValueMinor: 13800, valuationCompleteness: 'COMPLETE', missingValuationCount: 0,
-    activePlayerCount: 2, activeSalaryMinor: 450,
+    activePlayerCount: 2, activeSalaryMinor: 450, salaryCapMinor: 1000, salaryCapConfirmed: true,
     players: [
       {
-        playerId: 'player-1', playerName: '莱昂内尔·梅西', cardName: '史诗高光',
+        playerId: 'player-1', playerName: '莱昂内尔·梅西', cardName: '史诗高光', tags: ['FIXED_B'],
         cardImageUrl: 'https://example.com/player.png', position: 'RWF', nationality: '阿根廷', club: '迈阿密国际',
         age: 39, heightCm: 170, preferredFoot: '左脚', atRating: 103,
         acquiredAt: '2026-10-01T12:30:00.000Z', salaryMinor: 300, rosterStatus: 'ACTIVE',
@@ -49,7 +49,7 @@ it('presents every player asset field with Chinese labels and readable fallbacks
     identityCopy: '07号-海港竞技-梅西（小宣）',
     divisionCopy: '冠军 A 组',
     playerValueCopy: '8,800',
-    salaryCopy: '450',
+    salaryCopy: '450 / 1,000',
     shellCopy: '5,000',
   })
   expect(view.tabs).toEqual([
@@ -60,10 +60,69 @@ it('presents every player asset field with Chinese labels and readable fallbacks
   expect(view.active[0]).toMatchObject({
     playerName: '莱昂内尔·梅西', positionCopy: 'RWF', originCopy: '阿根廷 · 迈阿密国际',
     joinedCopy: '2026.10.01', ageCopy: '39 岁', heightCopy: '170 cm', footCopy: '左脚', atCopy: '103',
-    salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02'
+    salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02', tagLabels: ['固B']
   })
   expect(view.active[1]).toMatchObject({
     positionCopy: '位置待补', originCopy: '国籍待补 · 俱乐部待补', ageCopy: '—', heightCopy: '—',
-    footCopy: '—', atCopy: '—', valueCopy: '待设置', valuationCopy: '暂无正式身价'
+    footCopy: '—', atCopy: '—', valueCopy: '待设置', valuationCopy: '暂无正式身价', tagLabels: []
   })
+})
+
+it('shows an unset cap honestly and keeps a public team roster read-only', () => {
+  const value: PublicTeamAssets = {
+    leagueId: 'league-1', teamId: 'team-2', teamName: '阿贾克斯', teamNumber: 3,
+    teamLogoUrl: null, ownerAlias: 'tidus', activePlayerCount: 1, activeSalaryMinor: 800,
+    salaryCapMinor: null, salaryCapConfirmed: false, knownPlayerValueMinor: 1500,
+    shellValueMinor: 500, totalKnownValueMinor: 2000, valuationCompleteness: 'COMPLETE', missingValuationCount: 0,
+    players: [{ playerId: 'player-1', playerName: '球员', cardName: '精选卡', cardImageUrl: null,
+      position: 'CB', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
+      atRating: null, acquiredAt: '2026-10-01T00:00:00.000Z', salaryMinor: 800,
+      rosterStatus: 'ACTIVE', currentValueMinor: 1500, lastEffectiveAt: null },
+      { playerId: 'player-2', playerName: '已消失球员', cardName: '旧卡', cardImageUrl: null,
+        position: 'AMF', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
+        atRating: null, acquiredAt: '2026-09-01T00:00:00.000Z', salaryMinor: 100,
+        rosterStatus: 'DISAPPEARED', currentValueMinor: null, lastEffectiveAt: null },
+      { playerId: 'player-3', playerName: '已退役球员', cardName: '旧卡', cardImageUrl: null,
+        position: 'GK', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
+        atRating: null, acquiredAt: '2026-08-01T00:00:00.000Z', salaryMinor: 100,
+        rosterStatus: 'RETIRED', currentValueMinor: null, lastEffectiveAt: null }]
+  }
+  const view = teamAssetsView(value)
+  expect(view).toMatchObject({ isOwner: false, salaryCopy: '800 / 待管理员设置', overCap: false })
+  expect(view.active[0]).toMatchObject({ releaseEnabled: false })
+  expect(view.active[0]).toMatchObject({ disappearanceEnabled: false, transferVisible: false, forcedVisible: false })
+  const participantView = teamAssetsView(value, { teamId: 'team-1', seasonId: 'season-1' })
+  expect(participantView.active[0]).toMatchObject({ transferVisible: true, forcedVisible: true })
+  expect(participantView.viewerTeamId).toBe('team-1')
+  expect(forcedOfferRoute(participantView, 'player-1')).toContain('teamId=team-1&playerId=player-1')
+  expect(forcedOfferRoute(view, 'player-1')).toBeNull()
+  const ownPublicView = teamAssetsView(value, { teamId: 'team-2', seasonId: 'season-1' })
+  expect(ownPublicView.active[0]).toMatchObject({ transferVisible: false, forcedVisible: false })
+  expect(view.disappeared[0]).toMatchObject({ playerName: '已消失球员', transferVisible: false, forcedVisible: false, disappearanceEnabled: false })
+  expect(view.retired[0]).toMatchObject({ playerName: '已退役球员', transferVisible: false, forcedVisible: false, releaseEnabled: false })
+  expect(view.tabs).toEqual([
+    { key: 'ACTIVE', label: '一线阵容', count: 1 },
+    { key: 'DISAPPEARED', label: '已消失', count: 1 },
+    { key: 'RETIRED', label: '已退役', count: 1 }
+  ])
+})
+
+it('shows the next transfer opening when release is unavailable', () => {
+  const value: TeamAssetOverview = {
+    leagueId: 'league-1', teamId: 'team-1', seasonId: 'season-1', activeTransferWindowId: null,
+    nextTransferWindowStartAt: '2026-11-01T00:00:00.000Z', teamName: '海港竞技', teamNumber: 7,
+    divisionName: null, teamLogoUrl: null, ownerAlias: '小宣', ownerDisplayName: '小宣',
+    ownerPublicUserNo: '100069', ownerAvatarUrl: null, shellValueMinor: 500,
+    knownPlayerValueMinor: 1500, totalKnownValueMinor: 2000, valuationCompleteness: 'COMPLETE',
+    missingValuationCount: 0, activePlayerCount: 1, activeSalaryMinor: 800,
+    salaryCapMinor: 700, salaryCapConfirmed: true,
+    players: [{ playerId: 'player-1', playerName: '球员', cardName: '精选卡', cardImageUrl: null,
+      position: 'CB', nationality: null, club: null, age: null, heightCm: null, preferredFoot: null,
+      atRating: null, acquiredAt: '2026-10-01T00:00:00.000Z', salaryMinor: 800,
+      rosterStatus: 'ACTIVE', currentValueMinor: 1500, lastEffectiveAt: null,
+      ownershipId: 'ownership-1', ownershipVersion: 1, canRelease: false, releaseDisabledReason: 'TRANSFER_WINDOW_CLOSED' }]
+  }
+  const view = teamAssetsView(value)
+  expect(view).toMatchObject({ isOwner: true, salaryCopy: '800 / 700', overCap: true })
+  expect(view.active[0]).toMatchObject({ releaseEnabled: false, releaseDisabledCopy: '转会期未开放，预计 2026.11.01 开放' })
 })

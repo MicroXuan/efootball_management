@@ -10,6 +10,14 @@ const baseEnvironment = {
 };
 
 describe('environment schema', () => {
+  it('defaults share codes to the released miniprogram and accepts an explicit trial version', () => {
+    expect(validateEnvironment(baseEnvironment).WECHAT_MINIPROGRAM_ENV_VERSION).toBe('release');
+    expect(validateEnvironment({
+      ...baseEnvironment,
+      WECHAT_MINIPROGRAM_ENV_VERSION: 'trial'
+    }).WECHAT_MINIPROGRAM_ENV_VERSION).toBe('trial');
+  });
+
   it('normalizes a comma-separated admin origin allowlist', () => {
     const environment = validateEnvironment({
       ...baseEnvironment,

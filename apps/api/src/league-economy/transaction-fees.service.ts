@@ -131,15 +131,18 @@ export class TransactionFeesService {
   async listTransactions(
     leagueId: string,
     cursor?: string,
-    limit = 30
+    limit = 30,
+    scope?: { teamId: string }
   ): Promise<LeagueTransactionListResponse> {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const rows = await this.prisma.rosterTransaction.findMany({
-      where: { leagueId },
+      where: { leagueId, ...(scope ? { OR: [
+        { sourceLeagueTeamId: scope.teamId }, { targetLeagueTeamId: scope.teamId }
+      ] } : {}) },
       include: {
         footballPlayer: true,
-        sourceLeagueTeam: { select: { name: true } },
-        targetLeagueTeam: { select: { name: true } }
+        sourceLeagueTeam: { select: { name: true, teamNumber: true } },
+        targetLeagueTeam: { select: { name: true, teamNumber: true } }
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -147,6 +150,7 @@ export class TransactionFeesService {
     });
     const page = rows.slice(0, limit);
     return {
+      ...(scope ? { teamId: scope.teamId } : {}),
       items: page.map((row) => ({
         id: row.id,
         leagueId: row.leagueId,
@@ -156,8 +160,10 @@ export class TransactionFeesService {
         playerName: row.footballPlayer.nameZh ?? row.footballPlayer.nameEn ?? row.footballPlayer.shortName ?? '未命名球员',
         sourceLeagueTeamId: row.sourceLeagueTeamId,
         sourceTeamName: row.sourceLeagueTeam?.name ?? null,
+        sourceTeamNumber: row.sourceLeagueTeam?.teamNumber ?? null,
         targetLeagueTeamId: row.targetLeagueTeamId,
         targetTeamName: row.targetLeagueTeam?.name ?? null,
+        targetTeamNumber: row.targetLeagueTeam?.teamNumber ?? null,
         amountMinor: row.amountMinor,
         valuationSnapshotMinor: row.valuationSnapshotMinor,
         transactionFeeMinor: row.transactionFeeMinor,
@@ -174,10 +180,11 @@ export class TransactionFeesService {
   async listTransactionsForParticipant(userId: string, leagueId: string, cursor?: string, limit = 30) {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
     const entry = await this.prisma.seasonEntry.findFirst({
-      where: { ownerUserId: userId, status: 'APPROVED', season: { leagueId } }, select: { id: true }
+      where: { ownerUserId: userId, status: 'APPROVED', season: { leagueId } },
+      select: { leagueTeamId: true }
     });
     if (!entry) throw this.error('LEAGUE_PARTICIPANT_REQUIRED', '只有联赛参赛用户可以查看交易记录', 403);
-    return this.listTransactions(leagueId, cursor, limit);
+    return this.listTransactions(leagueId, cursor, limit, { teamId: entry.leagueTeamId });
   }
 
   private presentRule(rule: {

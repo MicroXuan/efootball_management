@@ -1,10 +1,11 @@
-import { Alert, Button, Card, Empty, Form, Input, InputNumber, Select, Spin, Tabs, Tag, Upload } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Button, Card, Empty, Form, Input, InputNumber, Modal, Select, Spin, Tabs, Tag, Upload } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LeagueDetailSchema, LeagueListResponseSchema, type LeagueEdition, type LeagueSummary } from '@efm/contracts';
 import { z } from 'zod';
 import { ApiError, adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
+import { PaginatedRecords } from '../components/paginated-records';
 
 type Fields = { name: string; shortName: string; description?: string; status?: 'ACTIVE' | 'ARCHIVED'; edition: LeagueEdition; defaultSuperCapacity: number; defaultChampionCapacity: number; defaultPromotionCount: number };
 const UploadResultSchema = z.object({ key: z.string(), url: z.url(), mimeType: z.string(), size: z.number().int() });
@@ -17,10 +18,9 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
   const [submitting, setSubmitting] = useState(false);
   const [statusTab, setStatusTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [editing, setEditing] = useState<LeagueSummary | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [form] = Form.useForm<Fields>();
-  const editorRef = useRef<HTMLDivElement>(null);
-  const editorTitleRef = useRef<HTMLHeadingElement>(null);
   const mutationKey = useMutationKey();
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -32,11 +32,15 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
     finally { setLoading(false); }
   }, [api]);
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    if (!editing) return;
-    editorTitleRef.current?.focus({ preventScroll: true });
-    editorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [editing]);
+  const closeEditor = () => {
+    if (submitting) return;
+    mutationKey.reset();
+    setEditorOpen(false);
+    setEditing(null);
+    setImageFile(null);
+    setError(null);
+    form.resetFields();
+  };
   const save = async (values: Fields) => {
     if (submitting) return; setSubmitting(true); setError(null);
     try {
@@ -57,7 +61,7 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
           ? { ...values, description: values.description ?? '', ...(imageFile ? { logoUrl } : {}), expectedVersion: editing.version }
           : { ...values, status: undefined, description: values.description ?? '', logoUrl }
       });
-      mutationKey.reset(); setEditing(null); setImageFile(null); form.resetFields(); await load();
+      mutationKey.reset(); setEditorOpen(false); setEditing(null); setImageFile(null); form.resetFields(); await load();
     } catch (caught) {
       if (editing && caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') {
         const editingId = editing.id;
@@ -76,9 +80,9 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
   const archivedCount = items.filter((item) => item.status === 'ARCHIVED').length;
   const visibleItems = items.filter((item) => item.status === statusTab);
   return <div className="page-grid">
-    <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>联赛管理</h1><p>创建联赛、确认当前赛季，并进入各赛事工作区。</p></div></header>
+    <header className="workspace-page-title workspace-page-title--actions"><div><span className="section-kicker">平台管理</span><h1>联赛管理</h1><p>创建联赛、确认当前赛季，并进入各赛事工作区。</p></div><Button type="primary" onClick={() => { mutationKey.reset(); setEditing(null); setImageFile(null); setError(null); form.resetFields(); setEditorOpen(true); }}>新增联赛</Button></header>
     <Card title="联赛目录" extra={!loading ? `共 ${items.length} 个联赛` : undefined} className="data-card league-directory">
-      {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
+      {!editorOpen && error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       {loading ? <div className="loading-block"><Spin /></div> : <>
         <Tabs
           activeKey={statusTab}
@@ -88,8 +92,8 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
             { key: 'ARCHIVED', label: `已归档（${archivedCount}）` },
           ]}
         />
-        {visibleItems.length ? <div className="league-card-grid">
-        {visibleItems.map((item) => <article key={item.id} className={`league-card${item.status === 'ARCHIVED' ? ' league-card--archived' : ''}`}>
+        {visibleItems.length ? <PaginatedRecords items={visibleItems} label="联赛分页" render={(pageItems) => <div className="league-card-grid">
+        {pageItems.map((item) => <article key={item.id} className={`league-card${item.status === 'ARCHIVED' ? ' league-card--archived' : ''}`}>
           <div className="league-card__main">
             {item.logoUrl
               ? <img className="league-card__logo" src={item.logoUrl} alt={`${item.shortName} 联赛标识`} />
@@ -107,14 +111,15 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
           </div>
           <div className="league-card__actions">
             <Button type={item.status === 'ACTIVE' ? 'primary' : 'default'} href={`/leagues/${item.id}/teams`}>{item.status === 'ACTIVE' ? '进入联赛' : '查看历史'}</Button>
-            <Button aria-label={`编辑 ${item.name}`} disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(item); setImageFile(null); form.setFieldsValue(item); }}>编辑</Button>
+            <Button aria-label={`编辑 ${item.name}`} disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(item); setImageFile(null); setError(null); form.setFieldsValue(item); setEditorOpen(true); }}>编辑</Button>
           </div>
         </article>)}
-      </div> : <Empty description={items.length ? (statusTab === 'ACTIVE' ? '暂无启用联赛' : '暂无已归档联赛') : '暂无联赛'} />}
+      </div>} /> : <Empty description={items.length ? (statusTab === 'ACTIVE' ? '暂无启用联赛' : '暂无已归档联赛') : '暂无联赛'} />}
       </>}
     </Card>
-    <div ref={editorRef} className="league-editor-anchor">
-    <Card title={<h2 ref={editorTitleRef} className="form-card__title" tabIndex={-1}>{editing ? `编辑联赛 · ${editing.name}` : '新建联赛'}</h2>} className="form-card"><Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save} initialValues={{ defaultSuperCapacity: 23, defaultChampionCapacity: 18, defaultPromotionCount: 4 }}>
+    <Modal open={editorOpen} title={editing ? `编辑联赛 · ${editing.name}` : '新建联赛'} footer={null} width={680} onCancel={closeEditor} mask={{ closable: !submitting }} closable={!submitting} destroyOnHidden>
+    <Form<Fields> form={form} layout="vertical" onValuesChange={() => mutationKey.reset()} onFinish={save} initialValues={{ defaultSuperCapacity: 23, defaultChampionCapacity: 18, defaultPromotionCount: 4 }}>
+      {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       <div className="form-section-title"><strong>基础资料</strong><span>用于前台展示与管理员识别</span></div>
       <Form.Item label="联赛名称" name="name" rules={[{ required: true, message: '请输入联赛名称' }]}><Input /></Form.Item>
       <Form.Item label="联赛简称" name="shortName" rules={[{ required: true, message: '请输入联赛简称' }]}><Input /></Form.Item>
@@ -135,8 +140,8 @@ export function LeaguesPage({ api = adminApi }: { api?: AdminApi }) {
       <div className="form-section-title"><strong>默认竞赛规则</strong><span>新赛季可单独覆盖这些参数</span></div>
       <div className="inline-fields"><Form.Item label="超级组人数" name="defaultSuperCapacity"><InputNumber min={2} max={64} /></Form.Item><Form.Item label="冠军组人数" name="defaultChampionCapacity"><InputNumber min={2} max={64} /></Form.Item><Form.Item label="升级建议数" name="defaultPromotionCount"><InputNumber min={0} max={32} /></Form.Item></div>
       <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>{editing ? '保存联赛' : '创建联赛'}</Button>
-      {editing ? <Button disabled={submitting} onClick={() => { mutationKey.reset(); setEditing(null); setImageFile(null); form.resetFields(); }}>取消编辑</Button> : null}
-    </Form></Card>
-    </div>
+      <Button disabled={submitting} onClick={closeEditor}>取消</Button>
+    </Form>
+    </Modal>
   </div>;
 }

@@ -30,6 +30,8 @@ function harness(options: {
   auctions?: any[];
   currentMatches?: any[];
   recentMatches?: any[];
+  disappearances?: any[];
+  transfers?: any[];
 } = {}) {
   const applicationFindMany = jest.fn(async (args: any) => {
     if (options.currentApplications || options.recentApplications) {
@@ -41,6 +43,8 @@ function harness(options: {
     leagueTeam: { findMany: jest.fn(async () => options.teams ?? [mine]) },
     playerAcquisitionApplication: { findMany: applicationFindMany },
     playerAuctionBatch: { findMany: jest.fn(async () => options.auctions ?? []) },
+    disappearanceRequest: { findMany: jest.fn(async () => options.disappearances ?? []) },
+    transferProposal: { findMany: jest.fn(async () => options.transfers ?? []) },
     competitionMatch: { findMany: jest.fn(async (args: any) => args.where.updatedAt
       ? options.recentMatches ?? [] : options.currentMatches ?? []) },
   };
@@ -63,6 +67,25 @@ function match(input: Partial<any> = {}) {
 }
 
 describe('ActionCenterService', () => {
+  it('shows disappearance status and an incoming transfer confirmation as a required task', async () => {
+    const validLeague = { ...league, id: randomUUID(), currentSeasonId: randomUUID() };
+    const validTeam = { ...mine, id: randomUUID(), leagueId: validLeague.id, league: validLeague };
+    const otherTeam = { ...rival, id: randomUUID() };
+    const disappearances = [{ id: randomUUID(), status: 'PENDING', seasonId: validLeague.currentSeasonId,
+      requesterTeamId: validTeam.id, requesterTeam: validTeam, league: validLeague,
+      ownership: { footballPlayer: player }, updatedAt: at }];
+    const transfers = [{ id: randomUUID(), status: 'PENDING_COUNTERPARTY', seasonId: validLeague.currentSeasonId,
+      sourceTeamId: validTeam.id, targetTeamId: otherTeam.id, initiatorTeamId: otherTeam.id,
+      sourceTeam: validTeam, targetTeam: otherTeam, league: validLeague,
+      ownership: { footballPlayer: player }, updatedAt: at }];
+    const result = await harness({ teams: [validTeam], disappearances, transfers }).service.get('user-1');
+    expect(result.actionRequiredCount).toBe(1);
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: `disappearance:${disappearances[0]!.id}`, section: 'STATUS_UPDATE' }),
+      expect.objectContaining({ id: `transfer-proposal:${transfers[0]!.id}`, section: 'ACTION_REQUIRED' })
+    ]));
+    expect(ActionCenterResponseSchema.parse(result).items).toHaveLength(2);
+  });
   it('preserves every current application alongside capped recent application history', async () => {
     const validLeague = { ...league, id: randomUUID(), currentSeasonId: randomUUID() };
     const validTeam = { ...mine, id: randomUUID(), leagueId: validLeague.id, league: validLeague };

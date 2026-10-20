@@ -171,7 +171,8 @@ describe('league-scoped team API', () => {
         ownerUserId: playerId,
         teamNumber: 8,
         ownerAlias: '首位用户',
-        catalogTeamId: firstCatalogTeamId
+        catalogTeamId: firstCatalogTeamId,
+        salaryCapMinor: 14_000
       }).expect(201);
 
     await request(app.getHttpServer())
@@ -181,7 +182,8 @@ describe('league-scoped team API', () => {
         ownerUserId: playerId,
         teamNumber: 9,
         ownerAlias: '首位用户',
-        catalogTeamId: secondCatalogTeamId
+        catalogTeamId: secondCatalogTeamId,
+        salaryCapMinor: 14_000
       }).expect(409);
 
     await request(app.getHttpServer())
@@ -191,7 +193,8 @@ describe('league-scoped team API', () => {
         ownerUserId: secondUserId,
         teamNumber: 8,
         ownerAlias: '第二位用户',
-        catalogTeamId: secondCatalogTeamId
+        catalogTeamId: secondCatalogTeamId,
+        salaryCapMinor: 14_000
       }).expect(409);
 
     await request(app.getHttpServer())
@@ -201,7 +204,8 @@ describe('league-scoped team API', () => {
         ownerUserId: playerId,
         teamNumber: 8,
         ownerAlias: '首位用户',
-        catalogTeamId: firstCatalogTeamId
+        catalogTeamId: firstCatalogTeamId,
+        salaryCapMinor: 14_000
       }).expect(403);
 
     await prisma.adminLeagueRole.create({
@@ -214,7 +218,8 @@ describe('league-scoped team API', () => {
         ownerUserId: playerId,
         teamNumber: 8,
         ownerAlias: '首位用户',
-        catalogTeamId: firstCatalogTeamId
+        catalogTeamId: firstCatalogTeamId,
+        salaryCapMinor: 14_000
       }).expect(201);
 
     expect(secondLeagueTeam.body.id).toEqual(expect.any(String));

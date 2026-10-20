@@ -147,7 +147,8 @@ describe('atomic league roster API', () => {
         catalogTeamId: shell.id,
         teamNumber: index + 1,
         name,
-        shortName
+        shortName,
+        salaryCapMinor: 200
       } });
     }));
     await Promise.all(teams.map((team, index) => prisma.seasonEntry.create({
@@ -326,6 +327,7 @@ describe('atomic league roster API', () => {
 
   it('serializes two acquisitions competing for roster slot 25', async () => {
     const f = await fixture('same-team-roster');
+    await prisma.leagueTeam.updateMany({ where: { leagueId: f.league.id }, data: { salaryCapMinor: 100_000 } });
     await prisma.leagueSalaryRuleVersion.updateMany({
       where: { leagueId: f.league.id },
       data: { salaryCapMinor: 100_000 }
@@ -368,6 +370,7 @@ describe('atomic league roster API', () => {
 
   it('rejects concurrent reuse of one idempotency key for different requests', async () => {
     const f = await fixture('idempotency-race');
+    await prisma.leagueTeam.updateMany({ where: { leagueId: f.league.id }, data: { salaryCapMinor: 10_000 } });
     await prisma.leagueSalaryRuleVersion.updateMany({
       where: { leagueId: f.league.id },
       data: { salaryCapMinor: 10_000 }
@@ -393,6 +396,7 @@ describe('atomic league roster API', () => {
 
   it('executes transfer, explicit card upgrade, and confirmed salary recalculation APIs', async () => {
     const f = await fixture('advanced-roster');
+    await prisma.leagueTeam.updateMany({ where: { leagueId: f.league.id }, data: { salaryCapMinor: 1_000 } });
     await prisma.leagueSalaryRuleVersion.updateMany({
       where: { leagueId: f.league.id },
       data: { salaryCapMinor: 1_000 }
@@ -448,6 +452,7 @@ describe('atomic league roster API', () => {
         tiers: { create: defaultSalaryTiers() }
       }
     });
+    await prisma.leagueTeam.updateMany({ where: { leagueId: f.league.id }, data: { salaryCapMinor: 250 } });
     await request(app.getHttpServer())
       .post('/v1/admin/roster/salary-recalculations').set(auth())
       .send({

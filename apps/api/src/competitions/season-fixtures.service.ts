@@ -13,11 +13,11 @@ import { CompetitionError } from './competition.errors.js';
 const FIXTURE_INCLUDE = {
   stage: { include: { competition: { include: { _count: { select: { participants: true } } } } } },
   homeParticipant: { include: { seasonEntry: { select: {
-    teamNameSnapshot: true, teamShortNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true,
+    leagueTeamId: true, teamNameSnapshot: true, teamShortNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true,
     leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, shortName: true, logoUrl: true } }
   } } } },
   awayParticipant: { include: { seasonEntry: { select: {
-    teamNameSnapshot: true, teamShortNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true,
+    leagueTeamId: true, teamNameSnapshot: true, teamShortNameSnapshot: true, teamNumberSnapshot: true, teamLogoUrlSnapshot: true,
     leagueTeam: { select: { status: true, ownerAlias: true, teamNumber: true, name: true, shortName: true, logoUrl: true } }
   } } } },
   officialResultVersion: true
@@ -26,9 +26,11 @@ const FIXTURE_INCLUDE = {
 type FixtureRecord = Prisma.CompetitionMatchGetPayload<{ include: typeof FIXTURE_INCLUDE }>;
 type FixtureParticipant = FixtureRecord['homeParticipant'];
 type Cursor = {
-  v: 1;
+  v: 2;
   status: SeasonFixtureListQuery['status'];
   team: string;
+  scope: 'ALL' | 'MINE';
+  leagueTeamId: string | null;
   phase: 0 | 1;
   roundNumber: number;
   matchNumber: number;
@@ -40,9 +42,15 @@ export class SeasonFixturesService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async list(userId: string, leagueId: string, seasonId: string, query: SeasonFixtureListQuery): Promise<SeasonFixtureListResponse> {
+    const scope = query.scope ?? 'ALL';
+    const leagueTeamId = scope === 'MINE' ? query.leagueTeamId ?? null : null;
+    if (scope === 'MINE' && !leagueTeamId) {
+      throw new CompetitionError('SEASON_FIXTURE_TEAM_REQUIRED', 'Select one owned team for my fixtures', 400);
+    }
     const entry = await this.prisma.seasonEntry.findFirst({
       where: {
         ownerUserId: userId,
+        ...(leagueTeamId ? { leagueTeamId } : {}),
         seasonId,
         status: 'APPROVED',
         leagueTeam: { leagueId, status: 'ACTIVE' },
@@ -62,8 +70,10 @@ export class SeasonFixturesService {
       include: FIXTURE_INCLUDE
     });
     const team = this.normalize(query.team ?? '');
-    const cursor = query.cursor ? this.decodeCursor(query.cursor, query.status, team) : null;
+    const cursor = query.cursor ? this.decodeCursor(query.cursor, query.status, team, scope, leagueTeamId) : null;
     const filtered = records
+      .filter((record) => !leagueTeamId || record.homeParticipant.seasonEntry?.leagueTeamId === leagueTeamId
+        || record.awayParticipant.seasonEntry?.leagueTeamId === leagueTeamId)
       .filter((record) => query.status === 'ALL'
         || (query.status === 'FINISHED') === Boolean(record.officialResultVersionId))
       .filter((record) => !team || this.matchesTeam(record.homeParticipant, team) || this.matchesTeam(record.awayParticipant, team))
@@ -78,7 +88,7 @@ export class SeasonFixturesService {
         match: this.match(record)
       })),
       nextCursor: hasMore && selected.length
-        ? this.encodeCursor({ ...this.key(selected[selected.length - 1]!), v: 1, status: query.status, team })
+        ? this.encodeCursor({ ...this.key(selected[selected.length - 1]!), v: 2, status: query.status, team, scope, leagueTeamId })
         : null
     };
   }
@@ -120,10 +130,10 @@ export class SeasonFixturesService {
     return Buffer.from(JSON.stringify(cursor)).toString('base64url');
   }
 
-  private decodeCursor(value: string, status: SeasonFixtureListQuery['status'], team: string): Cursor {
+  private decodeCursor(value: string, status: SeasonFixtureListQuery['status'], team: string, scope: 'ALL' | 'MINE', leagueTeamId: string | null): Cursor {
     try {
       const cursor = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<Cursor>;
-      if (cursor.v !== 1 || cursor.status !== status || cursor.team !== team
+      if (cursor.v !== 2 || cursor.status !== status || cursor.team !== team || cursor.scope !== scope || cursor.leagueTeamId !== leagueTeamId
         || (cursor.phase !== 0 && cursor.phase !== 1)
         || !Number.isInteger(cursor.roundNumber) || Number(cursor.roundNumber) < 1
         || !Number.isInteger(cursor.matchNumber) || Number(cursor.matchNumber) < 1

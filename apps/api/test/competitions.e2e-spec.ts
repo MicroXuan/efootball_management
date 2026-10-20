@@ -69,6 +69,11 @@ describe('competition lifecycle API', () => {
     await prisma.competitionMatch.updateMany({
       where: { stage: { competitionId: { in: competitionIds } } }, data: { officialResultVersionId: null }
     });
+    const matchScope = { match: { stage: { competitionId: { in: competitionIds } } } };
+    await prisma.matchResultEvent.deleteMany({ where: matchScope });
+    await prisma.matchResultEvidence.deleteMany({ where: matchScope });
+    await prisma.matchResultEvidenceUpload.deleteMany({ where: matchScope });
+    await prisma.matchResultDispute.deleteMany({ where: matchScope });
     await prisma.matchResultVersion.deleteMany({
       where: { match: { stage: { competitionId: { in: competitionIds } } } }
     });
@@ -87,6 +92,7 @@ describe('competition lifecycle API', () => {
     await prisma.gameAccount.deleteMany({ where: { id: { in: gameAccountIds } } });
     await prisma.user.deleteMany({ where: { id: { in: fixtureUserIds } } });
     await prisma.refreshSession.deleteMany({ where: { userId: { in: [adminUserId, managerUserId, playerUserId] } } });
+    await prisma.auditLog.deleteMany({ where: { actorUserId: { in: [adminUserId, managerUserId, playerUserId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [adminUserId, managerUserId, playerUserId] } } });
     await app.close();
     await prisma.$disconnect();
@@ -209,7 +215,7 @@ describe('competition lifecycle API', () => {
       .set('Authorization', `Bearer ${managerToken}`).expect(200)
       .expect(({ body: queue }) => {
         expect(queue).toHaveLength(1);
-        expect(queue[0]).toMatchObject({ applicantDisplayName: '实况玩家', gameAccountGamerTag: `E2E-${suffix}` });
+        expect(queue[0]).toMatchObject({ applicantDisplayName: expect.any(String), gameAccountGamerTag: `E2E-${suffix}` });
       });
     const approved = await request(app.getHttpServer())
       .post(`/v1/admin/competitions/${created.id}/registrations/${registration.body.id}/approve`)
@@ -274,7 +280,7 @@ describe('competition lifecycle API', () => {
     await request(app.getHttpServer())
       .post(`/v1/admin/competitions/${created.id}/matches/${publicMatches.body[0].id}/results`)
       .set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', randomUUID())
-      .send({ homeScore: 2, awayScore: 1, expectedVersion: 2 }).expect(200)
+      .send({ homeScore: 2, awayScore: 1, expectedVersion: 2, reason: '端到端验证比赛结果' }).expect(200)
       .expect(({ body: result }) => expect(result.status).toBe('OFFICIAL'));
     await request(app.getHttpServer()).get(`/v1/competitions/${created.id}/standings`)
       .expect(200).expect(({ body: standings }) => {

@@ -31,6 +31,7 @@ function harness() {
     $queryRaw: jest.fn(async () => []),
     leagueTeam: { findUnique: jest.fn(async () => ({ id: 'team-1', status: 'ACTIVE', rosterStatus: 'COMPLIANT' })) },
     transferWindow: { findUnique: jest.fn(async () => ({ id: 'window-1', seasonId: 'season-1', allowBuy: true, startsAt: new Date(now.getTime() - 1000), endsAt: new Date(now.getTime() + 1000) })) },
+    forcedOfferWindow: { findUnique: jest.fn(async () => ({ id: 'forced-1', seasonId: 'season-1', startsAt: new Date(now.getTime() - 1000), endsAt: new Date(now.getTime() + 1000) })) },
     leaguePlayerOwnership: {
       findUnique: jest.fn(async () => null),
       count: jest.fn(async () => 24)
@@ -154,6 +155,8 @@ describe('PlayerApplicationService', () => {
     const result = await service.submit('user-1', 'league-1', {
       ...baseInput,
       type: 'FORCED_TRANSFER',
+      transferWindowId: undefined,
+      window: { kind: 'FORCED_OFFER', id: 'forced-1' },
       playerCardId: 'card-2',
       amountMinor: 700,
       sourceLeagueTeamId: 'team-2',
@@ -162,7 +165,7 @@ describe('PlayerApplicationService', () => {
     }, 'forced');
     expect(result).toMatchObject({
       type: 'FORCED_TRANSFER', sourceTeam: expect.anything(), ownershipId: 'ownership-rival',
-      ownershipVersionSnapshot: 4, valuationVersionSnapshot: 1
+      ownershipVersionSnapshot: 4, valuationVersionSnapshot: 1, transferWindowId: null, forcedOfferWindowId: 'forced-1'
     });
   });
 
@@ -172,8 +175,46 @@ describe('PlayerApplicationService', () => {
       id: 'ownership-rival', leagueTeamId: 'team-2', currentPlayerCardId: 'card-2', status: 'ACTIVE', version: 4
     } as never);
     await expect(service.submit('user-1', 'league-1', {
-      ...baseInput, type: 'FORCED_TRANSFER', amountMinor: 499,
+      ...baseInput, type: 'FORCED_TRANSFER', transferWindowId: undefined, window: { kind: 'FORCED_OFFER', id: 'forced-1' }, amountMinor: 499,
       sourceLeagueTeamId: 'team-2', ownershipId: 'ownership-rival', ownershipVersionSnapshot: 4
     }, 'forced-low')).rejects.toMatchObject({ code: 'FORCED_AMOUNT_BELOW_OFFICIAL_VALUE' });
+  });
+
+  it('accepts an owned-player bid while transfers are closed, but not after forced-offer close', async () => {
+    const { service, tx } = harness();
+    tx.transferWindow.findUnique.mockResolvedValue(null as never);
+    tx.leaguePlayerOwnership.findUnique.mockResolvedValue({
+      id: 'ownership-rival', leagueTeamId: 'team-2', currentPlayerCardId: 'card-2', status: 'ACTIVE', version: 4
+    } as never);
+    const input = {
+      ...baseInput, transferWindowId: undefined, window: { kind: 'FORCED_OFFER' as const, id: 'forced-1' },
+      type: 'FORCED_TRANSFER' as const, amountMinor: 700,
+      sourceLeagueTeamId: 'team-2', ownershipId: 'ownership-rival', ownershipVersionSnapshot: 4
+    };
+    await expect(service.submit('user-1', 'league-1', input, 'forced-open'))
+      .resolves.toMatchObject({ forcedOfferWindowId: 'forced-1', transferWindowId: null });
+    expect(tx.transferWindow.findUnique).not.toHaveBeenCalled();
+    tx.forcedOfferWindow.findUnique.mockResolvedValueOnce({ id: 'forced-1', seasonId: 'season-1', startsAt: new Date(now.getTime() - 1000), endsAt: now });
+    await expect(service.submit('user-1', 'league-1', input, 'forced-closed'))
+      .rejects.toMatchObject({ code: 'FORCED_OFFER_WINDOW_CLOSED' });
+  });
+
+  it('rejects a forced window from another season and blocks amendment after the deadline', async () => {
+    const { service, tx } = harness();
+    tx.leaguePlayerOwnership.findUnique.mockResolvedValue({
+      id: 'ownership-rival', leagueTeamId: 'team-2', currentPlayerCardId: 'card-2', status: 'ACTIVE', version: 4
+    } as never);
+    const input = {
+      ...baseInput, transferWindowId: undefined, window: { kind: 'FORCED_OFFER' as const, id: 'forced-1' },
+      type: 'FORCED_TRANSFER' as const, amountMinor: 700,
+      sourceLeagueTeamId: 'team-2', ownershipId: 'ownership-rival', ownershipVersionSnapshot: 4
+    };
+    tx.forcedOfferWindow.findUnique.mockResolvedValueOnce({ id: 'forced-1', seasonId: 'season-2', startsAt: new Date(now.getTime() - 1000), endsAt: new Date(now.getTime() + 1000) });
+    await expect(service.submit('user-1', 'league-1', input, 'wrong-season'))
+      .rejects.toMatchObject({ code: 'FORCED_OFFER_WINDOW_CLOSED' });
+    await service.submit('user-1', 'league-1', input, 'valid');
+    tx.forcedOfferWindow.findUnique.mockResolvedValueOnce({ id: 'forced-1', seasonId: 'season-1', startsAt: new Date(now.getTime() - 1000), endsAt: now });
+    await expect(service.amend('user-1', 'application-1', { amountMinor: 800, expectedVersion: 1 }, 'late'))
+      .rejects.toMatchObject({ code: 'FORCED_OFFER_WINDOW_CLOSED' });
   });
 });

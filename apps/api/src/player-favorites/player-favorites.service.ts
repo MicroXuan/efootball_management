@@ -1,10 +1,11 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   PlayerCardSummary,
   PlayerFavoriteListQuery,
   PlayerFavoriteListResponse,
   PlayerFavoriteStatusResponse
 } from '@efm/contracts';
+import type { PlayerFavoriteGroup, PlayerFavoriteGroupsResponse } from '@efm/contracts';
 import type { PlayerCardVersion, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 
@@ -37,6 +38,43 @@ function compareCards(left: PlayerCardVersion, right: PlayerCardVersion): number
 @Injectable()
 export class PlayerFavoritesService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async groups(userId: string): Promise<PlayerFavoriteGroupsResponse> {
+    const rows = await this.prisma.userPlayerFavoriteGroup.findMany({
+      where: { userId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+    });
+    return { items: rows.map((row) => ({ id: row.id, name: row.name, createdAt: row.createdAt.toISOString() })) };
+  }
+
+  async createGroup(userId: string, name: string): Promise<PlayerFavoriteGroup> {
+    try {
+      const row = await this.prisma.userPlayerFavoriteGroup.create({ data: { userId, name: name.trim() } });
+      return { id: row.id, name: row.name, createdAt: row.createdAt.toISOString() };
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+        throw new ConflictException({ code: 'FAVORITE_GROUP_NAME_EXISTS', message: '分组名称已存在' });
+      }
+      throw error;
+    }
+  }
+
+  async deleteGroup(userId: string, groupId: string): Promise<{ deleted: boolean }> {
+    const result = await this.prisma.userPlayerFavoriteGroup.deleteMany({ where: { id: groupId, userId } });
+    if (!result.count) throw new NotFoundException({ code: 'FAVORITE_GROUP_NOT_FOUND', message: '分组不存在' });
+    return { deleted: true };
+  }
+
+  async move(userId: string, playerId: string, groupId: string | null): Promise<{ playerId: string; groupId: string | null }> {
+    if (groupId) {
+      const group = await this.prisma.userPlayerFavoriteGroup.findFirst({ where: { id: groupId, userId }, select: { id: true } });
+      if (!group) throw new NotFoundException({ code: 'FAVORITE_GROUP_NOT_FOUND', message: '分组不存在' });
+    }
+    const result = await this.prisma.userPlayerFavorite.updateMany({
+      where: { userId, footballPlayerId: playerId }, data: { groupId }
+    });
+    if (!result.count) throw new NotFoundException({ code: 'FAVORITE_NOT_FOUND', message: '收藏球员不存在' });
+    return { playerId, groupId };
+  }
 
   async favorite(userId: string, playerId: string): Promise<PlayerFavoriteStatusResponse> {
     const player = await this.prisma.footballPlayer.findUnique({ where: { id: playerId }, select: { id: true } });
@@ -82,6 +120,7 @@ export class PlayerFavoritesService {
     const rows = await this.prisma.userPlayerFavorite.findMany({
       where: {
         userId,
+        ...(query.groupId ? { groupId: query.groupId === 'ungrouped' ? null : query.groupId } : {}),
         footballPlayer: playerFilter,
         ...(cursor ? {
           OR: [
@@ -132,6 +171,7 @@ export class PlayerFavoritesService {
       const card = cards.find((candidate) => candidate.playerCardId === preferred) ?? cards[0];
       return card ? [{
         playerId: row.footballPlayerId,
+        groupId: row.groupId,
         favoritedAt: row.createdAt.toISOString(),
         card: this.summary(card)
       }] : [];

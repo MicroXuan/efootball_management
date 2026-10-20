@@ -1,5 +1,5 @@
 import {
-  Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography
+  Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Pagination, Select, Space, Table, Tag, Typography
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -28,6 +28,9 @@ const transactionTypeLabels: Record<string, string> = {
 };
 
 const money = (value: number | null) => value === null ? '未记录' : value.toLocaleString('zh-CN');
+const teamLabel = (number: number | null | undefined, name: string | null) =>
+  name === null ? '自由球员' : `${number === null || number === undefined ? '未编号' : `${number}号`} ${name}`;
+const historyPageSize = 30;
 
 type ManualFields = {
   leagueTeamId: string; seasonId?: string; direction: 'CREDIT' | 'DEBIT';
@@ -57,7 +60,11 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
   const { leagueId = '' } = useParams();
   const [data, setData] = useState<FinanceLedgerListResponse>({ items: [], nextCursor: null });
   const [transactions, setTransactions] = useState<LeagueTransactionListResponse>({ items: [], nextCursor: null });
-  const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
+  const [teams, setTeams] = useState<{ id: string; name: string; teamNumber: number | null }[]>([]);
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [transactionPage, setTransactionPage] = useState(1);
+  const [ledgerCursors, setLedgerCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [transactionCursors, setTransactionCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
   const [seasons, setSeasons] = useState<LeagueSeasonSummary[]>([]);
   const [rules, setRules] = useState<TransactionFeeRuleVersion[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -78,10 +85,33 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
         api.request(`/v1/admin/leagues/${leagueId}/roster-seasons`, { schema: z.array(LeagueSeasonSummarySchema) })
       ]);
       setData(ledger); setTransactions(transactionResult);
-      setTeams(teamResult.items.map(({ id, name }) => ({ id, name }))); setRules(ruleResult.items); setSeasons(seasonResult);
+      setLedgerPage(1); setTransactionPage(1);
+      setLedgerCursors({ 1: undefined, 2: ledger.nextCursor ?? undefined });
+      setTransactionCursors({ 1: undefined, 2: transactionResult.nextCursor ?? undefined });
+      setTeams(teamResult.items.map(({ id, name, teamNumber }) => ({ id, name, teamNumber }))); setRules(ruleResult.items); setSeasons(seasonResult);
     } catch { setError('财务数据加载失败'); }
   }, [api, leagueId]);
   useEffect(() => { void load(); }, [load]);
+  const changeLedgerPage = async (page: number) => {
+    const cursor = ledgerCursors[page];
+    if (page > 1 && !cursor) return;
+    try {
+      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+      const result = await api.request(`/v1/admin/roster/leagues/${leagueId}/ledger${query}`, { schema: FinanceLedgerListResponseSchema });
+      setData(result); setLedgerPage(page);
+      setLedgerCursors((current) => ({ ...current, [page + 1]: result.nextCursor ?? undefined }));
+    } catch { setError('财务流水翻页失败，请重试'); }
+  };
+  const changeTransactionPage = async (page: number) => {
+    const cursor = transactionCursors[page];
+    if (page > 1 && !cursor) return;
+    try {
+      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+      const result = await api.request(`/v1/admin/leagues/${leagueId}/transactions${query}`, { schema: LeagueTransactionListResponseSchema });
+      setTransactions(result); setTransactionPage(page);
+      setTransactionCursors((current) => ({ ...current, [page + 1]: result.nextCursor ?? undefined }));
+    } catch { setError('交易历史翻页失败，请重试'); }
+  };
   const createManual = async (values: ManualFields) => {
     setSubmitting(true); setError(null);
     try {
@@ -142,20 +172,21 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
     <Alert type="info" showIcon title="实时数据，非最终结算" description="流水写入后不可修改或删除；赛季为空的旧流水归入“历史未归档”。" />
     <Descriptions column={2} items={[
       { key: 'rule', label: '当前手续费规则', children: rules[0] ? `${rules[0].rateBps / 100}% · 最低 ${rules[0].minimumFeeMinor}` : '尚未配置' },
-      { key: 'history', label: '历史未归档', children: `${data.items.filter(({ seasonId }) => seasonId === null).length} 条` }
+      { key: 'history', label: '本页历史未归档', children: `${data.items.filter(({ seasonId }) => seasonId === null).length} 条` }
     ]} />
     <Space wrap><Button type="primary" onClick={() => setManualOpen(true)}>新增财务项目</Button><Button onClick={openSettlement}>赛季结算金额</Button><Button onClick={() => setFeeOpen(true)}>配置手续费规则</Button></Space>
     <Typography.Paragraph type="secondary">所有分类均以中文展示，技术类型码仅保留在接口和审计详情中。</Typography.Paragraph>
     <Table pagination={false} rowKey="id" dataSource={data.items} columns={[
-      { title: '时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) }, { title: '球队', dataIndex: 'teamName' },
+      { title: '时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) }, { title: '球队', render: (_, row) => teamLabel(row.teamNumber, row.teamName) },
       { title: '赛季', render: (_, row) => row.seasonId ? seasonNames.get(row.seasonId) ?? '未知赛季' : '历史未归档' },
       { title: '方向', render: (_, row) => <Tag color={row.direction === 'CREDIT' ? 'success' : 'gold'}>{row.direction === 'CREDIT' ? '收入' : '支出'}</Tag> },
       { title: '类型', render: (_, row) => financeTypeLabels[row.type] ?? '其他项目' },
       { title: '金额', dataIndex: 'amountMinor' }, { title: '说明', dataIndex: 'note' }
     ]} />
+    <Pagination aria-label="财务流水分页" current={ledgerPage} pageSize={historyPageSize} total={(ledgerPage - 1) * historyPageSize + data.items.length + (data.nextCursor ? 1 : 0)} showSizeChanger={false} onChange={(page) => void changeLedgerPage(page)} />
     <Modal open={manualOpen} title="新增财务项目" footer={null} onCancel={() => setManualOpen(false)} destroyOnHidden>
       <Form<ManualFields> form={manualForm} layout="vertical" initialValues={{ direction: 'DEBIT', type: 'MANUAL_ADJUSTMENT' }} onValuesChange={() => manualKey.reset()} onFinish={(values) => void createManual(values)}>
-        <Form.Item label="球队" name="leagueTeamId" rules={[{ required: true }]}><Select options={teams.map(({ id, name }) => ({ value: id, label: name }))} /></Form.Item>
+        <Form.Item label="球队" name="leagueTeamId" rules={[{ required: true }]}><Select options={teams.map(({ id, name, teamNumber }) => ({ value: id, label: teamLabel(teamNumber, name) }))} /></Form.Item>
         <Form.Item label="赛季" name="seasonId" extra="不选择时归入历史未归档"><Select allowClear placeholder="历史未归档" options={seasons.map(({ id, displayName }) => ({ value: id, label: displayName }))} /></Form.Item>
         <Form.Item label="收支方向" name="direction" rules={[{ required: true }]}><Select options={[{ value: 'CREDIT', label: '收入' }, { value: 'DEBIT', label: '支出' }]} /></Form.Item>
         <Form.Item label="项目类型" name="type" rules={[{ required: true }]}><Select options={manualTypes.map((value) => ({ value, label: financeTypeLabels[value] }))} /></Form.Item>
@@ -177,7 +208,7 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
         onFinish={(values) => void saveSettlement(values)}
       >
         <Space size="middle" style={{ display: 'flex' }}>
-          <Form.Item label="球队" name="leagueTeamId" rules={[{ required: true }]} style={{ flex: 1 }}><Select options={teams.map(({ id, name }) => ({ value: id, label: name }))} /></Form.Item>
+          <Form.Item label="球队" name="leagueTeamId" rules={[{ required: true }]} style={{ flex: 1 }}><Select options={teams.map(({ id, name, teamNumber }) => ({ value: id, label: teamLabel(teamNumber, name) }))} /></Form.Item>
           <Form.Item label="赛季" name="seasonId" rules={[{ required: true }]} style={{ flex: 1 }}><Select options={seasons.map(({ id, displayName }) => ({ value: id, label: displayName }))} /></Form.Item>
         </Space>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0 16px' }}>
@@ -205,11 +236,12 @@ export function LedgerPage({ api = adminApi }: { api?: AdminApi }) {
       { title: '时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) },
       { title: '类型', render: (_, row) => <Tag color={row.type === 'EMERGENCY_CORRECTION' ? 'gold' : 'green'}>{transactionTypeLabels[row.type] ?? '其他交易'}</Tag> },
       { title: '球员', dataIndex: 'playerName' },
-      { title: '买卖双方', render: (_, row) => `${row.sourceTeamName ?? '外部'} → ${row.targetTeamName ?? '外部'}` },
+      { title: '买卖双方', render: (_, row) => `${teamLabel(row.sourceTeamNumber, row.sourceTeamName)} → ${teamLabel(row.targetTeamNumber, row.targetTeamName)}` },
       { title: '原值 → 新值', render: (_, row) => `${money(row.valuationSnapshotMinor)} → ${money(row.amountMinor)}` },
       { title: '手续费', render: (_, row) => `手续费 ${money(row.transactionFeeMinor)}` },
       { title: '备注', dataIndex: 'reason' }
     ]} />
+    <Pagination aria-label="交易历史分页" current={transactionPage} pageSize={historyPageSize} total={(transactionPage - 1) * historyPageSize + transactions.items.length + (transactions.nextCursor ? 1 : 0)} showSizeChanger={false} onChange={(page) => void changeTransactionPage(page)} />
   </Card>
   </Space>;
 }

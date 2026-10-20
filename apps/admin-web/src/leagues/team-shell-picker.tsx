@@ -2,6 +2,7 @@ import { Alert, Button, Empty, Input, Spin, Tag } from 'antd';
 import { TeamCatalogListResponseSchema, type TeamCatalogItem } from '@efm/contracts';
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminApi } from '../lib/api';
+import { PaginatedRecords } from '../components/paginated-records';
 
 function catalogName(item: TeamCatalogItem) {
   return item.nameZh ?? item.nameEn ?? item.nameJa ?? item.shortName;
@@ -74,8 +75,8 @@ export function TeamShellPicker({
     /> : null}
     {loading ? <div className="team-shell-picker__loading"><Spin size="small" /><span>正在加载队壳目录</span></div> : null}
     {!loading && !failed && items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可选队壳，请调整搜索条件" /> : null}
-    {!loading && !failed && items.length > 0 ? <div className="team-shell-picker__grid">
-      {items.map((item) => {
+    {!loading && !failed && items.length > 0 ? <PaginatedRecords items={items} label="队壳分页" render={(pageItems) => <div className="team-shell-picker__grid">
+      {pageItems.map((item) => {
         const name = catalogName(item);
         const unavailable = item.isAssigned || item.status !== 'ACTIVE';
         const selected = value === item.id;
@@ -100,6 +101,6 @@ export function TeamShellPicker({
           </div>
         </article>;
       })}
-    </div> : null}
+    </div>} /> : null}
   </div>;
 }

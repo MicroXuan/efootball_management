@@ -12,6 +12,7 @@ describe('profile template', () => {
     expect(quickActions).toBeGreaterThan(center)
     expect(template).toContain('bindtap="openActionCenter"')
     expect(template).toContain('{{actionCenter.attentionCount}}')
+    expect(template).toContain('wx:if="{{actionCenter.attentionCount > 0}}" class="action-center-entry__count"')
     expect(template).toContain('wx:if="{{actionCenter.auctionCount}}"')
   })
 
@@ -20,7 +21,9 @@ describe('profile template', () => {
     const stylesheet = readFileSync(resolve(process.cwd(), 'miniprogram/pages/profile/index.wxss'), 'utf8')
 
     expect(template).toContain('class="quick-actions"')
-    expect(template).toContain('bindtap="openMyMatches"')
+    expect(template).toContain('bindtap="openMyLeagues"')
+    expect(template).toContain('>我的联赛</text>')
+    expect(template).toContain('>查看参赛联赛</text>')
     expect(template).toContain('bindtap="openPlayerAuctions"')
     expect(template).toContain('bindtap="openFavorites"')
     expect(template).not.toContain('class="favorites-entry" bindtap="openFavorites"')

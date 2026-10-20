@@ -46,11 +46,27 @@ function harness() {
   const state: any = {
     startBatch: jest.fn(), pauseBatch: jest.fn(), resumeBatch: jest.fn()
   };
-  const service = new AdminPlayerAuctionsService({} as never, authorization, receipts, audit, state);
+  const service = new AdminPlayerAuctionsService(tx, authorization, receipts, audit, state);
   return { service, tx, batch, audit, state };
 }
 
 describe('AdminPlayerAuctionsService', () => {
+  it('exposes the full team number, team, and bidder name in the bid audit', async () => {
+    const { service, batch } = harness();
+    batch.lots = [{
+      id: 'lot-1', displayOrder: 1, footballPlayerId: 'player-1', playerCardId: 'card-1',
+      playerNameSnapshot: '车范根', playerSnapshot: {}, startingPrice: 50, minimumIncrement: 10,
+      status: 'PENDING_REVIEW', currentPrice: 120, currentHighestBidId: 'bid-1', deadlineAt: null,
+      deadlineEpoch: 1, pausedRemainingMs: null, version: 2, startedAt: now, closedAt: now,
+      reviewedAt: null, review: null, bids: [{ id: 'bid-1', leagueTeamId: 'team-1', userId: 'user-1',
+        leagueTeam: { teamNumber: 1, name: '阿哈尔' }, user: { displayName: '小宣' },
+        source: 'MINIPROGRAM', amount: 120, result: 'VALID', rejectionReason: null,
+        wechatMessageId: null, wechatSortKey: null, wechatSentAt: null, submittedAt: now, receivedAt: now }]
+    }];
+    const result = await service.detail('admin-1', 'league-1', 'batch-1');
+    expect(result.lots[0]?.bids[0]).toMatchObject({ teamNumber: 1, teamName: '阿哈尔', bidderDisplayName: '小宣' });
+  });
+
   it('enforces league-scoped enabled group bindings when creating a draft', async () => {
     const { service, tx } = harness();
     tx.wechatGroupBinding.findFirst.mockResolvedValueOnce(null);

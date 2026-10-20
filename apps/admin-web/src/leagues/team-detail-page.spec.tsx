@@ -12,6 +12,7 @@ const detail = (name: string, version: number) => ({
   ownerDisplayName: '小宣', ownerAlias: 'tidus', catalogTeamId: '55555555-5555-4555-8555-555555555555',
   teamNumber: 0, name, shortName: '巴萨', logoUrl: null, status: 'ACTIVE' as const,
   rosterStatus: 'COMPLIANT' as const, activePlayerCount: 0, salaryTotalMinor: 0, salaryCapMinor: 0,
+  salaryCapConfirmed: false,
   shellValueMinor: 25000,
   defaultGameAccountId: null, participatingSeasonCount: 0, version,
   createdAt: '2026-09-29T00:00:00.000Z', updatedAt: '2026-09-29T00:00:00.000Z'
@@ -75,6 +76,26 @@ it('saves team settings without changing the team lifecycle status', async () =>
     method: 'PATCH',
     body: { teamNumber: 0, ownerAlias: '新称呼', shellValueMinor: 25000, expectedVersion: 1 }
   }));
+});
+
+it('previews an over-cap result and requires a reason before confirming a new cap', async () => {
+  const original = { ...detail('巴塞罗那', 1), salaryCapMinor: 14_000, salaryCapConfirmed: true, salaryTotalMinor: 12_000 };
+  const request = vi.fn().mockResolvedValueOnce(original).mockResolvedValueOnce({
+    ...original, version: 2, salaryCapMinor: 10_000, rosterStatus: 'OVER_CAP'
+  });
+  renderPage(request);
+
+  const cap = await screen.findByLabelText('设置球队工资帽');
+  await userEvent.clear(cap);
+  await userEvent.type(cap, '10000');
+  expect(screen.getByText('保存后预计状态：超帽')).toBeInTheDocument();
+  expect(screen.getByText(/现有工资超出新帽 2000/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '保存工资帽' })).toBeDisabled();
+  await userEvent.type(screen.getByLabelText('工资帽调整原因'), '赛季规则调整');
+  await userEvent.click(screen.getByRole('button', { name: '保存工资帽' }));
+  await waitFor(() => expect(request).toHaveBeenNthCalledWith(2, `/v1/admin/leagues/${leagueId}/teams/${teamId}`, expect.objectContaining({
+    method: 'PATCH', body: { salaryCapMinor: 10_000, salaryCapConfirmed: true, reason: '赛季规则调整', expectedVersion: 1 }
+  })));
 });
 
 it('refreshes current data after an optimistic-version conflict', async () => {

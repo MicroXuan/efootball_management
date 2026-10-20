@@ -137,6 +137,20 @@ describe('LeagueTeamsService', () => {
     return shell;
   }
 
+  it('does not create a team when its salary cap is omitted outside the HTTP validator', async () => {
+    const { user } = await createUser('缺工资帽用户');
+    const league = await createLeague('缺工资帽联赛');
+    const shell = await createShell('缺工资帽球队');
+
+    await expect(service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '经理',
+      teamNumber: 1,
+      catalogTeamId: shell.id
+    } as never, randomUUID())).rejects.toMatchObject({ code: 'TEAM_SALARY_CAP_REQUIRED' });
+    await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(0);
+  });
+
   it('rejects binding when the league has no current season and creates no orphan team', async () => {
     const { user } = await createUser('未开赛用户');
     const league = await createLeague('未设置赛季', false);
@@ -146,7 +160,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '未开赛经理',
       teamNumber: 1,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_CURRENT_SEASON_REQUIRED' } });
     await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(0);
   });
@@ -160,7 +175,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '停用经理',
       teamNumber: 2,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'TEAM_CATALOG_ITEM_UNAVAILABLE' } });
     await expect(prisma.leagueTeam.count({ where: { leagueId: league.id } })).resolves.toBe(0);
   });
@@ -175,13 +191,15 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '甲联赛称呼',
       teamNumber: 7,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
     const second = await service.create(actorId, secondLeague.id, {
       ownerUserId: user.id,
       ownerAlias: '乙联赛称呼',
       teamNumber: 7,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
 
     expect(first.ownerUserId).toBe(second.ownerUserId);
@@ -214,21 +232,24 @@ describe('LeagueTeamsService', () => {
       ownerUserId: firstOwner.user.id,
       ownerAlias: '一号',
       teamNumber: 12,
-      catalogTeamId: firstShell.id
+      catalogTeamId: firstShell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
 
     await expect(service.create(actorId, league.id, {
       ownerUserId: firstOwner.user.id,
       ownerAlias: '重复用户',
       teamNumber: 13,
-      catalogTeamId: secondShell.id
+      catalogTeamId: secondShell.id,
+      salaryCapMinor: 14_000
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_OWNER_ALREADY_EXISTS' } });
 
     await expect(service.create(actorId, league.id, {
       ownerUserId: secondOwner.user.id,
       ownerAlias: '二号',
       teamNumber: 12,
-      catalogTeamId: secondShell.id
+      catalogTeamId: secondShell.id,
+      salaryCapMinor: 14_000
     }, randomUUID())).rejects.toMatchObject({ response: { code: 'LEAGUE_TEAM_NUMBER_ALREADY_EXISTS' } });
     await expect(prisma.seasonEntry.count({ where: { season: { leagueId: league.id } } })).resolves.toBe(1);
   });
@@ -243,6 +264,7 @@ describe('LeagueTeamsService', () => {
       ownerAlias: '幂等经理',
       teamNumber: 21,
       catalogTeamId: shell.id,
+      salaryCapMinor: 14_000,
       name: '客户端伪造名称',
       logoUrl: 'https://outside.example/fake.png'
     };
@@ -282,13 +304,15 @@ describe('LeagueTeamsService', () => {
         ownerUserId: first.user.id,
         ownerAlias: '并发甲',
         teamNumber: 31,
-        catalogTeamId: shell.id
+        catalogTeamId: shell.id,
+        salaryCapMinor: 14_000
       }, randomUUID()),
       service.create(actorId, league.id, {
         ownerUserId: second.user.id,
         ownerAlias: '并发乙',
         teamNumber: 32,
-        catalogTeamId: shell.id
+        catalogTeamId: shell.id,
+        salaryCapMinor: 14_000
       }, randomUUID())
     ]);
 
@@ -337,7 +361,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '逻辑删除经理',
       teamNumber: 41,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
     await prisma.league.update({ where: { id: league.id }, data: { isDeleted: true } });
     const key = randomUUID();
@@ -368,7 +393,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '队壳经理',
       teamNumber: 8,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
     const key = randomUUID();
 
@@ -388,6 +414,69 @@ describe('LeagueTeamsService', () => {
     })).resolves.toBe(1);
   });
 
+  it('confirms and changes a team cap with versioning and an audit trail', async () => {
+    const { user } = await createUser('工资帽用户');
+    const league = await createLeague('工资帽联赛');
+    const shell = await createShell('工资帽球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id,
+      ownerAlias: '工资帽经理',
+      teamNumber: 33,
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
+    }, randomUUID());
+
+    const changed = await service.update(actorId, league.id, team.id, {
+      salaryCapMinor: 10_000,
+      salaryCapConfirmed: true,
+      reason: '逐队设置本赛季工资帽',
+      expectedVersion: team.version
+    }, randomUUID());
+
+    expect(changed).toMatchObject({ salaryCapMinor: 10_000, salaryCapConfirmed: true, version: team.version + 1 });
+    await expect(prisma.leagueTeam.findUniqueOrThrow({ where: { id: team.id } }))
+      .resolves.toMatchObject({ salaryCapMinor: 10_000, salaryCapConfirmedAt: expect.any(Date) });
+    await expect(prisma.auditLog.findFirst({ where: { resourceId: team.id, action: 'TEAM_SALARY_CAP_UPDATED' } }))
+      .resolves.toMatchObject({ reason: '逐队设置本赛季工资帽', metadata: expect.objectContaining({ oldSalaryCapMinor: 14_000, newSalaryCapMinor: 10_000 }) });
+    await expect(service.update(actorId, league.id, team.id, {
+      salaryCapMinor: 9_000, salaryCapConfirmed: true, reason: '过期版本', expectedVersion: team.version
+    }, randomUUID())).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+  });
+
+  it('marks a team over cap when an admin lowers its cap below active salary', async () => {
+    const { user } = await createUser('超帽用户');
+    const league = await createLeague('超帽联赛');
+    const shell = await createShell('超帽球队');
+    const team = await service.create(actorId, league.id, {
+      ownerUserId: user.id, ownerAlias: '经理', teamNumber: 34, catalogTeamId: shell.id, salaryCapMinor: 14_000
+    }, randomUUID());
+    const source = await prisma.dataSource.create({ data: { code: `cap-${randomUUID()}`, name: '工资帽测试' } });
+    const player = await prisma.footballPlayer.create({ data: { nameEn: 'Cap Fixture' } });
+    const rule = await prisma.leagueSalaryRuleVersion.create({
+      data: { leagueId: league.id, version: 1, salaryCapMinor: 14_000, effectiveAt: new Date('2026-01-01T00:00:00.000Z'), createdByAdminId: actorId }
+    });
+    const card = await prisma.playerCard.create({
+      data: { sourceId: source.id, externalId: `cap-card-${randomUUID()}`, playerId: player.id, cardName: 'Cap card', position: 'CB', overallRating: 90, cardType: 'STANDARD' }
+    });
+    try {
+      await prisma.leaguePlayerOwnership.create({
+        data: { leagueId: league.id, leagueTeamId: team.id, footballPlayerId: player.id, currentPlayerCardId: card.id, maxOverallSnapshot: 90, salaryRuleVersionId: rule.id, salaryMinor: 12_000 }
+      });
+      const updated = await service.update(actorId, league.id, team.id, {
+        salaryCapMinor: 10_000, salaryCapConfirmed: true, reason: '降低限额', expectedVersion: team.version
+      }, randomUUID());
+      expect(updated).toMatchObject({ salaryTotalMinor: 12_000, salaryCapMinor: 10_000, rosterStatus: 'OVER_CAP' });
+      await expect(prisma.auditLog.findFirst({ where: { resourceId: team.id, action: 'TEAM_SALARY_CAP_UPDATED' } }))
+        .resolves.toMatchObject({ metadata: expect.objectContaining({ projectedRosterStatus: 'OVER_CAP', salaryTotalMinor: 12_000 }) });
+    } finally {
+      await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueTeamId: team.id } });
+      await prisma.playerCard.delete({ where: { id: card.id } });
+      await prisma.footballPlayer.delete({ where: { id: player.id } });
+      await prisma.dataSource.delete({ where: { id: source.id } });
+      await prisma.leagueSalaryRuleVersion.delete({ where: { id: rule.id } });
+    }
+  });
+
   it('archives and restores a team without changing its identity or historical records', async () => {
     const { user } = await createUser('退出球队用户');
     const league = await createLeague('退出球队联赛');
@@ -396,7 +485,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '退出经理',
       teamNumber: 18,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
     const seasonId = league.currentSeasonId!;
     const seasonEntry = await prisma.seasonEntry.findUniqueOrThrow({
@@ -496,7 +586,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '状态经理',
       teamNumber: 19,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
 
     await expect(service.archive(actorId, league.id, team.id, {
@@ -531,7 +622,8 @@ describe('LeagueTeamsService', () => {
       ownerUserId: user.id,
       ownerAlias: '列表经理',
       teamNumber: 20,
-      catalogTeamId: shell.id
+      catalogTeamId: shell.id,
+      salaryCapMinor: 14_000
     }, randomUUID());
     await service.archive(actorId, league.id, team.id, {
       expectedVersion: team.version,

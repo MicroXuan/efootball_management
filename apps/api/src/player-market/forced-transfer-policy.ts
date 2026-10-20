@@ -20,7 +20,6 @@ export type ForcedApplicationDecision = {
 export type ForcedQueueItem = { id: string; firstValidSubmittedAt: Date };
 
 export function reconcileForcedApplication(input: ForcedApplicationSnapshot): ForcedApplicationDecision {
-  if (input.now >= input.windowEndsAt) return { status: 'EXPIRED', reason: 'TRANSFER_WINDOW_CLOSED' };
   if (input.currentOwnershipStatus !== 'ACTIVE') {
     return { status: 'OWNERSHIP_CHANGED', reason: 'OWNERSHIP_NO_LONGER_ACTIVE' };
   }

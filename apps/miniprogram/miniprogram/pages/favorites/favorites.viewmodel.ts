@@ -19,6 +19,7 @@ export function buildFavoriteQuery(
 ): PlayerFavoriteListQuery {
   return {
     ...(query.keyword?.trim() ? { keyword: query.keyword.trim() } : {}),
+    ...(query.groupId ? { groupId: query.groupId } : {}),
     ...(!resetCursor && query.cursor ? { cursor: query.cursor } : {}),
     limit: query.limit,
   }

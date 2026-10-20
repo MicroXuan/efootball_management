@@ -159,7 +159,8 @@ describe('RosterTransactionsService', () => {
         catalogTeamId: shell.id,
         teamNumber: index + 1,
         name: `Team ${index + 1}`,
-        shortName: `T${index + 1}`
+        shortName: `T${index + 1}`,
+        salaryCapMinor: options.cap ?? 10_000
       } });
     }));
     await salaryRules.createVersion(admin.id, league.id, {
@@ -254,6 +255,31 @@ describe('RosterTransactionsService', () => {
     expect(first.summary).toMatchObject({ rosterCount: 1, salaryMinor: 200, salaryCapMinor: 10_000 });
     await expect(prisma.rosterTransaction.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
     await expect(prisma.financeLedgerEntry.count({ where: { leagueId: f.league.id } })).resolves.toBe(1);
+  });
+
+  it('uses the target team cap, not the league rule cap, for acquisition', async () => {
+    const f = await fixture({ cap: 10_000 });
+    const player = await card(f.source.id, 'Team cap signing', 93);
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: 150 } });
+
+    await expect(service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    )).rejects.toMatchObject({ code: 'TEAM_SALARY_CAP_EXCEEDED' });
+    await expect(prisma.leaguePlayerOwnership.count({ where: { leagueId: f.league.id } })).resolves.toBe(0);
+  });
+
+  it('blocks an acquisition when the target team cap is unset', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'No cap signing', 93);
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: null } });
+
+    await expect(service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    )).rejects.toMatchObject({ code: 'TEAM_SALARY_CAP_UNSET' });
   });
 
   it('snapshots the opening roster before a request blocked across startsAt mutates it', async () => {
@@ -598,6 +624,28 @@ describe('RosterTransactionsService', () => {
     ]));
   });
 
+  it('allows an administrator release after a team cap becomes unset', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Unset cap release');
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: null } });
+
+    const released = await service.release({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      amountMinor: null,
+      expectedVersion: 1,
+      idempotencyKey: randomUUID(),
+      reason: 'Reduce salary'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+
+    expect(released.summary).toMatchObject({ rosterCount: 0, salaryMinor: 0, salaryCapMinor: 0 });
+  });
+
   it('rejects player 26 without changing the existing roster', async () => {
     const f = await fixture({ cap: 100_000 });
     const rule = await prisma.leagueSalaryRuleVersion.findFirstOrThrow({
@@ -705,6 +753,61 @@ describe('RosterTransactionsService', () => {
     ]));
   });
 
+  it('uses distinct source and destination team caps for a transfer', async () => {
+    const f = await fixture({ cap: 10_000 });
+    const player = await card(f.source.id, 'Distinct caps transfer', 93);
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: 100 } });
+    await prisma.leagueTeam.update({ where: { id: f.teams[1]!.id }, data: { salaryCapMinor: 500 } });
+
+    const moved = await service.transfer({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      targetLeagueTeamId: f.teams[1]!.id,
+      amountMinor: null,
+      expectedVersion: 1,
+      idempotencyKey: randomUUID(),
+      reason: 'Different salary caps'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+
+    expect(moved.summary).toMatchObject({ salaryMinor: 200, salaryCapMinor: 500 });
+    expect(moved.sourceSummary).toMatchObject({ salaryMinor: 0, salaryCapMinor: 100 });
+    await expect(prisma.leagueTeam.findMany({
+      where: { id: { in: f.teams.map(({ id }) => id) } },
+      select: { id: true, rosterStatus: true }
+    })).resolves.toEqual(expect.arrayContaining([
+      { id: f.teams[0]!.id, rosterStatus: 'COMPLIANT' },
+      { id: f.teams[1]!.id, rosterStatus: 'COMPLIANT' }
+    ]));
+  });
+
+  it('allows a player to leave a source team whose cap is unset', async () => {
+    const f = await fixture();
+    const player = await card(f.source.id, 'Unset source cap transfer', 93);
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id),
+      f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: null } });
+
+    const moved = await service.transfer({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      targetLeagueTeamId: f.teams[1]!.id,
+      amountMinor: null,
+      expectedVersion: 1,
+      idempotencyKey: randomUUID(),
+      reason: 'Leave unset source cap'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+
+    expect(moved.sourceSummary).toMatchObject({ salaryMinor: 0, salaryCapMinor: 0 });
+  });
+
   it('locks transfer teams in stable order so opposite transfers complete without deadlock', async () => {
     const f = await fixture();
     const first = await card(f.source.id, 'Opposite A');
@@ -804,13 +907,14 @@ describe('RosterTransactionsService', () => {
   });
 
   it('upgrades only to another card of the same player and checks the resulting salary', async () => {
-    const f = await fixture({ cap: 200 });
+    const f = await fixture({ cap: 1_000 });
     const player = await card(f.source.id, 'Upgrade base', 93);
     const acquired = await service.acquire(
       acquisition(f.season.id, f.teams[0]!.id, player.card.id),
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
     );
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: 200 } });
     const wrong = await card(f.source.id, 'Wrong player', 92);
     await expect(service.upgradeCard({
       seasonId: f.season.id,
@@ -949,11 +1053,12 @@ describe('RosterTransactionsService', () => {
       algorithmVersion: 'test-v1'
     });
     await salaryRules.createVersion(f.admin.id, f.league.id, {
-      salaryCapMinor: 150,
+      salaryCapMinor: 1_000,
       tiers: defaultSalaryTiers(),
       effectiveAt: '2026-09-16T00:00:00.000Z',
       expectedCurrentVersion: 1
     });
+    await prisma.leagueTeam.update({ where: { id: f.teams[0]!.id }, data: { salaryCapMinor: 150 } });
 
     await expect(service.upgradeCard({
       seasonId: f.season.id,
@@ -1019,7 +1124,7 @@ describe('RosterTransactionsService', () => {
       .rejects.toMatchObject({ code: 'TRANSFER_WINDOW_CLOSED' });
   });
 
-  it('recalculates salaries without dropping players and marks over-cap teams', async () => {
+  it('recalculates salaries without replacing the team salary cap', async () => {
     const f = await fixture({ cap: 10_000 });
     const player = await card(f.source.id, 'Recalculate', 93);
     await service.acquire(
@@ -1043,13 +1148,13 @@ describe('RosterTransactionsService', () => {
       reason: 'Apply new salaries'
     }, f.admin.id);
 
-    expect(result).toMatchObject({ recalculatedPlayers: 1, overCapTeams: 1 });
+    expect(result).toMatchObject({ recalculatedPlayers: 1, overCapTeams: 0 });
     await expect(prisma.leaguePlayerOwnership.count({
       where: { leagueId: f.league.id, status: 'ACTIVE' }
     })).resolves.toBe(1);
     await expect(prisma.leagueTeam.findUniqueOrThrow({
       where: { id: f.teams[0]!.id }, select: { rosterStatus: true }
-    })).resolves.toEqual({ rosterStatus: 'OVER_CAP' });
+    })).resolves.toEqual({ rosterStatus: 'COMPLIANT' });
   });
 
   it('allows only platform admins to make reasoned emergency corrections', async () => {
@@ -1099,6 +1204,29 @@ describe('RosterTransactionsService', () => {
     await expect(prisma.rosterTransaction.count({
       where: { leagueId: f.league.id, type: 'EMERGENCY_CORRECTION' }
     })).resolves.toBe(1);
+  });
+
+  it('checks the destination team cap during an emergency reassignment', async () => {
+    const f = await fixture({ openWindow: false });
+    const player = await card(f.source.id, 'Emergency cap', 93);
+    const rule = await prisma.leagueSalaryRuleVersion.findFirstOrThrow({ where: { leagueId: f.league.id } });
+    const ownership = await prisma.leaguePlayerOwnership.create({ data: {
+      leagueId: f.league.id, leagueTeamId: f.teams[0]!.id,
+      footballPlayerId: player.player.id, currentPlayerCardId: player.card.id,
+      maxOverallSnapshot: 93, dtRatingSnapshot: 93,
+      salaryRuleVersionId: rule.id, salaryMinor: 200
+    } });
+    await prisma.leagueTeam.update({ where: { id: f.teams[1]!.id }, data: { salaryCapMinor: 150 } });
+
+    await expect(service.emergencyCorrect({
+      seasonId: f.season.id,
+      ownershipId: ownership.id,
+      targetLeagueTeamId: f.teams[1]!.id,
+      newPlayerCardId: null,
+      expectedVersion: 1,
+      idempotencyKey: randomUUID(),
+      reason: 'Correct assignment'
+    }, f.admin.id)).rejects.toMatchObject({ code: 'TEAM_SALARY_CAP_EXCEEDED' });
   });
 
   it('marks a player disappeared or retired and restores active without deleting history', async () => {

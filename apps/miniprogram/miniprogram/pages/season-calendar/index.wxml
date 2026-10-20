@@ -1,0 +1,25 @@
+<view class="page-shell">
+  <view class="hero"><text class="kicker">赛季日程</text><text class="title">赛季阶段日历</text><text class="timezone">北京时间 · 一眼查看转会、强报、身价与提名期</text></view>
+  <view class="month-switch"><button bindtap="previousMonth" aria-label="上个月">‹</button><text>{{monthLabel}}</text><button bindtap="nextMonth" aria-label="下个月">›</button></view>
+  <loading-state wx:if="{{state === 'loading'}}" label="正在整理赛季日程" />
+  <view wx:elif="{{state === 'error'}}" class="state-card"><text>{{errorMessage}}</text><button class="efm-retry-button" bindtap="loadPage">重新加载</button></view>
+  <view wx:elif="{{!hasSeason}}" class="state-card"><text>当前联赛尚未设置赛季</text></view>
+  <view wx:else>
+    <view class="calendar-card">
+      <view class="weekday-row"><text>一</text><text>二</text><text>三</text><text>四</text><text>五</text><text>六</text><text>日</text></view>
+      <view wx:for="{{weeks}}" wx:key="id" wx:for-item="week" class="calendar-week">
+        <view wx:for="{{week.days}}" wx:key="date" wx:for-item="day" class="calendar-day {{day.inMonth ? '' : 'adjacent'}}">
+          <text class="day-number">{{day.dayNumber}}</text>
+          <view wx:for="{{day.markers}}" wx:key="id" wx:for-item="marker" class="day-marker tone-{{marker.tone}}"><text>{{marker.label}}</text></view>
+        </view>
+      </view>
+    </view>
+    <view class="summary-head"><text>本月阶段与事项</text><text>{{summary.length}} 项</text></view>
+    <view wx:if="{{!summary.length}}" class="state-card"><text>本月暂无赛季阶段或事项</text><text class="hint">可切换月份查看其他阶段。</text></view>
+    <view wx:for="{{summary}}" wx:key="id" wx:for-item="item" class="summary-row tone-{{item.tone}}">
+      <view class="summary-top"><text class="summary-kind">{{item.kind}}</text><text class="summary-title">{{item.title}}</text><text class="summary-status">{{item.status}}</text></view>
+      <text class="summary-range">{{item.range}}</text>
+      <text wx:if="{{item.description}}" class="summary-description">{{item.description}}</text>
+    </view>
+  </view>
+</view>

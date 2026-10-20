@@ -110,7 +110,7 @@ export function AdminAccountsPage({ api = adminApi }: { api?: AdminApi }) {
     <header className="workspace-page-title"><div><span className="section-kicker">平台管理</span><h1>账号管理</h1><p>管理登录状态、密码与联赛授权范围。</p></div></header>
     <Card title="账号管理" className="data-card">
       {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
-      {loading ? <div className="loading-block"><Spin /></div> : accounts.length ? <Table rowKey="id" pagination={false} dataSource={accounts} columns={[
+      {loading ? <div className="loading-block"><Spin /></div> : accounts.length ? <Table rowKey="id" pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50] }} dataSource={accounts} columns={[
         { title: '账号', dataIndex: 'username' }, { title: '显示名称', dataIndex: 'displayName' },
         { title: '状态', dataIndex: 'status', render: (value) => <Tag color={value === 'ACTIVE' ? 'success' : 'error'}>{value === 'ACTIVE' ? '启用' : '停用'}</Tag> },
         { title: '联赛权限', render: (_, row) => <Space wrap>{(grantsByAdmin[row.id] ?? []).length ? (grantsByAdmin[row.id] ?? []).map((grant) => <Tag key={grant.id} closable={!pending} onClose={(event) => { event.preventDefault(); void revoke(grant); }} closeIcon={<span aria-label={`撤销 ${grant.leagueName}`}>×</span>}>{grant.leagueName}</Tag>) : '暂无授权'}</Space> },

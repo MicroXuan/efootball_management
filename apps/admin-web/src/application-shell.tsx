@@ -6,6 +6,10 @@ import { AdminIcon } from './design-system/icons';
 
 const { Header, Sider, Content } = Layout;
 
+export function presentAdminDisplayName(displayName: string | undefined): string | undefined {
+  return displayName === 'Local Platform Administrator' ? '本地平台管理员' : displayName;
+}
+
 export function ApplicationShell() {
   const session = useAdminSession();
   const location = useLocation();
@@ -40,7 +44,7 @@ export function ApplicationShell() {
           <div><span className="section-kicker">赛事运营</span><strong>管理工作台</strong></div>
           <div className="admin-identity">
             <Tag color="success">{session.identity?.platformAdmin ? '平台管理员' : '联赛管理员'}</Tag>
-            <span>{admin?.displayName}</span>
+            <span>{presentAdminDisplayName(admin?.displayName)}</span>
             <Button type="text" onClick={() => void session.logout()}>退出登录</Button>
           </div>
         </Header>

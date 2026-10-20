@@ -2,6 +2,7 @@ import type { LeagueSeasonSummary, SeasonFixtureStatus } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { competitionsApi } from '../../services/competitions'
 import { leaguesApi } from '../../services/leagues'
+import { leagueTeamsApi } from '../../services/league-teams'
 import { competitionErrorMessage } from '../competitions/competitions.viewmodel'
 import { matchCard, seasonOptions } from './matches.viewmodel'
 
@@ -21,6 +22,11 @@ type FixturePage = {
     seasonLabels: string[]
     selectedSeasonIndex: number
     status: SeasonFixtureStatus
+    fixtureScope: 'ALL' | 'MINE'
+    selectedLeagueTeamId: string
+    mineTeams: Array<{ id: string; name: string }>
+    mineTeamLabels: string[]
+    selectedMineTeamIndex: number
     teamInput: string
     teamKeyword: string
     items: FixtureCard[]
@@ -33,13 +39,17 @@ let requestGeneration = 0
 let unloaded = false
 
 function requestSignature(page: FixturePage) {
-  return `${page.data.seasonId}\0${page.data.status}\0${page.data.teamKeyword}`
+  return `${page.data.seasonId}\0${page.data.fixtureScope}\0${page.data.selectedLeagueTeamId}\0${page.data.status}\0${page.data.teamKeyword}`
 }
 
 async function loadFixtures(page: FixturePage, mode: LoadMode = 'replace') {
   const { leagueId, seasonId } = page.data
   if (!leagueId || !seasonId) {
     page.setData({ loading: false, loadingMore: false })
+    return
+  }
+  if (page.data.fixtureScope === 'MINE' && !page.data.selectedLeagueTeamId) {
+    page.setData({ loading: false, loadingMore: false, items: [], nextCursor: '' })
     return
   }
 
@@ -52,8 +62,10 @@ async function loadFixtures(page: FixturePage, mode: LoadMode = 'replace') {
 
   try {
     const response = await competitionsApi.seasonFixtures(leagueId, seasonId, {
-      team: page.data.teamKeyword || undefined,
-      status: page.data.status,
+      team: page.data.fixtureScope === 'MINE' ? undefined : page.data.teamKeyword || undefined,
+      status: page.data.fixtureScope === 'MINE' ? 'ALL' : page.data.status,
+      scope: page.data.fixtureScope,
+      leagueTeamId: page.data.fixtureScope === 'MINE' ? page.data.selectedLeagueTeamId : undefined,
       cursor: append ? page.data.nextCursor || undefined : undefined,
       limit: 20,
     })
@@ -71,6 +83,29 @@ async function loadFixtures(page: FixturePage, mode: LoadMode = 'replace') {
     if (!unloaded && generation === requestGeneration && signature === requestSignature(page)) {
       page.setData({ loading: false, loadingMore: false })
     }
+  }
+}
+
+async function loadMineTeams(page: FixturePage) {
+  const generation = ++requestGeneration
+  page.setData({ loading: true, loadingMore: false, errorMessage: '', items: [], nextCursor: '' })
+  try {
+    const response = await leagueTeamsApi.mine()
+    if (unloaded || generation !== requestGeneration || page.data.fixtureScope !== 'MINE') return
+    const teams = response.items.filter((team) => team.leagueId === page.data.leagueId && team.status === 'ACTIVE')
+      .map((team) => ({ id: team.id, name: `${team.teamNumber ?? '—'}号 · ${team.name}（${team.ownerAlias}）` }))
+    const selected = teams.findIndex((team) => team.id === page.data.selectedLeagueTeamId)
+    const selectedMineTeamIndex = selected >= 0 ? selected : 0
+    page.setData({
+      mineTeams: teams,
+      mineTeamLabels: teams.map((team) => team.name),
+      selectedMineTeamIndex,
+      selectedLeagueTeamId: teams[selectedMineTeamIndex]?.id ?? ''
+    })
+    if (teams.length) await loadFixtures(page)
+    else page.setData({ loading: false })
+  } catch {
+    if (!unloaded && generation === requestGeneration) page.setData({ loading: false, errorMessage: '我的球队加载失败，请登录后重试' })
   }
 }
 
@@ -107,6 +142,11 @@ Page({
     seasonLabels: [] as string[],
     selectedSeasonIndex: 0,
     status: 'ALL' as SeasonFixtureStatus,
+    fixtureScope: 'ALL' as 'ALL' | 'MINE',
+    selectedLeagueTeamId: '',
+    mineTeams: [] as Array<{ id: string; name: string }>,
+    mineTeamLabels: [] as string[],
+    selectedMineTeamIndex: 0,
     teamInput: '',
     teamKeyword: '',
     items: [] as FixtureCard[],
@@ -138,8 +178,20 @@ Page({
   },
   changeStatus(event: { currentTarget: { dataset: { status: SeasonFixtureStatus } } }) {
     const status = event.currentTarget.dataset.status
-    if (!status || status === this.data.status) return
-    this.setData({ status })
+    if (!status || (status === this.data.status && this.data.fixtureScope === 'ALL')) return
+    this.setData({ status, fixtureScope: 'ALL' })
+    void loadFixtures(this as unknown as FixturePage)
+  },
+  showMine() {
+    if (this.data.fixtureScope === 'MINE') return Promise.resolve()
+    this.setData({ fixtureScope: 'MINE' })
+    return loadMineTeams(this as unknown as FixturePage)
+  },
+  changeMineTeam(event: { detail: { value: string } }) {
+    const selectedMineTeamIndex = Number(event.detail.value)
+    const selectedLeagueTeamId = this.data.mineTeams[selectedMineTeamIndex]?.id
+    if (!selectedLeagueTeamId || selectedLeagueTeamId === this.data.selectedLeagueTeamId) return
+    this.setData({ selectedMineTeamIndex, selectedLeagueTeamId })
     void loadFixtures(this as unknown as FixturePage)
   },
   changeSeason(event: { detail: { value: string } }) {
@@ -147,7 +199,8 @@ Page({
     const seasonId = this.data.seasonChoices[selectedSeasonIndex]?.id
     if (!seasonId || seasonId === this.data.seasonId) return
     this.setData({ selectedSeasonIndex, seasonId })
-    void loadFixtures(this as unknown as FixturePage)
+    if (this.data.fixtureScope === 'MINE') void loadMineTeams(this as unknown as FixturePage)
+    else void loadFixtures(this as unknown as FixturePage)
   },
   load() {
     return loadFixtures(this as unknown as FixturePage)

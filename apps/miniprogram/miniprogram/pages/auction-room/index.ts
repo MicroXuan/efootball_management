@@ -45,7 +45,7 @@ Page({
     bidRows: [] as ReturnType<typeof publicBidRows>,
     playerFallback: '球',
     upcoming: [] as MyPlayerAuctionRoom['queue'],
-    completed: [] as MyPlayerAuctionRoom['queue'],
+    completed: [] as ReturnType<typeof projectAuctionQueue>['completed'],
     canSubmit: false,
     amountHint: '请选择快捷价格或输入整数金额',
     submitting: false,
@@ -61,7 +61,7 @@ Page({
     wx.showShareMenu({ menus: ['shareAppMessage'] })
     if (!session.getAccessToken()) {
       const roomPath = '/pages/auction-room/index?batchId=' + encodeURIComponent(options.batchId)
-      wx.navigateTo({ url: '/pages/login/index?redirect=' + encodeURIComponent(roomPath) })
+      wx.redirectTo({ url: '/pages/login/index?redirect=' + encodeURIComponent(roomPath) })
     }
   },
 
@@ -115,7 +115,7 @@ Page({
     const amount = this.snapshot.draftAmount
     const draft = bidDraftState(amount, room.minimumValidPrice)
     this.setData({
-      state: 'loaded', room, teamName: room.team.name, reconnecting: false, statusMessage: '',
+      state: 'loaded', room, teamName: room.team?.name ?? '观战与分享', reconnecting: false, statusMessage: '',
       countdown: countdown ?? '—', amount,
       shortcuts: minimumPriceShortcuts(room.minimumValidPrice),
       bidRows: publicBidRows(room.currentLot?.bids ?? []),
@@ -144,6 +144,10 @@ Page({
   openPlayerCard() {
     const cardId = this.snapshot?.room.currentLot?.card.id
     if (cardId) wx.navigateTo({ url: playerCardDetailPath(cardId) })
+  },
+
+  openHome() {
+    wx.switchTab({ url: '/pages/leagues/index' })
   },
 
   async submitBid() {

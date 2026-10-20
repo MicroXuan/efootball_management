@@ -13,7 +13,7 @@ export function presentLeagueTeams(teams: readonly LeagueTeamSummary[]): LeagueT
   return teams.map((team) => ({
     ...team,
     rosterCopy: `${team.activePlayerCount}/25`,
-    salaryCopy: `${team.salaryTotalMinor}/${team.salaryCapMinor}`,
+    salaryCopy: `${team.salaryTotalMinor} / ${team.salaryCapMinor || '待管理员设置'}`,
     statusCopy: team.rosterStatus === 'OVER_CAP' ? '工资超帽' : '阵容合规',
     identityCopy: `${team.teamNumber === null ? '—' : team.teamNumber}-${team.name}`,
     ownerAliasCopy: `（${team.ownerAlias}）`,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MyPlayerAuctionListItem } from '@efm/contracts'
-import { groupAuctionsByLeague, playerAuctionStatusLabel } from './player-auctions.viewmodel'
+import { displayableAuctions, groupAuctionsByLeague, playerAuctionStatusLabel } from './player-auctions.viewmodel'
 
 const item = (batchId: string, leagueId: string, leagueName: string): MyPlayerAuctionListItem => ({
   batchId,
@@ -15,6 +15,14 @@ const item = (batchId: string, leagueId: string, leagueName: string): MyPlayerAu
 })
 
 describe('player auctions view model', () => {
+  it('keeps completed auctions accessible while excluding drafts and cancellations', () => {
+    const rows = [
+      { ...item('draft', 'league-a', '联赛'), status: 'DRAFT' as const },
+      { ...item('completed', 'league-a', '联赛'), status: 'COMPLETED' as const },
+      { ...item('cancelled', 'league-a', '联赛'), status: 'CANCELLED' as const },
+    ]
+    expect(displayableAuctions(rows).map((row) => row.batchId)).toEqual(['completed'])
+  })
   it('groups active auctions by league id without merging leagues with the same name', () => {
     const groups = groupAuctionsByLeague([
       item('batch-a', 'league-a', '周末联赛'),

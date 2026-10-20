@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MyTeamAssetsController } from './my-team-assets.controller.js';
+import { PublicTeamAssetsController } from './public-team-assets.controller.js';
 import { TeamAssetsService } from './team-assets.service.js';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module.js';
 import { AdminModule } from '../admin/admin.module.js';
@@ -10,11 +11,13 @@ import { TransactionFeesService } from './transaction-fees.service.js';
 import { AdminFinanceController } from './admin-finance.controller.js';
 import { TeamFinanceService } from './team-finance.service.js';
 import { AdminFinanceSettlementsController } from './admin-finance-settlements.controller.js';
+import { MyPersonalFinanceController } from './my-personal-finance.controller.js';
+import { PersonalFinanceService } from './personal-finance.service.js';
 
 @Module({
   imports: [JwtModule.register({}), AdminAuthModule, AdminModule],
-  controllers: [MyTeamAssetsController, MyLeagueTransactionsController, AdminTransactionFeesController, AdminFinanceController, AdminFinanceSettlementsController],
-  providers: [TeamAssetsService, TransactionFeesService, TeamFinanceService],
+  controllers: [MyTeamAssetsController, MyPersonalFinanceController, PublicTeamAssetsController, MyLeagueTransactionsController, AdminTransactionFeesController, AdminFinanceController, AdminFinanceSettlementsController],
+  providers: [TeamAssetsService, TransactionFeesService, TeamFinanceService, PersonalFinanceService],
   exports: [TeamAssetsService, TransactionFeesService, TeamFinanceService]
 })
 export class LeagueEconomyModule {}

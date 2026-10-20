@@ -2,6 +2,8 @@ import type {
   PlayerFavoriteListQuery,
   PlayerFavoriteListResponse,
   PlayerFavoriteStatusResponse,
+  PlayerFavoriteGroup,
+  PlayerFavoriteGroupsResponse,
 } from '@efm/contracts'
 import { api } from './api'
 
@@ -38,6 +40,26 @@ export const favoritesApi = {
   statuses(playerIds: string[]) {
     return api.request<PlayerFavoriteStatusResponse>({
       path: queryPath('/me/player-favorites/status', { playerIds: [...new Set(playerIds)].join(',') }),
+    })
+  },
+
+  groups() {
+    return api.request<PlayerFavoriteGroupsResponse>({ path: '/me/player-favorites/groups' })
+  },
+
+  createGroup(name: string) {
+    return api.request<PlayerFavoriteGroup>({ path: '/me/player-favorites/groups', method: 'POST', data: { name } })
+  },
+
+  deleteGroup(groupId: string) {
+    return api.request<{ deleted: boolean }>({
+      path: `/me/player-favorites/groups/${encodeURIComponent(groupId)}`, method: 'DELETE',
+    })
+  },
+
+  move(playerId: string, groupId: string | null) {
+    return api.request<{ playerId: string; groupId: string | null }>({
+      path: `/me/player-favorites/${encodeURIComponent(playerId)}/group`, method: 'PATCH', data: { groupId },
     })
   },
 }

@@ -22,6 +22,7 @@ import {
 import { z } from 'zod';
 import { adminApi, ApiError, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
+import { PaginatedRecords } from '../components/paginated-records';
 
 const SeasonListSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
 const CupGroupDecisionSchema = z.object({
@@ -539,8 +540,8 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
     </Card>
 
     {error ? <Alert role="alert" showIcon type="warning" title={error} /> : null}
-    {cups.length === 0 ? <Card><Empty description="当前赛季还没有杯赛" /></Card> : <div className="cup-card-grid">
-      {cups.map((cup) => <Card key={cup.id} className={`cup-card${selectedCup?.id === cup.id ? ' cup-card--selected' : ''}`}>
+    {cups.length === 0 ? <Card><Empty description="当前赛季还没有杯赛" /></Card> : <PaginatedRecords items={cups} label="杯赛分页" render={(pageCups) => <div className="cup-card-grid">
+      {pageCups.map((cup) => <Card key={cup.id} className={`cup-card${selectedCup?.id === cup.id ? ' cup-card--selected' : ''}`}>
         <div className="cup-card__top">
           <Tag color={cup.status === 'IN_PROGRESS' ? 'success' : 'default'}>{statusLabel[cup.status]}</Tag>
           <span>{cup.competitionType === 'GROUP_KNOCKOUT_CUP' ? '小组 + 淘汰' : '单场淘汰'}</span>
@@ -550,12 +551,12 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
         <div className="cup-card__meter"><strong>{cup.participantCount} / {cup.participantLimit}</strong><span>已报名 / 上限</span></div>
         {cup.status !== 'DRAFT' && cup.status !== 'CANCELLED' ? <div className="cup-participant-list">
           <div className="cup-participant-list__heading"><strong>已报名球队</strong><span>{participantsByCup[cup.id]?.length ?? 0} 支</span></div>
-          {(participantsByCup[cup.id] ?? []).length ? (participantsByCup[cup.id] ?? []).map((participant) => <div className="cup-participant" key={participant.id}>
+          {(participantsByCup[cup.id] ?? []).length ? <PaginatedRecords items={participantsByCup[cup.id] ?? []} label={`${cup.name}报名球队分页`} render={(pageParticipants) => pageParticipants.map((participant) => <div className="cup-participant" key={participant.id}>
             {participant.teamLogoUrl
               ? <img src={participant.teamLogoUrl} alt={`${participant.teamName ?? participant.displayName}队徽`} />
               : <span className="cup-participant__crest" aria-hidden="true">队</span>}
             <div><strong>{participant.teamNumber ?? '—'} · {participant.teamName ?? participant.displayName}</strong><span>负责人：{participant.ownerDisplayName ?? '未记录'}</span></div>
-          </div>) : <p className="cup-participant-list__empty">尚无球队报名</p>}
+          </div>)} /> : <p className="cup-participant-list__empty">尚无球队报名</p>}
         </div> : null}
         <Space wrap>
           {cup.status === 'DRAFT' ? <Button type="primary" loading={submitting} onClick={() => void transitionRegistration(cup, 'open-registration')}>开放报名</Button> : null}
@@ -567,7 +568,7 @@ export function CupsPage({ api = adminApi }: { api?: AdminApi }) {
           </Button>
         </Space>
       </Card>)}
-    </div>}
+    </div>} />}
 
     {groupLoading ? <Card className="cup-group-stage"><Spin /></Card> : null}
 

@@ -16,6 +16,7 @@ export const EnvironmentSchema = z.object({
   ADMIN_REFRESH_TOKEN_PEPPER: z.string().min(32).optional(),
   WECHAT_APP_ID: z.string().min(1),
   WECHAT_APP_SECRET: z.string().min(1),
+  WECHAT_MINIPROGRAM_ENV_VERSION: z.enum(['release', 'trial', 'develop']).default('release'),
   WECHAT_GATEWAY_MODE: z.enum(['fake', 'http']).default('fake'),
   DEV_WECHAT_OPEN_ID: z.string().trim().min(1).optional(),
   PESDATA_BASE_URL: z.url().default('https://pesdata.net'),

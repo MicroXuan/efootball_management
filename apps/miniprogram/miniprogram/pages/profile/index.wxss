@@ -47,7 +47,7 @@ page { background: #0e1417; color: #f4f7f8; }
 .action-center-entry__copy { min-width:0;margin-left:18rpx;flex:1; }
 .action-center-entry__top { display:flex;align-items:center;gap:12rpx; }
 .action-center-entry__title { font-size:28rpx;font-weight:850; }
-.action-center-entry__count { min-width:34rpx;height:34rpx;padding:0 8rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:17rpx;background:#ffba52;color:#171d1f;font-size:17rpx;font-weight:900; }
+.action-center-entry__count { position:relative;top:-5rpx;min-width:34rpx;height:34rpx;padding:0 8rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:17rpx;background:#ffba52;color:#171d1f;font-size:17rpx;font-weight:900;line-height:1;font-variant-numeric:tabular-nums; }
 .action-center-entry__detail { display:block;margin-top:7rpx;color:#aab5ba;font-size:19rpx; }
 .action-center-entry__tags { margin-top:9rpx;display:flex;gap:10rpx;color:#b6f13a;font-size:17rpx;font-weight:800; }
 .quick-actions__head { display:flex; align-items:flex-end; justify-content:space-between; }

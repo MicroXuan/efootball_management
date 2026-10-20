@@ -6,7 +6,8 @@
       <entity-artwork class="team-hero__crest" src="{{overview.team.logoUrl}}" fallback="{{overview.team.shortName}}" shape="square" />
       <view class="team-hero__copy"><text class="kicker">{{overview.leagueName}}</text><text class="title">{{overview.team.teamNumber}}-{{overview.team.name}}</text><text class="muted">（{{overview.team.ownerAlias}}） · 用户编号 {{overview.team.ownerPublicUserNo}}</text></view>
     </view>
-    <view class="metrics"><view><text class="value">{{overview.team.activePlayerCount}}/25</text><text class="label">阵容</text></view><view><text class="value {{overCap ? 'danger' : ''}}">{{overview.team.salaryTotalMinor}}/{{overview.team.salaryCapMinor}}</text><text class="label">工资 / 工资帽</text></view></view>
+    <view class="metrics"><view><text class="value">{{overview.team.activePlayerCount}}/25</text><text class="label">阵容</text></view><view><text class="value {{overCap ? 'danger' : ''}}">{{overview.team.salaryTotalMinor}} / {{overview.team.salaryCapMinor ? overview.team.salaryCapMinor : '待管理员设置'}}</text><text class="label">工资 / 工资帽</text></view></view>
+    <button class="workspace-link" bindtap="openTeamDirectory">查看联赛其他球队阵容 ›</button>
     <view class="workspace-grid">
       <button wx:for="{{actions}}" wx:key="key" class="workspace-link {{item.enabled ? '' : 'workspace-link--disabled'}}" data-url="{{item.url}}" bindtap="openSection">
         <text class="workspace-link__marker">{{item.marker}}</text>

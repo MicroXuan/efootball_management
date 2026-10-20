@@ -112,7 +112,7 @@ describe('player catalog lifecycle', () => {
       .expect(({ body }) => expect(body.error.code).toBe('FORBIDDEN'));
   });
 
-  it('creates, reads, publishes, de-duplicates, and publicly searches a batch', async () => {
+  it('creates, reads, publishes, de-duplicates, and searches a batch as a signed-in user', async () => {
     const payload = {
       sourceCode,
       fileName: 'players.json',
@@ -142,6 +142,7 @@ describe('player catalog lifecycle', () => {
 
     const search = await request(app.getHttpServer())
       .get(`/v1/players?keyword=${encodeURIComponent(`E2E Player ${suffix}`)}`)
+      .set('Authorization', ordinaryAuthorization)
       .expect(200);
     expect(search.body.items).toHaveLength(1);
     expect(search.body.items[0].playerNameEn).toBe(`E2E Player ${suffix}`);
@@ -150,11 +151,12 @@ describe('player catalog lifecycle', () => {
     publishedPackId = search.body.items[0].pack.id;
   });
 
-  it('allows unauthenticated public catalog reads', async () => {
-    await request(app.getHttpServer()).get('/v1/players').expect(200);
-    await request(app.getHttpServer()).get(`/v1/players/${publishedPlayerId}`).expect(200);
-    await request(app.getHttpServer()).get(`/v1/player-cards/${publishedCardId}`).expect(200);
-    await request(app.getHttpServer()).get(`/v1/card-packs/${publishedPackId}`).expect(200);
+  it('requires login for catalog reads and serves published records to a signed-in user', async () => {
+    await request(app.getHttpServer()).get('/v1/players').expect(401);
+    await request(app.getHttpServer()).get('/v1/players').set('Authorization', ordinaryAuthorization).expect(200);
+    await request(app.getHttpServer()).get(`/v1/players/${publishedPlayerId}`).set('Authorization', ordinaryAuthorization).expect(200);
+    await request(app.getHttpServer()).get(`/v1/player-cards/${publishedCardId}`).set('Authorization', ordinaryAuthorization).expect(200);
+    await request(app.getHttpServer()).get(`/v1/card-packs/${publishedPackId}`).set('Authorization', ordinaryAuthorization).expect(200);
   });
 
   it('accepts a valid JSON body above 100 KB but below 10 MB', async () => {
@@ -201,13 +203,14 @@ describe('player catalog lifecycle', () => {
       .expect(({ body }) => expect(body.error.code).toBe('IMPORT_BATCH_NOT_READY'));
     await request(app.getHttpServer())
       .get(`/v1/players?keyword=${encodeURIComponent(unpublishedKeyword)}`)
+      .set('Authorization', ordinaryAuthorization)
       .expect(200)
       .expect(({ body }) => expect(body.items).toHaveLength(0));
   });
 
   it('returns 404 for unpublished player, card, and pack IDs', async () => {
-    await request(app.getHttpServer()).get(`/v1/players/${randomUUID()}`).expect(404);
-    await request(app.getHttpServer()).get(`/v1/player-cards/${randomUUID()}`).expect(404);
-    await request(app.getHttpServer()).get(`/v1/card-packs/${randomUUID()}`).expect(404);
+    await request(app.getHttpServer()).get(`/v1/players/${randomUUID()}`).set('Authorization', ordinaryAuthorization).expect(404);
+    await request(app.getHttpServer()).get(`/v1/player-cards/${randomUUID()}`).set('Authorization', ordinaryAuthorization).expect(404);
+    await request(app.getHttpServer()).get(`/v1/card-packs/${randomUUID()}`).set('Authorization', ordinaryAuthorization).expect(404);
   });
 });

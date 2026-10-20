@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { ReleaseOwnedPlayerRequest, RosterMutationResponse } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { MutationReceiptService } from '../competitions/mutation-receipt.service.js';
@@ -7,17 +7,22 @@ import { PlayerMarketAccessService } from './player-market-access.service.js';
 import { PlayerMarketLockRepository } from './player-market-lock.repository.js';
 import { playerMarketError } from './player-market.errors.js';
 import { ValuationSnapshotsService } from '../player-valuations/valuation-snapshots.service.js';
+import { TeamSalaryCapService } from '../league-rosters/team-salary-cap.service.js';
 
 @Injectable()
 export class TeamPlayerReleaseService {
+  private readonly teamSalaryCaps: TeamSalaryCapService;
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MutationReceiptService) private readonly receipts: MutationReceiptService,
     @Inject(PlayerMarketAccessService) private readonly access: PlayerMarketAccessService,
     @Inject(PlayerMarketLockRepository) private readonly locks: PlayerMarketLockRepository,
     @Inject(AuditLogService) private readonly audit: AuditLogService,
-    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService
-  ) {}
+    @Inject(ValuationSnapshotsService) private readonly valuationSnapshots: ValuationSnapshotsService,
+    @Optional() @Inject(TeamSalaryCapService) teamSalaryCaps?: TeamSalaryCapService
+  ) {
+    this.teamSalaryCaps = teamSalaryCaps ?? new TeamSalaryCapService();
+  }
 
   async release(
     userId: string,
@@ -91,17 +96,14 @@ export class TeamPlayerReleaseService {
         reason: input.reason,
         metadata: { seasonId: input.seasonId, leagueTeamId, footballPlayerId: current.footballPlayerId }
       });
-      const [rosterCount, salary, rule] = await Promise.all([
+      const [rosterCount, salary, cap] = await Promise.all([
         tx.leaguePlayerOwnership.count({ where: { leagueTeamId, status: 'ACTIVE' } }),
         tx.leaguePlayerOwnership.aggregate({ where: { leagueTeamId, status: 'ACTIVE' }, _sum: { salaryMinor: true } }),
-        tx.leagueSalaryRuleVersion.findFirst({
-          where: { leagueId: current.leagueId, status: 'ACTIVE', effectiveAt: { lte: mutationAt } },
-          orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }]
-        })
+        this.teamSalaryCaps.readWithClient(tx, leagueTeamId)
       ]);
-      if (!rule) throw playerMarketError('SALARY_RULE_NOT_CONFIGURED', '联赛尚未配置工资规则', 422);
+      const salaryCapMinor = cap ?? 0;
       const salaryMinor = salary._sum.salaryMinor ?? 0;
-      const rosterStatus = salaryMinor > rule.salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT';
+      const rosterStatus = salaryMinor > salaryCapMinor ? 'OVER_CAP' : 'COMPLIANT';
       await tx.leagueTeam.updateMany({
         where: { id: leagueTeamId, rosterStatus: { not: rosterStatus } },
         data: { rosterStatus, version: { increment: 1 } }
@@ -144,7 +146,7 @@ export class TeamPlayerReleaseService {
           createdByUserId: transaction.createdByUserId,
           createdAt: transaction.createdAt.toISOString()
         },
-        summary: { rosterCount, salaryMinor, salaryCapMinor: rule.salaryCapMinor }
+        summary: { rosterCount, salaryMinor, salaryCapMinor }
       };
     });
   }

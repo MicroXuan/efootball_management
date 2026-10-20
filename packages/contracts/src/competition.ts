@@ -279,6 +279,16 @@ export const PublishStageScheduleRequestSchema = z.object({
   expectedSeasonVersion: ExpectedVersionSchema
 });
 
+export const CreateStageMatchRequestSchema = z.object({
+  expectedStageVersion: ExpectedVersionSchema,
+  roundNumber: z.number().int().positive(),
+  homeParticipantId: ResourceIdSchema,
+  awayParticipantId: ResourceIdSchema,
+  plannedAt: TimestampSchema
+}).refine((value) => value.homeParticipantId !== value.awayParticipantId, {
+  path: ['awayParticipantId'], message: 'home and away teams must differ'
+});
+
 export const CupProposalStatusSchema = z.enum(['DRAFT', 'CONFIRMED', 'SUPERSEDED']);
 
 export const GenerateCupGroupProposalRequestSchema = z.object({
@@ -609,8 +619,14 @@ export const SeasonFixtureStatusSchema = z.enum(['ALL', 'UPCOMING', 'FINISHED'])
 export const SeasonFixtureListQuerySchema = z.object({
   team: z.string().trim().min(1).max(64).optional(),
   status: SeasonFixtureStatusSchema.default('ALL'),
+  scope: z.enum(['ALL', 'MINE']).optional(),
+  leagueTeamId: ResourceIdSchema.optional(),
   cursor: z.string().min(1).max(2_048).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20)
+}).superRefine((value, context) => {
+  if (value.scope === 'MINE' && !value.leagueTeamId) {
+    context.addIssue({ code: 'custom', path: ['leagueTeamId'], message: 'My fixtures require an owned team' });
+  }
 });
 
 export const SeasonFixtureListItemSchema = z.object({
@@ -723,6 +739,7 @@ export type ReviewRegistrationRequest = z.input<typeof ReviewRegistrationRequest
 export type VersionedMutationRequest = z.input<typeof VersionedMutationRequestSchema>;
 export type GenerateStageScheduleRequest = z.infer<typeof GenerateStageScheduleRequestSchema>;
 export type PublishStageScheduleRequest = z.infer<typeof PublishStageScheduleRequestSchema>;
+export type CreateStageMatchRequest = z.infer<typeof CreateStageMatchRequestSchema>;
 export type GenerateCupGroupProposalRequest = z.infer<typeof GenerateCupGroupProposalRequestSchema>;
 export type ConfirmCupGroupProposalRequest = z.infer<typeof ConfirmCupGroupProposalRequestSchema>;
 export type CupGroupProposal = z.infer<typeof CupGroupProposalSchema>;

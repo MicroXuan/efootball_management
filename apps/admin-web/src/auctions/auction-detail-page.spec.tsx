@@ -9,14 +9,23 @@ const batchId = '22222222-2222-4222-8222-222222222222';
 
 it('shows computed result, bid audit, and the non-financial review boundary', async () => {
   const detail = { id: batchId, leagueId, groupBindingId: 'group-1', bidChannel: 'MINIPROGRAM', name: '秋季拍卖', status: 'ACTIVE', currentLotId: 'lot-1', version: 2, startedAt: '2026-10-09T00:00:00.000Z', completedAt: null, cancelledAt: null, createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', lots: [{ id: 'lot-1', displayOrder: 1, playerId: 'player-1', playerCardId: 'card-1', playerName: '车范根', playerSnapshot: {}, startingPrice: 50, minimumIncrement: 10, status: 'PENDING_REVIEW', currentPrice: 120, currentHighestBidId: 'bid-1', deadlineAt: null, deadlineEpoch: 2, pausedRemainingMs: null, version: 3, bids: [{ id: 'bid-1', leagueTeamId: 'team-1', teamName: '申花', userId: 'user-1', source: 'MINIPROGRAM', amount: 120, result: 'VALID', rejectionReason: null, wechatMessageId: null, wechatSortKey: null, wechatSentAt: null, submittedAt: '2026-10-09T00:00:01.000Z', receivedAt: '2026-10-09T00:00:01.100Z' }], review: null, startedAt: '2026-10-09T00:00:00.000Z', closedAt: '2026-10-09T00:00:30.000Z', reviewedAt: null }] };
-  const api = { request: vi.fn().mockResolvedValue(detail) } as unknown as AdminApi;
-  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/${batchId}`]}><Routes><Route path="/leagues/:leagueId/auctions/:batchId" element={<AuctionDetailPage api={api} />} /></Routes></MemoryRouter>);
+  Object.assign(detail.lots[0].bids[0], { teamNumber: 1, bidderDisplayName: '小宣' });
+  const api = { request: vi.fn().mockImplementation(async (path: string) => path.endsWith('/share-code') ? { imageDataUrl: 'data:image/png;base64,iVBORw0KGgo=', envVersion: 'trial' } : detail) } as unknown as AdminApi;
+  const { container } = render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/${batchId}`]}><Routes><Route path="/leagues/:leagueId/auctions/:batchId" element={<AuctionDetailPage api={api} />} /></Routes></MemoryRouter>);
   expect((await screen.findAllByText('车范根')).length).toBeGreaterThan(0);
-  expect(screen.getAllByText('⭐120⭐').length).toBeGreaterThan(0);
-  expect(screen.getByText(/审核只记录结果，不会自动修改资金或阵容/)).toBeInTheDocument();
+  expect([...container.querySelectorAll('.auction-money__value')].filter((node) => node.textContent === '120').length).toBeGreaterThan(0);
+  expect([...container.querySelectorAll('.auction-money__unit')].every((node) => node.textContent === '资金')).toBe(true);
+  expect(screen.getAllByText('1号 · 申花 · 小宣').length).toBeGreaterThan(0);
+  expect(screen.queryByText(/⭐/)).not.toBeInTheDocument();
+  expect(screen.getByText(/倒计时结束后，最高有效出价即为成交结果/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '暂停拍卖' })).toBeInTheDocument();
   expect(screen.getByRole('status', { name: '当前拍卖状态' })).toHaveTextContent('进行中');
   expect(screen.getByText(`/pages/auction-room/index?batchId=${batchId}`)).toBeInTheDocument();
+  expect(await screen.findByText('体验版小程序码')).toBeInTheDocument();
+  expect(await screen.findByRole('img', { name: '秋季拍卖小程序码' })).toHaveAttribute('src', 'data:image/png;base64,iVBORw0KGgo=');
+  expect(screen.getByText(/微信扫码进入拍卖大厅后，点击“分享拍卖”/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '复制页面路径' })).toHaveClass('auction-copy-path');
+  expect(screen.queryByRole('button', { name: '复制页面路径' })).not.toHaveTextContent('复制页面路径');
   expect(screen.getByText('小程序')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '暂停拍卖' }));
   expect(api.request).toHaveBeenCalledWith(
@@ -51,7 +60,7 @@ it('reviews pending and no-bid outcomes while the next lot advances automaticall
     closedAt: '2026-10-09T00:00:30.000Z', reviewedAt: null
   };
   const detail = {
-    id: batchId, leagueId, groupBindingId: 'group-1', name: '连续拍卖', status: 'ACTIVE',
+    id: batchId, leagueId, groupBindingId: 'group-1', bidChannel: 'WECHAT_GROUP', name: '连续拍卖', status: 'ACTIVE',
     currentLotId: 'lot-3', version: 4, startedAt: '2026-10-09T00:00:00.000Z',
     completedAt: null, cancelledAt: null, createdAt: '2026-10-09T00:00:00.000Z',
     updatedAt: '2026-10-09T00:01:00.000Z',
@@ -78,11 +87,14 @@ it('reviews pending and no-bid outcomes while the next lot advances automaticall
   const api = { request: vi.fn().mockResolvedValue(detail) } as unknown as AdminApi;
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/${batchId}`]}><Routes><Route path="/leagues/:leagueId/auctions/:batchId" element={<AuctionDetailPage api={api} />} /></Routes></MemoryRouter>);
 
-  expect(await screen.findByText(/当前有 2 位球员等待人工审核/)).toBeInTheDocument();
-  expect(screen.getByText(/系统会自动进入下一位或结束批次/)).toBeInTheDocument();
+  expect(await screen.findByText(/当前有 2 位球员可核对/)).toBeInTheDocument();
+  expect(screen.getByText(/审核员记录结果/)).toBeInTheDocument();
+  expect(screen.getAllByText('待审核').length).toBeGreaterThan(0);
+  expect(screen.queryByText(/最高有效出价即为成交结果/)).not.toBeInTheDocument();
+  expect(screen.getByText(/不会阻塞后续拍卖/)).toBeInTheDocument();
   expect(screen.queryByText(/下一位.*发送/)).not.toBeInTheDocument();
   const noBidReview = screen.getByRole('region', { name: '唐伯虎审核' });
-  expect(within(noBidReview).getByRole('radio', { name: '确认流拍' })).toBeInTheDocument();
+  expect(within(noBidReview).getByRole('radio', { name: '记录流拍' })).toBeInTheDocument();
   expect(within(noBidReview).getByRole('radio', { name: '作废' })).toBeInTheDocument();
   expect(within(noBidReview).queryByRole('radio', { name: '调整结果' })).not.toBeInTheDocument();
   expect(document.getElementById('lot-lot-3')).toHaveClass('is-current');

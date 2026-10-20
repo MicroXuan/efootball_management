@@ -8,6 +8,7 @@ import { Alert, Button, Card, Input, Modal, Space, Spin, Tag } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminApi } from '../lib/api';
 import { formatDateTime } from '../lib/date-time';
+import { PaginatedRecords } from '../components/paginated-records';
 
 const loginLabels = {
   LOGGED_IN: { text: '在线', color: 'success' },
@@ -138,12 +139,12 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
       <p>先创建一个设备，然后只在准备好的 Windows 电脑上保存一次性令牌并启动桥接程序。</p>
       <Button type="primary" onClick={() => setCreateOpen(true)}>创建第一台设备</Button>
     </Card> : null}
-    {devices?.length ? <div className="wechat-device-grid">{devices.map((device, index) => {
+    {devices?.length ? <PaginatedRecords items={devices} label="机器人设备分页" render={(pageItems, offset) => <div className="wechat-device-grid">{pageItems.map((device, index) => {
       const login = loginLabels[device.loginStatus];
       const healthy = device.status === 'ACTIVE' && device.loginStatus === 'LOGGED_IN' && device.circuitStatus === 'CLOSED';
       return <Card key={device.id} className={`wechat-device-card${healthy ? ' is-healthy' : ''}`}>
         <div className="wechat-device-card__top">
-          <span>BOT / {String(index + 1).padStart(2, '0')}</span>
+          <span>BOT / {String(offset + index + 1).padStart(2, '0')}</span>
           <Space size={6} wrap>
             {device.status === 'DISABLED' ? <Tag>已停用</Tag> : null}
             <Tag color={login.color}>{login.text}</Tag>
@@ -168,7 +169,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
           </Button>
         </div>
       </Card>;
-    })}</div> : null}
+    })}</div>} /> : null}
     <Modal
       title="创建机器人设备"
       open={createOpen}

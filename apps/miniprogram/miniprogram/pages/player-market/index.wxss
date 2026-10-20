@@ -144,6 +144,9 @@ page {
 .arrow { color: #b6f13a; }
 .arrow { font-size: 38rpx; }
 
+.profile-facts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8rpx 14rpx; min-width: 0; }
+.profile-fact { padding: 6rpx 10rpx; border-radius: 8rpx; color: #b7c3c7; background: #202b2f; font-size: 17rpx; line-height: 1.4; white-space: nowrap; }
+
 .owner-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 13rpx; padding-top: 18rpx; border-top: 2rpx solid #29353a; }
 .crest { display: flex; align-items: center; justify-content: center; width: 54rpx; height: 54rpx; overflow: hidden; border-radius: 14rpx; background: #233036; color: #b6f13a; font-weight: 900; }
 .crest image { width: 100%; height: 100%; }
@@ -158,7 +161,18 @@ page {
 .timeline { margin-top: 18rpx; padding-left: 18rpx; border-left: 3rpx solid #4c5e66; }
 .timeline-row { display: flex; justify-content: space-between; gap: 20rpx; padding: 9rpx 0; color: #95a3aa; font-size: 17rpx; }
 .notice-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12rpx; }
+.notice-heading { min-width: 0; }
 .notice-kind { display: inline-block; margin-bottom: 9rpx; }
+.notice-teams { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 30rpx minmax(0, 1fr); align-items: center; gap: 8rpx; padding: 16rpx 0; border-top: 2rpx solid #29353a; border-bottom: 2rpx solid #29353a; }
+.notice-team { display: flex; align-items: center; min-width: 0; gap: 9rpx; }
+.notice-crest { display: flex; flex: none; align-items: center; justify-content: center; width: 48rpx; height: 48rpx; overflow: hidden; border-radius: 12rpx; background: #233036; color: #b6f13a; font-size: 20rpx; font-weight: 900; }
+.notice-crest image { width: 100%; height: 100%; }
+.notice-team-copy { display: flex; flex-direction: column; min-width: 0; }
+.notice-team-copy text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notice-team-number { color: #b6f13a; font-size: 16rpx; font-weight: 900; }
+.notice-team-name { color: #f4f7f8; font-size: 18rpx; font-weight: 850; }
+.notice-owner { color: #95a3aa; font-size: 16rpx; }
+.notice-arrow { color: #b6f13a; font-size: 25rpx; font-weight: 900; text-align: center; }
 .notice-message,
 .notice-time { grid-column: 1 / -1; font-size: 18rpx; }
 .state-card { margin-top: 24rpx; text-align: center; }

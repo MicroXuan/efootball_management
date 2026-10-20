@@ -7,7 +7,7 @@ import { AdminIcon } from '../design-system/icons';
 import { useMutationKey } from '../lib/mutation-key';
 import { TeamShellPicker } from './team-shell-picker';
 
-type CreateFields = { publicUserNo: string; teamNumber: number; ownerAlias: string; catalogTeamId: string };
+type CreateFields = { publicUserNo: string; teamNumber: number; ownerAlias: string; catalogTeamId: string; salaryCapMinor: number };
 
 export function filterLeagueTeams(teams: LeagueTeamSummary[], keyword: string) {
   const normalizedKeyword = keyword.trim().toLocaleLowerCase('zh-CN');
@@ -67,7 +67,8 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
           ownerUserId: owner.id,
           ownerAlias: values.ownerAlias,
           teamNumber: values.teamNumber,
-          catalogTeamId: values.catalogTeamId
+          catalogTeamId: values.catalogTeamId,
+          salaryCapMinor: values.salaryCapMinor
         }
       });
       mutationKey.reset(); form.resetFields(); setOwner(null); await load();
@@ -121,6 +122,9 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         </div> },
         { title: '负责人', render: (_, row) => row.ownerDisplayName ? `${row.ownerDisplayName} · ${row.ownerPublicUserNo}` : row.ownerPublicUserNo },
         { title: '阵容', render: (_, row) => `${row.activePlayerCount}/25` },
+        { title: '工资帽', render: (_, row) => row.salaryCapConfirmed
+          ? `${row.salaryTotalMinor} / ${row.salaryCapMinor}`
+          : <Tag color="warning">待管理员确认</Tag> },
         { title: '状态', render: (_, row) => row.status === 'ARCHIVED'
           ? <Tag>已退赛</Tag>
           : <Tag color={row.rosterStatus === 'COMPLIANT' ? 'success' : 'error'}>{row.rosterStatus === 'COMPLIANT' ? '合规' : '超帽'}</Tag> },
@@ -140,6 +144,9 @@ export function TeamsPage({ api = adminApi }: { api?: AdminApi }) {
         <Form.Item label="联赛称呼" name="ownerAlias" extra="仅在当前联赛中显示，可填写微信昵称或常用称呼。" rules={[{ required: true, message: '请输入联赛称呼' }, { max: 32 }]}><Input maxLength={32} /></Form.Item>
         <Form.Item label="球队队壳" name="catalogTeamId" rules={[{ required: true, message: '请选择球队队壳' }]}>
           <TeamShellPicker api={api} leagueId={leagueId} />
+        </Form.Item>
+        <Form.Item label="工资帽" name="salaryCapMinor" rules={[{ required: true, message: '请填写该球队工资帽' }]} extra="管理员为这支球队设置，创建后可在球队详情中修改；用户无法修改。">
+          <InputNumber min={1} max={4_294_967_295} precision={0} style={{ width: '100%' }} />
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={submitting} disabled={submitting}>创建球队</Button>
       </Form>

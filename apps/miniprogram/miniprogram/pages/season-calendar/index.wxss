@@ -1,0 +1,38 @@
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { box-sizing: border-box; min-height: 100vh; padding: 32rpx 24rpx 110rpx; background: #0e1417; }
+.hero { padding: 8rpx 4rpx 24rpx; }
+.kicker { display: block; color: #b6f13a; font-size: 19rpx; font-weight: 800; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 7rpx; font-size: 36rpx; font-weight: 850; }
+.timezone { display: block; margin-top: 9rpx; color: #aab5ba; font-size: 20rpx; }
+.month-switch { display: flex; align-items: center; justify-content: space-between; padding: 10rpx; border: 2rpx solid #344047; border-radius: 17rpx; background: #151d21; }
+.month-switch text { font-size: 25rpx; font-weight: 850; }
+.month-switch button { width: 66rpx; height: 60rpx; margin: 0; padding: 0; border: 0; border-radius: 11rpx; color: #b6f13a; background: #253025; font-size: 36rpx; line-height: 56rpx; }
+.month-switch button::after { border: 0; }
+.calendar-card { box-sizing: border-box; width: 100%; margin-top: 22rpx; padding: 12rpx 6rpx; overflow: hidden; border: 2rpx solid #344047; border-radius: 18rpx; background: #151d21; }
+.weekday-row, .calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); width: 100%; }
+.weekday-row text { min-width: 0; padding: 8rpx 0 12rpx; color: #aab5ba; font-size: 19rpx; text-align: center; }
+.calendar-day { box-sizing: border-box; min-width: 0; min-height: 94rpx; padding: 7rpx 2rpx; border-top: 1rpx solid #344047; border-right: 1rpx solid #344047; overflow: hidden; }
+.calendar-day:last-child { border-right: 0; }
+.calendar-day.adjacent { opacity: .4; }
+.day-number { display: block; color: #f4f7f8; font-size: 19rpx; font-weight: 750; text-align: center; }
+.day-marker { box-sizing: border-box; width: 100%; margin-top: 3rpx; padding: 2rpx 0; overflow: hidden; border-radius: 4rpx; color: #c6f879; background: #26391d; font-size: 15rpx; line-height: 19rpx; text-align: center; white-space: nowrap; }
+.day-marker text { display: block; overflow: hidden; text-overflow: clip; }
+.day-marker.tone-forced-offer { color: #a8e1fa; background: #173c48; }
+.day-marker.tone-valuation { color: #f8dba2; background: #493a22; }
+.day-marker.tone-nomination { color: #e6c5ff; background: #3b2947; }
+.day-marker.tone-manual { color: #f0d6cc; background: #49312c; }
+.summary-head { display: flex; justify-content: space-between; margin: 28rpx 4rpx 13rpx; color: #f4f7f8; font-size: 24rpx; font-weight: 800; }
+.summary-head text:last-child { color: #aab5ba; font-size: 19rpx; font-weight: 500; }
+.summary-row { margin-bottom: 12rpx; padding: 19rpx 21rpx; border: 2rpx solid #344047; border-left: 6rpx solid #b6f13a; border-radius: 15rpx; background: #151d21; }
+.summary-row.tone-forced-offer { border-left-color: #7bd2ed; }
+.summary-row.tone-valuation { border-left-color: #f4c978; }
+.summary-row.tone-nomination { border-left-color: #d6a7ef; }
+.summary-row.tone-manual { border-left-color: #e3ad94; }
+.summary-top { display: flex; align-items: center; gap: 11rpx; min-width: 0; }
+.summary-kind { flex: none; color: #b6f13a; font-size: 18rpx; font-weight: 800; }
+.summary-title { min-width: 0; flex: 1; overflow: hidden; font-size: 23rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.summary-status { flex: none; color: #aab5ba; font-size: 18rpx; }
+.summary-range, .summary-description { display: block; margin-top: 8rpx; color: #aab5ba; font-size: 19rpx; line-height: 1.5; }
+.state-card { margin-top: 22rpx; padding: 40rpx 22rpx; border: 2rpx solid #344047; border-radius: 18rpx; color: #aab5ba; text-align: center; background: #151d21; font-size: 21rpx; }
+.state-card .hint { display: block; margin-top: 10rpx; color: #839198; font-size: 19rpx; }
+.state-card button { margin-top: 18rpx; color: #0e1417; background: #b6f13a; }

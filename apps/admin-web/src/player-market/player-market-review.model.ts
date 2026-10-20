@@ -22,9 +22,9 @@ export function buildReviewGroups(items: PlayerAcquisitionApplication[]): Review
       applications: sorted.map((item, index) => ({
         ...item,
         canReview: item.status === 'PENDING' && (item.type === 'NORMAL_PURCHASE' || index === pendingHead)
-      }))
+      })).sort((left, right) => Number(right.status === 'PENDING') - Number(left.status === 'PENDING'))
     };
-  });
+  }).sort((left, right) => Number(right.applications.some((item) => item.status === 'PENDING')) - Number(left.applications.some((item) => item.status === 'PENDING')));
 }
 
 export function reviewBlocker(item: PlayerAcquisitionApplication): string | null {

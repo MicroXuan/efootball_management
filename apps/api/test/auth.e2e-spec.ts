@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { config } from 'dotenv';
 import request from 'supertest';
+import { FOOTBALL_NICKNAME_STYLES, FOOTBALL_NICKNAME_TITLES } from '../src/auth/football-nickname.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { createTestApp } from './test-app.js';
 
@@ -47,7 +48,9 @@ describe('authentication', () => {
     expect(first.body.refreshToken).toEqual(expect.any(String));
     expect(second.body.refreshToken).not.toBe(first.body.refreshToken);
     expect(users).toHaveLength(1);
-    expect(users[0]?.displayName).toBe('实况玩家');
+    expect(FOOTBALL_NICKNAME_STYLES.some((style) =>
+      FOOTBALL_NICKNAME_TITLES.some((title) => users[0]?.displayName === `${style}${title}`)
+    )).toBe(true);
     expect(users[0]?.publicUserNo).toMatch(/^\d{6}$/);
   });
 

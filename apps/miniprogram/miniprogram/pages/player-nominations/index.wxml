@@ -1,0 +1,49 @@
+<view class="nomination-page">
+  <view class="hero"><text class="eyebrow">赛季提名 · PLAYER NOMINATION</text><text class="title">选择想提名的球员</text><text class="sub">管理员汇总候选后再安排拍卖；提名本身不代表获得球员。</text></view>
+  <view wx:if="{{state === 'loading'}}" class="state">正在加载提名期…</view>
+  <view wx:elif="{{state === 'error'}}" class="state"><text>{{errorMessage}}</text><button class="efm-retry-button" bindtap="loadPage">重试</button></view>
+  <view wx:elif="{{state === 'empty'}}" class="state state--empty"><text class="state-eyebrow">提名尚未开放</text><text class="state-title">本赛季尚未设置提名期</text><text class="state-copy">联赛管理员设置提名时间后，就可以在这里选择想提名的球员。下拉页面可刷新状态。</text></view>
+  <block wx:else>
+    <view class="window-card"><text class="label">剩余提名名额</text><text class="count">{{workspace.remainingSlots}} / {{workspace.window.perTeamLimit}}</text><text class="window-status">{{open ? '提名进行中' : '当前不在提名期'}}</text><text class="sub">截止：{{deadlineLabel}}</text></view>
+    <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
+    <view class="section nomination-section">
+      <view class="nomination-heading"><text class="section-title">我的提名</text><text wx:if="{{nominationCards.length > 3}}" class="nomination-scroll-hint">上下滑动查看更多</text></view>
+      <text wx:if="{{!nominationCards.length}}" class="empty">还没有提名球员</text>
+      <scroll-view wx:else scroll-y="{{nominationCards.length > 3}}" class="nomination-list {{nominationCards.length > 3 ? 'is-scrollable' : ''}}">
+        <view wx:for="{{nominationCards}}" wx:key="id" class="nomination-row">
+          <view class="nomination-photo"><entity-artwork src="{{item.portraitUrl}}" fallback="{{item.portraitFallback}}" shape="portrait" fit="contain" directHttps="{{true}}" /></view>
+          <view class="nomination-info">
+            <text class="nomination-name">{{item.playerName}}</text>
+            <text class="nomination-detail">{{item.clubLabel}} · {{item.nationalityLabel}}</text>
+            <text class="nomination-detail">{{item.cardName}} · {{item.position}} · AT {{item.overallLabel}}</text>
+          </view>
+          <view wx:if="{{open}}" class="withdraw-action {{busy ? 'is-disabled' : ''}}" role="button" aria-disabled="{{busy}}" data-nomination-id="{{item.id}}" bindtap="withdraw">撤回</view>
+        </view>
+      </scroll-view>
+    </view>
+    <view wx:if="{{open}}" class="section search-section">
+      <text class="section-title">搜索自由球员</text>
+      <text class="section-copy">按姓名查找，核对球员照片与能力后加入提名名单。</text>
+      <view class="search">
+        <input aria-label="球员姓名" placeholder="输入球员姓名" value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="searchPlayers" />
+        <view class="search-button {{searching ? 'is-disabled' : ''}}" role="button" aria-disabled="{{searching}}" bindtap="searchPlayers">{{searching ? '搜索中' : '搜索'}}</view>
+      </view>
+      <view wx:if="{{searched}}" class="result-count">找到 {{players.length}} 名自由球员</view>
+      <view wx:if="{{searched && !players.length}}" class="search-empty">没有找到符合条件的自由球员，试试姓名中的其他字。</view>
+      <view wx:for="{{players}}" wx:key="playerId" class="player-card">
+        <view class="player-card-main">
+          <view class="player-photo"><entity-artwork src="{{item.portraitUrl}}" fallback="{{item.portraitFallback}}" shape="portrait" fit="contain" directHttps="{{true}}" /></view>
+          <view class="player-info">
+            <text class="player-name">{{item.playerName}}</text>
+            <text class="player-club">{{item.clubLabel}}</text>
+            <text class="player-meta">{{item.nationalityLabel}} · {{item.card ? item.card.cardName : '球员卡待补充'}}</text>
+            <view class="player-stats"><text class="stat-position">{{item.position}}</text><text class="stat-at">自动加点 AT {{item.overallLabel}}</text></view>
+            <text class="player-value">官方身价 {{item.officialValueLabel}} · 参考工资 {{item.salaryLabel}}</text>
+          </view>
+        </view>
+        <view class="nominate-button {{busy || item.nominated || workspace.remainingSlots < 1 ? 'is-disabled' : ''}}" role="button" aria-disabled="{{busy || item.nominated || workspace.remainingSlots < 1}}" data-player-id="{{item.playerId}}" bindtap="nominate">{{item.nominated ? '已提名' : workspace.remainingSlots < 1 ? '提名名额已用完' : '提名这名球员'}}</view>
+      </view>
+    </view>
+    <view wx:else class="state">提名窗口未开放或已结束，当前只能查看名单。</view>
+  </block>
+</view>

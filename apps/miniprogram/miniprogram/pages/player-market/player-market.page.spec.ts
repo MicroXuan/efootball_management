@@ -17,6 +17,7 @@ type MarketPage = {
   data: Record<string, any>
   onLoad(options: Record<string, string | undefined>): void
   loadView(showLoading?: boolean, mode?: 'replace' | 'append'): Promise<void>
+  onReachBottom(): void
   onPageScroll(event: { scrollTop: number }): void
   backToTop(): void
 }
@@ -44,6 +45,7 @@ function player(playerId: string) {
     playerId, playerName: playerId, nationality: null, club: null, currentOwner: null,
     ownershipId: null, ownershipVersion: null, officialValueMinor: null, valuationVersion: null,
     card: null, forcedTransferBadge: false, action: 'APPLY', disabledReason: null,
+    salary: { kind: 'UNAVAILABLE', salaryMinor: null, basisOverall: null, salaryRuleVersionId: null, currentTier: null, unavailableReason: 'AUTO_BUILD_MISSING' },
   }
 }
 
@@ -54,6 +56,7 @@ function context() {
   }
   return {
     data,
+    loadView: page.loadView,
     setData(update: Record<string, unknown>) { Object.assign(this.data, update) },
   }
 }
@@ -84,6 +87,7 @@ describe('player market page pagination', () => {
 
   it('shows a floating shortcut after scrolling and returns to the page top', () => {
     const instance = context()
+    instance.data.view = 'announcements'
 
     page.onPageScroll.call(instance, { scrollTop: 900 })
     expect(instance.data.showBackToTop).toBe(true)
@@ -91,5 +95,20 @@ describe('player market page pagination', () => {
 
     expect(instance.data.showBackToTop).toBe(false)
     expect(wx.pageScrollTo).toHaveBeenCalledWith({ scrollTop: 0, duration: 250 })
+  })
+
+  it('loads older transfer news pages without repeating an announcement', async () => {
+    mocks.listAnnouncements
+      .mockResolvedValueOnce({ items: [{ id: 'news-2', kind: 'TRANSFER', playerId: 'p-2', playerName: '球员乙', sourceTeam: null, targetTeam: null, amountMinor: 400, message: '转会', createdAt: '2026-10-20T00:00:00.000Z' }], nextCursor: 'older' })
+      .mockResolvedValueOnce({ items: [{ id: 'news-2', kind: 'TRANSFER', playerId: 'p-2', playerName: '球员乙', sourceTeam: null, targetTeam: null, amountMinor: 400, message: '转会', createdAt: '2026-10-20T00:00:00.000Z' },
+        { id: 'news-1', kind: 'FORCED_TRANSFER', playerId: 'p-1', playerName: '球员甲', sourceTeam: null, targetTeam: null, amountMinor: 500, message: '强报', createdAt: '2026-10-19T00:00:00.000Z' }], nextCursor: null })
+    const instance = context()
+    instance.data.view = 'announcements'
+    await page.loadView.call(instance)
+    page.onReachBottom.call(instance)
+    await vi.waitFor(() => expect(instance.data.nextAnnouncementCursor).toBeNull())
+    expect(mocks.listAnnouncements).toHaveBeenNthCalledWith(1, 'league-1', expect.objectContaining({ limit: 30, cursor: undefined }))
+    expect(mocks.listAnnouncements).toHaveBeenNthCalledWith(2, 'league-1', expect.objectContaining({ limit: 30, cursor: 'older' }))
+    expect(instance.data.announcements.map((item: { id: string }) => item.id)).toEqual(['news-2', 'news-1'])
   })
 })

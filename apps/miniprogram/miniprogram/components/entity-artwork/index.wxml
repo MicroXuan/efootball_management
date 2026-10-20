@@ -3,7 +3,7 @@
     wx:if="{{displaySrc && !imageFailed}}"
     class="artwork__image"
     src="{{displaySrc}}"
-    mode="{{shape === 'portrait' ? 'aspectFill' : 'aspectFit'}}"
+    mode="{{fit === 'contain' || shape !== 'portrait' ? 'aspectFit' : 'aspectFill'}}"
     binderror="onImageError"
   />
   <view wx:else class="artwork__fallback">

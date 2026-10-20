@@ -340,9 +340,9 @@ describe('Player auction group acceptance', () => {
     const firstRoom = await request(app.getHttpServer()).get(`/v1/me/player-auctions/${firstBatch.id}`)
       .set(firstAuth).expect(200);
     await request(app.getHttpServer()).get(`/v1/me/player-auctions/${secondBatch.id}`)
-      .set(firstAuth).expect(403).expect(({ body }) => expect(body.error.code).toBe('NO_ACTIVE_TEAM'));
+      .set(firstAuth).expect(200).expect(({ body }) => expect(body).toMatchObject({ team: null, canBid: false }));
     await request(app.getHttpServer()).get(`/v1/me/player-auctions/${firstBatch.id}`)
-      .set(archivedAuth).expect(403).expect(({ body }) => expect(body.error.code).toBe('NO_ACTIVE_TEAM'));
+      .set(archivedAuth).expect(200).expect(({ body }) => expect(body).toMatchObject({ team: null, canBid: false }));
     const secondList = await request(app.getHttpServer()).get('/v1/me/player-auctions?status=active')
       .set(secondAuth).expect(200);
     expect(secondList.body.items.map((item: { batchId: string }) => item.batchId)).toEqual(expect.arrayContaining([firstBatch.id, secondBatch.id]));
