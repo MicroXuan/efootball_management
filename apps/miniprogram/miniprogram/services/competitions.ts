@@ -47,6 +47,8 @@ export type MyMatchListOptions = {
 export type SeasonFixtureListOptions = {
   team?: string
   status?: SeasonFixtureStatus
+  scope?: 'ALL'|'MINE'
+  leagueTeamId?: string
   cursor?: string
   limit?: number
 }
@@ -80,6 +82,8 @@ export function seasonFixturesPath(
     {
       team: team || undefined,
       status: options.status ?? 'ALL',
+      scope: options.scope === 'MINE' ? 'MINE' : undefined,
+      leagueTeamId: options.scope === 'MINE' ? options.leagueTeamId : undefined,
       cursor: options.cursor,
       limit: options.limit ?? 20,
     },

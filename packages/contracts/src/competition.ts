@@ -609,8 +609,14 @@ export const SeasonFixtureStatusSchema = z.enum(['ALL', 'UPCOMING', 'FINISHED'])
 export const SeasonFixtureListQuerySchema = z.object({
   team: z.string().trim().min(1).max(64).optional(),
   status: SeasonFixtureStatusSchema.default('ALL'),
+  scope: z.enum(['ALL', 'MINE']).optional(),
+  leagueTeamId: ResourceIdSchema.optional(),
   cursor: z.string().min(1).max(2_048).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20)
+}).superRefine((value, context) => {
+  if (value.scope === 'MINE' && !value.leagueTeamId) {
+    context.addIssue({ code: 'custom', path: ['leagueTeamId'], message: 'My fixtures require an owned team' });
+  }
 });
 
 export const SeasonFixtureListItemSchema = z.object({

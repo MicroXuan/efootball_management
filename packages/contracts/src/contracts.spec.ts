@@ -287,6 +287,9 @@ describe('action center contracts', () => {
 describe('season fixture contracts', () => {
   it('defaults to all fixtures with a twenty-item page and normalizes team search', () => {
     assert.deepEqual(SeasonFixtureListQuerySchema.parse({}), { status: 'ALL', limit: 20 });
+    assert.throws(() => SeasonFixtureListQuerySchema.parse({ scope: 'MINE' }));
+    const ownedTeamId = randomUUID();
+    assert.equal(SeasonFixtureListQuerySchema.parse({ scope: 'MINE', leagueTeamId: ownedTeamId }).leagueTeamId, ownedTeamId);
     assert.deepEqual(SeasonFixtureListQuerySchema.parse({ team: '  AC Milan  ', status: 'UPCOMING', limit: '100' }), {
       team: 'AC Milan', status: 'UPCOMING', limit: 100
     });
