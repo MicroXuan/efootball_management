@@ -1,4 +1,4 @@
-import type { TeamAssetOverview } from '@efm/contracts'
+import type { PublicTeamAssets, TeamAssetOverview } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { economyApi } from '../../services/economy'
 import { teamAssetsView } from './team-assets.viewmodel'
@@ -27,20 +27,25 @@ Page({
     state: 'loading' as 'loading'|'loaded'|'error',
     errorMessage: '',
     teamId: '',
+    leagueId: '',
+    publicView: false,
     returnTo: '',
     releasingOwnershipId: '',
     selectedStatus: 'ACTIVE' as AssetStatus,
     assets: null as AssetsView|null,
     rosterPlayers: [] as AssetsView['active']
   },
-  onLoad(options: { teamId?: string; returnTo?: string }) {
+  onLoad(options: { teamId?: string; leagueId?: string; view?: string; returnTo?: string }) {
     if (!options.teamId) this.setData({ state: 'error', errorMessage: '球队参数缺失' })
-    else { this.setData({ teamId: options.teamId, returnTo: options.returnTo ?? '' }); void this.loadPage() }
+    else if (options.view === 'public' && !options.leagueId) this.setData({ state: 'error', errorMessage: '联赛参数缺失' })
+    else { this.setData({ teamId: options.teamId, leagueId: options.leagueId ?? '', publicView: options.view === 'public', returnTo: options.returnTo ?? '' }); void this.loadPage() }
   },
   async loadPage(showLoading = true) {
     if (showLoading) this.setData({ state: 'loading' })
     try {
-      const assets: TeamAssetOverview = await economyApi.assets(this.data.teamId)
+      const assets: TeamAssetOverview | PublicTeamAssets = this.data.publicView
+        ? await economyApi.publicAssets(this.data.leagueId, this.data.teamId)
+        : await economyApi.assets(this.data.teamId)
       const view = teamAssetsView(assets)
       this.setData({ state: 'loaded', assets: view, selectedStatus: 'ACTIVE', rosterPlayers: view.active })
     } catch {
@@ -58,7 +63,7 @@ Page({
   confirmRelease(event: ReleaseEvent) {
     const ownershipId = event.currentTarget.dataset.ownershipId
     const playerName = event.currentTarget.dataset.playerName
-    if (!ownershipId || !playerName || this.data.releasingOwnershipId) return
+    if (!ownershipId || !playerName || this.data.publicView || this.data.releasingOwnershipId) return
     wx.showModal({
       title: `确认下放 ${playerName}？`,
       content: '下放立即生效、没有收入、不能自动撤销；后续申请失败也不会返回阵容。',
@@ -69,7 +74,7 @@ Page({
   async releasePlayer(ownershipId: string) {
     const assets = this.data.assets
     const player = assets?.active.find((item) => item.ownershipId === ownershipId)
-    if (!assets?.seasonId || !assets.activeTransferWindowId || !player?.ownershipVersion || !player.releaseEnabled) return
+    if (!assets?.isOwner || !assets.seasonId || !assets.activeTransferWindowId || !player?.ownershipVersion || !player.releaseEnabled) return
     this.setData({ releasingOwnershipId: ownershipId, errorMessage: '' })
     try {
       await economyApi.releasePlayer(this.data.teamId, ownershipId, {

@@ -25,7 +25,7 @@ describe('team assets template', () => {
   })
 
   it('only exposes release on eligible active players and explains the irreversible effect', () => {
-    expect(markup).toContain('wx:if="{{item.releaseEnabled}}"')
+    expect(markup).toContain('wx:if="{{assets.isOwner && selectedStatus === \'ACTIVE\'}}"')
     expect(markup).toContain('data-ownership-id="{{item.ownershipId}}"')
     expect(markup).toContain('bindtap="confirmRelease"')
     expect(markup).toContain('本赛季强报')
@@ -36,5 +36,12 @@ describe('team assets template', () => {
     expect(controller).toContain('后续申请失败也不会返回')
     expect(controller).toContain('returnTo')
     expect(controller).toContain('wx.navigateBack')
+  })
+
+  it('puts salary cap and roster count first while keeping public visitors read-only', () => {
+    expect(markup).toContain('{{assets.salaryCopy}}')
+    expect(markup).toContain('wx:if="{{assets.isOwner}}"')
+    expect(markup.indexOf('工资 / 工资帽')).toBeLessThan(markup.indexOf('球员总身价'))
+    expect(markup).toContain('disabled="{{!item.releaseEnabled || !!releasingOwnershipId}}"')
   })
 })

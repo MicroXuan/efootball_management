@@ -1,0 +1,17 @@
+page { background: #0e1417; color: #f4f7f8; }
+.page-shell { min-height: 100vh; padding: 42rpx 28rpx 120rpx; background: #0e1417; }
+.directory-head { padding: 28rpx 10rpx 30rpx; }
+.kicker { display: block; color: #b6f13a; font-size: 18rpx; font-weight: 800; letter-spacing: 2rpx; }
+.title { display: block; margin-top: 8rpx; font-size: 38rpx; font-weight: 850; }
+.subtitle { display: block; margin-top: 12rpx; color: #91a0a6; font-size: 21rpx; }
+.team-search { height: 78rpx; margin-bottom: 22rpx; padding: 0 22rpx; border: 2rpx solid #344047; border-radius: 17rpx; color: #f4f7f8; background: #151d21; font-size: 23rpx; }
+.team-row { display: flex; align-items: center; min-height: 116rpx; margin-bottom: 12rpx; padding: 16rpx 20rpx; border: 2rpx solid #344047; border-radius: 22rpx; background: #151d21; }
+.crest { width: 76rpx; height: 76rpx; flex: none; border: 2rpx solid #546b32; border-radius: 17rpx; background: #0b1114; }
+.crest--fallback { display: flex; align-items: center; justify-content: center; color: #b6f13a; font-size: 29rpx; font-weight: 850; }
+.team-copy { min-width: 0; margin-left: 20rpx; flex: 1; }
+.team-name { display: block; overflow: hidden; font-size: 26rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.manager-name { display: block; margin-top: 7rpx; color: #aab5ba; font-size: 20rpx; }
+.team-action { display: flex; align-items: center; gap: 15rpx; color: #b6f13a; font-size: 20rpx; font-weight: 800; }
+.arrow { font-size: 34rpx; }
+.state-card { padding: 38rpx 20rpx; border: 2rpx solid #344047; border-radius: 22rpx; color: #aab5ba; text-align: center; background: #151d21; }
+.state-card button { margin-top: 20rpx; color: #0e1417; background: #b6f13a; }

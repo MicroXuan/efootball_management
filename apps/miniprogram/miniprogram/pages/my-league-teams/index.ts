@@ -30,4 +30,8 @@ Page({
     const id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: `/pages/league-team-detail/index?id=${encodeURIComponent(id)}` })
   },
+  openDirectory(event: { currentTarget: { dataset: { leagueId?: string } } }) {
+    const leagueId = event.currentTarget.dataset.leagueId
+    if (leagueId) wx.navigateTo({ url: `/pages/league-team-directory/index?leagueId=${encodeURIComponent(leagueId)}` })
+  },
 })

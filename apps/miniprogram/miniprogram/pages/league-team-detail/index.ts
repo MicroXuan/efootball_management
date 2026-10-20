@@ -26,4 +26,8 @@ Page({
     if (url) wx.navigateTo({ url })
     else wx.showToast({ title: '当前没有开放的身价窗口', icon: 'none' })
   },
+  openTeamDirectory() {
+    const leagueId = this.data.overview?.team.leagueId
+    if (leagueId) wx.navigateTo({ url: `/pages/league-team-directory/index?leagueId=${encodeURIComponent(leagueId)}` })
+  },
 })

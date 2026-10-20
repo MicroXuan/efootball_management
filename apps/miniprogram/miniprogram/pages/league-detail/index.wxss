@@ -127,6 +127,8 @@ page { background: #0e1417; color: #f4f7f8; }
 .workspace-schedule-arrow { width: 42rpx; height: 42rpx; flex: none; border: 2rpx solid #546b37; border-radius: 50%; color: #b6f13a; background: #202c25; font-size: 32rpx; font-weight: 700; line-height: 36rpx; text-align: center; }
 
 .workspace-groups { margin-top: 20rpx; }
+.directory-entry { display: flex; align-items: center; justify-content: space-between; margin-top: 14rpx; padding: 21rpx 24rpx; border: 2rpx solid #536a37; border-radius: 17rpx; color: #d9efac; background: #1a2420; font-size: 21rpx; font-weight: 800; }
+.directory-entry text:last-child { color: #b6f13a; font-size: 19rpx; }
 .workspace-group + .workspace-group { margin-top: 22rpx; }
 .workspace-group__head { padding: 0 2rpx; color: #aab5ba; font-size: 16rpx; font-weight: 750; letter-spacing: 3rpx; }
 .module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; margin-top: 10rpx; }

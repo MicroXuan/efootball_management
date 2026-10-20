@@ -162,6 +162,11 @@ Page({
     })
   },
 
+  openTeamDirectory() {
+    if (!this.data.workspace) return
+    wx.navigateTo({ url: `/pages/league-team-directory/index?leagueId=${encodeURIComponent(this.data.leagueId)}` })
+  },
+
   onWorkspaceModuleTap(event: WorkspaceModuleTapEvent) {
     const workspace = this.data.workspace
     if (!workspace) return

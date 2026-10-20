@@ -12,6 +12,7 @@
       </view>
       <view class="metrics"><text>阵容 {{item.rosterCopy}}</text><text>工资 {{item.salaryCopy}}</text></view>
       <text class="chevron">查看球队档案 →</text>
+      <button class="directory-shortcut" data-league-id="{{item.leagueId}}" catchtap="openDirectory">查看本联赛其他球队</button>
     </view>
   </view>
 </view>
