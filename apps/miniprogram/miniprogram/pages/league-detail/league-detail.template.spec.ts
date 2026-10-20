@@ -89,4 +89,11 @@ describe('league detail module cards', () => {
     expect(page).toContain('leagueId=')
     expect(page).toContain('seasonId=')
   })
+
+  it('shows the team identity once and gives rank and fixtures distinct dashboard cards', () => {
+    expect(markup).not.toContain('class="workspace-title">{{workspaceView.teamName}}')
+    expect(markup).toContain('class="workspace-title">赛季工作台</text>')
+    expect(markup).toContain('class="workspace-metric workspace-metric--rank"')
+    expect(markup).toContain('class="workspace-schedule-action"')
+  })
 })

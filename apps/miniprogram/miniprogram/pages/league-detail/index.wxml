@@ -42,12 +42,12 @@
 
     <view wx:if="{{workspace && workspaceView}}" class="workspace-card">
       <view class="workspace-head">
-        <view><text class="section-kicker">我的联赛工作台</text><text class="workspace-title">{{workspaceView.teamName}}</text></view>
+        <view><text class="section-kicker">我的联赛</text><text class="workspace-title">赛季工作台</text></view>
         <text class="workspace-division">{{workspaceView.divisionName}}</text>
       </view>
       <view class="workspace-metrics">
-        <view class="workspace-metric"><text class="workspace-metric__label">当前排名</text><view class="workspace-rank-row"><text class="workspace-rank">{{workspaceView.rank}}</text><text wx:if="{{workspaceView.rankNotice}}" class="workspace-rank-notice">{{workspaceView.rankNotice}}</text></view><text class="workspace-metric__meta">{{workspaceView.rankMeta}}</text></view>
-        <view class="workspace-metric workspace-metric--schedule" bindtap="openFixtures" role="button"><text class="workspace-metric__label">赛程</text><text class="workspace-next">全部赛程</text><view class="workspace-schedule-footer"><text class="workspace-metric__meta">按队伍和状态查找比赛</text><text class="workspace-schedule-arrow">查看 →</text></view></view>
+        <view class="workspace-metric workspace-metric--rank"><text class="workspace-metric__label">当前排名</text><view class="workspace-rank-row"><text class="workspace-rank">{{workspaceView.rank}}</text><text wx:if="{{workspaceView.rankNotice}}" class="workspace-rank-notice">{{workspaceView.rankNotice}}</text></view><text class="workspace-metric__meta">{{workspaceView.rankMeta}}</text></view>
+        <view class="workspace-metric workspace-metric--schedule" bindtap="openFixtures" role="button"><text class="workspace-metric__label">赛程中心</text><view class="workspace-schedule-action"><text class="workspace-next">全部赛程</text><text class="workspace-schedule-arrow">›</text></view><text class="workspace-metric__meta">按队伍和状态查找比赛</text></view>
       </view>
       <view class="workspace-groups">
         <view wx:for="{{workspaceModuleGroups}}" wx:key="key" wx:for-item="group" class="workspace-group">

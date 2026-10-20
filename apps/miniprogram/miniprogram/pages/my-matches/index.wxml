@@ -14,7 +14,7 @@
       <button bindtap="search">搜索</button>
     </view>
 
-    <view class="status-filters">
+    <view class="status-filter-bar">
       <button class="status-filter {{status === 'ALL' ? 'status-filter-active' : ''}}" data-status="ALL" bindtap="changeStatus">全部</button>
       <button class="status-filter {{status === 'UPCOMING' ? 'status-filter-active' : ''}}" data-status="UPCOMING" bindtap="changeStatus">未开始</button>
       <button class="status-filter {{status === 'FINISHED' ? 'status-filter-active' : ''}}" data-status="FINISHED" bindtap="changeStatus">已结束</button>
