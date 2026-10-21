@@ -23,7 +23,7 @@ const productionCloudbaseApi = {
 }
 
 export function resolveCloudbaseApiConfig(envVersion: MiniProgramEnvVersion) {
-  return envVersion === 'develop' ? stagingCloudbaseApi : productionCloudbaseApi
+  return envVersion === 'release' ? productionCloudbaseApi : stagingCloudbaseApi
 }
 
 export function resolveApiRuntimeConfig(
