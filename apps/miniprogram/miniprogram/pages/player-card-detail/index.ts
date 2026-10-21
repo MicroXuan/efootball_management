@@ -24,7 +24,7 @@ Page({
   currentDetail: null as PlayerCardDetail | null,
 
   data: {
-    state: 'loading' as 'login' | 'loading' | 'loaded' | 'error' | 'unavailable',
+    state: 'loading' as 'loading' | 'loaded' | 'error' | 'unavailable',
     errorMessage: '',
     cardId: '',
     card: null as PlayerCardDetailViewModel | null,
@@ -50,6 +50,10 @@ Page({
   },
 
   onShow() {
+    if (this.data.state === 'loaded' && this.data.card) {
+      void this.loadFavoriteStatus(this.data.card.playerId)
+      return
+    }
     this.resumeAuthenticatedDetail()
   },
 
@@ -74,10 +78,6 @@ Page({
 
   resumeAuthenticatedDetail() {
     if (!this.data.cardId || this.data.state === 'loaded' || this.requestInFlight) return
-    if (!session.getAccessToken()) {
-      this.setData({ state: 'login', errorMessage: '' })
-      return
-    }
     void this.loadCard()
   },
 
@@ -102,7 +102,7 @@ Page({
     const card = this.data.card
     if (!card || this.data.favoriteBusy) return
     if (!session.getAccessToken()) {
-      wx.navigateTo({ url: '/pages/login/index' })
+      this.goToLogin()
       return
     }
     const playerId = favoritePlayerId(card)
@@ -122,10 +122,6 @@ Page({
   },
 
   async loadCard() {
-    if (!session.getAccessToken()) {
-      this.setData({ state: 'login', errorMessage: '' })
-      return
-    }
     const token = ++this.detailRequestToken
     this.requestInFlight = true
     this.setData({ state: 'loading', errorMessage: '' })

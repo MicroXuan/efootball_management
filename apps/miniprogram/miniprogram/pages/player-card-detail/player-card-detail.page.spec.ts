@@ -1,17 +1,18 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ getPlayerCard: vi.fn() }))
+const mocks = vi.hoisted(() => ({ getPlayerCard: vi.fn(), getAccessToken: vi.fn((): string | undefined => 'token') }))
 
 vi.mock('../../services/catalog', () => ({ catalogApi: { getPlayerCard: mocks.getPlayerCard } }))
 vi.mock('../../services/favorites', () => ({ favoritesApi: { statuses: vi.fn() } }))
-vi.mock('../../services/session', () => ({ session: { getAccessToken: () => 'token' } }))
+vi.mock('../../services/session', () => ({ session: { getAccessToken: mocks.getAccessToken } }))
 
 type DetailPage = {
-  data: { state: string; cardId: string; errorMessage: string }
+  data: { state: string; cardId: string; errorMessage: string; card: { playerId: string } | null }
   onLoad(options: { id?: string }): void
   onShow(): void
   onUnload(): void
   loadCard(): Promise<void>
+  toggleFavorite(): Promise<void>
   resumeAuthenticatedDetail(): void
   setData(update: Record<string, unknown>): void
   [key: string]: unknown
@@ -25,7 +26,10 @@ beforeAll(async () => {
   await import('./index')
 })
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.getAccessToken.mockReturnValue('token')
+})
 
 function instance(): DetailPage {
   return {
@@ -36,6 +40,31 @@ function instance(): DetailPage {
 }
 
 describe('player card detail page lifecycle', () => {
+  it('requests the published card for a guest without opening login', () => {
+    mocks.getAccessToken.mockReturnValue(undefined)
+    mocks.getPlayerCard.mockReturnValue(new Promise(() => undefined))
+    const detail = instance()
+
+    detail.onLoad({ id: cardId })
+
+    expect(mocks.getPlayerCard).toHaveBeenCalledWith(cardId)
+    expect(detail.data.state).toBe('loading')
+  })
+
+  it('asks for login only when a guest tries to save a favorite', async () => {
+    mocks.getAccessToken.mockReturnValue(undefined)
+    const navigateTo = vi.fn()
+    vi.stubGlobal('wx', { navigateTo })
+    const detail = instance()
+    detail.data.cardId = cardId
+    detail.data.card = { playerId: '22222222-2222-4222-8222-222222222222' }
+
+    await detail.toggleFavorite()
+
+    expect(navigateTo).toHaveBeenCalledWith({
+      url: `/pages/login/index?redirect=${encodeURIComponent(`/pages/player-card-detail/index?id=${cardId}`)}`,
+    })
+  })
   it('starts a new card request each time the detail page is reopened', async () => {
     mocks.getPlayerCard.mockRejectedValue(new Error('offline'))
     const first = instance()

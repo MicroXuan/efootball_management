@@ -1,7 +1,6 @@
 import type { PlayerCardType, PlayerPosition, PlayerSearchResponse } from '@efm/contracts'
 import { ApiError } from '../../services/api'
 import { catalogApi } from '../../services/catalog'
-import { session } from '../../services/session'
 import {
   cardTypeOptions,
   groupCardsByPack,
@@ -29,7 +28,6 @@ function errorMessage(error: unknown): string {
 Page({
   data: {
     loading: true,
-    authenticated: false,
     refreshing: false,
     loadingMore: false,
     errorMessage: '',
@@ -53,12 +51,12 @@ Page({
 
   onLoad() {
     unloaded = false
-    this.resumeAuthenticatedCatalog()
+    void this.loadPacks()
+    void this.loadCards('refresh')
   },
 
   onShow() {
     this.getTabBar?.()?.setData({ selected: 0 })
-    this.resumeAuthenticatedCatalog()
   },
 
   onUnload() {
@@ -117,31 +115,12 @@ Page({
     void this.loadCards('refresh')
   },
 
-  goToLogin() {
-    const route = '/pages/players/index'
-    wx.navigateTo({ url: `/pages/login/index?redirect=${encodeURIComponent(route)}` })
-  },
-
-  resumeAuthenticatedCatalog() {
-    const authenticated = Boolean(session.getAccessToken())
-    if (!authenticated) {
-      requestToken += 1
-      this.setData({ authenticated: false, loading: false, cards: [], groups: [] })
-      return
-    }
-    if (this.data.authenticated) return
-    this.setData({ authenticated: true, loading: true })
-    void this.loadPacks()
-    void this.loadCards('refresh')
-  },
-
   onCardTap(event: CardTapEvent) {
     const id = event.detail.id
     if (id) wx.navigateTo({ url: `/pages/player-card-detail/index?id=${encodeURIComponent(id)}` })
   },
 
   async loadCards(mode: 'refresh' | 'append') {
-    if (!session.getAccessToken()) return
     const token = ++requestToken
     this.setData(mode === 'append'
       ? { loadingMore: true, errorMessage: '' }
@@ -182,7 +161,6 @@ Page({
   },
 
   async loadPacks() {
-    if (!session.getAccessToken()) return
     try {
       const response = await catalogApi.listCardPacks({ limit: 100 })
       if (unloaded) return
