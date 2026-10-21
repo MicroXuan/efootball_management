@@ -151,12 +151,12 @@ describe('player catalog lifecycle', () => {
     publishedPackId = search.body.items[0].pack.id;
   });
 
-  it('requires login for catalog reads and serves published records to a signed-in user', async () => {
-    await request(app.getHttpServer()).get('/v1/players').expect(401);
-    await request(app.getHttpServer()).get('/v1/players').set('Authorization', ordinaryAuthorization).expect(200);
-    await request(app.getHttpServer()).get(`/v1/players/${publishedPlayerId}`).set('Authorization', ordinaryAuthorization).expect(200);
-    await request(app.getHttpServer()).get(`/v1/player-cards/${publishedCardId}`).set('Authorization', ordinaryAuthorization).expect(200);
-    await request(app.getHttpServer()).get(`/v1/card-packs/${publishedPackId}`).set('Authorization', ordinaryAuthorization).expect(200);
+  it('serves published catalog records to a guest', async () => {
+    await request(app.getHttpServer()).get('/v1/players').expect(200);
+    await request(app.getHttpServer()).get(`/v1/players/${publishedPlayerId}`).expect(200);
+    await request(app.getHttpServer()).get(`/v1/player-cards/${publishedCardId}`).expect(200);
+    await request(app.getHttpServer()).get('/v1/card-packs').expect(200);
+    await request(app.getHttpServer()).get(`/v1/card-packs/${publishedPackId}`).expect(200);
   });
 
   it('accepts a valid JSON body above 100 KB but below 10 MB', async () => {
