@@ -19,7 +19,7 @@ describe('mini-program API configuration', () => {
 
   it.each([
     ['develop', 'cloud1-d0g1gwk2aefd9f1e8', 'efm-dev'],
-    ['trial', 'cloud1-d0g1gwk2aefd9f1e8', 'efm-dev'],
+    ['trial', 'efm-production-d1gmvq6jvbc778e79', 'efm-api-production'],
     ['release', 'efm-production-d1gmvq6jvbc778e79', 'efm-api-production'],
   ] as const)('routes the %s mini-program version to the correct CloudBase service', (
     envVersion,
@@ -41,7 +41,7 @@ describe('mini-program API configuration', () => {
 
   it.each([
     ['develop', 'ios', 'cloud1-d0g1gwk2aefd9f1e8', 'efm-dev'],
-    ['trial', 'devtools', 'cloud1-d0g1gwk2aefd9f1e8', 'efm-dev'],
+    ['trial', 'devtools', 'efm-production-d1gmvq6jvbc778e79', 'efm-api-production'],
     ['release', 'devtools', 'efm-production-d1gmvq6jvbc778e79', 'efm-api-production'],
   ] as const)('keeps %s on %s connected through CloudBase', (
     envVersion,
