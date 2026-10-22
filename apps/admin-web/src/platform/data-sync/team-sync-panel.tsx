@@ -10,9 +10,10 @@ import {
 } from '@efm/contracts';
 import { ApiError, adminApi, type AdminApi } from '../../lib/api';
 import { formatDateTime } from '../../lib/date-time';
+import { syncErrorText } from './sync-error-text';
 
 type TeamSyncItem = TeamSyncItemPage['items'][number];
-const DEFAULT_STATUSES = ['PENDING', 'FAILED'];
+const DEFAULT_STATUSES = ['PENDING'];
 const pageSizeOptions = [20, 50];
 const statusCopy = { PENDING: '等待确认', FAILED: '同步失败', PUBLISHED: '已发布', REJECTED: '已驳回' } as const;
 const changeCopy = { ADDED: '新增', UPDATED: '更新', SOURCE_MISSING: '来源缺失' } as const;
@@ -40,17 +41,21 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
   const [query, setQuery] = useState('');
   const [errorCode, setErrorCode] = useState('');
   const [errorReasons, setErrorReasons] = useState<Array<{ code: string; count: number }>>([]);
+  const [runItemSummary, setRunItemSummary] = useState<TeamSyncItemPage['summary'] | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [detail, setDetail] = useState<TeamSyncItem | null>(null);
   const [result, setResult] = useState<BatchMutationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [mutating, setMutating] = useState(false);
+  const [fullPublishProgress, setFullPublishProgress] = useState<string | null>(null);
+  const [fullPublishResult, setFullPublishResult] = useState(false);
   const [resumingRunId, setResumingRunId] = useState<string | null>(null);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadedRefreshKey = useRef<string | null>(null);
   const runRequestSequence = useRef(0);
   const selectNewestOnNextRunLoad = useRef(false);
+  const itemNames = useRef(new Map<string, string>());
 
   const loadRuns = useCallback(async () => {
     try {
@@ -72,7 +77,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
   }, [api, refreshKey, runPage]);
 
   const loadItems = useCallback(async () => {
-    if (!selectedRunId) { setItems([]); setTotal(0); return; }
+    if (!selectedRunId) { setItems([]); setTotal(0); setRunItemSummary(null); return; }
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), status: statuses.join(',') });
@@ -81,7 +86,8 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
       if (query) params.set('query', query);
       if (errorCode) params.set('errorCode', errorCode);
       const response = await api.request(`/v1/admin/data-sync/teams/runs/${selectedRunId}/items?${params}`, { schema: TeamSyncItemPageSchema });
-      setItems(response.items); setTotal(response.total); setErrorReasons(response.summary.errors); setError(null);
+      response.items.forEach((item) => itemNames.current.set(item.id, teamName(item)));
+      setItems(response.items); setTotal(response.total); setRunItemSummary(response.summary); setErrorReasons(response.summary.errors); setError(null);
       const visible = new Map(response.items.map((item) => [item.id, item.reviewStatus]));
       setSelectedIds((current) => current.filter((id) => {
         const status = visible.get(id);
@@ -94,10 +100,11 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
   useEffect(() => { void loadRuns(); }, [loadRuns]);
   useEffect(() => { void loadItems(); }, [loadItems]);
   useEffect(() => { setSelectedIds([]); }, [changeTypes, errorCode, query, selectedRunId, sourceLeagueId, statuses]);
+  useEffect(() => { itemNames.current.clear(); setRunItemSummary(null); }, [selectedRunId]);
 
   const mutate = async (action: 'publish' | 'reject' | 'retry') => {
     if (!selectedIds.length || mutating) return;
-    setMutating(true); setError(null); setResult(null);
+    setMutating(true); setError(null); setResult(null); setFullPublishResult(false);
     try {
       const response = await api.request(`/v1/admin/data-sync/teams/items/${action}`, {
         method: 'POST', body: { ids: selectedIds }, schema: BatchMutationResultSchema
@@ -107,6 +114,50 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
       await Promise.all([loadItems(), onChanged()]);
     } catch (caught) { setError(errorCopy(caught, '批量操作失败')); }
     finally { setMutating(false); }
+  };
+
+  const publishAllPending = async () => {
+    if (!selectedRunId || !runItemSummary?.pending || mutating) return;
+    const runId = selectedRunId;
+    const outcome: BatchMutationResult = { requestedCount: 0, succeededIds: [], failed: [] };
+    let publishError: string | null = null;
+    setMutating(true); setError(null); setResult(null); setFullPublishResult(true);
+    setFullPublishProgress('正在查找当前任务中可发布的队壳…');
+    try {
+      const pendingIds: string[] = [];
+      let pendingTotal = 0;
+      for (let pendingPage = 1; ; pendingPage += 1) {
+        const params = new URLSearchParams({ page: String(pendingPage), pageSize: '50', status: 'PENDING' });
+        const response = await api.request(`/v1/admin/data-sync/teams/runs/${runId}/items?${params}`, { schema: TeamSyncItemPageSchema });
+        response.items.forEach((item) => itemNames.current.set(item.id, teamName(item)));
+        pendingTotal = response.total;
+        pendingIds.push(...response.items.filter((item) => item.reviewStatus === 'PENDING').map((item) => item.id));
+        setFullPublishProgress(`正在查找可发布队壳：已检查 ${Math.min(pendingPage * 50, pendingTotal)} / ${pendingTotal} 条`);
+        if (pendingPage * 50 >= pendingTotal || response.items.length === 0) break;
+      }
+      const uniqueIds = [...new Set(pendingIds)];
+      for (let offset = 0; offset < uniqueIds.length; offset += 100) {
+        const ids = uniqueIds.slice(offset, offset + 100);
+        const response = await api.request('/v1/admin/data-sync/teams/items/publish', {
+          method: 'POST', body: { ids }, schema: BatchMutationResultSchema
+        });
+        outcome.requestedCount += response.requestedCount;
+        outcome.succeededIds.push(...response.succeededIds);
+        outcome.failed.push(...response.failed);
+        setFullPublishProgress(`正在发布：已处理 ${outcome.requestedCount} / ${uniqueIds.length} 条`);
+      }
+      setResult({ ...outcome });
+    } catch (caught) {
+      if (outcome.requestedCount) setResult({ ...outcome });
+      publishError = `${errorCopy(caught, '全量发布中断')}；请检查结果后重试，已成功发布的队壳不会重复处理。`;
+    } finally {
+      setFullPublishProgress(null);
+      setSelectedIds([]);
+      try { await Promise.all([loadItems(), onChanged()]); }
+      catch (caught) { publishError ??= errorCopy(caught, '发布结果刷新失败'); }
+      if (publishError) setError(publishError);
+      setMutating(false);
+    }
   };
 
   const resumeRun = async (runId: string) => {
@@ -126,26 +177,26 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
   const columns = useMemo(() => [
     { title: '球队队壳', key: 'team', render: (_: unknown, item: TeamSyncItem) => <div className="sync-team-cell">
       {item.candidate?.storedLogoUrl ? <Image preview={false} src={item.candidate.storedLogoUrl} alt="" /> : <span>{item.candidate?.shortName.slice(0, 2) ?? '队'}</span>}
-      <div><strong>{item.candidate?.nameZh ?? item.candidate?.nameEn ?? item.current?.nameZh ?? item.sourceExternalId}</strong><small>{item.sourceExternalId}</small></div>
+      <div><strong>{teamName(item)}</strong><small>{item.candidate?.nameEn ?? item.current?.nameEn ?? '球队队壳'}</small></div>
     </div> },
     { title: '来源联赛', key: 'league', render: (_: unknown, item: TeamSyncItem) => item.candidate?.sourceLeagueName ?? '未归类' },
     { title: '变化', dataIndex: 'changeType', key: 'changeType', render: (value: TeamSyncItem['changeType']) => <Tag>{changeCopy[value]}</Tag> },
-    { title: '状态 / 错误', key: 'status', render: (_: unknown, item: TeamSyncItem) => <div className="sync-table-identity"><strong>{statusCopy[item.reviewStatus]}</strong><small>{item.errorCode ?? '无错误'}</small></div> },
+    { title: '状态 / 错误', key: 'status', render: (_: unknown, item: TeamSyncItem) => <div className="sync-table-identity"><strong>{statusCopy[item.reviewStatus]}</strong><small title={item.errorCode ?? undefined}>{item.errorCode ? syncErrorText(item.errorCode) : '无错误'}</small></div> },
     { title: '操作', key: 'action', render: (_: unknown, item: TeamSyncItem) => <Button onClick={() => setDetail(item)}>查看详情</Button> }
   ], []);
 
-  const selectedSummary = selectedIds.join('、');
+  const selectedSummary = selectedIds.map((id) => itemNames.current.get(id) ?? '队壳记录').join('、');
   const selectedRun = runs.find((item) => item.id === selectedRunId) ?? null;
   return <div className="team-sync-panel">
     {error ? <Alert role="alert" type="error" showIcon closable onClose={() => setError(null)} title={error} /> : null}
     {result ? <Alert
       role="status" type={result.failed.length ? 'warning' : 'success'} showIcon closable onClose={() => setResult(null)}
       title={`成功 ${result.succeededIds.length} 条，失败 ${result.failed.length} 条`}
-      description={result.failed.length ? result.failed.map((failure) => `${failure.id} · ${failure.code}`).join('；') : '所选队壳已处理'}
+      description={result.failed.length ? <>{result.failed.slice(0, 10).map((failure) => `${itemNames.current.get(failure.id) ?? '队壳记录'}：${syncErrorText(failure.code)}`).join('；')}{result.failed.length > 10 ? `；另有 ${result.failed.length - 10} 条失败` : ''}</> : fullPublishResult ? '当前任务中等待确认的队壳已处理；同步失败项已自动跳过。' : '所选队壳已处理'}
     /> : null}
     <Card title={<div className="sync-section-title"><strong>需要确认的球队队壳</strong><small>{selectedRun ? selectedRunDescription(selectedRun) : '同步完成后，需要确认的队壳会显示在这里。'}</small></div>} className="data-card">
       <div className="sync-filter-grid">
-        <Select mode="multiple" aria-label="审核状态" value={statuses} onChange={(values) => { setStatuses(values.length ? values : DEFAULT_STATUSES); setPage(1); }} options={[
+        <Select mode="multiple" aria-label="审核状态" value={statuses} onChange={(values) => { setStatuses(values.length ? values : DEFAULT_STATUSES); setErrorCode(''); setPage(1); }} options={[
           { value: 'PENDING', label: '等待确认' }, { value: 'FAILED', label: '同步失败' }, { value: 'PUBLISHED', label: '已发布' }, { value: 'REJECTED', label: '已驳回' }
         ]} />
         <Select mode="multiple" aria-label="变化类型" value={changeTypes} placeholder="全部变化类型" allowClear onChange={(values) => { setChangeTypes(values); setPage(1); }} options={[
@@ -154,15 +205,21 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
         <Input.Search aria-label="来源联赛" placeholder="来源联赛 ID" allowClear onSearch={(value) => { setSourceLeagueId(value.trim()); setPage(1); }} />
         <Input.Search aria-label="搜索队壳" placeholder="球队名称或来源 ID" allowClear onSearch={(value) => { setQuery(value.trim()); setPage(1); }} />
       </div>
-      {errorReasons.length ? <div className="sync-error-chips"><span>失败原因</span>{errorReasons.map((reason) => <Button key={reason.code} type={errorCode === reason.code ? 'primary' : 'default'} onClick={() => { setErrorCode(errorCode === reason.code ? '' : reason.code); setPage(1); }}>{reason.code} · {reason.count}</Button>)}</div> : null}
+      {statuses.includes('FAILED') && errorReasons.length ? <div className="sync-error-chips"><span>失败原因</span>{errorReasons.map((reason) => <Button key={reason.code} title={reason.code} type={errorCode === reason.code ? 'primary' : 'default'} onClick={() => { setErrorCode(errorCode === reason.code ? '' : reason.code); setPage(1); }}>{syncErrorText(reason.code)} · {reason.count}</Button>)}</div> : null}
       <div className="sync-batch-bar">
-        <span>已选 {selectedIds.length} 条（最多 100 条）</span>
+        <span>已选 {selectedIds.length} 条（最多 100 条）{runItemSummary ? `；当前任务可全量发布 ${runItemSummary.pending} 条` : ''}</span>
         <Space wrap>
+          <Popconfirm
+            title={`发布当前任务中 ${runItemSummary?.pending ?? 0} 条等待确认的队壳`}
+            description={`自动跳过 ${runItemSummary?.failed ?? 0} 条同步失败，以及已发布或已驳回的记录。将处理当前任务的所有页面，不受上方筛选条件影响。`}
+            okText="确认全量发布" cancelText="取消" onConfirm={publishAllPending}
+          ><Button type="primary" loading={Boolean(fullPublishProgress)} disabled={!selectedRunId || !runItemSummary?.pending || mutating}>全量发布</Button></Popconfirm>
           <Popconfirm title={`将发布 ${selectedIds.length} 条队壳`} description={selectedSummary} okText="确认发布" cancelText="取消" onConfirm={() => mutate('publish')}><Button type="primary" disabled={!selectedIds.length || mutating}>批量发布</Button></Popconfirm>
           <Popconfirm title={`将驳回 ${selectedIds.length} 条队壳`} description={selectedSummary} okText="确认驳回" cancelText="取消" onConfirm={() => mutate('reject')}><Button disabled={!selectedIds.length || mutating}>批量驳回</Button></Popconfirm>
           <Popconfirm title={`将重试 ${selectedIds.length} 条失败项`} description={selectedSummary} okText="确认重试" cancelText="取消" onConfirm={() => mutate('retry')}><Button disabled={!selectedIds.length || mutating}>重试失败项</Button></Popconfirm>
         </Space>
       </div>
+      {fullPublishProgress ? <Alert role="status" type="info" showIcon title={fullPublishProgress} /> : null}
       <Table<TeamSyncItem>
         rowKey="id" loading={loading} dataSource={items} columns={columns} scroll={{ x: 900 }}
         rowSelection={{
@@ -187,7 +244,7 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
         <Table<PlatformSyncRunSummary>
           rowKey="id" size="small" dataSource={runs}
           rowClassName={(item) => item.id === selectedRunId ? 'is-selected' : ''}
-          onRow={(item) => ({ onClick: () => { setSelectedRunId(item.id); setPage(1); setSelectedIds([]); } })}
+          onRow={(item) => ({ onClick: () => { if (mutating) return; setSelectedRunId(item.id); setPage(1); setSelectedIds([]); } })}
           columns={[
             { title: '创建时间', dataIndex: 'createdAt', render: (value: string) => formatDateTime(value) },
             { title: '同步方式', dataIndex: 'mode', render: (value: PlatformSyncRunSummary['mode']) => runModeCopy[value] },
@@ -218,8 +275,8 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
         <Descriptions column={1} bordered size="small" items={[
           { key: 'change', label: '变化类型', children: changeCopy[detail.changeType] },
           { key: 'status', label: '审核状态', children: statusCopy[detail.reviewStatus] },
-          { key: 'source', label: '来源 ID', children: detail.sourceExternalId },
-          { key: 'error', label: '错误', children: detail.errorCode ? `${detail.errorCode} · ${detail.errorMessage ?? ''}` : '无' }
+          { key: 'source', label: '来源编号（排查用）', children: detail.sourceExternalId },
+          { key: 'error', label: '错误', children: detail.errorCode ? syncErrorText(detail.errorCode) : '无' }
         ]} />
         <div className="team-sync-comparison">
           <TeamSnapshot title="当前正式数据" value={detail.current} />
@@ -236,6 +293,10 @@ export function TeamSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancel
 
 function selectedRunDescription(run: PlatformSyncRunSummary) {
   return `当前显示 ${formatDateTime(run.createdAt)} 的${runModeCopy[run.mode]}任务；可在历史记录中切换。`;
+}
+
+function teamName(item: TeamSyncItem): string {
+  return item.candidate?.nameZh ?? item.candidate?.nameEn ?? item.current?.nameZh ?? item.current?.nameEn ?? '未命名球队';
 }
 
 function TeamSnapshot({ title, value }: { title: string; value: TeamSyncItem['current'] }) {

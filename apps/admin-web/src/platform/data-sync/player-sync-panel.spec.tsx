@@ -48,6 +48,55 @@ function fixture({ publishFails = false, resumableRun = false, resumableStatus =
 }
 
 describe('PlayerSyncPanel', () => {
+  it('publishes all valid ready batches across pages and skips abnormal batches without manual selection', async () => {
+    const readyBatches = Array.from({ length: 51 }, (_, index) => ({
+      ...batch, id: `${String(index + 1000).padStart(8, '0')}-2222-4222-8222-222222222222`, fileName: `第 ${index + 1} 批球员卡`
+    }));
+    const invalidReady = { ...batch, id: 'aaaaaaaa-2222-4222-8222-222222222222', fileName: '包含无效记录的批次', invalidCount: 1 };
+    const published: string[] = [];
+    const request = vi.fn(async (path: string, options?: { method?: string }) => {
+      if (path.endsWith('/publish') && options?.method === 'POST') {
+        const id = path.split('/').at(-2)!;
+        published.push(id);
+        if (id === readyBatches[50]!.id) throw new ApiError({ status: 409, code: 'IMPORT_BATCH_NOT_READY' });
+        return { ...readyBatches.find((item) => item.id === id), status: 'PUBLISHED' };
+      }
+      if (path.includes('/runs?')) return {
+        items: [run], page: 1, pageSize: 20, total: 1,
+        summary: { pending: 0, running: 0, ready: 1, paused: 0, failed: 0 }
+      };
+      if (path.includes('/batches?')) {
+        const params = new URL(path, 'http://localhost').searchParams;
+        const page = Number(params.get('page'));
+        const pageSize = Number(params.get('pageSize'));
+        const readyOnly = params.get('status') === 'READY';
+        const listed = readyOnly ? [...readyBatches, invalidReady] : [
+          { ...batch, id: 'bbbbbbbb-2222-4222-8222-222222222222', status: 'FAILED', fileName: '同步失败批次' },
+          { ...batch, id: 'cccccccc-2222-4222-8222-222222222222', status: 'VALIDATED', fileName: '存在异常批次' },
+          ...readyBatches, invalidReady
+        ];
+        return {
+          items: listed.slice((page - 1) * pageSize, page * pageSize), page, pageSize, total: listed.length,
+          summary: { uploaded: 0, validated: 1, ready: 52, published: 0, failed: 1, cancelled: 0 }
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    render(<PlayerSyncPanel api={{ request } as unknown as AdminApi} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    await screen.findByText(/当前任务有 52 个待确认批次/);
+    fireEvent.click(screen.getByRole('button', { name: '全量发布' }));
+    expect(await screen.findByText(/52 个等待确认的批次/)).toBeInTheDocument();
+    expect(screen.getByText(/跳过同步失败和存在异常的批次/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认全量发布' }));
+
+    await waitFor(() => expect(published).toHaveLength(51));
+    expect(published).toEqual(readyBatches.map((item) => item.id));
+    expect(await screen.findByText(/成功发布 50 个批次.*失败 1 个/)).toBeInTheDocument();
+    expect(screen.getByText(/第 51 批球员卡：批次尚未准备好，无法发布/)).toBeInTheDocument();
+    expect(screen.queryByText(/IMPORT_BATCH_NOT_READY/)).not.toBeInTheDocument();
+  });
+
   it('labels sample history as sample synchronization', async () => {
     const { api } = fixture({ mode: 'SAMPLE' });
     render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
@@ -66,12 +115,12 @@ describe('PlayerSyncPanel', () => {
     expect(screen.getByText(/当前显示.*增量同步任务/)).toBeInTheDocument();
   });
 
-  it('uses server pagination, default exception filters, and only 20/50 page sizes', async () => {
+  it('uses server pagination, shows ready batches by default, and only offers 20/50 page sizes', async () => {
     const { api, request } = fixture();
     render(<PlayerSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
 
     expect(await screen.findByText('共 43000 条')).toBeInTheDocument();
-    expect(request).toHaveBeenCalledWith(expect.stringContaining('status=READY%2CVALIDATED%2CFAILED'), expect.anything());
+    expect(request.mock.calls.some(([path]) => new URL(String(path), 'http://localhost').searchParams.get('status') === 'READY')).toBe(true);
     expect(screen.queryByText('第 21 条以后未请求的数据')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTitle('2'));
@@ -96,7 +145,7 @@ describe('PlayerSyncPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '发布批次' }));
     expect(await screen.findByText('将发布整个导入批次')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认发布' }));
-    expect(await screen.findByText(/IMPORT_BATCH_NOT_READY/)).toBeInTheDocument();
+    expect(await screen.findByText(/批次尚未准备好，无法发布/)).toBeInTheDocument();
     expect(screen.getAllByText('共 43000 条').length).toBeGreaterThan(0);
   });
 
