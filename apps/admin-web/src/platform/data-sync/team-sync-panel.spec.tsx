@@ -51,6 +51,51 @@ function fixture({ resumableRun = false, resumableStatus = 'FAILED', mode = 'INC
 }
 
 describe('TeamSyncPanel', () => {
+  it('publishes every pending team in the selected run without selecting rows and skips sync failures', async () => {
+    const pendingItems = Array.from({ length: 101 }, (_, index) => ({
+      ...items[0]!, id: `${String(index + 1000).padStart(8, '0')}-1111-4111-8111-111111111111`,
+      sourceExternalId: `pending-${index}`
+    }));
+    const failedId = items[2]!.id;
+    const publishBodies: string[][] = [];
+    const request = vi.fn(async (path: string, options?: { method?: string; body?: { ids?: string[] } }) => {
+      if (path.endsWith('/publish') && options?.method === 'POST') {
+        const batch = options.body?.ids ?? [];
+        publishBodies.push(batch);
+        return { requestedCount: batch.length, succeededIds: batch, failed: [] };
+      }
+      if (path.includes('/runs?')) return {
+        items: [run], page: 1, pageSize: 20, total: 1,
+        summary: { pending: 0, running: 0, ready: 1, paused: 0, failed: 0 }
+      };
+      if (path.includes('/items')) {
+        const params = new URL(path, 'http://localhost').searchParams;
+        const page = Number(params.get('page'));
+        const pageSize = Number(params.get('pageSize'));
+        const pendingOnly = params.get('status') === 'PENDING';
+        const listedItems = pendingOnly ? pendingItems : [items[2]!, ...pendingItems];
+        return {
+          items: listedItems.slice((page - 1) * pageSize, page * pageSize), page, pageSize,
+          total: listedItems.length,
+          summary: { pending: 101, failed: 1, published: 0, rejected: 0, errors: [{ code: 'CREST_INVALID', count: 1 }] }
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    render(<TeamSyncPanel api={{ request } as unknown as AdminApi} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: '全量发布' }));
+    expect(await screen.findByText(/发布当前任务中 101 条等待确认的队壳/)).toBeInTheDocument();
+    expect(screen.getByText(/自动跳过 1 条同步失败/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '确认全量发布' }));
+
+    await waitFor(() => expect(publishBodies.flat()).toHaveLength(101));
+    expect(publishBodies).toHaveLength(2);
+    expect(publishBodies.every((batch) => batch.length <= 100)).toBe(true);
+    expect(publishBodies.flat()).not.toContain(failedId);
+    expect(await screen.findByText('成功 101 条，失败 0 条')).toBeInTheDocument();
+  });
+
   it('labels sample history as sample synchronization', async () => {
     const { api } = fixture({ mode: 'SAMPLE' });
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
@@ -69,21 +114,28 @@ describe('TeamSyncPanel', () => {
     expect(screen.getByText(/当前显示.*增量同步任务/)).toBeInTheDocument();
   });
 
-  it('shows only the current server page and applies exception-first filters', async () => {
+  it('shows publishable teams by default and keeps failure records available through the status filter', async () => {
     const { api, request } = fixture();
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
 
     expect(await screen.findByText('共 981 条')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '查看详情' })).toHaveLength(20);
-    expect(request).toHaveBeenCalledWith(expect.stringContaining('status=PENDING%2CFAILED'), expect.anything());
+    expect(request.mock.calls.some(([path]) => new URL(String(path), 'http://localhost').searchParams.get('status') === 'PENDING')).toBe(true);
+    expect(screen.queryByRole('button', { name: /队徽图片无效/ })).not.toBeInTheDocument();
     expect(screen.queryByText('已发布球队')).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '审核状态' }));
+    const failedOption = [...document.querySelectorAll<HTMLElement>('.ant-select-item-option-content')].find((option) => option.textContent === '同步失败');
+    expect(failedOption).toBeDefined();
+    await userEvent.click(failedOption!);
+    await waitFor(() => expect(request.mock.calls.map(([path]) => String(path))).toContainEqual(expect.stringContaining('FAILED')));
+
+    await userEvent.click(screen.getByRole('button', { name: /队徽图片无效/ }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('errorCode=CREST_INVALID'), expect.anything()));
 
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '审核状态' }));
     await userEvent.click(await screen.findByText('已发布'));
     await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('PUBLISHED'), expect.anything()));
-
-    await userEvent.click(screen.getByRole('button', { name: /CREST_INVALID/ }));
-    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('errorCode=CREST_INVALID'), expect.anything()));
 
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '每页条数' }));
     const options = await screen.findAllByRole('option');
@@ -98,11 +150,12 @@ describe('TeamSyncPanel', () => {
     for (const id of ids.slice(0, 3)) await userEvent.click(screen.getByRole('checkbox', { name: `选择 ${id}` }));
     await userEvent.click(screen.getByRole('button', { name: '批量发布' }));
     const confirmation = await screen.findByText(/将发布 3 条队壳/);
-    expect(confirmation.parentElement).toHaveTextContent(ids[0]!);
-    expect(confirmation.parentElement).toHaveTextContent(ids[2]!);
+    expect(confirmation.parentElement).toHaveTextContent('球队 1');
+    expect(confirmation.parentElement).toHaveTextContent('新球队名');
     await userEvent.click(screen.getByRole('button', { name: '确认发布' }));
     expect(await screen.findByText('成功 2 条，失败 1 条')).toBeInTheDocument();
-    expect(screen.getByText(/TEAM_SYNC_ITEM_NOT_PENDING/)).toBeInTheDocument();
+    expect(screen.getByText(/新球队名.*状态已变化/)).toBeInTheDocument();
+    expect(screen.queryByText(/TEAM_SYNC_ITEM_NOT_PENDING/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getAllByRole('button', { name: '查看详情' })[2]!);
     const drawer = await screen.findByRole('dialog');
@@ -110,7 +163,7 @@ describe('TeamSyncPanel', () => {
     expect(within(drawer).getByText('新球队名')).toBeInTheDocument();
     expect(within(drawer).getByText('https://media.example.com/old.png')).toBeInTheDocument();
     expect(within(drawer).getByText('https://media.example.com/new.png')).toBeInTheDocument();
-    expect(within(drawer).getByText(/CREST_INVALID/)).toBeInTheDocument();
+    expect(within(drawer).getByText('队徽图片无效')).toBeInTheDocument();
     expect(within(drawer).queryByText(/rawDetail/)).not.toBeInTheDocument();
   });
 
@@ -140,12 +193,12 @@ describe('TeamSyncPanel', () => {
     render(<TeamSyncPanel api={api} onChanged={vi.fn()} onResumeRun={vi.fn()} />);
     await screen.findByText('共 981 条');
     await userEvent.click(screen.getByRole('checkbox', { name: `选择 ${ids[0]}` }));
-    expect(screen.getByText('已选 1 条（最多 100 条）')).toBeInTheDocument();
+    expect(screen.getByText(/已选 1 条（最多 100 条）/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTitle('2'));
 
     expect(await screen.findByText('第二页球队 1')).toBeInTheDocument();
-    expect(screen.getByText('已选 1 条（最多 100 条）')).toBeInTheDocument();
+    expect(screen.getByText(/已选 1 条（最多 100 条）/)).toBeInTheDocument();
   });
 
   it('switches review data to the newest run after a terminal refresh', async () => {

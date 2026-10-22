@@ -216,6 +216,7 @@ select { font: inherit; }
 .league-team-identity { min-width: 220px; display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 12px; }
 .league-team-identity > img,
 .league-team-identity > span { width: 48px; height: 48px; object-fit: contain; border: 1px solid #dfe6e9; border-radius: 12px; background: #f5f7f8; }
+.league-team-identity > img { background: #546b77; }
 .league-team-identity > span { display: grid; place-items: center; color: #f4f7f8; background: #182126; font-size: 12px; font-weight: 800; }
 .league-team-identity a { min-width: 0; display: grid; gap: 3px; color: var(--admin-text); }
 .league-team-identity strong { overflow-wrap: anywhere; }
@@ -229,6 +230,7 @@ select { font: inherit; }
 .team-shell-option--selected { border-color: #7c9f34; background: #f7faef; box-shadow: 0 0 0 3px rgba(182,241,58,.16); }
 .team-shell-option__crest img,
 .team-shell-option__crest span { width: 48px; height: 48px; object-fit: contain; border: 1px solid #e1e6e8; border-radius: 11px; background: #fff; }
+.team-shell-option__crest img { background: #546b77; }
 .team-shell-option__crest span { display: grid; place-items: center; color: #fff; background: #182126; font-size: 12px; font-weight: 800; }
 .team-shell-option__copy { min-width: 0; display: grid; gap: 3px; }
 .team-shell-option__copy strong { overflow: hidden; color: var(--admin-text); text-overflow: ellipsis; white-space: nowrap; }
