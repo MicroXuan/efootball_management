@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, ApiError } from './api'
 import { session } from './session'
 
-type ContainerOptions = { path: string }
+type ContainerOptions = { path: string; header: Record<string, string> }
 
 describe('mini-program session and API client', () => {
   const storage = new Map<string, unknown>()
@@ -20,7 +20,13 @@ describe('mini-program session and API client', () => {
     } as unknown as WechatMiniprogram.Wx
   })
 
-  it('persists access and refresh tokens under versioned keys', () => {
+  it('keeps the current API environment session separate from legacy storage', () => {
+    storage.set('efm.session.v1', {
+      accessToken: 'other-environment-access',
+      refreshToken: 'other-environment-refresh',
+    })
+    expect(session.getAccessToken()).toBeUndefined()
+
     session.setTokens({
       accessToken: 'access-1',
       expiresInSeconds: 900,
@@ -29,7 +35,36 @@ describe('mini-program session and API client', () => {
     })
 
     expect(session.getAccessToken()).toBe('access-1')
-    expect(storage.get('efm.session.v1')).toMatchObject({ refreshToken: 'refresh-1' })
+    expect(storage.get('efm.session.v1.cloud1-d0g1gwk2aefd9f1e8.efm-dev')).toMatchObject({ refreshToken: 'refresh-1' })
+  })
+
+  it('refreshes an invalid access token and retries the protected request', async () => {
+    session.setTokens({
+      accessToken: 'invalid-access',
+      expiresInSeconds: 900,
+      refreshToken: 'refresh-1',
+      refreshExpiresInSeconds: 2_592_000,
+    })
+    callContainer.mockImplementation(async (options: ContainerOptions) => {
+      if (options.path.endsWith('/auth/refresh')) return {
+        statusCode: 200,
+        data: {
+          accessToken: 'new-access',
+          expiresInSeconds: 900,
+          refreshToken: 'refresh-2',
+          refreshExpiresInSeconds: 2_592_000,
+        },
+      }
+      return options.header.Authorization === 'Bearer invalid-access'
+        ? { statusCode: 401, data: { error: { code: 'AUTH_REQUIRED', message: 'Access token is invalid' } } }
+        : options.header.Authorization === 'Bearer new-access'
+          ? { statusCode: 200, data: { id: 'current-user' } }
+          : { statusCode: 401, data: { error: { code: 'AUTH_REQUIRED', message: 'Authentication is required' } } }
+    })
+
+    await expect(api.request<{ id: string }>({ path: '/me' })).resolves.toEqual({ id: 'current-user' })
+    expect(session.getAccessToken()).toBe('new-access')
+    expect(wx.reLaunch).not.toHaveBeenCalled()
   })
 
   it('uses one refresh for concurrent expired requests and retries each once', async () => {
@@ -94,6 +129,34 @@ describe('mini-program session and API client', () => {
     await expect(api.request({ path: '/me' })).rejects.toBeInstanceOf(ApiError)
     expect(session.getAccessToken()).toBeUndefined()
     expect(wx.reLaunch).toHaveBeenCalledWith({ url: '/pages/login/index' })
+  })
+
+  it('clears an invalid session when its refresh token is also invalid', async () => {
+    session.setTokens({
+      accessToken: 'invalid-access',
+      expiresInSeconds: 900,
+      refreshToken: 'invalid-refresh',
+      refreshExpiresInSeconds: 2_592_000,
+    })
+    callContainer.mockImplementation(async (options: ContainerOptions) => ({
+      statusCode: 401,
+      data: { error: { code: options.path.endsWith('/auth/refresh') ? 'AUTH_REFRESH_INVALID' : 'AUTH_REQUIRED', message: 'invalid' } },
+    }))
+
+    await expect(api.request({ path: '/me' })).rejects.toMatchObject({ code: 'AUTH_REFRESH_INVALID' })
+    expect(session.getAccessToken()).toBeUndefined()
+    expect(wx.reLaunch).toHaveBeenCalledWith({ url: '/pages/login/index' })
+  })
+
+  it('does not refresh a protected request without a stored access token', async () => {
+    callContainer.mockResolvedValue({
+      statusCode: 401,
+      data: { error: { code: 'AUTH_REQUIRED', message: 'Authentication is required' } },
+    })
+
+    await expect(api.request({ path: '/me' })).rejects.toMatchObject({ code: 'AUTH_REQUIRED' })
+    expect(callContainer).toHaveBeenCalledTimes(1)
+    expect(wx.reLaunch).not.toHaveBeenCalled()
   })
 
   it('does not refresh or redirect when a public request returns 401', async () => {

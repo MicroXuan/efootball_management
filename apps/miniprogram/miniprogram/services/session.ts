@@ -1,6 +1,9 @@
 import type { AuthTokenResponse } from '@efm/contracts'
+import { apiRuntimeConfig } from '../config/api'
 
-const SESSION_KEY = 'efm.session.v1'
+const SESSION_KEY = apiRuntimeConfig.transport === 'cloudbase'
+  ? `efm.session.v1.${apiRuntimeConfig.environmentId}.${apiRuntimeConfig.serviceName}`
+  : `efm.session.v1.${apiRuntimeConfig.baseUrl}`
 
 type StoredSession = AuthTokenResponse & {
   storedAt: number

@@ -130,14 +130,15 @@ async function refreshSession(): Promise<void> {
 }
 
 async function request<T>(options: ApiRequestOptions, retried = false): Promise<T> {
+  const accessToken = options.skipAuth ? undefined : session.getAccessToken()
   const response = await rawRequest<T>(
     options,
-    options.skipAuth ? undefined : session.getAccessToken(),
+    accessToken,
   )
   if (response.statusCode >= 200 && response.statusCode < 300) return response.data
 
   const error = toApiError(response)
-  if (!options.skipAuth && !retried && error.code === 'AUTH_TOKEN_EXPIRED') {
+  if (accessToken && !retried && (error.code === 'AUTH_TOKEN_EXPIRED' || error.code === 'AUTH_REQUIRED')) {
     await refreshSession()
     return request<T>(options, true)
   }
