@@ -21,7 +21,7 @@ Page({
   },
 
   onShow() {
-    void this.load()
+    void this.load(this.data.state !== 'loaded')
   },
 
   onPullDownRefresh() {
@@ -46,7 +46,7 @@ Page({
       markActionCenterRead(visibleItems)
     } catch (error) {
       this.setData({
-        state: 'error',
+        state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
         errorMessage: error instanceof ApiError ? error.message : '待办加载失败，请稍后重试',
       })
     }

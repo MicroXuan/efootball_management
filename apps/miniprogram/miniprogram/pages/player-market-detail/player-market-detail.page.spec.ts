@@ -13,6 +13,7 @@ vi.mock('../../services/api', () => ({ ApiError: class ApiError extends Error {}
 type DetailPage = {
   data: Record<string, any>
   detail: any
+  onShow(): void
   submitApplication(): Promise<void>
   withdrawApplication(): Promise<void>
   confirmComposer(): void
@@ -53,6 +54,17 @@ function context() {
 }
 
 describe('player market detail page', () => {
+  it('refreshes without hiding the detail when returning from another page', () => {
+    const instance = context()
+    instance.data.playerId = 'player-1'
+    instance.data.state = 'loaded'
+
+    page.onShow.call(instance)
+
+    expect(instance.loadDetail).toHaveBeenCalledWith(false)
+    expect(instance.data.state).toBe('loaded')
+  })
+
   it('submits a forced offer using the forced-period ID while transfer is closed', async () => {
     const instance = context()
     await page.submitApplication.call(instance)

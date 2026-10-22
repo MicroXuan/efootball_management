@@ -37,7 +37,7 @@ Page({
   },
 
   onShow() {
-    if (this.data.playerId) void this.loadDetail()
+    if (this.data.playerId) void this.loadDetail(this.data.state !== 'loaded')
   },
 
   onPullDownRefresh() {
@@ -66,7 +66,10 @@ Page({
         forcedCopyText: activeForcedOfferCopy(detail.myApplication, detail.playerEnglishName) ?? '',
       })
     } catch (error) {
-      this.setData({ state: 'error', errorMessage: error instanceof ApiError ? error.message : '球员详情加载失败，请稍后重试' })
+      this.setData({
+        state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
+        errorMessage: error instanceof ApiError ? error.message : '球员详情加载失败，请稍后重试',
+      })
     }
   },
 

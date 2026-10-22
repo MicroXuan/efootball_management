@@ -14,6 +14,7 @@ Component({
 
   observers: {
     'src, directHttps'(src: string, directHttps: boolean) {
+      if (this.data.requestedSrc === src && this.data.requestedDirectHttps === directHttps) return
       this.setData({
         displaySrc: '', requestedSrc: src, requestedDirectHttps: directHttps, imageFailed: false,
       })

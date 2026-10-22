@@ -16,6 +16,7 @@ vi.mock('../../services/api', () => ({ ApiError: class ApiError extends Error {}
 type MarketPage = {
   data: Record<string, any>
   onLoad(options: Record<string, string | undefined>): void
+  onShow(): void
   loadView(showLoading?: boolean, mode?: 'replace' | 'append'): Promise<void>
   onReachBottom(): void
   onPageScroll(event: { scrollTop: number }): void
@@ -62,6 +63,16 @@ function context() {
 }
 
 describe('player market page pagination', () => {
+  it('refreshes without hiding players when returning from a detail page', () => {
+    const instance = { ...context(), loadView: vi.fn(async () => undefined) }
+    instance.data.state = 'loaded'
+
+    page.onShow.call(instance)
+
+    expect(instance.loadView).toHaveBeenCalledWith(false)
+    expect(instance.data.state).toBe('loaded')
+  })
+
   it('opens the requested application view from an action-center deep link', () => {
     const instance = context()
 
