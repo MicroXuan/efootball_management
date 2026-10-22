@@ -17,6 +17,8 @@ function errorCopy(error: unknown): string {
   return error instanceof ApiError ? error.message : '加载失败，请检查网络后重试'
 }
 
+let loadVersion = 0
+
 Page({
   data: {
     state: 'loading' as 'loading' | 'loaded' | 'error',
@@ -42,6 +44,7 @@ Page({
   },
 
   async loadPage(showLoading = true) {
+    const currentVersion = ++loadVersion
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     const loggedIn = Boolean(session.getAccessToken())
     if (!loggedIn) {
@@ -49,23 +52,26 @@ Page({
       return
     }
     try {
-      const [user, teams, actionCenter] = await Promise.all([
+      const actionCenterPromise = loadActionCenter().catch(() => ({ items: [], actionRequiredCount: 0 }))
+      const [user, teams] = await Promise.all([
         api.request<CurrentUserResponse>({ path: '/me' }),
         leaguesApi.mine(),
-        loadActionCenter().catch(() => ({ items: [], actionRequiredCount: 0 })),
       ])
+      if (currentVersion !== loadVersion) return
+      this.setData({
+        state: 'loaded', errorMessage: '', loggedIn: true,
+        currentUser: user, profile: profileView(user, teams.items),
+      })
+      const actionCenter = await actionCenterPromise
+      if (currentVersion !== loadVersion) return
       const readVersions = readActionCenterVersions()
       const sourceCounts = actionCenterSourceAttention(actionCenter, readVersions)
       const attentionCount = actionCenterAttentionCount(actionCenter, readVersions)
       this.setData({
-        state: 'loaded',
-        errorMessage: '',
-        loggedIn: true,
-        currentUser: user,
-        profile: profileView(user, teams.items),
         actionCenter: { attentionCount, actionRequiredCount: actionCenter.actionRequiredCount, auctionCount: sourceCounts.AUCTION },
       })
     } catch (error) {
+      if (currentVersion !== loadVersion) return
       this.setData({
         state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
         errorMessage: errorCopy(error),

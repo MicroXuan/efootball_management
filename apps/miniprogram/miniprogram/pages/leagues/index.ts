@@ -31,6 +31,8 @@ Page({
     leagues: [] as LeagueCardView[],
     hasLeagues: false,
     loggedIn: false,
+    mineLoadFailed: false,
+    mineLoading: false,
     bannerUrl: '',
     bannerDisplayUrl: '',
     bannerMode: 'loading' as BannerMode,
@@ -69,16 +71,31 @@ Page({
     const presentationPromise = platformPresentationApi.get().catch(() => null)
     try {
       const loggedIn = Boolean(session.getAccessToken())
-      const [allResponse, mineResponse] = await Promise.all([
-        leaguesApi.list(undefined, 100),
-        loggedIn ? leaguesApi.mine() : Promise.resolve({ items: [], nextCursor: null }),
-      ])
+      if (loggedIn) this.setData({ mineLoading: true })
+      const minePromise = (loggedIn ? leaguesApi.mine() : Promise.resolve({ items: [], nextCursor: null }))
+        .then((response) => ({ response, error: null as unknown }), (error: unknown) => ({ response: null, error }))
+      const allResponse = await leaguesApi.list(undefined, 100)
       const allLeagues = allResponse.items.map((league: LeagueSummary) => leagueCardView(league))
+      if (this.data.activeTab === 'all') {
+        this.setData({
+          state: 'loaded', errorMessage: '', loggedIn, allLeagues,
+          leagues: allLeagues, hasLeagues: allLeagues.length > 0,
+        })
+      } else {
+        this.setData({ loggedIn, allLeagues })
+      }
+      const mineResult = await minePromise
+      if (mineResult.error) {
+        this.setData({ mineLoadFailed: true, mineLoading: false })
+        throw mineResult.error
+      }
+      const mineResponse = mineResult.response!
       const myLeagues = mineResponse.items.map((team: MyLeagueTeamSummary) => myLeagueCardView(team))
-      const leagues = selectLeagueCards(this.data.activeTab, allLeagues, myLeagues)
+      const showMine = this.data.activeTab === 'mine'
+      const leagues = showMine ? selectLeagueCards('mine', allLeagues, myLeagues) : null
       this.setData({
-        state: 'loaded', errorMessage: '', loggedIn, allLeagues, myLeagues, leagues,
-        hasLeagues: leagues.length > 0,
+        state: 'loaded', errorMessage: '', loggedIn, mineLoadFailed: false, mineLoading: false, myLeagues,
+        ...(leagues ? { leagues, hasLeagues: leagues.length > 0 } : {}),
       })
       const presentation = await presentationPromise
       if (!presentation) {
@@ -106,7 +123,10 @@ Page({
           : { bannerUrl: banner.imageUrl, bannerDisplayUrl: '', bannerMode: 'fallback' })
     } catch (error) {
       this.setData({
-        state: this.data.state === 'loaded' ? 'loaded' : 'error',
+        mineLoading: false,
+        state: this.data.mineLoadFailed && this.data.activeTab === 'mine'
+          ? 'error'
+          : this.data.state === 'loaded' ? 'loaded' : 'error',
         errorMessage: error instanceof ApiError
           ? leagueListErrorMessage(error.code)
           : leagueListErrorMessage('UNKNOWN'),
@@ -118,7 +138,12 @@ Page({
     const activeTab = event.currentTarget.dataset.tab
     if (!activeTab || activeTab === this.data.activeTab) return
     const leagues = selectLeagueCards(activeTab, this.data.allLeagues, this.data.myLeagues)
-    this.setData({ activeTab, leagues, hasLeagues: leagues.length > 0 })
+    this.setData({
+      activeTab, leagues, hasLeagues: leagues.length > 0,
+      ...(this.data.mineLoading
+        ? { state: activeTab === 'mine' && this.data.myLeagues.length === 0 ? 'loading' : 'loaded' }
+        : this.data.mineLoadFailed ? { state: activeTab === 'mine' ? 'error' : 'loaded' } : {}),
+    })
   },
 
   openLeague(event: LeagueTapEvent) {

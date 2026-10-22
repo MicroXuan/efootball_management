@@ -56,6 +56,53 @@ describe('profile quick actions', () => {
     expect(instance.data.profile.teams).toEqual([{ id: 'team-1' }])
   })
 
+  it('shows the profile before action-center statistics finish loading', async () => {
+    const { session } = await import('../../services/session')
+    const { api } = await import('../../services/api')
+    const { leaguesApi } = await import('../../services/leagues')
+    const actionCenter = await import('../../services/action-center')
+    vi.spyOn(session, 'getAccessToken').mockReturnValue('access-token')
+    vi.spyOn(api, 'request').mockResolvedValue({ id: 'user-1', displayName: 'Player' })
+    vi.spyOn(leaguesApi, 'mine').mockResolvedValue({ items: [], nextCursor: null })
+    let finishActionCenter!: (value: { items: never[]; actionRequiredCount: number }) => void
+    vi.spyOn(actionCenter, 'loadActionCenter').mockImplementation(() => new Promise((resolve) => { finishActionCenter = resolve }))
+    const instance = {
+      data: { ...page.data },
+      setData(update: Record<string, unknown>) { Object.assign(this.data, update) },
+    }
+
+    const loading = page.loadPage.call(instance, true)
+    await vi.waitFor(() => expect(instance.data.state).toBe('loaded'))
+
+    expect(instance.data).toMatchObject({ profile: { displayName: 'Player' } })
+    finishActionCenter({ items: [], actionRequiredCount: 0 })
+    await loading
+  })
+
+  it('ignores late statistics after the profile is refreshed as logged out', async () => {
+    const { session } = await import('../../services/session')
+    const { api } = await import('../../services/api')
+    const { leaguesApi } = await import('../../services/leagues')
+    const actionCenter = await import('../../services/action-center')
+    vi.spyOn(session, 'getAccessToken').mockReturnValueOnce('access-token').mockReturnValue(undefined)
+    vi.spyOn(api, 'request').mockResolvedValue({ id: 'user-1', displayName: 'Player' })
+    vi.spyOn(leaguesApi, 'mine').mockResolvedValue({ items: [], nextCursor: null })
+    let finishActionCenter!: (value: { items: never[]; actionRequiredCount: number }) => void
+    vi.spyOn(actionCenter, 'loadActionCenter').mockImplementation(() => new Promise((resolve) => { finishActionCenter = resolve }))
+    const instance = {
+      data: { ...page.data },
+      setData(update: Record<string, unknown>) { Object.assign(this.data, update) },
+    }
+
+    const first = page.loadPage.call(instance, true)
+    await vi.waitFor(() => expect(instance.data.state).toBe('loaded'))
+    await page.loadPage.call(instance, false)
+    finishActionCenter({ items: [], actionRequiredCount: 3 })
+    await first
+
+    expect(instance.data).toMatchObject({ loggedIn: false, actionCenter: { actionRequiredCount: 0 } })
+  })
+
   it('opens the cross-league action center', () => {
     page.openActionCenter()
     expect(wx.navigateTo).toHaveBeenCalledWith({ url: '/pages/action-center/index' })

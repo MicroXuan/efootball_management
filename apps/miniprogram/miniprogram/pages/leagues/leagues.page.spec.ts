@@ -25,6 +25,7 @@ type LeaguesPage = {
   data: Record<string, unknown>
   onShow(): void
   loadLeagues(showLoading?: boolean): Promise<void>
+  switchTab(event: { currentTarget: { dataset: { tab: 'all' | 'mine' } } }): void
 }
 
 let page: LeaguesPage
@@ -58,6 +59,36 @@ function context() {
 }
 
 describe('league banner presentation', () => {
+  it('shows public leagues before the private leagues request completes', async () => {
+    mocks.getAccessToken.mockReturnValue('access-token')
+    let finishMine!: (value: { items: never[]; nextCursor: null }) => void
+    mocks.listMyLeagues.mockImplementation(() => new Promise((resolve) => { finishMine = resolve }))
+    mocks.listLeagues.mockResolvedValue({ items: [{ id: 'league-1', name: 'Test League', shortName: 'Test', description: '', logoUrl: null, edition: 'NATIONAL', currentSeason: null }], nextCursor: null })
+    const instance = context()
+
+    const loading = page.loadLeagues.call(instance, true)
+    await vi.waitFor(() => expect(instance.data.state).toBe('loaded'))
+
+    expect(instance.data.allLeagues).toHaveLength(1)
+    page.switchTab.call(instance, { currentTarget: { dataset: { tab: 'mine' } } })
+    expect(instance.data.state).toBe('loading')
+    finishMine({ items: [], nextCursor: null })
+    await loading
+    expect(instance.data.state).toBe('loaded')
+  })
+
+  it('does not mistake a failed private request for no bound leagues', async () => {
+    mocks.getAccessToken.mockReturnValue('access-token')
+    mocks.listMyLeagues.mockRejectedValue(new Error('offline'))
+    const instance = context()
+
+    await page.loadLeagues.call(instance, true)
+    expect(instance.data.state).toBe('loaded')
+
+    page.switchTab.call(instance, { currentTarget: { dataset: { tab: 'mine' } } })
+    expect(instance.data.state).toBe('error')
+  })
+
   it('uses the HTTPS banner URL after the cloud file has been preloaded', async () => {
     const instance = context()
 

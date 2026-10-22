@@ -10,6 +10,7 @@ import {
 } from './competitions.viewmodel'
 
 let unloaded = false
+let loadVersion = 0
 
 Page({
   data: {
@@ -44,7 +45,7 @@ Page({
     if (!this.data.loading && this.data.rawItems.length > 0) void this.load('refresh')
   },
 
-  onUnload() { unloaded = true },
+  onUnload() { unloaded = true; loadVersion += 1 },
   onPullDownRefresh() { void this.load('refresh').finally(() => wx.stopPullDownRefresh()) },
   onReachBottom() { if (this.data.hasMore && !this.data.loadingMore) void this.load('append') },
   retry() { void this.load('refresh') },
@@ -55,33 +56,44 @@ Page({
   },
 
   async load(mode: 'refresh' | 'append') {
+    const currentVersion = ++loadVersion
     this.setData(mode === 'append' ? { loadingMore: true } : { loading: true, errorMessage: '' })
+    const minePromise = session.getAccessToken()
+      ? competitionsApi.mine(undefined, 100).catch(() => null)
+      : Promise.resolve(null)
     try {
       const publicPage = await competitionsApi.list({
         cursor: mode === 'append' ? this.data.nextCursor ?? undefined : undefined,
         seasonId: this.data.seasonId || undefined,
         category: this.data.category || undefined,
       })
-      const mine = session.getAccessToken() ? await competitionsApi.mine(undefined, 100).catch(() => null) : null
-      const registrations = new Map<string, MyCompetitionResponse['registration']>(
-        (mine?.items ?? []).map((item) => [item.competition.id, item.registration]),
-      )
+      if (unloaded || currentVersion !== loadVersion) return
       const rawItems = mode === 'append'
         ? mergeCompetitionPages(this.data.rawItems, publicPage.items)
         : publicPage.items
-      if (!unloaded) this.setData({
+      this.setData({
         rawItems,
-        items: rawItems.map((item) => toCompetitionCard(item, registrations.get(item.id)?.status)),
+        items: rawItems.map((item) => toCompetitionCard(item)),
         nextCursor: publicPage.nextCursor,
         hasMore: Boolean(publicPage.nextCursor),
         errorMessage: '',
+        loading: false,
+        loadingMore: false,
       })
+      const mine = await minePromise
+      if (unloaded || currentVersion !== loadVersion || !mine) return
+      const registrations = new Map<string, MyCompetitionResponse['registration']>(
+        mine.items.map((item) => [item.competition.id, item.registration]),
+      )
+      this.setData({ items: rawItems.map((item) => toCompetitionCard(item, registrations.get(item.id)?.status)) })
     } catch (error) {
-      if (!unloaded) this.setData({
+      if (!unloaded && currentVersion === loadVersion) this.setData({
         errorMessage: competitionErrorMessage(error instanceof ApiError ? error : {}),
       })
     } finally {
-      if (!unloaded) this.setData({ loading: false, loadingMore: false })
+      if (!unloaded && currentVersion === loadVersion && (this.data.loading || this.data.loadingMore)) {
+        this.setData({ loading: false, loadingMore: false })
+      }
     }
   },
 })
