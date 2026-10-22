@@ -13,10 +13,10 @@ Page({
     if (!options.seasonId) this.setData({ state: 'error', errorMessage: '缺少赛季参数' })
     else this.setData({ seasonId: options.seasonId })
   },
-  onShow() { if (this.data.seasonId) void this.load() },
-  onPullDownRefresh() { void this.load().finally(() => wx.stopPullDownRefresh()) },
-  async load() {
-    this.setData({ state: 'loading', errorMessage: '' })
+  onShow() { if (this.data.seasonId) void this.load(this.data.state !== 'loaded') },
+  onPullDownRefresh() { void this.load(false).finally(() => wx.stopPullDownRefresh()) },
+  async load(showLoading = true) {
+    if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     try {
       const [mine, response] = await Promise.all([leagueTeamsApi.mine(), playerRequestsApi.listTransfers(this.data.seasonId)])
       const myTeamId = mine.items.find((team) => team.currentSeason?.id === this.data.seasonId)?.id ?? ''
@@ -25,7 +25,10 @@ Page({
         canRespond: item.status === 'PENDING_COUNTERPARTY' && item.initiatorTeamId !== myTeamId && (item.sourceTeamId === myTeamId || item.targetTeamId === myTeamId),
         canWithdraw: item.status === 'PENDING_COUNTERPARTY' && item.initiatorTeamId === myTeamId }))
       this.setData({ state: 'loaded', myTeamId, items })
-    } catch (error) { this.setData({ state: 'error', errorMessage: error instanceof ApiError ? error.message : '转会申请加载失败' }) }
+    } catch (error) { this.setData({
+      state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
+      errorMessage: error instanceof ApiError ? error.message : '转会申请加载失败',
+    }) }
   },
   respond(event: { currentTarget: { dataset: { id?: string; decision?: 'CONFIRM'|'REJECT'|'WITHDRAW' } } }) {
     const id = event.currentTarget.dataset.id
@@ -41,9 +44,9 @@ Page({
     this.setData({ busyId: item.id, errorMessage: '' })
     try {
       await playerRequestsApi.respondTransfer(item.id, { decision, expectedVersion: item.version }, key())
-      await this.load()
+      await this.load(false)
       wx.showToast({ title: decision === 'CONFIRM' ? '已确认，等待终审' : '已处理', icon: 'success' })
-    } catch (error) { this.setData({ errorMessage: error instanceof ApiError ? error.message : '操作失败，请刷新重试' }); await this.load() }
+    } catch (error) { this.setData({ errorMessage: error instanceof ApiError ? error.message : '操作失败，请刷新重试' }); await this.load(false) }
     finally { this.setData({ busyId: '' }) }
   },
 })

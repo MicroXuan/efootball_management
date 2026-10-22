@@ -17,6 +17,18 @@ function context() {
   return { ...page, data: { ...page.data, leagueId: 'league-1', seasonId: 'season-1' }, setData(update: Record<string, unknown>) { Object.assign(this.data, update) } }
 }
 
+it('does not double-load on first show and refreshes silently after returning', () => {
+  const instance = { ...context(), loadPage: vi.fn(async () => undefined) }
+  instance.data.windowId = 'window-1'
+
+  page.onShow.call(instance)
+  expect(instance.loadPage).not.toHaveBeenCalled()
+
+  instance.data.state = 'loaded'
+  page.onShow.call(instance)
+  expect(instance.loadPage).toHaveBeenCalledWith(false)
+})
+
 it('chooses the active window and loads remaining slots and own nominations', async () => {
   mocks.listWindows.mockResolvedValueOnce({ items: [window] })
   mocks.workspace.mockResolvedValueOnce({ window, leagueTeamId: 'team-1', isOpen: true, remainingSlots: 1, nominations: [{ id: 'n1', playerId: 'player-1', playerName: '瓦拉内', player: { clubLabel: '科莫', nationalityLabel: '法国', card: { cardName: '精选', imageUrl: 'https://example.com/player.png', position: 'CB', maxOverall: 96 } } }] })

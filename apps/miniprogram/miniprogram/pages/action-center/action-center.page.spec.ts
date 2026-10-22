@@ -18,6 +18,7 @@ vi.mock('../../services/api', () => ({ ApiError: class ApiError extends Error {}
 type ActionCenterPage = {
   data: Record<string, any>
   onLoad(options: { leagueId?: string }): void
+  onShow(): void
   load(showLoading?: boolean): Promise<void>
 }
 
@@ -56,6 +57,16 @@ function context() {
 }
 
 describe('action center page', () => {
+  it('keeps tasks visible while refreshing on return', () => {
+    const instance = { ...context(), load: vi.fn(async () => undefined) }
+    instance.data.state = 'loaded'
+
+    page.onShow.call(instance)
+
+    expect(instance.load).toHaveBeenCalledWith(false)
+    expect(instance.data.state).toBe('loaded')
+  })
+
   it('marks only the visible league items as read', async () => {
     const leagueItem = item('league-1-item', 'league-1')
     const otherItem = item('league-2-item', 'league-2')
