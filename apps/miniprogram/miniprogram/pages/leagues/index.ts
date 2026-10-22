@@ -38,12 +38,17 @@ Page({
   },
 
   onShow() {
+    const showMine = consumeMyLeaguesTabRequest()
     this.setData({
       bannerLayerVisible: true,
-      ...(consumeMyLeaguesTabRequest() ? { activeTab: 'mine' as LeagueListTab } : {}),
+      ...(showMine ? {
+        activeTab: 'mine' as LeagueListTab,
+        leagues: selectLeagueCards('mine', this.data.allLeagues, this.data.myLeagues),
+        hasLeagues: this.data.myLeagues.length > 0,
+      } : {}),
     })
     this.getTabBar?.()?.setData({ selected: 1 })
-    void this.loadLeagues()
+    void this.loadLeagues(this.data.state !== 'loaded')
   },
 
   beforeTabLeave(continueSwitch: () => void) {
@@ -61,46 +66,47 @@ Page({
 
   async loadLeagues(showLoading = true) {
     if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
+    const presentationPromise = platformPresentationApi.get().catch(() => null)
     try {
       const loggedIn = Boolean(session.getAccessToken())
-      const [allResponse, mineResponse, presentation] = await Promise.all([
+      const [allResponse, mineResponse] = await Promise.all([
         leaguesApi.list(undefined, 100),
         loggedIn ? leaguesApi.mine() : Promise.resolve({ items: [], nextCursor: null }),
-        platformPresentationApi.get().catch(() => ({ leagueCenterBannerUrl: null, version: 0 })),
       ])
-      const banner = leagueBannerView(presentation)
-      let bannerDisplayUrl = this.data.bannerDisplayUrl
-      let bannerMode = this.data.bannerMode
-      if (!banner.imageUrl) {
-        bannerDisplayUrl = ''
-        bannerMode = 'fallback'
-      } else {
-        const preloadedSource = await cacheImageSource(
-          banner.cacheSource,
-          {
-            downloadHttp: (options) => wx.downloadFile(options),
-            downloadCloud: (options) => wx.cloud.downloadFile(options),
-          },
-          `${banner.cacheSource}:${presentation.version}`,
-        ).catch(() => '')
-        if (preloadedSource) {
-          bannerDisplayUrl = banner.imageUrl
-          bannerMode = 'image'
-        } else if (!bannerDisplayUrl) {
-          bannerMode = 'fallback'
-        }
-      }
       const allLeagues = allResponse.items.map((league: LeagueSummary) => leagueCardView(league))
       const myLeagues = mineResponse.items.map((team: MyLeagueTeamSummary) => myLeagueCardView(team))
       const leagues = selectLeagueCards(this.data.activeTab, allLeagues, myLeagues)
       this.setData({
         state: 'loaded', errorMessage: '', loggedIn, allLeagues, myLeagues, leagues,
-        hasLeagues: leagues.length > 0, bannerUrl: banner.imageUrl, bannerDisplayUrl,
-        bannerMode,
+        hasLeagues: leagues.length > 0,
       })
+      const presentation = await presentationPromise
+      if (!presentation) {
+        if (this.data.bannerMode === 'loading') this.setData({ bannerMode: 'fallback' })
+        return
+      }
+      const banner = leagueBannerView(presentation)
+      const previousBannerUrl = this.data.bannerUrl
+      if (!banner.imageUrl) {
+        this.setData({ bannerUrl: '', bannerDisplayUrl: '', bannerMode: 'fallback' })
+        return
+      }
+      const preloadedSource = await cacheImageSource(
+        banner.cacheSource,
+        {
+          downloadHttp: (options) => wx.downloadFile(options),
+          downloadCloud: (options) => wx.cloud.downloadFile(options),
+        },
+        `${banner.cacheSource}:${presentation.version}`,
+      ).catch(() => '')
+      this.setData(preloadedSource
+        ? { bannerUrl: banner.imageUrl, bannerDisplayUrl: banner.imageUrl, bannerMode: 'image' }
+        : previousBannerUrl === banner.imageUrl && this.data.bannerDisplayUrl
+          ? { bannerUrl: banner.imageUrl }
+          : { bannerUrl: banner.imageUrl, bannerDisplayUrl: '', bannerMode: 'fallback' })
     } catch (error) {
       this.setData({
-        state: 'error',
+        state: this.data.state === 'loaded' ? 'loaded' : 'error',
         errorMessage: error instanceof ApiError
           ? leagueListErrorMessage(error.code)
           : leagueListErrorMessage('UNKNOWN'),

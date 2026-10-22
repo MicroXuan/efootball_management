@@ -66,7 +66,11 @@ Page({
         actionCenter: { attentionCount, actionRequiredCount: actionCenter.actionRequiredCount, auctionCount: sourceCounts.AUCTION },
       })
     } catch (error) {
-      this.setData({ state: 'error', errorMessage: errorCopy(error), loggedIn: true })
+      this.setData({
+        state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
+        errorMessage: errorCopy(error),
+        loggedIn: true,
+      })
     }
   },
 

@@ -60,7 +60,7 @@ Page({
   },
 
   onShow() {
-    if (this.data.leagueId) void this.loadView()
+    if (this.data.leagueId) void this.loadView(this.data.state !== 'loaded' && this.data.state !== 'empty')
   },
 
   onPullDownRefresh() {
@@ -155,7 +155,9 @@ Page({
       this.setData({ state: count ? 'loaded' : 'empty', errorMessage: '' })
     } catch (error) {
       const errorMessage = error instanceof ApiError ? error.message : '球员市场加载失败，请稍后重试'
-      this.setData(mode === 'append' ? { errorMessage } : { state: 'error', errorMessage })
+      this.setData(mode === 'append' || (!showLoading && this.data.state === 'loaded')
+        ? { errorMessage }
+        : { state: 'error', errorMessage })
     } finally {
       if (mode === 'append') this.setData({ loadingMore: false })
     }

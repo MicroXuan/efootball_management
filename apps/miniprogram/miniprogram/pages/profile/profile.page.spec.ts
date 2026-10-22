@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type ProfilePage = {
   data: { state: 'loading' | 'loaded' | 'error' }
@@ -23,6 +23,8 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 describe('profile quick actions', () => {
   it('refreshes silently when returning to an already loaded profile', () => {
     const loadPage = vi.fn(async () => undefined)
@@ -34,6 +36,24 @@ describe('profile quick actions', () => {
     })
 
     expect(loadPage).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps the team card visible if a background refresh fails', async () => {
+    const { session } = await import('../../services/session')
+    const { api } = await import('../../services/api')
+    const { leaguesApi } = await import('../../services/leagues')
+    vi.spyOn(session, 'getAccessToken').mockReturnValue('access-token')
+    vi.spyOn(api, 'request').mockRejectedValue(new Error('offline'))
+    vi.spyOn(leaguesApi, 'mine').mockRejectedValue(new Error('offline'))
+    const instance = {
+      data: { ...page.data, state: 'loaded' as const, profile: { teams: [{ id: 'team-1' }] } },
+      setData(update: Record<string, unknown>) { Object.assign(this.data, update) },
+    }
+
+    await page.loadPage.call(instance, false)
+
+    expect(instance.data.state).toBe('loaded')
+    expect(instance.data.profile.teams).toEqual([{ id: 'team-1' }])
   })
 
   it('opens the cross-league action center', () => {

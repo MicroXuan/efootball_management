@@ -24,10 +24,10 @@ Page({
     this.setData({ leagueId: options.leagueId, seasonId: options.seasonId, windowId: options.windowId ?? '' })
     await this.loadPage()
   },
-  onShow() { if (this.data.windowId) void this.loadPage() },
-  onPullDownRefresh() { void this.loadPage().finally(() => wx.stopPullDownRefresh()) },
-  async loadPage() {
-    this.setData({ state: 'loading', errorMessage: '' })
+  onShow() { if (this.data.leagueId && this.data.state !== 'loading') void this.loadPage(false) },
+  onPullDownRefresh() { void this.loadPage(false).finally(() => wx.stopPullDownRefresh()) },
+  async loadPage(showLoading = true) {
+    if (showLoading) this.setData({ state: 'loading', errorMessage: '' })
     try {
       let windowId = this.data.windowId
       if (!windowId) {
@@ -51,7 +51,10 @@ Page({
       this.setData({ state: 'loaded', windowId, workspace, open: workspace.isOpen, deadlineLabel: formatLocalDate(workspace.window.endsAt),
         nominationCards, players: this.data.players.map((item) => ({ ...item, nominated: nominatedIds.has(item.playerId) })) })
     } catch (error) {
-      this.setData({ state: 'error', errorMessage: error instanceof ApiError ? error.message : '提名信息加载失败' })
+      this.setData({
+        state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
+        errorMessage: error instanceof ApiError ? error.message : '提名信息加载失败',
+      })
     }
   },
   onKeywordInput(event: { detail: { value: string } }) { this.setData({ keyword: event.detail.value, players: [], searched: false }) },
@@ -71,7 +74,7 @@ Page({
     this.setData({ busy: true, errorMessage: '' })
     try {
       await nominationsApi.submit(this.data.windowId, playerId)
-      await this.loadPage()
+      await this.loadPage(false)
       wx.showToast({ title: '已加入提名名单', icon: 'success' })
     } catch (error) { this.setData({ errorMessage: error instanceof ApiError ? error.message : '提交提名失败' }) }
     finally { this.setData({ busy: false }) }
@@ -82,7 +85,7 @@ Page({
     this.setData({ busy: true, errorMessage: '' })
     try {
       await nominationsApi.withdraw(this.data.windowId, nominationId)
-      await this.loadPage()
+      await this.loadPage(false)
       wx.showToast({ title: '已撤回提名', icon: 'success' })
     } catch (error) { this.setData({ errorMessage: error instanceof ApiError ? error.message : '撤回失败' }) }
     finally { this.setData({ busy: false }) }

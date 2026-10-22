@@ -66,6 +66,21 @@ describe('league banner presentation', () => {
     expect(instance.data.bannerDisplayUrl).toBe('https://media.example/banner.webp')
     expect(instance.data.bannerMode).toBe('image')
   })
+
+  it('renders the league list before a slow banner preload finishes', async () => {
+    let finishBanner!: (value: string) => void
+    mocks.cacheImageSource.mockImplementation(() => new Promise<string>((resolve) => { finishBanner = resolve }))
+    const instance = context()
+
+    const loading = page.loadLeagues.call(instance, false)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(instance.data.state).toBe('loaded')
+    await vi.waitFor(() => expect(mocks.cacheImageSource).toHaveBeenCalled())
+    finishBanner('wxfile://tmp/banner.webp')
+    await loading
+  })
 })
 
 describe('My Leagues shortcut', () => {
@@ -83,5 +98,21 @@ describe('My Leagues shortcut', () => {
     instance.data.activeTab = 'all'
     page.onShow.call(instance)
     expect(instance.data.activeTab).toBe('all')
+  })
+
+  it('keeps the current list visible while refreshing on return', () => {
+    const instance = {
+      ...context(),
+      data: { ...page.data, state: 'loaded', activeTab: 'all', allLeagues: [{ id: 'league-1' }], myLeagues: [{ id: 'league-2' }], leagues: [{ id: 'league-1' }] },
+      getTabBar: () => ({ setData: vi.fn() }),
+      loadLeagues: vi.fn(async () => undefined),
+    }
+
+    requestMyLeaguesTab()
+    page.onShow.call(instance)
+
+    expect(instance.loadLeagues).toHaveBeenCalledWith(false)
+    expect(instance.data.leagues).toEqual([{ id: 'league-2' }])
+    expect(instance.data.state).toBe('loaded')
   })
 })

@@ -12,7 +12,7 @@ Page({
   },
 
   onShow() {
-    void this.loadAuctions()
+    void this.loadAuctions(this.data.state !== 'loaded')
   },
 
   onPullDownRefresh() {
@@ -29,7 +29,10 @@ Page({
       }))
       this.setData({ state: 'loaded', groups, errorMessage: '' })
     } catch {
-      this.setData({ state: 'error', errorMessage: '拍卖列表加载失败，请检查网络后重试' })
+      this.setData({
+        state: !showLoading && this.data.state === 'loaded' ? 'loaded' : 'error',
+        errorMessage: '拍卖列表加载失败，请检查网络后重试',
+      })
     }
   },
 

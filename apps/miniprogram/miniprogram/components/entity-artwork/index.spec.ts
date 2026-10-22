@@ -70,6 +70,21 @@ describe('entity artwork source selection', () => {
     expect(context.data.displaySrc).toBe('wxfile://tmp/new.webp')
   })
 
+  it('keeps the current image when its source is reported again', async () => {
+    mocks.cacheImageSource.mockResolvedValue('wxfile://tmp/crest.webp')
+    const definition = await componentDefinition()
+    const context = instance(false)
+    const observer = definition.observers?.['src, directHttps'] as Function
+
+    observer.call(context, 'cloud://bucket/crest.webp', false)
+    await Promise.resolve()
+    expect(context.data.displaySrc).toBe('wxfile://tmp/crest.webp')
+
+    observer.call(context, 'cloud://bucket/crest.webp', false)
+    expect(context.data.displaySrc).toBe('wxfile://tmp/crest.webp')
+    expect(mocks.cacheImageSource).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the fallback for an empty source and after a real image error', async () => {
     const definition = await componentDefinition()
     const context = instance(true)
