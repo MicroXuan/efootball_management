@@ -116,13 +116,13 @@ export function mergeUniqueCards(
 }
 
 export function toPackOptions(
-  packs: Array<CardPackSummary & { cardCount: number }>,
+  packs: Array<Pick<CardPackSummary, 'id' | 'nameZh' | 'nameEn'>>,
 ): PackOption[] {
   return [
     { value: '', label: '球员包' },
     ...packs.map((pack) => ({
       value: pack.id,
-      label: `${pack.nameZh ?? pack.nameEn ?? '未命名球员包'} · ${pack.cardCount} 张`,
+      label: pack.nameZh ?? pack.nameEn ?? '未命名球员包',
     })),
   ]
 }

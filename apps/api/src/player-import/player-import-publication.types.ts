@@ -117,10 +117,13 @@ export type PublicationVersionRow = {
   cardPackId: string | null;
   packNameZh: string | null;
   packNameEn: string | null;
+  normalizedPackNameZh: string | null;
+  normalizedPackNameEn: string | null;
   packSeason: string | null;
   packReleaseDate: Date | null;
   packCoverUrl: string | null;
   cardName: string;
+  normalizedCardName: string;
   position: PlayerPosition;
   overallRating: number;
   cardType: PlayerCardType;
