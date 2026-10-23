@@ -51,7 +51,7 @@ function dateOnly(value: Date | null | undefined): string | undefined {
   return value?.toISOString().slice(0, 10);
 }
 
-function toExistingRecord(card: {
+export function toExistingRecord(card: {
   externalId: string;
   cardName: string;
   position: NormalizedPlayerCardRecord['position'];
@@ -135,25 +135,28 @@ export class PlayerImportService {
 
   async createBatchForPlatformAdmin(
     actorAdminId: string,
-    input: CreateImportBatchRequest
+    input: CreateImportBatchRequest,
+    dedupeNamespace?: string
   ): Promise<CreateBatchOutcome> {
     await this.requirePlatformAdmin(actorAdminId);
-    return this.createBatchUnchecked(actorAdminId, input);
+    return this.createBatchUnchecked(actorAdminId, input, this.prisma, dedupeNamespace);
   }
 
   async createBatchForPlatformAdminInTransaction(
     tx: Prisma.TransactionClient,
     actorAdminId: string,
-    input: CreateImportBatchRequest
+    input: CreateImportBatchRequest,
+    dedupeNamespace?: string
   ): Promise<CreateBatchOutcome> {
     await this.requirePlatformAdmin(actorAdminId);
-    return this.createBatchUnchecked(actorAdminId, input, tx);
+    return this.createBatchUnchecked(actorAdminId, input, tx, dedupeNamespace);
   }
 
   private async createBatchUnchecked(
     actorId: string,
     input: CreateImportBatchRequest,
-    store: ImportStore = this.prisma
+    store: ImportStore = this.prisma,
+    dedupeNamespace?: string
   ): Promise<CreateBatchOutcome> {
 
     const source = await store.dataSource.findUnique({ where: { code: input.sourceCode } });
@@ -161,7 +164,10 @@ export class PlayerImportService {
       throw new ImportDomainError('IMPORT_SOURCE_UNAVAILABLE', 'Import source is missing or disabled');
     }
 
-    const contentChecksum = checksum(input.content);
+    // Reconciliation retries share a batch, but a later daily run must get a new
+    // publication even when its normalized content matches an old release.
+    const contentChecksum = checksum(dedupeNamespace === undefined
+      ? input.content : `${dedupeNamespace}\0${input.content}`);
     const duplicate = await store.importBatch.findUnique({
       where: { sourceId_checksum: { sourceId: source.id, checksum: contentChecksum } },
       include: { source: true, release: true }
@@ -475,7 +481,9 @@ export class PlayerImportService {
       targetPlayerId = candidates[0]?.id ?? null;
     }
 
-    const diff = calculateRecordDiff(existingCard ? toExistingRecord(existingCard) : null, item.normalized);
+    const calculated = calculateRecordDiff(existingCard ? toExistingRecord(existingCard) : null, item.normalized);
+    const diff = existingCard?.publishedAt === null && calculated.type === 'UNCHANGED'
+      ? { ...calculated, type: 'UPDATE' as const } : calculated;
     return {
       ...item,
       errors: diff.errors,
@@ -560,7 +568,9 @@ export class PlayerImportService {
         }
         targetPlayerId = candidateIds.values().next().value ?? null;
       }
-      const diff = calculateRecordDiff(existingCard ? toExistingRecord(existingCard) : null, item.normalized);
+      const calculated = calculateRecordDiff(existingCard ? toExistingRecord(existingCard) : null, item.normalized);
+      const diff = existingCard?.publishedAt === null && calculated.type === 'UNCHANGED'
+        ? { ...calculated, type: 'UPDATE' as const } : calculated;
       return {
         ...item,
         errors: diff.errors,

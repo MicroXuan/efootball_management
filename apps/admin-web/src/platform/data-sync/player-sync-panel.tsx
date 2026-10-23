@@ -13,6 +13,7 @@ import {
 import { ApiError, adminApi, type AdminApi } from '../../lib/api';
 import { formatDateTime } from '../../lib/date-time';
 import { syncErrorText } from './sync-error-text';
+import { DailyReconciliationCard } from './daily-reconciliation-card';
 
 const DEFAULT_BATCH_STATUSES = ['READY'];
 const pageSizeOptions = [20, 50];
@@ -22,7 +23,7 @@ const batchStatusCopy: Record<ImportBatchResponse['status'], string> = {
 const diffCopy: Record<ImportRecordResponse['diffType'], string> = {
   CREATE: '新增', UPDATE: '更新', UNCHANGED: '无变化', INVALID: '无效'
 };
-const runModeCopy = { SAMPLE: '抽样同步', INCREMENTAL: '增量同步', FULL: '全量同步', RESUME: '继续执行' } as const;
+const runModeCopy = { SAMPLE: '抽样同步', INCREMENTAL: '增量同步', FULL: '全量同步', RECONCILE: '每日对账', RESUME: '继续执行' } as const;
 const runStatusCopy = { PENDING: '排队中', RUNNING: '同步中', READY: '同步完成', PAUSED: '已暂停', FAILED: '同步失败', CANCELLED: '已取消' } as const;
 
 export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, onCancelRun, refreshKey = '' }: {
@@ -181,20 +182,21 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, onCanc
     finally { setCancellingRunId(null); }
   };
 
+  const isReconciliation = runs.find((item) => item.id === selectedRunId)?.mode === 'RECONCILE';
   const batchColumns = useMemo(() => [
     { title: '导入批次', dataIndex: 'fileName', key: 'fileName', render: (value: string, item: ImportBatchResponse) => <div className="sync-table-identity"><strong>{value}</strong><small>共 {item.totalCount} 条球员卡记录</small></div> },
     { title: '变化', key: 'changes', render: (_: unknown, item: ImportBatchResponse) => <span>新增 {item.createCount} · 更新 {item.updateCount} · 无效 {item.invalidCount}</span> },
     { title: '状态', dataIndex: 'status', key: 'status', render: (value: ImportBatchResponse['status']) => <Tag color={value === 'READY' ? 'success' : value === 'FAILED' || value === 'VALIDATED' ? 'error' : 'default'}>{batchStatusCopy[value]}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, item: ImportBatchResponse) => <Space wrap>
       <Button onClick={() => { setSelectedBatch(item); setRecordPage(1); setRecordDiffType(''); setRecordQuery(''); }}>查看记录</Button>
-      <Popconfirm title="将发布整个导入批次" description={`共 ${item.totalCount} 条记录，不能只发布单条球员卡。`} okText="确认发布" cancelText="取消" onConfirm={() => mutateBatch(item, 'publish')}>
+      {!isReconciliation ? <Popconfirm title="将发布整个导入批次" description={`共 ${item.totalCount} 条记录，不能只发布单条球员卡。`} okText="确认发布" cancelText="取消" onConfirm={() => mutateBatch(item, 'publish')}>
         <Button type="primary" loading={mutatingId === item.id} disabled={Boolean(mutatingId) || item.status !== 'READY' || item.invalidCount > 0}>发布批次</Button>
-      </Popconfirm>
-      <Popconfirm title="确认驳回整个批次？" okText="确认驳回" cancelText="取消" onConfirm={() => mutateBatch(item, 'reject')}>
+      </Popconfirm> : null}
+      {!isReconciliation ? <Popconfirm title="确认驳回整个批次？" okText="确认驳回" cancelText="取消" onConfirm={() => mutateBatch(item, 'reject')}>
         <Button danger disabled={Boolean(mutatingId) || !['READY', 'VALIDATED', 'UPLOADED'].includes(item.status)}>驳回</Button>
-      </Popconfirm>
+      </Popconfirm> : null}
     </Space> }
-  ], [mutatingId]);
+  ], [isReconciliation, mutatingId]);
 
   const recordColumns = useMemo(() => [
     { title: '球员', key: 'player', render: (_: unknown, item: ImportRecordResponse) => <div className="sync-player-cell">
@@ -212,6 +214,8 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, onCanc
   const selectedRun = runs.find((item) => item.id === selectedRunId) ?? null;
 
   return <div className="player-sync-panel">
+    <DailyReconciliationCard api={api} selectedRunId={selectedRunId} selectedRunMode={selectedRun?.mode}
+      onChanged={async () => { selectNewestOnNextRunLoad.current = true; await onChanged(); await loadRuns(); }} />
     {error ? <Alert role="alert" type="error" showIcon closable onClose={() => setError(null)} title={error} /> : null}
     {fullPublishResult ? <Alert
       role="status" type={fullPublishResult.failed.length ? 'warning' : 'success'} showIcon closable onClose={() => setFullPublishResult(null)}
@@ -228,11 +232,11 @@ export function PlayerSyncPanel({ api = adminApi, onChanged, onResumeRun, onCanc
       </div>
       <div className="sync-batch-bar">
         <span>{batchSummary ? `当前任务有 ${batchSummary.ready} 个待确认批次` : '正在加载批次概况'}</span>
-        <Popconfirm
+        {selectedRun?.mode !== 'RECONCILE' ? <Popconfirm
           title={`将处理当前任务的 ${batchSummary?.ready ?? 0} 个等待确认的批次`}
           description="只发布状态正常且没有无效记录的批次；跳过同步失败和存在异常的批次。将处理当前任务的所有页面，不受上方筛选条件影响。"
           okText="确认全量发布" cancelText="取消" onConfirm={publishAllReady}
-        ><Button type="primary" loading={Boolean(fullPublishProgress)} disabled={!selectedRunId || !batchSummary?.ready || Boolean(mutatingId)}>全量发布</Button></Popconfirm>
+        ><Button type="primary" loading={Boolean(fullPublishProgress)} disabled={!selectedRunId || !batchSummary?.ready || Boolean(mutatingId)}>全量发布</Button></Popconfirm> : null}
       </div>
       {fullPublishProgress ? <Alert role="status" type="info" showIcon title={fullPublishProgress} /> : null}
       <Table<ImportBatchResponse>

@@ -38,4 +38,19 @@ describe('PlatformDataSyncController', () => {
       expect(Reflect.getMetadata(HTTP_CODE_METADATA, PlatformDataSyncController.prototype[handler])).toBe(202);
     }
   });
+
+  it('exposes schedule settings and queues a manual reconciliation run', async () => {
+    const queued = { runId: '22222222-2222-4222-8222-222222222222', status: 'PENDING' as const };
+    const schedule = { get: jest.fn(async () => ({ enabled: false, timeZone: 'UTC', localTime: '03:00', lastTriggeredDate: null })),
+      update: jest.fn(async () => ({ enabled: true, timeZone: 'Asia/Shanghai', localTime: '04:00', lastTriggeredDate: null })),
+      startManual: jest.fn(async () => queued) };
+    const runner = { scheduleReconciliation: jest.fn() };
+    const controller = new PlatformDataSyncController({} as never, schedule as never, {} as never, runner as never);
+
+    await expect(controller.getPlayerCatalogSchedule(admin)).resolves.toMatchObject({ enabled: false });
+    await expect(controller.updatePlayerCatalogSchedule(admin,
+      { enabled: true, timeZone: 'Asia/Shanghai', localTime: '04:00' })).resolves.toMatchObject({ enabled: true });
+    await expect(controller.startPlayerReconciliation(admin)).resolves.toEqual(queued);
+    expect(runner.scheduleReconciliation).toHaveBeenCalledWith(queued.runId);
+  });
 });

@@ -237,6 +237,31 @@ describe('PlayerImportService', () => {
     await expect(prisma.importBatch.count({ where: { sourceId } })).resolves.toBe(1);
   });
 
+  it('deduplicates a reconciliation retry but creates a fresh batch for a later run', async () => {
+    const input = { sourceCode, fileName: 'daily.json', format: 'JSON' as const,
+      content: JSON.stringify([{ ...validCard, externalId: 'daily-card' }]) };
+    const first = await service.createBatchForPlatformAdmin(adminId, input, 'run-one:chunk-one');
+    const retry = await service.createBatchForPlatformAdmin(adminId, input, 'run-one:chunk-one');
+    const nextDay = await service.createBatchForPlatformAdmin(adminId, input, 'run-two:chunk-one');
+    expect(retry.batch.id).toBe(first.batch.id);
+    expect(nextDay.batch.id).not.toBe(first.batch.id);
+  });
+
+  it('rolls back a reconciliation batch and its rows together if the task stops', async () => {
+    const input = { sourceCode, fileName: 'atomic-daily.json', format: 'JSON' as const,
+      content: JSON.stringify([{ ...validCard, externalId: 'atomic-daily' }]) };
+    await expect(prisma.$transaction(async (tx) => {
+      await service.createBatchForPlatformAdminInTransaction(tx, adminId, input, 'atomic-run');
+      throw new Error('interrupted');
+    }, { timeout: 60_000 })).rejects.toThrow('interrupted');
+    await expect(prisma.importBatch.count({ where: { sourceId } })).resolves.toBe(0);
+    const retry = await prisma.$transaction((tx) =>
+      service.createBatchForPlatformAdminInTransaction(tx, adminId, input, 'atomic-run'),
+    { timeout: 60_000 });
+    expect(retry.batch.status).toBe('READY');
+    await expect(prisma.importRecord.count({ where: { batchId: retry.batch.id } })).resolves.toBe(1);
+  });
+
   it('marks every duplicate external ID invalid', async () => {
     const batch = await createJsonBatch([validCard, { ...validCard, overallRating: 96 }]);
     const records = await service.listRecords(actorId, batch.id, { diffType: 'INVALID' });

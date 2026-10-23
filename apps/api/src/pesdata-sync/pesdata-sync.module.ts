@@ -11,6 +11,10 @@ import { PESDATA_TEAM_SYNC_OPTIONS, PesdataTeamSyncService } from './pesdata-tea
 import { AdminModule } from '../admin/admin.module.js';
 import { PesdataPlayerChunkProcessor } from './pesdata-player-chunk.processor.js';
 import { PesdataTeamChunkProcessor } from './pesdata-team-chunk.processor.js';
+import { PlayerCatalogScanRepository } from './player-catalog-scan.repository.js';
+import { PesdataPlayerReconciliationProcessor, PESDATA_RECONCILIATION_OPTIONS } from './pesdata-player-reconciliation.processor.js';
+import { PlayerCatalogScheduleService } from './player-catalog-schedule.service.js';
+import { PlayerCatalogReconciliationReview } from './player-catalog-reconciliation.review.js';
 
 @Module({
   imports: [AdminModule, DatabaseModule, PlayerImportModule, StorageModule],
@@ -38,11 +42,22 @@ import { PesdataTeamChunkProcessor } from './pesdata-team-chunk.processor.js';
     },
     { provide: PESDATA_SYNC_OPTIONS, useValue: {} },
     { provide: PESDATA_TEAM_SYNC_OPTIONS, useValue: {} },
+    { provide: PESDATA_RECONCILIATION_OPTIONS, inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const value = Number(config.get<string>('PESDATA_MAX_MISSING_PERCENT') ?? '20');
+        return { maxMissingPercent: Number.isFinite(value) && value >= 0 && value <= 100 ? value : 20 };
+      } },
     PesdataSyncService,
     PesdataPlayerChunkProcessor,
+    PlayerCatalogScanRepository,
+    PesdataPlayerReconciliationProcessor,
+    PlayerCatalogScheduleService,
+    PlayerCatalogReconciliationReview,
     PesdataTeamChunkProcessor,
     PesdataTeamSyncService
   ],
-  exports: [PesdataSyncService, PesdataPlayerChunkProcessor, PesdataTeamSyncService, PesdataTeamChunkProcessor]
+  exports: [PesdataSyncService, PesdataPlayerChunkProcessor, PesdataPlayerReconciliationProcessor,
+    PlayerCatalogScheduleService, PlayerCatalogReconciliationReview,
+    PesdataTeamSyncService, PesdataTeamChunkProcessor]
 })
 export class PesdataSyncModule {}

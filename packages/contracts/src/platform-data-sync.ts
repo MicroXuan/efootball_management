@@ -7,7 +7,36 @@ const TimestampSchema = z.iso.datetime();
 const NonNegativeCountSchema = z.number().int().nonnegative();
 
 export const PlatformSyncKindSchema = z.enum(['PLAYER_CARDS', 'TEAM_SHELLS']);
-export const PlatformSyncModeSchema = z.enum(['SAMPLE', 'FULL', 'INCREMENTAL', 'RESUME']);
+export const PlatformSyncModeSchema = z.enum(['SAMPLE', 'FULL', 'INCREMENTAL', 'RECONCILE', 'RESUME']);
+export const PlayerCatalogScheduleInputSchema = z.object({
+  enabled: z.boolean(),
+  timeZone: z.string().trim().min(1).max(64),
+  localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+});
+export const PlayerCatalogScheduleSchema = PlayerCatalogScheduleInputSchema.extend({
+  lastTriggeredDate: z.iso.date().nullable()
+});
+export type PlayerCatalogScheduleInput = z.infer<typeof PlayerCatalogScheduleInputSchema>;
+
+export const PlayerCatalogReconciliationReportSchema = z.object({
+  runId: ResourceIdSchema,
+  status: z.string(), phase: z.string().nullable(), trusted: z.boolean(),
+  warningCode: z.string().nullable(),
+  sourceTotal: z.number().int().nonnegative().nullable(), publicActive: z.number().int().nonnegative(),
+  businessDate: z.iso.date().nullable(), startedAt: TimestampSchema.nullable(), finishedAt: TimestampSchema.nullable(),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  page: z.number().int().positive(), pageSize: z.number().int().positive(), total: z.number().int().nonnegative(),
+  items: z.array(z.object({
+    id: ResourceIdSchema, externalId: z.string(), displayName: z.string().nullable(),
+    changeType: z.string(), reason: z.string().nullable(), evidenceJson: z.unknown(),
+    batchId: ResourceIdSchema.nullable(), publishedAt: TimestampSchema.nullable()
+  }))
+});
+export const PlayerCatalogPublishResultSchema = z.object({
+  published: z.number().int().nonnegative(), skipped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(), remaining: z.number().int().nonnegative(),
+  failures: z.array(z.object({ batchId: ResourceIdSchema, reason: z.string() }))
+});
 export const PlatformSyncStatusSchema = z.enum(['PENDING', 'RUNNING', 'READY', 'PAUSED', 'FAILED', 'CANCELLED']);
 export const StartPlatformSyncRequestSchema = z.object({
   mode: z.enum(['sample', 'incremental', 'full']),

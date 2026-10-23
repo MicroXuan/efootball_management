@@ -178,7 +178,8 @@ export class PlayerImportPublisher {
     return this.publishUnchecked(actorId, batchId, false);
   }
 
-  async publishForPlatformAdmin(actorAdminId: string, batchId: string): Promise<ImportBatchResponse> {
+  async publishForPlatformAdmin(actorAdminId: string, batchId: string,
+    reconciliationRunId?: string): Promise<ImportBatchResponse> {
     if (!this.adminAuthorization) {
       throw new ForbiddenException({
         code: 'ADMIN_PLATFORM_ACCESS_DENIED',
@@ -186,15 +187,24 @@ export class PlayerImportPublisher {
       });
     }
     await this.adminAuthorization.requirePlatformAdmin(actorAdminId);
-    return this.publishUnchecked(actorAdminId, batchId, true);
+    return this.publishUnchecked(actorAdminId, batchId, true, reconciliationRunId);
   }
 
   private async publishUnchecked(
     actorId: string,
     batchId: string,
-    platformAdmin: boolean
+    platformAdmin: boolean,
+    reconciliationRunId?: string
   ): Promise<ImportBatchResponse> {
     try {
+      const linked = await this.prisma.externalSyncRunBatch.findFirst({
+        where: { batchId, run: { mode: 'RECONCILE' } }, include: { run: true }
+      });
+      if (linked && (!platformAdmin || !reconciliationRunId || linked.runId !== reconciliationRunId
+        || linked.run.status !== 'READY' || !linked.run.scanTrusted)) {
+        throw new ConflictException({ code: 'RECONCILIATION_REVIEW_REQUIRED',
+          message: 'Publish this batch from the trusted reconciliation report' });
+      }
       const prepared = await preparePlayerImportPublication(this.prisma, batchId);
       const published = await this.prisma.$transaction(
         (tx) => executePlayerImportPublication(tx, {

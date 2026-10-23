@@ -136,6 +136,21 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
     });
   });
 
+  it('releases an expired reconciliation publication lease for a safe retry', async () => {
+    const now = new Date('2026-10-07T12:00:00.000Z');
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'RECONCILE', status: 'READY',
+      currentPhase: 'PUBLISHING', activeLeaseKey: 'pesdata',
+      leaseOwnerToken: randomUUID(), leaseExpiresAt: new Date('2026-10-07T11:59:59.000Z'),
+      scanTrusted: true
+    } });
+    await new PlatformDataSyncRunner(prisma).reconcileStaleRuns(now);
+    await expect(prisma.externalSyncRun.findUnique({ where: { id: run.id } })).resolves.toMatchObject({
+      status: 'READY', currentPhase: 'PARTIALLY_PUBLISHED', activeLeaseKey: null,
+      leaseOwnerToken: null, errorCode: 'PUBLISH_INTERRUPTED'
+    });
+  });
+
   it('schedules each in-process run once and contains execution failures', async () => {
     let resolvePlayer!: () => void;
     const player = {
@@ -187,5 +202,23 @@ describe('PlatformDataSyncRunner stale lease reconciliation', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(processor.processNextChunk).toHaveBeenCalledTimes(2);
+  });
+
+  it('routes reconciliation runs to the dedicated processor', async () => {
+    const outcomes = [
+      { disposition: 'CONTINUE', status: 'PENDING', completionReason: null },
+      { disposition: 'STOP', status: 'READY', completionReason: 'SOURCE_EXHAUSTED' }
+    ];
+    const oldProcessor = { processNextChunk: jest.fn() };
+    const reconciliation = { processNextChunk: jest.fn(async () => outcomes.shift()!) };
+    const runner = new PlatformDataSyncRunner(prisma, undefined, undefined, oldProcessor as never,
+      undefined, reconciliation as never);
+
+    runner.scheduleReconciliation('daily-run');
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(reconciliation.processNextChunk).toHaveBeenCalledTimes(2);
+    expect(oldProcessor.processNextChunk).not.toHaveBeenCalled();
   });
 });
