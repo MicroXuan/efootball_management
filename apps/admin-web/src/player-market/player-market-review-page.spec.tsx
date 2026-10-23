@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { AdminApi } from '../lib/api';
@@ -50,4 +50,37 @@ it('disables review actions behind the forced-transfer queue head', async () => 
   const buttons = screen.getAllByRole('button', { name: '通过申请' });
   expect(buttons[0]).toBeEnabled();
   expect(buttons[1]).toBeDisabled();
+});
+
+it('loads application history one page at a time', async () => {
+  const older = { ...base, id: id(40), playerId: id(41), playerName: '较早申请' };
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [base], nextCursor: 'older-cursor' })
+    .mockResolvedValueOnce({ items: [base, older], nextCursor: null });
+  const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
+  render(<MemoryRouter initialEntries={[`/leagues/${id(2)}/player-market?seasonId=${id(3)}`]}><Routes><Route path="/leagues/:leagueId/player-market" element={<PlayerMarketReviewPage api={api} />} /></Routes></MemoryRouter>);
+
+  expect(await screen.findByText('迪格雷戈里奥')).toBeInTheDocument();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('较早申请')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '加载更多申请' }));
+  expect(await screen.findByText('较早申请')).toBeInTheDocument();
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(request).toHaveBeenNthCalledWith(2, expect.stringContaining('cursor=older-cursor'), expect.anything());
+  expect(screen.getAllByText('迪格雷戈里奥')).toHaveLength(1);
+});
+
+it('resets the server cursor when the status filter changes', async () => {
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [base], nextCursor: 'older-cursor' })
+    .mockResolvedValueOnce({ items: [], nextCursor: null });
+  const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
+  render(<MemoryRouter initialEntries={[`/leagues/${id(2)}/player-market?seasonId=${id(3)}`]}><Routes><Route path="/leagues/:leagueId/player-market" element={<PlayerMarketReviewPage api={api} />} /></Routes></MemoryRouter>);
+
+  expect(await screen.findByText('迪格雷戈里奥')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('combobox', { name: '申请状态' }));
+  await userEvent.click(await screen.findByText('已通过'));
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(request).toHaveBeenNthCalledWith(2, expect.stringMatching(/status=APPROVED(?!.*cursor=)/), expect.anything());
+  expect(screen.queryByRole('button', { name: '加载更多申请' })).not.toBeInTheDocument();
 });

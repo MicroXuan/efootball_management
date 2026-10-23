@@ -156,6 +156,12 @@ describe('player catalog lifecycle', () => {
     await request(app.getHttpServer()).get(`/v1/players/${publishedPlayerId}`).expect(200);
     await request(app.getHttpServer()).get(`/v1/player-cards/${publishedCardId}`).expect(200);
     await request(app.getHttpServer()).get('/v1/card-packs').expect(200);
+    await request(app.getHttpServer())
+      .get('/v1/card-pack-options')
+      .expect(200)
+      .expect(({ body }) => expect(body.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: publishedPackId, nameZh: 'E2E Pack' })
+      ])));
     await request(app.getHttpServer()).get(`/v1/card-packs/${publishedPackId}`).expect(200);
   });
 

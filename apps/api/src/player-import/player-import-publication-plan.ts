@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { selectBestCard } from '../player-builds/player-build-selector.js';
+import { buildPlayerCardSearchFields } from '../player-catalog/player-card-search-fields.js';
 import { normalizeSearchText } from './record-normalizer.js';
 import {
   publicationBuildKey,
@@ -160,6 +161,11 @@ function versionRow(
     cardPackId: pack?.id ?? null,
     packNameZh: pack?.nameZh ?? null,
     packNameEn: pack?.nameEn ?? null,
+    ...buildPlayerCardSearchFields({
+      cardName: card.cardName,
+      packNameZh: pack?.nameZh ?? null,
+      packNameEn: pack?.nameEn ?? null
+    }),
     packSeason: pack?.season ?? null,
     packReleaseDate: pack?.releaseDate ?? null,
     packCoverUrl: pack?.coverUrl ?? null,

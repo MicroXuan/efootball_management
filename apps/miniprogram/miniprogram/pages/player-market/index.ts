@@ -46,6 +46,7 @@ Page({
     announcements: [] as ReturnType<typeof announcementCard>[],
     nextPlayerCursor: null as string | null,
     nextAnnouncementCursor: null as string | null,
+    nextApplicationCursor: null as string | null,
     loadingMore: false,
     showBackToTop: false,
   },
@@ -70,6 +71,10 @@ Page({
   onReachBottom() {
     if (this.data.loadingMore) return
     if (this.data.view === 'announcements' && this.data.nextAnnouncementCursor) {
+      void this.loadView(false, 'append')
+      return
+    }
+    if ((this.data.view === 'public' || this.data.view === 'mine') && this.data.nextApplicationCursor) {
       void this.loadView(false, 'append')
       return
     }
@@ -114,7 +119,7 @@ Page({
 
   async loadView(showLoading = true, mode: 'replace' | 'append' = 'replace') {
     if (mode === 'append') this.setData({ loadingMore: true, errorMessage: '' })
-    else if (showLoading) this.setData({ state: 'loading', errorMessage: '', nextPlayerCursor: null, nextAnnouncementCursor: null })
+    else if (showLoading) this.setData({ state: 'loading', errorMessage: '', nextPlayerCursor: null, nextAnnouncementCursor: null, nextApplicationCursor: null })
     try {
       let count = 0
       if (this.data.view === 'players') {
@@ -146,11 +151,16 @@ Page({
         this.setData({ announcements, nextAnnouncementCursor: result.nextCursor })
       } else {
         const result = await listPlayerApplications(this.data.leagueId, {
-          seasonId: this.data.seasonId, scope: this.data.view === 'mine' ? 'MINE' : 'PUBLIC', limit: 60,
+          seasonId: this.data.seasonId,
+          scope: this.data.view === 'mine' ? 'MINE' : 'PUBLIC',
+          cursor: mode === 'append' ? this.data.nextApplicationCursor ?? undefined : undefined,
+          limit: 30,
         })
-        const applications = result.items.map(applicationCard)
+        const existing = mode === 'append' ? this.data.applications : []
+        const seen = new Set(existing.map((item) => item.id))
+        const applications = [...existing, ...result.items.map(applicationCard).filter((item) => !seen.has(item.id) && Boolean(seen.add(item.id)))]
         count = applications.length
-        this.setData({ applications })
+        this.setData({ applications, nextApplicationCursor: result.nextCursor })
       }
       this.setData({ state: count ? 'loaded' : 'empty', errorMessage: '' })
     } catch (error) {

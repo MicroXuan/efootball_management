@@ -162,7 +162,7 @@ Page({
 
   async loadPacks() {
     try {
-      const response = await catalogApi.listCardPacks({ limit: 100 })
+      const response = await catalogApi.listCardPackOptions()
       if (unloaded) return
       this.setData({ packOptions: toPackOptions(response.items), packErrorMessage: '' })
     } catch {
