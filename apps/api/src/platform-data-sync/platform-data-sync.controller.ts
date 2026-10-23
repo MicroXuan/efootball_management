@@ -1,9 +1,11 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Optional, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   BatchMutationRequestSchema,
   PlatformPageRequestSchema,
   ResourceIdSchema,
   StartPlatformSyncRequestSchema,
+  PlayerCatalogScheduleInputSchema,
+  type PlayerCatalogScheduleInput,
   type BatchMutationRequest,
   type PlatformPageRequest,
   type StartPlatformSyncRequest
@@ -15,6 +17,9 @@ import type { CurrentAdminIdentity } from '../admin-auth/current-admin.decorator
 import { AdminScopeGuard, PlatformAdminOnly } from '../admin/admin-scope.guard.js';
 import { ZodValidationPipe } from '../common/validation/zod-validation.pipe.js';
 import { PlatformDataSyncService } from './platform-data-sync.service.js';
+import { PlayerCatalogScheduleService } from '../pesdata-sync/player-catalog-schedule.service.js';
+import { PlayerCatalogReconciliationReview } from '../pesdata-sync/player-catalog-reconciliation.review.js';
+import { PlatformDataSyncRunner } from './platform-data-sync.runner.js';
 
 const PlayerRecordPageRequestSchema = PlatformPageRequestSchema.extend({
   diffType: z.enum(['CREATE', 'UPDATE', 'UNCHANGED', 'INVALID']).optional()
@@ -25,7 +30,55 @@ type PlayerRecordPageRequest = z.infer<typeof PlayerRecordPageRequestSchema>;
 @UseGuards(AdminAuthGuard, AdminScopeGuard)
 @PlatformAdminOnly()
 export class PlatformDataSyncController {
-  constructor(@Inject(PlatformDataSyncService) private readonly sync: PlatformDataSyncService) {}
+  constructor(
+    @Inject(PlatformDataSyncService) private readonly sync: PlatformDataSyncService,
+    @Optional() @Inject(PlayerCatalogScheduleService) private readonly schedule?: PlayerCatalogScheduleService,
+    @Optional() @Inject(PlayerCatalogReconciliationReview) private readonly reconciliation?: PlayerCatalogReconciliationReview,
+    @Optional() @Inject(PlatformDataSyncRunner) private readonly runner?: PlatformDataSyncRunner
+  ) {}
+
+  @Get('players/schedule')
+  getPlayerCatalogSchedule(@CurrentAdmin() admin: CurrentAdminIdentity) {
+    if (!this.schedule) throw new Error('PLAYER_CATALOG_SCHEDULE_UNAVAILABLE');
+    return this.schedule.get(admin.id);
+  }
+
+  @Put('players/schedule')
+  updatePlayerCatalogSchedule(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Body(new ZodValidationPipe(PlayerCatalogScheduleInputSchema)) body: PlayerCatalogScheduleInput
+  ) {
+    if (!this.schedule) throw new Error('PLAYER_CATALOG_SCHEDULE_UNAVAILABLE');
+    return this.schedule.update(admin.id, body);
+  }
+
+  @Post('players/reconciliation-runs')
+  @HttpCode(202)
+  async startPlayerReconciliation(@CurrentAdmin() admin: CurrentAdminIdentity) {
+    if (!this.schedule || !this.runner) throw new Error('PLAYER_RECONCILIATION_UNAVAILABLE');
+    const queued = await this.schedule.startManual(admin.id);
+    this.runner.scheduleReconciliation(queued.runId);
+    return queued;
+  }
+
+  @Get('players/runs/:runId/reconciliation')
+  playerReconciliationReport(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string,
+    @Query(new ZodValidationPipe(PlatformPageRequestSchema)) query: PlatformPageRequest
+  ) {
+    if (!this.reconciliation) throw new Error('PLAYER_RECONCILIATION_UNAVAILABLE');
+    return this.reconciliation.report(admin.id, runId, query.page, query.pageSize);
+  }
+
+  @Post('players/runs/:runId/publish-valid')
+  playerReconciliationPublish(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('runId', new ZodValidationPipe(ResourceIdSchema)) runId: string
+  ) {
+    if (!this.reconciliation) throw new Error('PLAYER_RECONCILIATION_UNAVAILABLE');
+    return this.reconciliation.publishValid(admin.id, runId);
+  }
 
   @Get('overview')
   overview(@CurrentAdmin() admin: CurrentAdminIdentity) {

@@ -1,5 +1,5 @@
 import { Button, Card, Popconfirm, Select, Space, Tag } from 'antd';
-import type { PlatformSyncMode, PlatformSyncRunSummary } from '@efm/contracts';
+import type { PlatformSyncRunSummary } from '@efm/contracts';
 
 const statusCopy: Record<PlatformSyncRunSummary['status'], { label: string; color: string }> = {
   PENDING: { label: '排队中', color: 'processing' },
@@ -19,7 +19,14 @@ const phaseCopy: Record<string, { players: string; teams: string }> = {
   FAILED: { players: '同步失败，请查看原因', teams: '同步失败，请查看原因' },
   PAUSED: { players: '任务已暂停，可继续执行或取消', teams: '任务已暂停，可继续执行或取消' },
   PAUSING: { players: '正在暂停，当前分片完成后停止', teams: '正在暂停，当前分片完成后停止' },
-  CANCELLED: { players: '任务已取消', teams: '任务已取消' }
+  CANCELLED: { players: '任务已取消', teams: '任务已取消' },
+  SCAN_PASS_1: { players: '正在第一次完整扫描', teams: '正在扫描' },
+  SCAN_PASS_2: { players: '正在第二次完整扫描', teams: '正在扫描' },
+  DIFF_SOURCE: { players: '正在核对新增和更新', teams: '正在核对' },
+  DIFF_MISSING: { players: '正在复核来源缺失的卡', teams: '正在核对' },
+  PUBLISHING: { players: '正在发布有效变更', teams: '正在发布' },
+  PUBLISHED: { players: '有效变更已发布', teams: '已发布' },
+  PARTIALLY_PUBLISHED: { players: '部分变更已发布，请查看待确认项', teams: '部分已发布' }
 };
 
 export function SyncRunCard({ kind, run, pendingReview, failedReview, published, busy = false, sampleLimit = 100, onSampleLimitChange = () => undefined, onStart, onPause, onResume, onCancel }: {
@@ -31,7 +38,7 @@ export function SyncRunCard({ kind, run, pendingReview, failedReview, published,
   busy?: boolean;
   sampleLimit?: 10 | 100 | 500;
   onSampleLimitChange?: (limit: 10 | 100 | 500) => void;
-  onStart: (mode: Exclude<Lowercase<PlatformSyncMode>, 'resume'>) => Promise<void>;
+  onStart: (mode: 'sample' | 'incremental' | 'full') => Promise<void>;
   onPause: () => Promise<void>;
   onResume: () => Promise<void>;
   onCancel: () => Promise<void>;

@@ -145,7 +145,7 @@ export class PesdataSyncService {
         }, data: {
           status: 'PENDING',
           activeLeaseKey: 'pesdata',
-          currentPhase: 'QUEUED',
+          currentPhase: run.mode === 'RECONCILE' ? run.currentPhase : 'QUEUED',
           heartbeatAt: now,
           leaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS),
           errorCode: null,
@@ -190,12 +190,12 @@ export class PesdataSyncService {
         where: { id: runId, status: run.status, activeLeaseKey: 'pesdata' },
         data: pausing ? {
           pauseRequestedAt: now,
-          currentPhase: 'PAUSING',
+          currentPhase: run.mode === 'RECONCILE' ? run.currentPhase : 'PAUSING',
           heartbeatAt: now
         } : {
           status: 'PAUSED',
           pauseRequestedAt: null,
-          currentPhase: 'PAUSED',
+          currentPhase: run.mode === 'RECONCILE' ? run.currentPhase : 'PAUSED',
           heartbeatAt: now,
           leaseOwnerToken: null,
           leaseExpiresAt: null

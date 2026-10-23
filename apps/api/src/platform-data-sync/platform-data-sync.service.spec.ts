@@ -6,6 +6,7 @@ import { AuditLogService } from '../admin/audit-log.service.js';
 import { TeamCatalogService } from '../team-catalog/team-catalog.service.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { PlayerImportService } from '../player-import/player-import.service.js';
+import { PesdataSyncService } from '../pesdata-sync/pesdata-sync.service.js';
 import { PlatformDataSyncService } from './platform-data-sync.service.js';
 
 config({ path: '../../.env', quiet: true });
@@ -137,6 +138,22 @@ describe('PlatformDataSyncService queries', () => {
       audit
     );
   }
+
+  it('resumes a reconciliation run through the reconciliation worker', async () => {
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'RECONCILE', status: 'FAILED', currentPhase: 'SCAN_PASS_2'
+    } });
+    const calls: string[] = [];
+    const runner = { schedulePlayer: () => calls.push('legacy'),
+      scheduleReconciliation: (id: string) => calls.push(id) };
+    const imports = new PlayerImportService(prisma, userAuthorization as never, adminAuthorization as never);
+    const sync = new PesdataSyncService(prisma, imports, {} as never);
+    const review = new PlatformDataSyncService(prisma, adminAuthorization as never, imports,
+      {} as never, undefined, sync, undefined, runner as never);
+
+    await review.resumePlayerRun(adminId, run.id);
+    expect(calls).toEqual([run.id]);
+  });
 
   it('paginates large team review results and aggregates error reasons', async () => {
     const result = await service().listTeamItems(adminId, runId, {

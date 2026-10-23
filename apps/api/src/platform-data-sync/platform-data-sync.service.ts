@@ -65,10 +65,12 @@ export class PlatformDataSyncService {
   async resumePlayerRun(adminId: string, runId: string): Promise<QueuedSyncRun> {
     await this.authorization.requirePlatformAdmin(adminId);
     const runner = this.required(this.runner, 'SYNC_RUNNER_UNAVAILABLE');
+    const run = await this.prisma.externalSyncRun.findUnique({ where: { id: runId }, select: { mode: true } });
     const queued = QueuedSyncRunSchema.parse(
       await this.required(this.playerSync, 'PLAYER_SYNC_SERVICE_UNAVAILABLE').resumePlatformRun(adminId, runId)
     );
-    runner.schedulePlayer(runId);
+    if (run?.mode === 'RECONCILE') runner.scheduleReconciliation(runId);
+    else runner.schedulePlayer(runId);
     return queued;
   }
 

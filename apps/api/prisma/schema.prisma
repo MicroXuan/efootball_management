@@ -281,6 +281,7 @@ enum ExternalSyncMode {
   SAMPLE
   FULL
   INCREMENTAL
+  RECONCILE
 }
 
 enum ExternalSyncStatus {
@@ -1991,6 +1992,8 @@ model PlayerCard {
   status                       PlayerCardStatus               @default(ACTIVE)
   imageUrl                     String?                        @map("image_url") @db.VarChar(2048)
   sourceUpdatedAt              DateTime?                      @map("source_updated_at")
+  publishedSummaryChecksum     String?                        @map("published_summary_checksum") @db.Char(64)
+  lastDetailAuditAt            DateTime?                      @map("last_detail_audit_at")
   publishedAt                  DateTime?                      @map("published_at")
   lastPublishedReleaseSequence Int?                           @map("last_published_release_sequence")
   createdAt                    DateTime                       @default(now()) @map("created_at")
@@ -2014,6 +2017,7 @@ model PlayerCard {
   @@index([position, cardType, overallRating], map: "player_cards_filter_idx")
   @@index([cardPackId], map: "player_cards_pack_idx")
   @@index([publishedAt, status], map: "player_cards_published_status_idx")
+  @@index([sourceId, status, publishedAt, externalId], map: "player_cards_reconciliation_active_idx")
   @@map("player_cards")
 }
 
@@ -2131,7 +2135,11 @@ model ExternalSyncRun {
   skippedCount     Int                    @default(0) @map("skipped_count") @db.UnsignedInt
   failedCount      Int                    @default(0) @map("failed_count") @db.UnsignedInt
   currentOffset    Int                    @default(0) @map("current_offset") @db.UnsignedInt
+  currentCursor    String?                @map("current_cursor") @db.VarChar(128)
   currentPhase     String?                @map("current_phase") @db.VarChar(64)
+  scheduleKey      String?                @unique @map("schedule_key") @db.VarChar(96)
+  businessDate     DateTime?              @map("business_date") @db.Date
+  scanTrusted      Boolean                @default(false) @map("scan_trusted")
   heartbeatAt      DateTime?              @map("heartbeat_at")
   leaseExpiresAt   DateTime?              @map("lease_expires_at")
   errorCode        String?                @map("error_code") @db.VarChar(64)
@@ -2143,11 +2151,77 @@ model ExternalSyncRun {
   source           DataSource             @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   items            ExternalSyncItem[]
   batchLinks       ExternalSyncRunBatch[]
+  scanPages        PlayerCatalogScanPage[]
+  scanEntries      PlayerCatalogScanEntry[]
+  reconciliationItems PlayerCatalogReconciliationItem[]
 
   @@index([sourceId, status, createdAt], map: "external_sync_runs_source_status_idx")
   @@index([status, leaseExpiresAt], map: "external_sync_runs_lease_idx")
   @@index([actorId], map: "external_sync_runs_actor_idx")
+  @@index([sourceId, businessDate, scanTrusted], map: "external_sync_runs_trusted_day_idx")
   @@map("external_sync_runs")
+}
+
+model PlayerCatalogScanPage {
+  runId          String          @map("run_id") @db.Char(36)
+  pass           Int             @db.UnsignedTinyInt
+  offset         Int             @db.UnsignedInt
+  pageLimit      Int             @map("page_limit") @db.UnsignedInt
+  reportedTotal  Int             @map("reported_total") @db.UnsignedInt
+  returnedCount  Int             @map("returned_count") @db.UnsignedInt
+  idChecksum     String          @map("id_checksum") @db.Char(64)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  run            ExternalSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, pass, offset])
+  @@map("player_catalog_scan_pages")
+}
+
+model PlayerCatalogScanEntry {
+  runId           String          @map("run_id") @db.Char(36)
+  pass            Int             @db.UnsignedTinyInt
+  externalId      String          @map("external_id") @db.VarChar(128)
+  summaryChecksum String          @map("summary_checksum") @db.Char(64)
+  displayName     String?         @map("display_name") @db.VarChar(255)
+  run             ExternalSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, pass, externalId])
+  @@index([runId, externalId], map: "player_catalog_scan_entries_run_id_idx")
+  @@map("player_catalog_scan_entries")
+}
+
+model PlayerCatalogReconciliationItem {
+  id              String          @id @default(uuid()) @db.Char(36)
+  runId           String          @map("run_id") @db.Char(36)
+  externalId      String          @map("external_id") @db.VarChar(128)
+  changeType      String          @map("change_type") @db.VarChar(32)
+  reason          String?         @db.VarChar(512)
+  summaryChecksum String?         @map("summary_checksum") @db.Char(64)
+  displayName     String?         @map("display_name") @db.VarChar(255)
+  normalizedJson  Json?           @map("normalized_json")
+  evidenceJson    Json?           @map("evidence_json")
+  batchId         String?         @map("batch_id") @db.Char(36)
+  publishedAt     DateTime?       @map("published_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  run             ExternalSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, externalId], map: "player_catalog_reconciliation_items_run_id_unique")
+  @@index([runId, changeType], map: "player_catalog_reconciliation_items_run_type_idx")
+  @@index([runId, batchId], map: "player_catalog_reconciliation_items_run_batch_idx")
+  @@map("player_catalog_reconciliation_items")
+}
+
+model PlayerCatalogSyncSchedule {
+  sourceId       String     @id @map("source_id") @db.Char(36)
+  actorId        String     @map("actor_id") @db.Char(36)
+  enabled        Boolean    @default(false)
+  timeZone       String     @map("time_zone") @db.VarChar(64)
+  localTime      String     @map("local_time") @db.VarChar(5)
+  lastTriggeredDate String? @map("last_triggered_date") @db.Char(10)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@map("player_catalog_sync_schedules")
 }
 
 model ExternalSyncItem {
