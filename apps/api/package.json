@@ -20,6 +20,8 @@
     "test:e2e": "JEST_SCOPE=e2e NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.ts",
     "player-import": "tsx src/player-import/player-import.cli.ts",
     "player-import:rollback-check": "tsx src/player-import/player-import-publication.rollback-check.ts",
+    "player-catalog:backfill": "tsx src/player-catalog/backfill-player-card-search-fields.cli.ts",
+    "player-catalog:benchmark": "tsx scripts/benchmark-player-catalog.ts",
     "sync:pesdata": "tsx src/pesdata-sync/pesdata-sync.cli.ts",
     "data-sync:clear": "tsx src/platform-data-sync/platform-data-sync-cleanup.cli.ts",
     "test-data:clear": "tsx test/run-test-data-cleanup.ts",

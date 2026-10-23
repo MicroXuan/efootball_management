@@ -2240,10 +2240,13 @@ model PlayerCardVersion {
   cardPackId       String?          @map("card_pack_id") @db.Char(36)
   packNameZh       String?          @map("pack_name_zh") @db.VarChar(128)
   packNameEn       String?          @map("pack_name_en") @db.VarChar(128)
+  normalizedPackNameZh String?      @map("normalized_pack_name_zh") @db.VarChar(512)
+  normalizedPackNameEn String?      @map("normalized_pack_name_en") @db.VarChar(512)
   packSeason       String?          @map("pack_season") @db.VarChar(32)
   packReleaseDate  DateTime?        @map("pack_release_date") @db.Date
   packCoverUrl     String?          @map("pack_cover_url") @db.VarChar(2048)
   cardName         String           @map("card_name") @db.VarChar(128)
+  normalizedCardName String?        @map("normalized_card_name") @db.VarChar(512)
   position         PlayerPosition
   overallRating    Int              @map("overall_rating") @db.UnsignedTinyInt
   cardType         PlayerCardType   @map("card_type")
@@ -2263,6 +2266,9 @@ model PlayerCardVersion {
   @@index([position, cardType, overallRating], map: "player_card_versions_filter_idx")
   @@index([normalizedNameZh], map: "player_card_versions_name_zh_idx")
   @@index([normalizedNameEn], map: "player_card_versions_name_en_idx")
+  @@index([playerId, releaseSequence], map: "player_card_versions_player_release_idx")
+  @@index([cardPackId, releaseSequence], map: "player_card_versions_pack_release_idx")
+  @@index([status, packReleaseDate(sort: Desc), overallRating(sort: Desc), publishedAt(sort: Desc), playerCardId, releaseSequence], map: "player_card_versions_catalog_order_idx")
   @@map("player_card_versions")
 }
 
