@@ -64,6 +64,18 @@ describe('PesdataSyncService', () => {
     await prisma.auditLog.deleteMany({ where: { actorAdminId: adminId } });
   });
 
+  it('resumes a reconciliation run at its saved scan phase and offset', async () => {
+    const source = await prisma.dataSource.findUniqueOrThrow({ where: { code: 'pesdata' } });
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId: source.id, actorId: adminId, mode: 'RECONCILE', status: 'FAILED',
+      currentPhase: 'SCAN_PASS_2', currentOffset: 300
+    } });
+    const sync = new PesdataSyncService(prisma, importService, {} as never);
+    await sync.resumePlatformRun(adminId, run.id);
+    expect(await prisma.externalSyncRun.findUniqueOrThrow({ where: { id: run.id } }))
+      .toMatchObject({ status: 'PENDING', currentPhase: 'SCAN_PASS_2', currentOffset: 300 });
+  });
+
   it('queues a platform run, reserves one lease, and renews progress while executing', async () => {
     const listOffsets: number[] = [];
     const client = {

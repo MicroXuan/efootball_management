@@ -4,7 +4,7 @@
 
 **Goal:** 每日可信扫描 PESDATA 卡片编号，形成新增、更新、确认下架的差异报告，并由管理员一键发布有效变更。
 
-**Architecture:** 两遍列表扫描分块写暂存表，并在数据库内验证完整性和集合一致；详情复核与本地正式卡做差异；待确认与失败项不发布。沿用导入批次、版本发布与同步任务租约，后台展示报告和发布结果。
+**Architecture:** 新增独立 `RECONCILE` 任务类型，保留现有 `SAMPLE/FULL/INCREMENTAL` 流程。两遍列表扫描分块写暂存表，并在数据库内验证完整性和集合一致；详情复核与本地正式卡做差异；待确认与失败项不发布。沿用导入批次、版本发布与同步任务租约，后台展示报告和发布结果。
 
 **Tech Stack:** NestJS、TypeScript、Prisma 7、MySQL、Jest、React 管理后台。
 
@@ -48,13 +48,13 @@ flowchart TD
 ### Task 1: 双遍扫描的持久化模型与完整性判定
 
 **Files:**
-- Modify: `apps/api/prisma/schema.prisma` 的 `ExternalSyncRun`、`ExternalSyncItem`
+- Modify: `apps/api/prisma/schema.prisma` 的 `ExternalSyncRun`、`PlayerCard`；新增扫描页、扫描编号、差异项和调度设置模型
 - Create: `apps/api/prisma/migrations/<执行时生成时间戳>_pesdata_player_scan/migration.sql`
 - Create: `apps/api/src/pesdata-sync/pesdata-player-scan.repository.ts`
 - Create: `apps/api/src/pesdata-sync/pesdata-player-scan.repository.spec.ts`
 
 **Interfaces:**
-- 新增 `ExternalSyncScanEntry(runId, pass, externalId, summaryChecksum)`，唯一键 `(runId, pass, externalId)`，索引 `(runId, pass, externalId)`；新增每遍页报告表 `ExternalSyncScanPage(runId, pass, offset, reportedTotal, returnedCount, idChecksum)`，唯一键 `(runId, pass, offset)`。
+- 新增 `PlayerCatalogScanEntry(runId, pass, externalId, summaryChecksum)`，唯一键 `(runId, pass, externalId)`；新增每遍页报告表 `PlayerCatalogScanPage(runId, pass, offset, reportedTotal, returnedCount, idChecksum)`，唯一键 `(runId, pass, offset)`。`PlayerCatalogReconciliationItem` 保存变更分类、证据、规范化详情及发布状态。`PlayerCatalogSyncSchedule` 保存后台设置。`PlayerCard` 增加已发布来源摘要及最近详情复核时间。
 - `PesdataPlayerScanRepository.recordPage(runId, pass, offset, reportedTotal, summaries)` 事务写入页报告与唯一 ID；若页偏移重复、页内/跨页 ID 重复或总数跳变，返回不可信原因而非跳过重复。
 - `verifyPass(runId, pass)` 核对页连续、实际行数、唯一 ID 数与来源总数；`comparePasses(runId)` 在 MySQL 内核对 pass 1 和 2 的双向集合差及总数，返回 `{ trusted: boolean; reason?: string; sourceTotal: number }`。
 
@@ -66,19 +66,19 @@ flowchart TD
 ### Task 2: 同步状态机改为先扫后取详情
 
 **Files:**
-- Modify: `apps/api/src/pesdata-sync/pesdata-player-chunk.processor.ts`
+- Create: `apps/api/src/pesdata-sync/pesdata-player-reconciliation.processor.ts`
 - Modify: `apps/api/src/pesdata-sync/pesdata-sync.service.ts`
 - Modify: `apps/api/src/pesdata-sync/pesdata-sync.types.ts`
-- Modify: `apps/api/src/pesdata-sync/pesdata-player-chunk.processor.spec.ts`
+- Create: `apps/api/src/pesdata-sync/pesdata-player-reconciliation.processor.spec.ts`
 - Modify: `apps/api/src/platform-data-sync/platform-data-sync.runner.spec.ts`
 
 **Interfaces:**
-- `ExternalSyncRun.currentPhase` 采用 `SCAN_PASS_1`、`SCAN_PASS_2`、`DIFF`、`FETCH_DETAILS`、`VERIFY_REMOVALS`、`READY`；`currentOffset` 仅表示当前遍的页偏移，切换遍时在持有租约的事务内归零。
-- `processNextChunk(runId)` 保持现有租约/心跳/暂停/继续接口；每个扫描块只写一页及进度，不在第一遍时创建待发布批次。仅 `comparePasses().trusted === true` 时进入差异阶段。
+- `ExternalSyncRun.currentPhase` 对 `RECONCILE` 采用 `SCAN_PASS_1`、`SCAN_PASS_2`、`DIFF`、`FETCH_DETAILS`、`VERIFY_REMOVALS`、`READY`；`currentOffset` 仅表示当前遍的页偏移，切换遍时在持有租约的事务内归零。
+- `PesdataPlayerReconciliationProcessor.processNextChunk(runId)` 保持现有租约/心跳/暂停/继续语义；每个扫描块只写一页及进度，不在第一遍时创建待发布批次。仅 `comparePasses().trusted === true` 时进入差异阶段。现有 processor 继续处理其余三种模式。
 
 - [ ] 写失败测试：第一页、跨遍切换、掉线恢复、租约丢失、暂停继续、来源在两遍之间重排及 ID 集合变化。
 - [ ] 显式 verify `DATABASE_URL` 跑目标测试，确认失败。
-- [ ] 实现阶段转换，保留 `SAMPLE` 模式原行为；新对账路径限定 `INCREMENTAL`/`FULL`，首次全量未验收前不启用每日入口。
+- [ ] 实现独立 `RECONCILE` 阶段转换，保留 `SAMPLE/FULL/INCREMENTAL` 原行为；首次全量未验收前不启用每日入口。
 - [ ] 跑 processor、service、runner 测试和 typecheck，确认无重扫死循环及重复批次；提交本任务文件。
 
 ### Task 3: 详情差异、滚动复核和下架证据
@@ -167,8 +167,16 @@ flowchart TD
 查询优化已经在 `dev`，本计划新增对账与发布能力。先确认本机 MySQL host/库名。所有 API/e2e 命令显式设置连接，例如：
 
 ```bash
-DATABASE_URL='mysql://efm:efm_local@127.0.0.1:3307/efootball_catalog_verify' pnpm --filter @efm/api test -- --runInBand pesdata
-DATABASE_URL='mysql://efm:efm_local@127.0.0.1:3307/efootball_catalog_verify' pnpm --filter @efm/api test:e2e -- --runInBand player-catalog.e2e-spec.ts
+DATABASE_URL='mysql://efm:efm_local@127.0.0.1:3307/efootball_catalog_verify' pnpm --filter @efm/api test pesdata
+DATABASE_URL='mysql://efm:efm_local@127.0.0.1:3307/efootball_catalog_verify' WECHAT_GATEWAY_MODE=fake STORAGE_PROVIDER=local pnpm --filter @efm/api test:e2e player-catalog.e2e-spec.ts
 ```
 
 示例账号密码必须与本机 Docker Compose 核对。执行时按项目数据安全约束处理任何持久化测试数据；现有未提交工作不得混入本功能提交。
+
+## 实施记录（2026-10-23）
+
+- 已实现独立 `RECONCILE` 状态机、两遍扫描持久化与可信性校验、每日/手动触发、差异报告和管理员分批一键发布。发布每次 HTTP 请求只处理一个批次，由后台在一次点击后继续请求，避免首轮数百批次的单次请求超时。
+- 已实现明确失效或相邻两日可信缺失的下架条件、详情仍可读取时阻止下架、异常缺失比例保护、复核预算、重试批次隔离及已发布批次中断后的状态修复。详情证据逻辑直接包含在独立 processor，未另拆计划中命名的 service/client API。
+- 本机 verify 库已应用 3 个迁移，`db:status` 显示已更新。最终 API 单测 169 个文件/1042 个测试通过；球员库与联赛球队 e2e 2 个文件/8 个测试通过；后台 54 个文件/245 个测试、小程序 100 个文件/469 个测试通过；API/后台构建和类型检查、API lint 通过。详见 [5 万卡基准](../../performance/2026-10-23-pesdata-reconciliation-50k.md)。
+- 审查后增加了公开卡片编号集合核对、未发布旧卡重新发布、对账批次原子创建；逐批发布期间仍可能有短暂中间状态，见上线说明。若业务要求所有卡在单一时间点同时切换，需要单独设计全库版本可见性门闩。
+- 目标环境 `db:status`、受控迁移、真实 PESDATA 首轮扫描、实际接口和小程序展示尚未执行；按 [上线与使用说明](../../operations/player-catalog-daily-reconciliation.md) 验收。扫描证据当前保留，长期归档与精确任务清理为后续运维工作。

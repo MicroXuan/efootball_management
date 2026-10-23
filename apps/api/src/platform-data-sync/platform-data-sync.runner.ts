@@ -6,6 +6,8 @@ import { PesdataSyncService } from '../pesdata-sync/pesdata-sync.service.js';
 import { PesdataPlayerChunkProcessor } from '../pesdata-sync/pesdata-player-chunk.processor.js';
 import { PesdataTeamChunkProcessor } from '../pesdata-sync/pesdata-team-chunk.processor.js';
 import { PesdataTeamSyncService } from '../pesdata-sync/pesdata-team-sync.service.js';
+import { PesdataPlayerReconciliationProcessor } from '../pesdata-sync/pesdata-player-reconciliation.processor.js';
+import { PlayerCatalogScheduleService } from '../pesdata-sync/player-catalog-schedule.service.js';
 import { SYNC_RECONCILE_INTERVAL_MS } from './platform-data-sync.constants.js';
 
 export { SYNC_LEASE_MS } from './platform-data-sync.constants.js';
@@ -20,14 +22,18 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
     @Optional() @Inject(PesdataSyncService) private readonly playerSync?: PesdataSyncService,
     @Optional() @Inject(PesdataTeamSyncService) private readonly teamSync?: PesdataTeamSyncService,
     @Optional() @Inject(PesdataPlayerChunkProcessor) private readonly playerChunks?: PesdataPlayerChunkProcessor,
-    @Optional() @Inject(PesdataTeamChunkProcessor) private readonly teamChunks?: PesdataTeamChunkProcessor
+    @Optional() @Inject(PesdataTeamChunkProcessor) private readonly teamChunks?: PesdataTeamChunkProcessor,
+    @Optional() @Inject(PesdataPlayerReconciliationProcessor) private readonly reconciliation?: PesdataPlayerReconciliationProcessor,
+    @Optional() @Inject(PlayerCatalogScheduleService) private readonly scheduleService?: PlayerCatalogScheduleService
   ) {}
 
   async onModuleInit(): Promise<void> {
     await this.reconcileStaleRuns();
+    if (this.scheduleService) await this.scheduleDueRuns();
     await this.schedulePendingRuns();
     this.reconcileTimer = setInterval(() => {
       void this.reconcileStaleRuns()
+        .then(() => this.scheduleDueRuns())
         .then(() => this.schedulePendingRuns())
         .catch(() => undefined);
     }, SYNC_RECONCILE_INTERVAL_MS);
@@ -36,11 +42,19 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
 
   private async schedulePendingRuns(): Promise<void> {
     const [players, teams] = await Promise.all([
-      this.prisma.externalSyncRun.findMany({ where: { status: 'PENDING', activeLeaseKey: { not: null } }, select: { id: true } }),
+      this.prisma.externalSyncRun.findMany({ where: { status: 'PENDING', activeLeaseKey: { not: null } }, select: { id: true, mode: true } }),
       this.prisma.teamCatalogSyncRun.findMany({ where: { status: 'PENDING', activeLeaseKey: { not: null } }, select: { id: true } })
     ]);
-    for (const { id } of players) this.schedulePlayer(id);
+    for (const { id, mode } of players) {
+      if (mode === 'RECONCILE') this.scheduleReconciliation(id);
+      else this.schedulePlayer(id);
+    }
     for (const { id } of teams) this.scheduleTeam(id);
+  }
+
+  private async scheduleDueRuns(): Promise<void> {
+    if (!this.scheduleService) return;
+    for (const id of await this.scheduleService.tick()) this.scheduleReconciliation(id);
   }
 
   onModuleDestroy(): void {
@@ -58,6 +72,15 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
     }
     if (!this.playerSync) throw new Error('PLAYER_SYNC_SERVICE_UNAVAILABLE');
     this.schedule(`PLAYER_CARDS:${runId}`, () => this.playerSync!.executePlatformRun(runId));
+  }
+
+  scheduleReconciliation(runId: string): void {
+    if (!this.reconciliation) throw new Error('PLAYER_RECONCILIATION_UNAVAILABLE');
+    this.schedule(
+      `PLAYER_RECONCILIATION:${runId}`,
+      () => this.reconciliation!.processNextChunk(runId),
+      (outcome) => outcome.disposition === 'CONTINUE' && this.scheduleReconciliation(runId)
+    );
   }
 
   scheduleTeam(runId: string): void {
@@ -105,10 +128,20 @@ export class PlatformDataSyncRunner implements OnModuleInit, OnModuleDestroy {
       errorCode: null,
       errorMessage: null
     };
-    const [players, teams] = await this.prisma.$transaction([
-      this.prisma.externalSyncRun.updateMany({ where: stalePlayers, data: { ...recoverable, finishedAt: null } }),
+    const [players, reconciliation, teams] = await this.prisma.$transaction([
+      this.prisma.externalSyncRun.updateMany({ where: { ...stalePlayers, mode: { not: 'RECONCILE' } }, data: { ...recoverable, finishedAt: null } }),
+      this.prisma.externalSyncRun.updateMany({ where: { ...stalePlayers, mode: 'RECONCILE' }, data: {
+        status: 'PENDING', leaseOwnerToken: null, leaseExpiresAt: null, heartbeatAt: now,
+        errorCode: null, errorMessage: null, finishedAt: null
+      } }),
       this.prisma.teamCatalogSyncRun.updateMany({ where: staleTeams, data: { ...recoverable, completedAt: null } })
     ]);
-    return { players: players.count, teams: teams.count };
+    await this.prisma.externalSyncRun.updateMany({
+      where: { mode: 'RECONCILE', status: 'READY', currentPhase: 'PUBLISHING',
+        activeLeaseKey: 'pesdata', leaseExpiresAt: { lt: now } },
+      data: { activeLeaseKey: null, leaseOwnerToken: null, leaseExpiresAt: null,
+        currentPhase: 'PARTIALLY_PUBLISHED', errorCode: 'PUBLISH_INTERRUPTED' }
+    });
+    return { players: players.count + reconciliation.count, teams: teams.count };
   }
 }

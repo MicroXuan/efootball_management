@@ -149,6 +149,41 @@ describe('PlayerImportPublisher', () => {
     expect(userAuthorizationCalls).toEqual([]);
   });
 
+  it('requires the trusted reconciliation route for a staged daily batch', async () => {
+    const batch = await createBatch([card('daily-guard')]);
+    const run = await prisma.externalSyncRun.create({ data: {
+      sourceId, actorId: adminId, mode: 'RECONCILE', status: 'READY', scanTrusted: true
+    } });
+    try {
+      await prisma.externalSyncRunBatch.create({ data: { runId: run.id, batchId: batch.id, chunkIndex: 1 } });
+      await expect(publisher.publish(actorId, batch.id)).rejects.toThrow('Publish this batch');
+      await expect(publisher.publishForPlatformAdmin(adminId, batch.id)).rejects.toThrow('Publish this batch');
+      await expect(publisher.publishForPlatformAdmin(adminId, batch.id, run.id))
+        .resolves.toMatchObject({ status: 'PUBLISHED' });
+    } finally {
+      await prisma.externalSyncRun.delete({ where: { id: run.id } });
+    }
+  });
+
+  it('publishes a previously stored but unpublished card without changing its identity', async () => {
+    const initial = await createBatch([card('stored-unpublished')]);
+    await publisher.publish(actorId, initial.id);
+    const stored = await prisma.playerCard.findUniqueOrThrow({
+      where: { sourceId_externalId: { sourceId, externalId: 'stored-unpublished' } }
+    });
+    await prisma.playerCardVersion.deleteMany({ where: { playerCardId: stored.id } });
+    await prisma.playerCard.update({ where: { id: stored.id }, data: { publishedAt: null } });
+    const retry = await service.createBatchForPlatformAdmin(adminId, {
+      sourceCode, fileName: 'stored-unpublished.json', format: 'JSON',
+      content: JSON.stringify([card('stored-unpublished')])
+    }, 'later-daily-run');
+    expect(retry.batch.updateCount).toBe(1);
+    await publisher.publishForPlatformAdmin(adminId, retry.batch.id);
+    const restored = await prisma.playerCard.findUniqueOrThrow({ where: { id: stored.id } });
+    expect(restored.publishedAt).not.toBeNull();
+    await expect(prisma.playerCardVersion.count({ where: { playerCardId: stored.id } })).resolves.toBe(1);
+  });
+
   it('keeps ordinary publication on user scope authorization', async () => {
     const batch = await createBatch([card('user-publish')]);
     userAuthorizationCalls.length = 0;
@@ -246,6 +281,7 @@ describe('PlayerImportPublisher', () => {
     };
     const fakePrisma = {
       importBatch: { findUnique: async () => ready },
+      externalSyncRunBatch: { findFirst: async () => null },
       $transaction: async (_callback: unknown, options: { timeout?: number }) => {
         transactionOptions = options;
         return published;
@@ -282,6 +318,7 @@ describe('PlayerImportPublisher', () => {
     const timedOutPublisher = new PlayerImportPublisher(
       {
         importBatch: { findUnique: async () => ready },
+        externalSyncRunBatch: { findFirst: async () => null },
         $transaction: async () => { throw timeout; }
       } as never,
       authorization as never,
