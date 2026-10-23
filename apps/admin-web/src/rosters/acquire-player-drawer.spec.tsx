@@ -25,8 +25,8 @@ const candidate = {
 
 describe('acquire player drawer', () => {
   it('sends position, card type, and pack filters and shows an explicit empty result', async () => {
-    const request = vi.fn(async (path: string) => path === '/v1/card-packs?limit=100'
-      ? { items: [{ id: '77777777-7777-4777-8777-777777777777', nameZh: '每周精选', nameEn: null, season: null, releaseDate: null, coverUrl: null, cardCount: 11 }], nextCursor: null, releaseSequence: 1 }
+    const request = vi.fn(async (path: string) => path === '/v1/card-pack-options'
+      ? { items: [{ id: '77777777-7777-4777-8777-777777777777', nameZh: '每周精选', nameEn: null }], releaseSequence: 1 }
       : { items: [] });
     render(<AcquirePlayerDrawer open leagueId={leagueId} teamId={teamId} seasonId={seasonId} api={api(request as unknown as AdminApi['request'])} summary={{ rosterCount: 2, salaryMinor: 400, salaryCapMinor: 2000 }} onClose={vi.fn()} onCompleted={vi.fn()} />);
 

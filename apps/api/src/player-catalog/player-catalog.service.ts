@@ -3,6 +3,7 @@ import {
   derivePesdataAutoBuild,
   type CardPackDetail,
   type CardPackListResponse,
+  type CardPackOptionsResponse,
   type PlayerCardDetail,
   type PlayerCardSummary,
   type PlayerDetail,
@@ -160,6 +161,14 @@ export class PlayerCatalogService {
         overallRating: last.newest.overallRating,
         id: last.id
       }) : null,
+      releaseSequence
+    };
+  }
+
+  async listPackOptions(): Promise<CardPackOptionsResponse> {
+    const releaseSequence = await this.latestReleaseSequence();
+    return {
+      items: await this.read.listPackOptionsAtRelease(releaseSequence),
       releaseSequence
     };
   }

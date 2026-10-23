@@ -165,4 +165,28 @@ export class PlayerCatalogReadRepository {
       return newest ? [{ id: row.id, newest, count: Number(row.cardCount) }] : [];
     });
   }
+
+  async listPackOptionsAtRelease(releaseSequence: number): Promise<Array<{
+    id: string;
+    nameZh: string | null;
+    nameEn: string | null;
+  }>> {
+    return this.prisma.$queryRaw(Prisma.sql`
+      SELECT p.id, p.name_zh AS nameZh, p.name_en AS nameEn
+      FROM card_packs p
+      WHERE EXISTS (
+        SELECT 1 FROM player_card_versions v
+        WHERE v.card_pack_id = p.id
+          AND v.release_sequence <= ${releaseSequence}
+          AND v.status = 'ACTIVE'
+          AND NOT EXISTS (
+            SELECT 1 FROM player_card_versions newer
+            WHERE newer.player_card_id = v.player_card_id
+              AND newer.release_sequence <= ${releaseSequence}
+              AND newer.release_sequence > v.release_sequence
+          )
+      )
+      ORDER BY p.release_date DESC, p.id ASC
+    `);
+  }
 }

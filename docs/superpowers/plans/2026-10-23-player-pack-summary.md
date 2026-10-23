@@ -1,5 +1,7 @@
 # Player Pack Summary Implementation Plan
 
+> 状态：用户已取消筛选项中的卡片数量。本方案存档，不再执行；现行方案见 [球员包轻量选项](../specs/2026-10-23-player-pack-options.zh-CN.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让球员包筛选读取发布时维护的准确摘要，不再在每次打开筛选框时统计全部球员卡历史版本。

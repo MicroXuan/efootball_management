@@ -249,6 +249,25 @@ describe('PlayerCatalogService', () => {
     expect((await catalog.getPack(packIds[0]!)).cards).toHaveLength(first.items[0]!.cardCount);
   });
 
+  it('lists only packs with current active cards as lightweight options', async () => {
+    await importAndPublish([
+      card(1, { packExternalId: 'pack-a', packName: 'Shared' }),
+      card(2, { packExternalId: 'pack-b', packName: 'Shared' }),
+      card(3, { packExternalId: 'pack-c', packName: 'Withdrawn' })
+    ]);
+    await importAndPublish([
+      card(1, { packExternalId: 'pack-b', packName: 'Shared' }),
+      card(3, { packExternalId: 'pack-c', packName: 'Withdrawn', status: 'INACTIVE' })
+    ]);
+
+    const options = await catalog.listPackOptions();
+    const sourcePacks = await prisma.cardPack.findMany({ where: { sourceId }, select: { id: true } });
+    const shown = options.items.filter(({ id }) => sourcePacks.some((pack) => pack.id === id));
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toMatchObject({ nameZh: 'Shared', nameEn: null });
+    expect(shown[0]).not.toHaveProperty('cardCount');
+  });
+
   it('returns player, card, and pack details and raises 404 for hidden IDs', async () => {
     await importAndPublish([card(1), card(2)]);
     const search = await catalog.search({ keyword: sourceCode, limit: 20 });

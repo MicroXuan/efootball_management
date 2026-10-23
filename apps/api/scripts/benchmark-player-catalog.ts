@@ -141,6 +141,7 @@ async function main(): Promise<void> {
     await timed('search', async () => catalog.search({ limit: 20, keyword: 'benchmark card 499' }));
     await timed('card-detail', async () => catalog.getCard(cardIds[0]!));
     await timed('pack-list', async () => catalog.listPacks({ limit: 20 }));
+    await timed('pack-options', async () => catalog.listPackOptions());
     const explain = await prisma.$queryRaw<Array<Record<string, unknown>>>`
       EXPLAIN SELECT v.id FROM player_card_versions v
       WHERE v.release_sequence <= ${releaseSequences.at(-1)!} AND v.status = 'ACTIVE'

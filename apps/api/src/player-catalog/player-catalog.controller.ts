@@ -35,6 +35,11 @@ export class PlayerCatalogController {
     return this.catalog.listPacks(query);
   }
 
+  @Get('card-pack-options')
+  listPackOptions() {
+    return this.catalog.listPackOptions();
+  }
+
   @Get('card-packs/:id')
   getPack(@Param('id', new ZodValidationPipe(ResourceIdSchema)) id: string) {
     return this.catalog.getPack(id);
