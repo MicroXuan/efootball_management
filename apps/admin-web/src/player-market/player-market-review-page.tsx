@@ -1,5 +1,5 @@
 import { Alert, Avatar, Button, Card, Descriptions, Empty, Input, Modal, Select, Space, Tag, Timeline } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { LeagueSeasonSummarySchema, PlayerApplicationListResponseSchema, type PlayerAcquisitionApplication, type PlayerApplicationStatus } from '@efm/contracts';
 import { z } from 'zod';
@@ -7,7 +7,6 @@ import { adminApi, type AdminApi } from '../lib/api';
 import { useMutationKey } from '../lib/mutation-key';
 import { buildReviewGroups, reviewBlocker, type ReviewApplication } from './player-market-review.model';
 import { PaginatedRecords } from '../components/paginated-records';
-import { collectCursorPages } from '../lib/cursor-pages';
 
 const statusLabels: Record<PlayerApplicationStatus, string> = {
   PENDING: '待审核', APPROVED: '已通过', NOT_SELECTED: '未入选', REJECTED: '已驳回', WITHDRAWN: '已撤回',
@@ -23,6 +22,9 @@ export function PlayerMarketReviewPage({ api = adminApi }: { api?: AdminApi }) {
   const [params, setParams] = useSearchParams();
   const seasonId = params.get('seasonId') ?? '';
   const [items, setItems] = useState<PlayerAcquisitionApplication[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requestRevision = useRef(0);
   const type = pathname.endsWith('/forced-player-market') ? 'FORCED_TRANSFER' : 'NORMAL_PURCHASE';
   const [status, setStatus] = useState<'ALL' | PlayerApplicationStatus>('ALL');
   const [review, setReview] = useState<{ item: ReviewApplication; action: 'approve' | 'reject' } | null>(null);
@@ -40,18 +42,39 @@ export function PlayerMarketReviewPage({ api = adminApi }: { api?: AdminApi }) {
 
   const load = useCallback(async () => {
     if (!seasonId) return;
+    const revision = ++requestRevision.current;
+    setItems([]);
+    setNextCursor(null);
     try {
-      const query = new URLSearchParams({ seasonId, scope: 'PUBLIC', type, limit: '100' });
+      const query = new URLSearchParams({ seasonId, scope: 'PUBLIC', type, limit: '30' });
       if (status !== 'ALL') query.set('status', status);
-      const all = await collectCursorPages((cursor) => {
-        if (cursor) query.set('cursor', cursor);
-        return api.request(`/v1/admin/leagues/${leagueId}/player-market-applications?${query}`, { schema: PlayerApplicationListResponseSchema });
-      });
-      setItems(all);
+      const page = await api.request(`/v1/admin/leagues/${leagueId}/player-market-applications?${query}`, { schema: PlayerApplicationListResponseSchema });
+      if (revision !== requestRevision.current) return;
+      setItems(page.items);
+      setNextCursor(page.nextCursor);
       setError(null);
-    } catch { setError('球员申请加载失败，请检查赛季和管理权限'); }
+    } catch { if (revision === requestRevision.current) setError('球员申请加载失败，请检查赛季和管理权限'); }
   }, [api, leagueId, seasonId, status, type]);
   useEffect(() => { void load(); }, [load]);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    const revision = requestRevision.current;
+    setLoadingMore(true);
+    try {
+      const query = new URLSearchParams({ seasonId, scope: 'PUBLIC', type, limit: '30', cursor: nextCursor });
+      if (status !== 'ALL') query.set('status', status);
+      const page = await api.request(`/v1/admin/leagues/${leagueId}/player-market-applications?${query}`, { schema: PlayerApplicationListResponseSchema });
+      if (revision !== requestRevision.current) return;
+      setItems((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        return [...current, ...page.items.filter((item) => !seen.has(item.id))];
+      });
+      setNextCursor(page.nextCursor);
+      setError(null);
+    } catch { if (revision === requestRevision.current) setError('更多申请加载失败，请重试'); }
+    finally { setLoadingMore(false); }
+  };
 
   const groups = useMemo(() => buildReviewGroups(items.filter((item) => item.type === type && (status === 'ALL' || item.status === status))), [items, status, type]);
   const submit = async () => {
@@ -70,16 +93,17 @@ export function PlayerMarketReviewPage({ api = adminApi }: { api?: AdminApi }) {
 
   return <section className="player-market-review-page">
     <Card className="market-command-card">
-      <div className="market-command-heading"><div><span className="section-kicker">公开交易审核</span><h2>球员申请</h2><p>普通购买可择优通过；强报严格按首次有效提交时间逐笔处理。</p></div><div className="market-command-count"><strong>{items.filter((item) => item.status === 'PENDING').length}</strong><span>待复核</span></div></div>
+      <div className="market-command-heading"><div><span className="section-kicker">公开交易审核</span><h2>球员申请</h2><p>普通购买可择优通过；强报严格按首次有效提交时间逐笔处理。</p></div><div className="market-command-count"><strong>{items.filter((item) => item.status === 'PENDING').length}</strong><span>已加载待复核</span></div></div>
       {error ? <Alert role="alert" type="warning" showIcon title={error} /> : null}
       <div className="market-review-toolbar">
         <strong>{type === 'FORCED_TRANSFER' ? '强报队列' : '普通购买'}</strong>
         <Select aria-label="申请状态" value={status} onChange={setStatus} options={[{ value: 'ALL', label: '全部状态' }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]} />
       </div>
-      {groups.length ? <PaginatedRecords items={groups} label="球员申请分页" render={(pageGroups) => <div className="market-review-groups">{pageGroups.map((group) => <article className="market-review-group" key={group.playerId}>
+      {groups.length ? <PaginatedRecords key={`${seasonId}:${type}:${status}`} items={groups} label="球员申请分页" render={(pageGroups) => <div className="market-review-groups">{pageGroups.map((group) => <article className="market-review-group" key={group.playerId}>
         <header><div><span className="market-review-eyebrow">{type === 'FORCED_TRANSFER' ? '强报顺位' : '同球员申请'}</span><h3>{group.playerName}</h3></div><Tag color={type === 'FORCED_TRANSFER' ? 'gold' : 'green'}>{group.applications.length} 笔</Tag></header>
         <div className="market-review-applications">{group.applications.map((item) => <ApplicationCard key={item.id} item={item} onReview={openReview} />)}</div>
       </article>)}</div>} /> : <Empty description="当前筛选条件下没有申请" />}
+      {nextCursor ? <Button onClick={() => void loadMore()} loading={loadingMore}>加载更多申请</Button> : null}
     </Card>
     <Modal open={review !== null} title={review?.action === 'approve' ? '确认通过申请' : '确认驳回申请'} okText={review?.action === 'approve' ? '确认通过' : '确认驳回'} cancelText="取消" confirmLoading={busy} okButtonProps={{ disabled: !reason.trim() }} onOk={() => void submit()} onCancel={() => setReview(null)}>
       {review ? <><Descriptions size="small" column={2} items={[{ key: 'player', label: '球员', children: review.item.playerName }, { key: 'team', label: '申请球队', children: review.item.applicantTeam.name }, { key: 'value', label: '官方身价', children: money(review.item.valuationMinorSnapshot) }, { key: 'amount', label: '申请金额', children: money(review.item.amountMinor) }, { key: 'salary', label: '工资', children: money(review.item.playerCard.salaryMinor) }, { key: 'card', label: '球员卡', children: review.item.playerCard.cardName }]} /><label className="modal-field-label" htmlFor="player-review-reason">审核原因</label><Input.TextArea id="player-review-reason" value={reason} onChange={(event) => { setReason(event.target.value); key.reset(); }} maxLength={512} placeholder="说明通过或驳回依据，所有参赛球队可查看" /></> : null}
