@@ -1,6 +1,7 @@
 import type {
   CardPackDetail,
   CardPackListResponse,
+  CardPackOptionsResponse,
   PlayerCardDetail,
   PlayerDetail,
   PlayerSearchResponse,
@@ -37,6 +38,10 @@ export const catalogApi = {
       path: queryPath('/card-packs', { cursor: query.cursor, limit: query.limit ?? 20 }),
       skipAuth: true,
     })
+  },
+
+  listCardPackOptions() {
+    return api.request<CardPackOptionsResponse>({ path: '/card-pack-options', skipAuth: true })
   },
 
   getCardPack(id: string) {

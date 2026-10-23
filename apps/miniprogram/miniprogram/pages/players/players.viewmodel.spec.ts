@@ -54,13 +54,9 @@ describe('player list view model', () => {
       id: '44444444-4444-4444-8444-444444444444',
       nameZh: '每周精选',
       nameEn: 'POTW',
-      season: '2026',
-      releaseDate: null,
-      coverUrl: null,
-      cardCount: 11,
     }])).toEqual([
       { value: '', label: '球员包' },
-      { value: '44444444-4444-4444-8444-444444444444', label: '每周精选 · 11 张' },
+      { value: '44444444-4444-4444-8444-444444444444', label: '每周精选' },
     ])
   })
 

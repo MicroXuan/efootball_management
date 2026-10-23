@@ -115,6 +115,11 @@ export const CardPackListResponseSchema = z.object({
   releaseSequence: z.number().int().positive()
 });
 
+export const CardPackOptionsResponseSchema = z.object({
+  items: z.array(CardPackSummarySchema.pick({ id: true, nameZh: true, nameEn: true })),
+  releaseSequence: z.number().int().positive()
+});
+
 export const CardPackDetailSchema = CardPackSummarySchema.extend({
   cards: z.array(PlayerCardSummarySchema)
 });
@@ -181,6 +186,7 @@ export type PlayerCardDetail = z.infer<typeof PlayerCardDetailSchema>;
 export type PlayerAutoBuild = z.infer<typeof PlayerAutoBuildSchema>;
 export type CardPackSummary = z.infer<typeof CardPackSummarySchema>;
 export type CardPackListResponse = z.infer<typeof CardPackListResponseSchema>;
+export type CardPackOptionsResponse = z.infer<typeof CardPackOptionsResponseSchema>;
 export type CardPackDetail = z.infer<typeof CardPackDetailSchema>;
 export type CreatePlayerFavoriteRequest = z.infer<typeof CreatePlayerFavoriteRequestSchema>;
 export type PlayerFavoriteListQuery = z.output<typeof PlayerFavoriteListQuerySchema>;

@@ -122,4 +122,33 @@ describe('player market page pagination', () => {
     expect(mocks.listAnnouncements).toHaveBeenNthCalledWith(2, 'league-1', expect.objectContaining({ limit: 30, cursor: 'older' }))
     expect(instance.data.announcements.map((item: { id: string }) => item.id)).toEqual(['news-2', 'news-1'])
   })
+
+  it('loads older application pages and removes duplicates', async () => {
+    mocks.listApplications
+      .mockResolvedValueOnce({ items: [{ id: 'application-2', playerId: 'p-2', events: [] }], nextCursor: 'older-application' })
+      .mockResolvedValueOnce({ items: [{ id: 'application-2', playerId: 'p-2', events: [] }, { id: 'application-1', playerId: 'p-1', events: [] }], nextCursor: null })
+    const instance = context()
+    instance.data.view = 'public'
+    await page.loadView.call(instance)
+    expect(instance.data.nextApplicationCursor).toBe('older-application')
+    page.onReachBottom.call(instance)
+    await vi.waitFor(() => expect(instance.data.nextApplicationCursor).toBeNull())
+    expect(mocks.listApplications).toHaveBeenNthCalledWith(1, 'league-1', expect.objectContaining({ cursor: undefined, limit: 30 }))
+    expect(mocks.listApplications).toHaveBeenNthCalledWith(2, 'league-1', expect.objectContaining({ cursor: 'older-application', limit: 30 }))
+    expect(instance.data.applications.map((item: { id: string }) => item.id)).toEqual(['application-2', 'application-1'])
+  })
+
+  it('starts from the first application page after switching between public and mine', async () => {
+    mocks.listApplications
+      .mockResolvedValueOnce({ items: [{ id: 'public-1', events: [] }], nextCursor: 'public-next' })
+      .mockResolvedValueOnce({ items: [{ id: 'mine-1', events: [] }], nextCursor: null })
+    const instance = context()
+    instance.data.view = 'public'
+    await page.loadView.call(instance)
+    instance.data.view = 'mine'
+    await page.loadView.call(instance)
+    expect(mocks.listApplications).toHaveBeenNthCalledWith(2, 'league-1', expect.objectContaining({ scope: 'MINE', cursor: undefined }))
+    expect(instance.data.applications.map((item: { id: string }) => item.id)).toEqual(['mine-1'])
+    expect(instance.data.nextApplicationCursor).toBeNull()
+  })
 })

@@ -1,7 +1,7 @@
 import { Alert, Button, Drawer, Empty, Form, Input, InputNumber, Radio, Select, Tag } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  CardPackListResponseSchema,
+  CardPackOptionsResponseSchema,
   RosterMutationResponseSchema,
   RosterPlayerCandidateListResponseSchema,
   type CardPackSummary,
@@ -34,7 +34,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
   const [position, setPosition] = useState<PlayerPosition | undefined>();
   const [cardType, setCardType] = useState<PlayerCardType | undefined>();
   const [cardPackId, setCardPackId] = useState<string | undefined>();
-  const [packs, setPacks] = useState<Array<CardPackSummary & { cardCount: number }>>([]);
+  const [packs, setPacks] = useState<Array<Pick<CardPackSummary, 'id' | 'nameZh' | 'nameEn'>>>([]);
   const [results, setResults] = useState<RosterPlayerCandidate[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export function AcquirePlayerDrawer({ open, leagueId, teamId, seasonId, summary,
 
   useEffect(() => {
     if (!open) return;
-    void api.request('/v1/card-packs?limit=100', { schema: CardPackListResponseSchema })
+    void api.request('/v1/card-pack-options', { schema: CardPackOptionsResponseSchema })
       .then((response) => setPacks(response.items))
       .catch(() => setPacks([]));
   }, [api, open]);
