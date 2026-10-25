@@ -7,6 +7,21 @@ export function matchSalaryTier<T extends SalaryTier>(tiers: readonly T[], overa
   return tiers.find((tier) => overall >= tier.minOverall && overall <= tier.maxOverall) ?? null;
 }
 
+export function birdSalaryQuote(tiers: readonly SalaryTier[], overall: number, baseline: number | null | undefined) {
+  const current = matchSalaryTier(tiers, overall);
+  if (!current) return null;
+  const sorted = [...tiers].sort((a, b) => a.minOverall - b.minOverall);
+  const index = sorted.findIndex((tier) => overall >= tier.minOverall && overall <= tier.maxOverall);
+  const previous = baseline !== null && baseline !== undefined && overall > baseline && index > 0
+    ? sorted[index - 1]
+    : null;
+  const birdDiscountApplied = previous !== null && previous !== undefined && previous.salaryMinor < current.salaryMinor;
+  return {
+    salaryMinor: birdDiscountApplied ? previous.salaryMinor : current.salaryMinor,
+    birdDiscountApplied
+  };
+}
+
 export function findActiveSalaryRule(
   client: PrismaService | Prisma.TransactionClient,
   leagueId: string,

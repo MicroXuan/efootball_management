@@ -13,6 +13,8 @@ describe('tiered league lifecycle API', () => {
   const suffix = randomUUID();
   const userIds: string[] = [];
   const catalogIds: string[] = [];
+  const fixturePlayerIds: string[] = [];
+  let fixtureSourceId = '';
   const userTokenById = new Map<string, string>();
   let app: INestApplication;
   let adminId = '';
@@ -67,6 +69,7 @@ describe('tiered league lifecycle API', () => {
     });
     seasonId = season.id;
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: seasonId } });
+    const teamIds: string[] = [];
     for (let index = 0; index < 19; index += 1) {
       const name = `分级球队 ${index + 1}`;
       const shortName = `球队${index + 1}`;
@@ -75,9 +78,11 @@ describe('tiered league lifecycle API', () => {
       const team = await prisma.leagueTeam.create({
         data: {
           leagueId, ownerUserId: userIds[index]!, teamNumber: index + 1,
-          ownerAlias: `用户${index + 1}`, catalogTeamId: shell.id, name, shortName
+          ownerAlias: `用户${index + 1}`, catalogTeamId: shell.id, name, shortName,
+          salaryCapMinor: 2_000
         }
       });
+      teamIds.push(team.id);
       await prisma.seasonEntry.create({
         data: {
           seasonId, leagueTeamId: team.id, ownerUserId: userIds[index]!, source: 'NEW_APPLICATION',
@@ -86,6 +91,28 @@ describe('tiered league lifecycle API', () => {
         }
       });
     }
+    const source = await prisma.dataSource.create({ data: { code: `tiered-e2e-${suffix}`, name: '分级联赛测试球员' } });
+    fixtureSourceId = source.id;
+    const rule = await prisma.leagueSalaryRuleVersion.create({ data: {
+      leagueId, version: 1, salaryCapMinor: 2_000,
+      effectiveAt: new Date('2026-09-01T00:00:00Z'), createdByAdminId: adminId
+    } });
+    const players = teamIds.flatMap((teamId, teamIndex) => Array.from({ length: 16 }, (_, playerIndex) => ({
+      teamId, teamIndex, playerIndex, playerId: randomUUID(), cardId: randomUUID()
+    })));
+    fixturePlayerIds.push(...players.map(({ playerId }) => playerId));
+    await prisma.footballPlayer.createMany({ data: players.map(({ playerId, teamIndex, playerIndex }) => ({
+      id: playerId, nameZh: `分级球员 ${teamIndex + 1}-${playerIndex + 1}`
+    })) });
+    await prisma.playerCard.createMany({ data: players.map(({ cardId, playerId, teamIndex, playerIndex }) => ({
+      id: cardId, sourceId: source.id, externalId: `tiered-${teamIndex}-${playerIndex}-${suffix}`,
+      playerId, cardName: '测试卡', position: playerIndex === 0 ? 'GK' : 'CF',
+      overallRating: 80, cardType: 'STANDARD'
+    })) });
+    await prisma.leaguePlayerOwnership.createMany({ data: players.map(({ teamId, playerId, cardId }) => ({
+      leagueId, leagueTeamId: teamId, footballPlayerId: playerId, currentPlayerCardId: cardId,
+      maxOverallSnapshot: 80, salaryRuleVersionId: rule.id, salaryMinor: 100
+    })) });
   });
 
   afterAll(async () => {
@@ -112,12 +139,18 @@ describe('tiered league lifecycle API', () => {
     await prisma.seasonAllocationProposal.deleteMany({ where: { seasonId } });
     await prisma.auditLog.deleteMany({ where: { leagueId } });
     await prisma.adminMutationReceipt.deleteMany({ where: { adminId } });
+    await prisma.seasonPlayingRosterEntry.deleteMany({ where: { seasonId } });
+    await prisma.leaguePlayerOwnership.deleteMany({ where: { leagueId } });
     await prisma.seasonEntry.deleteMany({ where: { seasonId } });
+    await prisma.leagueSalaryRuleVersion.deleteMany({ where: { leagueId } });
     await prisma.league.update({ where: { id: leagueId }, data: { currentSeasonId: null } });
     await prisma.leagueSeason.delete({ where: { id: seasonId } });
     await prisma.leagueTeam.deleteMany({ where: { leagueId } });
     await prisma.teamCatalogItem.deleteMany({ where: { id: { in: catalogIds } } });
     await prisma.league.delete({ where: { id: leagueId } });
+    await prisma.playerCard.deleteMany({ where: { sourceId: fixtureSourceId } });
+    await prisma.footballPlayer.deleteMany({ where: { id: { in: fixturePlayerIds } } });
+    await prisma.dataSource.delete({ where: { id: fixtureSourceId } });
     await prisma.refreshSession.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.adminSession.deleteMany({ where: { adminId } });

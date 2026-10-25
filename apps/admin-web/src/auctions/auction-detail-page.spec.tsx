@@ -99,3 +99,23 @@ it('reviews pending and no-bid outcomes while the next lot advances automaticall
   expect(within(noBidReview).queryByRole('radio', { name: '调整成交并入队扣款' })).not.toBeInTheDocument();
   expect(document.getElementById('lot-lot-3')).toHaveClass('is-current');
 });
+
+it('offers a base-price award for an unbid nominated lot', async () => {
+  const detail = {
+    id: batchId, leagueId, groupBindingId: null, bidChannel: 'MINIPROGRAM', name: '摘牌拍卖', status: 'COMPLETED',
+    currentLotId: null, version: 2, startedAt: '2026-10-09T00:00:00.000Z', completedAt: '2026-10-09T00:01:00.000Z',
+    cancelledAt: null, createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:01:00.000Z',
+    lots: [{ id: 'lot-1', nominationId: 'nomination-1', noBidAward: { leagueTeamId: 'team-2', teamNumber: 2, teamName: '阿贾克斯', ownerAlias: 'Tidus', price: 10 }, displayOrder: 1, playerId: 'player-1', playerCardId: 'card-1',
+      playerName: '瓦拉内', playerSnapshot: {}, startingPrice: 20, minimumIncrement: 10, status: 'NO_BID',
+      currentPrice: null, currentHighestBidId: null, deadlineAt: null, deadlineEpoch: 1, pausedRemainingMs: null,
+      version: 2, bids: [], review: null, startedAt: '2026-10-09T00:00:00.000Z', closedAt: '2026-10-09T00:00:30.000Z', reviewedAt: null }]
+  };
+  const api = { request: vi.fn().mockImplementation(async (path: string) =>
+    path.endsWith('/share-code') ? { imageDataUrl: 'data:image/png;base64,iVBORw0KGgo=', envVersion: 'trial' } : detail) } as unknown as AdminApi;
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/auctions/${batchId}`]}><Routes><Route path="/leagues/:leagueId/auctions/:batchId" element={<AuctionDetailPage api={api} />} /></Routes></MemoryRouter>);
+
+  const review = await screen.findByRole('region', { name: '瓦拉内审核' });
+  expect(within(review).getByRole('radio', { name: '底价归最早提名者' })).toBeInTheDocument();
+  expect(within(review).getByText(/预计归属：2号 · 阿贾克斯 · Tidus · 底价 10 资金/)).toBeInTheDocument();
+  expect(within(review).getByRole('button', { name: '确认底价入队' })).toBeInTheDocument();
+});

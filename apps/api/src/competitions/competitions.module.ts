@@ -32,6 +32,9 @@ import { AdminMatchResultDisputesService } from './admin-match-result-disputes.s
 import { ResultEvidenceRetentionWorker } from './result-evidence-retention.worker.js';
 import { SeasonFixturesController } from './season-fixtures.controller.js';
 import { SeasonFixturesService } from './season-fixtures.service.js';
+import { SeasonPlayingRosterController } from './season-playing-roster.controller.js';
+import { SeasonPlayingRosterService } from './season-playing-roster.service.js';
+import { SeasonRosterReadinessService } from './season-roster-readiness.service.js';
 
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, JwtModule.register({}), StorageModule],
@@ -45,7 +48,8 @@ import { SeasonFixturesService } from './season-fixtures.service.js';
     MyCompetitionsController,
     AdminCupCompetitionsController,
     CupCompetitionsController,
-    SeasonFixturesController
+    SeasonFixturesController,
+    SeasonPlayingRosterController
   ],
   providers: [
     CompetitionsService,
@@ -66,6 +70,8 @@ import { SeasonFixturesService } from './season-fixtures.service.js';
     AdminMatchResultDisputesService,
     ResultEvidenceRetentionWorker,
     SeasonFixturesService,
+    SeasonPlayingRosterService,
+    SeasonRosterReadinessService,
     { provide: SCHEDULE_GENERATOR, useValue: generateRoundRobin },
     { provide: COMPETITION_CLOCK, useClass: SystemCompetitionClock }
   ],

@@ -29,6 +29,7 @@ import { AdminRosterQueriesService } from './admin-roster-queries.service.js';
 import { z } from 'zod';
 
 const RosterQuerySchema = z.object({ seasonId: ResourceIdSchema });
+const SalaryRefreshQuerySchema = z.object({ salaryRuleVersionId: ResourceIdSchema });
 const LedgerQuerySchema = z.object({
   teamId: ResourceIdSchema.optional(),
   cursor: ResourceIdSchema.optional(),
@@ -45,6 +46,16 @@ export class AdminRostersController {
     private readonly salaryRecalculation: SalaryRecalculationService,
     @Inject(AdminRosterQueriesService) private readonly queries: AdminRosterQueriesService
   ) {}
+
+  @Get('leagues/:leagueId/seasons/:seasonId/salary-refresh-preview')
+  previewSalaryRefresh(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string,
+    @Query(new ZodValidationPipe(SalaryRefreshQuerySchema)) query: z.output<typeof SalaryRefreshQuerySchema>
+  ) {
+    return this.salaryRecalculation.previewLeague(leagueId, seasonId, query.salaryRuleVersionId, admin.id);
+  }
 
   @Get('leagues/:leagueId/teams/:teamId/roster')
   roster(

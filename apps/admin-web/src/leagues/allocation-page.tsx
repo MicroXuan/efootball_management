@@ -6,6 +6,7 @@ import {
   CompetitionMatchResponseSchema,
   MatchResultVersionResponseSchema,
   SeasonAllocationProposalSchema,
+  SeasonRosterReadinessResponseSchema,
   type CompetitionMatchResponse,
   type LeagueSeasonSummary,
   type SeasonAllocationProposal
@@ -34,6 +35,11 @@ const StageParticipantsSchema = z.array(z.object({
 }));
 type Confirmed = z.infer<typeof ConfirmedSchema>;
 type SchedulePreview = z.infer<typeof SchedulePreviewSchema>;
+type RosterReadiness = z.infer<typeof SeasonRosterReadinessResponseSchema>;
+const rosterIssueLabels: Record<RosterReadiness['teams'][number]['issues'][number], string> = {
+  UNDER_MINIMUM: '少于 16 人', OVER_MAXIMUM: '超过 25 人', NO_GOALKEEPER: '缺少默认位置为 GK 的球员',
+  SALARY_CAP_UNSET: '未设置工资帽', OVER_CAP: '超出工资帽'
+};
 
 const stageLabel = (code: string) => code === 'SUPER' ? '超级组' : `冠军 ${code.replace('CHAMPION_', '')} 组`;
 const championCode = (index: number) => {
@@ -115,6 +121,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   const [seasonId, setSeasonId] = useState('');
   const [proposal, setProposal] = useState<SeasonAllocationProposal | null>(null);
   const [confirmed, setConfirmed] = useState<Confirmed | null>(null);
+  const [rosterReadiness, setRosterReadiness] = useState<RosterReadiness | null>(null);
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [scheduleVersions, setScheduleVersions] = useState<Record<string, number>>({});
@@ -183,6 +190,22 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
   }, [api, leagueId, loadProposal]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const loadRosterReadiness = useCallback(async (targetSeasonId: string) => {
+    try {
+      const result = await api.request(`/v1/admin/leagues/${leagueId}/seasons/${targetSeasonId}/roster-readiness`, {
+        schema: SeasonRosterReadinessResponseSchema
+      });
+      setRosterReadiness(result);
+    } catch {
+      setRosterReadiness(null);
+      setError('开赛阵容校验加载失败，请刷新后重试');
+    }
+  }, [api, leagueId]);
+  useEffect(() => {
+    setRosterReadiness(null);
+    if (confirmed?.status === 'READY') void loadRosterReadiness(confirmed.seasonId);
+  }, [confirmed?.seasonId, confirmed?.status, loadRosterReadiness]);
 
   const stageOptions = useMemo(() => {
     const codes = new Set(proposal?.rows.map((row) => row.suggestedStageCode) ?? []);
@@ -267,22 +290,30 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
 
   const publishSchedule = async (stageId: string) => {
     if (!confirmed) return;
-    const stageVersion = confirmed.stages.find((stage) => stage.id === stageId)?.version ?? scheduleVersions[stageId] ?? 1;
-    const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/publish`, {
-      method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
-      body: { expectedStageVersion: stageVersion, expectedSeasonVersion: confirmed.version }
-    });
-    mutationKey.reset();
-    setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
-    setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
-    setConfirmed((current) => current ? {
-      ...current,
-      status: 'IN_PROGRESS',
-      version: current.status === 'READY' ? current.version + 1 : current.version,
-      stages: current.stages.map((stage) => stage.id === stageId
-        ? { ...stage, version: preview.version, status: 'PUBLISHED' }
-        : stage)
-    } : current);
+    setError(null); setScheduleBusyStageId(stageId);
+    try {
+      const stageVersion = confirmed.stages.find((stage) => stage.id === stageId)?.version ?? scheduleVersions[stageId] ?? 1;
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/schedule/publish`, {
+        method: 'POST', headers: { 'Idempotency-Key': mutationKey.current() }, schema: SchedulePreviewSchema,
+        body: { expectedStageVersion: stageVersion, expectedSeasonVersion: confirmed.version }
+      });
+      mutationKey.reset();
+      setScheduleVersions((current) => ({ ...current, [stageId]: preview.version }));
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setConfirmed((current) => current ? {
+        ...current,
+        status: 'IN_PROGRESS',
+        version: current.status === 'READY' ? current.version + 1 : current.version,
+        stages: current.stages.map((stage) => stage.id === stageId
+          ? { ...stage, version: preview.version, status: 'PUBLISHED' }
+          : stage)
+      } : current);
+    } catch (caught) {
+      setError(caught instanceof ApiError && caught.code === 'SEASON_ROSTER_NOT_READY'
+        ? '开赛阵容未达标，请查看下方逐队校验结果并刷新'
+        : '发布赛程失败，请刷新后重试');
+      if (confirmed.status === 'READY') await loadRosterReadiness(confirmed.seasonId);
+    } finally { setScheduleBusyStageId(null); }
   };
 
   const openMatchEditor = async (stageId: string) => {
@@ -456,6 +487,18 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
       ]} />
       <Button type="primary" disabled={Boolean(confirmed)} loading={submitting} onClick={() => void confirm()}>确认正式分组</Button>
     </Card>}
+    {confirmed?.status === 'READY' ? <Card title="开赛阵容校验" className="data-card">
+      <Space orientation="vertical" style={{ width: '100%' }}>
+        <Space><Tag color={rosterReadiness?.ready ? 'success' : 'warning'}>{rosterReadiness?.ready ? '全部合格' : '待处理'}</Tag><Button onClick={() => void loadRosterReadiness(confirmed.seasonId)}>刷新校验</Button></Space>
+        {rosterReadiness ? <Table rowKey="leagueTeamId" pagination={{ pageSize: 10 }} dataSource={rosterReadiness.teams} columns={[
+          { title: '球队', render: (_, row) => `${row.teamNumber ?? '—'}号 · ${row.teamName}` },
+          { title: '现役人数', dataIndex: 'playerCount' },
+          { title: 'GK 人数', dataIndex: 'goalkeeperCount' },
+          { title: '工资 / 工资帽', render: (_, row) => `${row.salaryMinor} / ${row.salaryCapMinor ?? '未设置'}` },
+          { title: '校验结果', render: (_, row) => row.issues.length ? row.issues.map((issue) => rosterIssueLabels[issue]).join('、') : '合格' }
+        ]} /> : <span className="muted-copy">正在检查参赛球队阵容…</span>}
+      </Space>
+    </Card> : null}
     {confirmed ? <Card title="正式组别与赛程" className="data-card">
       <div className="allocation-stage-grid">{confirmed.stages.map((stage) => {
         const preview = schedulePreviews[stage.id];
@@ -477,7 +520,7 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
                   onClick={() => void generateSchedule(stage.id)}>
                   {preview?.matches.some((match) => match.plannedAt) ? '已有手动比赛' : preview ? '重新生成预览' : '生成预览'}
                 </Button>}
-            <Button type="primary" disabled={stage.status === 'PUBLISHED'} onClick={() => void publishSchedule(stage.id)}>{stage.matchCount === 0 ? '发布组别（暂不安排比赛）' : '发布赛程'}</Button>
+            <Button type="primary" disabled={stage.status === 'PUBLISHED' || (confirmed.status === 'READY' && !rosterReadiness?.ready)} loading={scheduleBusyStageId === stage.id} onClick={() => void publishSchedule(stage.id)}>{stage.matchCount === 0 ? '发布组别（暂不安排比赛）' : '发布赛程'}</Button>
           </Space>
         </article>;
       })}</div>
