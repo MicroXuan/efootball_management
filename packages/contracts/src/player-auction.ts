@@ -281,6 +281,13 @@ export const PlayerAuctionLotSchema = z.object({
   playerId: ResourceIdSchema,
   playerCardId: ResourceIdSchema.nullable(),
   nominationId: ResourceIdSchema.nullable().default(null),
+  noBidAward: z.object({
+    leagueTeamId: ResourceIdSchema,
+    teamNumber: z.number().int().min(0).max(9_999).nullable(),
+    teamName: z.string(),
+    ownerAlias: z.string(),
+    price: PositiveMoneySchema
+  }).nullable().default(null),
   playerName: z.string().trim().min(1).max(128),
   playerSnapshot: z.record(z.string(), z.unknown()),
   startingPrice: PositiveMoneySchema,

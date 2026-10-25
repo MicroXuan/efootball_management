@@ -63,7 +63,7 @@ export class TeamPlayerReleaseService {
 
       const ownership = await tx.leaguePlayerOwnership.update({
         where: { id: current.id },
-        data: { status: 'RELEASED', version: { increment: 1 } }
+        data: { status: 'RELEASED', birdDiscountApplied: false, version: { increment: 1 } }
       });
       const transaction = await tx.rosterTransaction.create({ data: {
         leagueId: current.leagueId,

@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../database/prisma.service.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { birdSalaryQuote } from './salary-quote.js';
 
 @Injectable()
 export class AdminRosterQueriesService {
@@ -177,6 +178,7 @@ export class AdminRosterQueriesService {
           ? player.bestCard!.playerCardId
           : player.cards[0]?.id ?? null,
         cards: player.cards.map((card) => {
+          const ownership = player.leagueOwnerships[0];
           const build = card.autoBuilds[0];
           const attributes = objectRecord(card.attributes?.attributesJson);
           const sourceMetadata = objectRecord(attributes?.sourceMetadata);
@@ -199,6 +201,9 @@ export class AdminRosterQueriesService {
               : salaryRule?.tiers.find((tier) =>
                 maxOverall >= tier.minOverall && maxOverall <= tier.maxOverall
               )?.salaryMinor ?? null,
+            upgradeSalaryMinor: maxOverall === null || !salaryRule || !ownership
+              ? null
+              : birdSalaryQuote(salaryRule.tiers, maxOverall, ownership.birdBaselineOverall ?? ownership.maxOverallSnapshot)?.salaryMinor ?? null,
             recommended: player.bestCard?.playerCardId === card.id
               || (!player.cards.some((candidate) => candidate.id === player.bestCard?.playerCardId) && player.cards[0]?.id === card.id)
           };

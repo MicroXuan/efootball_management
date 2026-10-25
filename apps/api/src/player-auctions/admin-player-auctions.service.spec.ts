@@ -61,6 +61,83 @@ function harness() {
 }
 
 describe('AdminPlayerAuctionsService', () => {
+  it('previews the earliest active nominee and base price on an unbid lot', async () => {
+    const { service, tx, batch } = harness();
+    batch.lots = [{ id: 'lot-1', displayOrder: 1, batchId: batch.id, nominationId: 'nomination-1',
+      footballPlayerId: 'player-1', playerCardId: 'card-1', playerNameSnapshot: '车范根', playerSnapshot: {},
+      startingPrice: 20, minimumIncrement: 10, status: 'NO_BID', currentPrice: null, currentHighestBidId: null,
+      deadlineAt: null, deadlineEpoch: 1, pausedRemainingMs: null, version: 2, bids: [], review: null,
+      startedAt: now, closedAt: now, reviewedAt: null }];
+    tx.playerNomination = { findMany: jest.fn(async () => [] as any[])
+      .mockResolvedValueOnce([{ id: 'nomination-1', windowId: 'window-1', footballPlayerId: 'player-1', window: { season: { leagueId: 'league-1' } } }])
+      .mockResolvedValueOnce([{ windowId: 'window-1', footballPlayerId: 'player-1', leagueTeamId: 'team-2',
+        leagueTeam: { status: 'ACTIVE', teamNumber: 2, name: '阿贾克斯', ownerAlias: 'Tidus' } }]) };
+
+    const result = await service.detail('admin-1', 'league-1', batch.id);
+
+    expect(result.lots[0]?.noBidAward).toEqual({
+      leagueTeamId: 'team-2', teamNumber: 2, teamName: '阿贾克斯', ownerAlias: 'Tidus', price: 10
+    });
+  });
+
+  it('awards an unbid nominated player to the earliest active nominator for 10', async () => {
+    const { service, tx, batch, rosterTransactions } = harness();
+    batch.lots = [{ id: 'lot-1', batchId: batch.id, nominationId: 'nomination-1', footballPlayerId: 'player-1',
+      playerCardId: 'card-1', status: 'NO_BID', version: 1, currentPrice: null, currentHighestBid: null,
+      startingPrice: 20, minimumIncrement: 10, review: null }];
+    tx.playerNomination = {
+      findUnique: jest.fn(async () => ({ id: 'nomination-1', windowId: 'window-1', footballPlayerId: 'player-1', window: { season: { leagueId: 'league-1' } } })),
+      findFirst: jest.fn(async () => ({ id: 'nomination-2', leagueTeamId: 'team-2', footballPlayerId: 'player-1', withdrawnAt: null }))
+    };
+    tx.leagueTeam.findFirst.mockResolvedValueOnce({ id: 'team-2', leagueId: 'league-1', status: 'ACTIVE',
+      teamNumber: 2, name: '阿贾克斯', owner: { displayName: 'Tidus' } });
+
+    const result = await service.reviewLot('admin-1', 'league-1', batch.id, 'lot-1',
+      { decision: 'CONFIRM', expectedVersion: 1 }, 'no-bid-award');
+
+    expect(result.review).toMatchObject({ reviewedWinnerTeamId: 'team-2', reviewedPrice: 10 });
+    expect(rosterTransactions.acquireAuctionWithClient).toHaveBeenCalledWith(tx, expect.objectContaining({
+      targetLeagueTeamId: 'team-2', amountMinor: 10
+    }), 'admin-1');
+  });
+
+  it('does not award a nominated no-bid lot after every nomination is withdrawn', async () => {
+    const { service, tx, batch, rosterTransactions } = harness();
+    batch.lots = [{ id: 'lot-1', batchId: batch.id, nominationId: 'nomination-1', footballPlayerId: 'player-1',
+      playerCardId: 'card-1', status: 'NO_BID', version: 1, currentPrice: null, currentHighestBid: null, review: null }];
+    tx.playerNomination = {
+      findUnique: jest.fn(async () => ({ id: 'nomination-1', windowId: 'window-1', footballPlayerId: 'player-1', window: { season: { leagueId: 'league-1' } } })),
+      findFirst: jest.fn(async () => null)
+    };
+
+    await expect(service.reviewLot('admin-1', 'league-1', batch.id, 'lot-1',
+      { decision: 'CONFIRM', expectedVersion: 1 }, 'no-bid-withdrawn'))
+      .rejects.toMatchObject({ code: 'AUCTION_NOMINATION_INELIGIBLE' });
+    expect(tx.playerNomination.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { windowId: 'window-1', footballPlayerId: 'player-1', withdrawnAt: null, leagueTeam: { leagueId: 'league-1', status: 'ACTIVE' } },
+      orderBy: [{ effectiveSubmittedAt: 'asc' }, { id: 'asc' }]
+    }));
+    expect(rosterTransactions.acquireAuctionWithClient).not.toHaveBeenCalled();
+    expect(tx.playerAuctionReview.create).not.toHaveBeenCalled();
+  });
+
+  it('aborts no-bid review if the winning team cannot acquire the player', async () => {
+    const { service, tx, batch, rosterTransactions } = harness();
+    batch.lots = [{ id: 'lot-1', batchId: batch.id, nominationId: 'nomination-1', footballPlayerId: 'player-1',
+      playerCardId: 'card-1', status: 'NO_BID', version: 1, currentPrice: null, currentHighestBid: null, review: null }];
+    tx.playerNomination = {
+      findUnique: jest.fn(async () => ({ id: 'nomination-1', windowId: 'window-1', footballPlayerId: 'player-1', window: { season: { leagueId: 'league-1' } } })),
+      findFirst: jest.fn(async () => ({ id: 'nomination-1', leagueTeamId: 'team-1' }))
+    };
+    rosterTransactions.acquireAuctionWithClient.mockRejectedValueOnce({ code: 'PLAYER_ALREADY_OWNED' });
+
+    await expect(service.reviewLot('admin-1', 'league-1', batch.id, 'lot-1',
+      { decision: 'CONFIRM', expectedVersion: 1 }, 'no-bid-owned'))
+      .rejects.toMatchObject({ code: 'PLAYER_ALREADY_OWNED' });
+    expect(tx.playerAuctionReview.create).not.toHaveBeenCalled();
+    expect(tx.playerAuctionLot.updateMany).not.toHaveBeenCalled();
+  });
+
   it('refreshes an overdue miniprogram batch before showing its admin status', async () => {
     const { service, batch, tx, worker } = harness();
     batch.bidChannel = 'MINIPROGRAM';

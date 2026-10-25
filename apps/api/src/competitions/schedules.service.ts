@@ -14,6 +14,8 @@ import type { CompetitionTransaction } from './competition.types.js';
 import type { generateRoundRobin } from './domain/round-robin.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
+import { SeasonPlayingRosterService } from './season-playing-roster.service.js';
+import { SeasonRosterReadinessService } from './season-roster-readiness.service.js';
 
 export type PublishScheduleInput = {
   expectedCompetitionVersion: number;
@@ -47,6 +49,8 @@ export type SchedulePreview = {
 @Injectable()
 export class SchedulesService {
   private readonly visibility: LeagueVisibilityService;
+  private readonly playingRoster: SeasonPlayingRosterService;
+  private readonly rosterReadiness: SeasonRosterReadinessService;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -54,9 +58,13 @@ export class SchedulesService {
     @Inject(SCHEDULE_GENERATOR) private readonly generator: ScheduleGenerator,
     @Optional() @Inject(AdminMutationReceiptService) private readonly adminReceipts?: AdminMutationReceiptService,
     @Optional() @Inject(AuditLogService) private readonly audit?: AuditLogService,
-    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService
+    @Optional() @Inject(LeagueVisibilityService) visibility?: LeagueVisibilityService,
+    @Optional() @Inject(SeasonPlayingRosterService) playingRoster?: SeasonPlayingRosterService,
+    @Optional() @Inject(SeasonRosterReadinessService) rosterReadiness?: SeasonRosterReadinessService
   ) {
     this.visibility = visibility ?? new LeagueVisibilityService(prisma);
+    this.playingRoster = playingRoster ?? new SeasonPlayingRosterService(prisma);
+    this.rosterReadiness = rosterReadiness ?? new SeasonRosterReadinessService(prisma);
   }
 
   async generateStage(
@@ -123,7 +131,14 @@ export class SchedulesService {
     if (stageLeagueId !== leagueId) throw this.visibility.notFound();
     const receipts = this.requireAdminReceipts();
     return receipts.execute(actorAdminId, `competition-stage.schedule.publish:${stageId}`, key, async (transaction) => {
-      await transaction.$queryRaw`SELECT id FROM competition_stages WHERE id = ${stageId} FOR UPDATE`;
+      await transaction.$queryRaw`
+        SELECT stage.id
+        FROM competition_stages stage
+        JOIN competitions competition ON competition.id = stage.competition_id
+        JOIN league_seasons season ON season.id = competition.season_id
+        WHERE stage.id = ${stageId}
+        FOR UPDATE
+      `;
       const stage = await transaction.competitionStage.findUnique({
         where: { id: stageId },
         include: { competition: { include: { season: true } } }
@@ -148,6 +163,7 @@ export class SchedulesService {
         if (sibling) {
           throw new CompetitionError('LEAGUE_SEASON_ALREADY_IN_PROGRESS', '该联赛已有进行中的赛季', 409);
         }
+        await this.rosterReadiness.assertReady(transaction, season.id);
       }
       const stageUpdate = await transaction.competitionStage.updateMany({
         where: { id: stageId, status: 'DRAFT', version: input.expectedStageVersion },
@@ -168,6 +184,7 @@ export class SchedulesService {
         if (seasonUpdate.count !== 1) {
           throw new CompetitionError('VERSION_CONFLICT', '赛季已被其他管理员修改，请刷新后重试', 409);
         }
+        await this.playingRoster.capture(transaction, season.id);
       }
       if (this.audit) {
         await this.audit.record(transaction, {
@@ -187,6 +204,13 @@ export class SchedulesService {
   async previewStage(stageId: string): Promise<SchedulePreview> {
     await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
     return this.readStagePreview(this.prisma, stageId);
+  }
+
+  async seasonRosterReadiness(leagueId: string, seasonId: string) {
+    await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId });
+    const seasonLeagueId = await this.visibility.requireVisible({ type: 'SEASON', id: seasonId });
+    if (seasonLeagueId !== leagueId) throw this.visibility.notFound();
+    return this.rosterReadiness.preview(seasonId);
   }
 
   async previewStageForLeague(leagueId: string, stageId: string): Promise<SchedulePreview> {

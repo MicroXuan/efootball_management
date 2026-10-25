@@ -51,7 +51,6 @@ describe('RosterTransactionsService', () => {
     authorization,
     new AdminMutationReceiptService(prisma),
     audit,
-    salaryRules,
     new RosterLockRepository()
   );
   const createdLeagueIds: string[] = [];
@@ -469,7 +468,6 @@ describe('RosterTransactionsService', () => {
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
     );
-
     await expect(service.acquire(
       acquisition(f.season.id, f.teams[1]!.id, variant.id),
       f.admin.id,
@@ -934,13 +932,13 @@ describe('RosterTransactionsService', () => {
         playerId: player.player.id,
         cardName: 'Upgrade expensive',
         position: 'CB',
-        overallRating: 94,
+        overallRating: 95,
         cardType: 'EPIC'
       }
     });
     await new PlayerBuildsService(prisma).save(expensive.id, {
       autoBuildAllocation: { defending: 11 },
-      autoBuildMaxOverall: 94,
+      autoBuildMaxOverall: 95,
       dtRating: 94,
       algorithmVersion: 'test-v1'
     });
@@ -1002,12 +1000,31 @@ describe('RosterTransactionsService', () => {
     expect(upgraded.ownership).toMatchObject({
       currentPlayerCardId: upgrade.id,
       maxOverall: 95,
-      salaryMinor: 400,
+      salaryMinor: 300,
       version: 2
     });
     await expect(prisma.financeLedgerEntry.count({
       where: { rosterTransaction: { type: 'CARD_UPGRADE', leagueId: f.league.id } }
     })).resolves.toBe(1);
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquired.ownership.id },
+      select: { birdBaselineOverall: true, birdDiscountApplied: true }
+    })).resolves.toEqual({ birdBaselineOverall: 93, birdDiscountApplied: true });
+
+    const transferred = await service.transfer({
+      seasonId: f.season.id,
+      ownershipId: acquired.ownership.id,
+      targetLeagueTeamId: f.teams[1]!.id,
+      amountMinor: null,
+      expectedVersion: 2,
+      idempotencyKey: randomUUID(),
+      reason: 'Bird salary resets on transfer'
+    }, f.admin.id, new Date('2026-09-15T00:00:00.000Z'));
+    expect(transferred.ownership).toMatchObject({ salaryMinor: 400, leagueTeamId: f.teams[1]!.id });
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquired.ownership.id },
+      select: { birdBaselineOverall: true, birdDiscountApplied: true }
+    })).resolves.toEqual({ birdBaselineOverall: 95, birdDiscountApplied: false });
   });
 
   it('rejects an equal-salary card change while over cap but permits a salary reduction', async () => {
@@ -1127,11 +1144,15 @@ describe('RosterTransactionsService', () => {
   it('recalculates salaries without replacing the team salary cap', async () => {
     const f = await fixture({ cap: 10_000 });
     const player = await card(f.source.id, 'Recalculate', 93);
-    await service.acquire(
+    const acquired = await service.acquire(
       acquisition(f.season.id, f.teams[0]!.id, player.card.id),
       f.admin.id,
       new Date('2026-09-15T00:00:00.000Z')
     );
+    await prisma.leaguePlayerOwnership.update({
+      where: { id: acquired.ownership.id },
+      data: { birdBaselineOverall: 90, birdDiscountApplied: true, salaryMinor: 100 }
+    });
     const newRule = await salaryRules.createVersion(f.admin.id, f.league.id, {
       salaryCapMinor: 150,
       tiers: defaultSalaryTiers(),
@@ -1152,9 +1173,101 @@ describe('RosterTransactionsService', () => {
     await expect(prisma.leaguePlayerOwnership.count({
       where: { leagueId: f.league.id, status: 'ACTIVE' }
     })).resolves.toBe(1);
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquired.ownership.id },
+      select: { salaryMinor: true, birdDiscountApplied: true }
+    })).resolves.toEqual({ salaryMinor: 100, birdDiscountApplied: true });
     await expect(prisma.leagueTeam.findUniqueOrThrow({
       where: { id: f.teams[0]!.id }, select: { rosterStatus: true }
     })).resolves.toEqual({ rosterStatus: 'COMPLIANT' });
+  });
+
+  it('previews a changed automatic-build overall and applies Bird salary on confirmation', async () => {
+    const f = await fixture({ cap: 10_000 });
+    const player = await card(f.source.id, 'Rating refresh', 93);
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id), f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await new PlayerBuildsService(prisma).save(player.card.id, {
+      autoBuildAllocation: { defending: 12 }, autoBuildMaxOverall: 95,
+      dtRating: 95, algorithmVersion: 'test-v1'
+    });
+    const rule = await prisma.leagueSalaryRuleVersion.findFirstOrThrow({ where: { leagueId: f.league.id } });
+    const preview = await recalculation.previewLeague(f.league.id, f.season.id, rule.id, f.admin.id);
+    expect(preview.players).toEqual([expect.objectContaining({
+      ownershipId: acquired.ownership.id, oldOverall: 93, newOverall: 95,
+      oldSalaryMinor: 200, newSalaryMinor: 300, birdDiscountApplied: true
+    })]);
+    expect(preview.teams).toEqual(expect.arrayContaining([
+      expect.objectContaining({ leagueTeamId: f.teams[0]!.id, currentSalaryMinor: 200, projectedSalaryMinor: 300 })
+    ]));
+    await recalculation.recalculateLeague({
+      leagueId: f.league.id, seasonId: f.season.id,
+      salaryRuleVersionId: rule.id, confirm: true, expectedPreviewHash: preview.previewHash,
+      idempotencyKey: randomUUID(), reason: 'Apply latest build'
+    }, f.admin.id);
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquired.ownership.id },
+      select: { maxOverallSnapshot: true, birdBaselineOverall: true, salaryMinor: true, birdDiscountApplied: true }
+    })).resolves.toEqual({ maxOverallSnapshot: 95, birdBaselineOverall: 93, salaryMinor: 300, birdDiscountApplied: true });
+  });
+
+  it('rejects a stale salary preview after the automatic build changes again', async () => {
+    const f = await fixture({ cap: 10_000 });
+    const player = await card(f.source.id, 'Stale rating preview', 93);
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id), f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    const builds = new PlayerBuildsService(prisma);
+    await builds.save(player.card.id, {
+      autoBuildAllocation: { defending: 12 }, autoBuildMaxOverall: 95,
+      dtRating: 95, algorithmVersion: 'test-v1'
+    });
+    const rule = await prisma.leagueSalaryRuleVersion.findFirstOrThrow({ where: { leagueId: f.league.id } });
+    const preview = await recalculation.previewLeague(f.league.id, f.season.id, rule.id, f.admin.id);
+    await builds.save(player.card.id, {
+      autoBuildAllocation: { defending: 13 }, autoBuildMaxOverall: 96,
+      dtRating: 96, algorithmVersion: 'test-v2'
+    });
+    await expect(recalculation.recalculateLeague({
+      leagueId: f.league.id, seasonId: f.season.id,
+      salaryRuleVersionId: rule.id, confirm: true, expectedPreviewHash: preview.previewHash,
+      idempotencyKey: randomUUID(), reason: 'Apply stale preview'
+    }, f.admin.id)).rejects.toMatchObject({ code: 'SALARY_PREVIEW_STALE' });
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquired.ownership.id },
+      select: { maxOverallSnapshot: true, salaryMinor: true, birdDiscountApplied: true }
+    })).resolves.toEqual({ maxOverallSnapshot: 93, salaryMinor: 200, birdDiscountApplied: false });
+  });
+
+  it('removes the Bird discount when the latest overall falls below its team baseline', async () => {
+    const f = await fixture({ cap: 10_000 });
+    const player = await card(f.source.id, 'Declining rating', 93, 95);
+    const acquired = await service.acquire(
+      acquisition(f.season.id, f.teams[0]!.id, player.card.id), f.admin.id,
+      new Date('2026-09-15T00:00:00.000Z')
+    );
+    await new PlayerBuildsService(prisma).save(player.card.id, {
+      autoBuildAllocation: { defending: 8 }, autoBuildMaxOverall: 93,
+      dtRating: 93, algorithmVersion: 'test-decline'
+    });
+    const rule = await prisma.leagueSalaryRuleVersion.findFirstOrThrow({ where: { leagueId: f.league.id } });
+    const preview = await recalculation.previewLeague(f.league.id, f.season.id, rule.id, f.admin.id);
+    expect(preview.players).toEqual([expect.objectContaining({
+      ownershipId: acquired.ownership.id, oldOverall: 95, newOverall: 93,
+      newSalaryMinor: 200, birdDiscountApplied: false
+    })]);
+    await recalculation.recalculateLeague({
+      leagueId: f.league.id, seasonId: f.season.id,
+      salaryRuleVersionId: rule.id, confirm: true, expectedPreviewHash: preview.previewHash,
+      idempotencyKey: randomUUID(), reason: 'Apply lower rating'
+    }, f.admin.id);
+    await expect(prisma.leaguePlayerOwnership.findUniqueOrThrow({
+      where: { id: acquired.ownership.id },
+      select: { maxOverallSnapshot: true, birdBaselineOverall: true, salaryMinor: true, birdDiscountApplied: true }
+    })).resolves.toEqual({ maxOverallSnapshot: 93, birdBaselineOverall: 95, salaryMinor: 200, birdDiscountApplied: false });
   });
 
   it('allows only platform admins to make reasoned emergency corrections', async () => {

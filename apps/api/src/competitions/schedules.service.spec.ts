@@ -4,6 +4,7 @@ import { jest } from '@jest/globals';
 import { PrismaService } from '../database/prisma.service.js';
 import { MutationReceiptService } from './mutation-receipt.service.js';
 import { SchedulesService } from './schedules.service.js';
+import { CompetitionError } from './competition.errors.js';
 import { generateRoundRobin } from './domain/round-robin.js';
 
 config({ path: '../../.env', quiet: true });
@@ -293,15 +294,19 @@ describe('tiered stage schedules', () => {
       ) => work(transaction))
     };
     const audit = { record: jest.fn(async () => undefined) };
+    const playingRoster = { capture: jest.fn(async () => undefined) };
+    const rosterReadiness = { assertReady: jest.fn(async () => undefined), preview: jest.fn(async () => ({ seasonId: 'season-1', ready: true, teams: [] })) };
     const service = new SchedulesService(
       transaction as never,
       {} as never,
       generateRoundRobin,
       adminReceipts as never,
       audit as never,
-      { requireVisible: jest.fn(async () => 'league-1') } as never
+      { requireVisible: jest.fn(async () => 'league-1') } as never,
+      playingRoster as never,
+      rosterReadiness as never
     );
-    return { service, transaction, stage };
+    return { service, transaction, stage, playingRoster, rosterReadiness };
   }
 
   it('generates matches from only the selected stage members, including odd-sized groups', async () => {
@@ -346,7 +351,7 @@ describe('tiered stage schedules', () => {
   });
 
   it('allows an empty single-team schedule and advances the season on first publication', async () => {
-    const { service, transaction, stage } = stageHarness(1);
+    const { service, transaction, stage, playingRoster, rosterReadiness } = stageHarness(1);
     const draft = await service.generateStage('admin-1', 'league-1', 'stage-1', {
       expectedStageVersion: 1
     }, 'single-generate');
@@ -362,5 +367,18 @@ describe('tiered stage schedules', () => {
       where: { id: 'season-1', status: 'READY', version: 4 },
       data: { status: 'IN_PROGRESS', version: { increment: 1 } }
     }));
+    expect(playingRoster.capture).toHaveBeenCalledWith(transaction, 'season-1');
+    expect(rosterReadiness.assertReady).toHaveBeenCalledWith(transaction, 'season-1');
+  });
+
+  it('rejects an unready roster before publishing a stage or capturing the playing roster', async () => {
+    const { service, transaction, rosterReadiness, playingRoster } = stageHarness(2);
+    rosterReadiness.assertReady.mockRejectedValueOnce(new CompetitionError('SEASON_ROSTER_NOT_READY', '阵容未达标', 409));
+    await expect(service.publishStage('admin-1', 'league-1', 'stage-1', {
+      expectedStageVersion: 1, expectedSeasonVersion: 4
+    }, 'unready')).rejects.toMatchObject({ code: 'SEASON_ROSTER_NOT_READY' });
+    expect(transaction.competitionStage.updateMany).not.toHaveBeenCalled();
+    expect(transaction.leagueSeason.updateMany).not.toHaveBeenCalled();
+    expect(playingRoster.capture).not.toHaveBeenCalled();
   });
 });

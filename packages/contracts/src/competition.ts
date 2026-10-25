@@ -639,6 +639,35 @@ export const SeasonFixtureListResponseSchema = z.object({
   nextCursor: z.string().nullable()
 });
 
+export const SeasonPlayingRosterResponseSchema = z.object({
+  seasonId: ResourceIdSchema,
+  capturedAt: z.iso.datetime(),
+  items: z.array(z.object({
+    leagueTeamId: ResourceIdSchema,
+    footballPlayerId: ResourceIdSchema,
+    playerCardId: ResourceIdSchema,
+    playerName: z.string(),
+    cardName: z.string(),
+    position: z.string(),
+    overallRating: z.number().int().nonnegative()
+  }))
+});
+
+export const SeasonRosterReadinessResponseSchema = z.object({
+  seasonId: ResourceIdSchema,
+  ready: z.boolean(),
+  teams: z.array(z.object({
+    leagueTeamId: ResourceIdSchema,
+    teamName: z.string(),
+    teamNumber: z.number().int().nullable(),
+    playerCount: z.number().int().nonnegative(),
+    goalkeeperCount: z.number().int().nonnegative(),
+    salaryMinor: z.number().int().nonnegative(),
+    salaryCapMinor: z.number().int().nonnegative().nullable(),
+    issues: z.array(z.enum(['UNDER_MINIMUM', 'OVER_MAXIMUM', 'NO_GOALKEEPER', 'SALARY_CAP_UNSET', 'OVER_CAP']))
+  }))
+});
+
 export const StandingsRowResponseSchema = z.object({
   participantId: ResourceIdSchema,
   displayName: z.string(),
@@ -768,6 +797,8 @@ export type SeasonFixtureStatus = z.infer<typeof SeasonFixtureStatusSchema>;
 export type SeasonFixtureListQuery = z.output<typeof SeasonFixtureListQuerySchema>;
 export type SeasonFixtureListItem = z.infer<typeof SeasonFixtureListItemSchema>;
 export type SeasonFixtureListResponse = z.infer<typeof SeasonFixtureListResponseSchema>;
+export type SeasonPlayingRosterResponse = z.infer<typeof SeasonPlayingRosterResponseSchema>;
+export type SeasonRosterReadinessResponse = z.infer<typeof SeasonRosterReadinessResponseSchema>;
 export type MatchResultVersionResponse = z.infer<typeof MatchResultVersionResponseSchema>;
 export type StandingsSnapshotResponse = z.infer<typeof StandingsSnapshotResponseSchema>;
 export type MyCompetitionResponse = z.infer<typeof MyCompetitionResponseSchema>;

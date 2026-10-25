@@ -72,7 +72,7 @@ function harness(type: 'NORMAL_PURCHASE' | 'FORCED_TRANSFER' = 'NORMAL_PURCHASE'
         .mockResolvedValue(undefined)
   };
   const service = new PlayerMarketReviewService(prisma as never, receipts as never, authorization as never, locks as never, rosterLocks as never, salaryRules as never, audit as never, valuationSnapshots as never);
-  return { service, tx, receipts, authorization, ownership, locks, rosterLocks, valuationSnapshots,
+  return { service, tx, receipts, authorization, ownership, locks, rosterLocks, salaryRules, valuationSnapshots,
     setApplication: (value: ReturnType<typeof row>) => { application = value; } };
 }
 
@@ -171,6 +171,15 @@ describe('PlayerMarketReviewService', () => {
     expect(result).toMatchObject({ status: 'INELIGIBLE', transactionId: null, ownershipId: null });
     expect(tx.leaguePlayerOwnership.update).not.toHaveBeenCalled();
     expect(tx.financeLedgerEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('checks a forced transfer against the undiscounted salary at the buyer', async () => {
+    const { service, tx, salaryRules } = harness('FORCED_TRANSFER');
+    salaryRules.quoteWithClient.mockResolvedValueOnce({ salaryRuleVersionId: 'salary-rule-2', salaryMinor: 400, salaryCapMinor: 5000 });
+    tx.leaguePlayerOwnership.aggregate.mockResolvedValueOnce({ _sum: { salaryMinor: 4700 } });
+    const result = await service.approve('admin-1', 'app-1', { expectedVersion: 1, reason: '伯德优惠不可随强报转移' }, 'bird-forced-cap', at);
+    expect(result.status).toBe('INELIGIBLE');
+    expect(tx.leaguePlayerOwnership.update).not.toHaveBeenCalled();
   });
 
   it.each(['NORMAL_PURCHASE', 'FORCED_TRANSFER'] as const)(

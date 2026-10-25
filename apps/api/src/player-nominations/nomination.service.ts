@@ -36,7 +36,7 @@ export class NominationService {
         bestCard: { include: { playerCard: true, autoBuild: true } },
         cards: { where: { status: 'ACTIVE', publishedAt: { not: null } }, orderBy: [{ overallRating: 'desc' }, { id: 'asc' }], take: 1,
           include: { autoBuilds: { orderBy: [{ calculatedAt: 'desc' }, { id: 'desc' }], take: 1 } } }
-      } } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      } } }, orderBy: [{ effectiveSubmittedAt: 'asc' }, { id: 'asc' }]
     });
     return {
       window: this.presentWindow(window), leagueTeamId: team.leagueTeamId,
@@ -84,9 +84,10 @@ export class NominationService {
       if (existing && !existing.withdrawnAt) return this.present(existing, name);
       const count = await tx.playerNomination.count({ where: { windowId, leagueTeamId: team.leagueTeamId, withdrawnAt: null } });
       if (count >= current.perTeamLimit) throw this.error('NOMINATION_LIMIT_REACHED', '球队提名名额已用完', 409);
+      const submittedAt = at ?? new Date();
       const nomination = existing
-        ? await tx.playerNomination.update({ where: { id: existing.id }, data: { withdrawnAt: null } })
-        : await tx.playerNomination.create({ data: { windowId, leagueTeamId: team.leagueTeamId, footballPlayerId: input.playerId } });
+        ? await tx.playerNomination.update({ where: { id: existing.id }, data: { withdrawnAt: null, effectiveSubmittedAt: submittedAt } })
+        : await tx.playerNomination.create({ data: { windowId, leagueTeamId: team.leagueTeamId, footballPlayerId: input.playerId, effectiveSubmittedAt: submittedAt } });
       return this.present(nomination, name);
     });
   }
@@ -114,7 +115,7 @@ export class NominationService {
     const rows = await this.prisma.playerNomination.findMany({
       where: { windowId, withdrawnAt: null },
       include: { footballPlayer: { include: { cards: { where: { status: 'ACTIVE', publishedAt: { not: null } }, select: { id: true, cardName: true } } } }, leagueTeam: true },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      orderBy: [{ effectiveSubmittedAt: 'asc' }, { id: 'asc' }]
     });
     const grouped = new Map<string, NominationCandidate>();
     for (const row of rows) {

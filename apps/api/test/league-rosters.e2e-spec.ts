@@ -439,7 +439,7 @@ describe('atomic league roster API', () => {
     expect(upgraded.body.ownership).toMatchObject({
       currentPlayerCardId: upgrade.card.id,
       maxOverall: 94,
-      salaryMinor: 300
+      salaryMinor: 200
     });
     expect(() => RosterMutationResponseSchema.parse(upgraded.body)).not.toThrow();
     const rule = await prisma.leagueSalaryRuleVersion.create({
@@ -466,7 +466,7 @@ describe('atomic league roster API', () => {
       .expect(201)
       .expect(({ body }) => {
         expect(() => SalaryRecalculationResponseSchema.parse(body)).not.toThrow();
-        expect(body).toMatchObject({ recalculatedPlayers: 1, overCapTeams: 1 });
+        expect(body).toMatchObject({ recalculatedPlayers: 1, overCapTeams: 0 });
       });
   });
 });

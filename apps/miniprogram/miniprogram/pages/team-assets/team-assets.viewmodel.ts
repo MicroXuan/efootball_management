@@ -31,7 +31,10 @@ export function teamAssetsView(assets: TeamAssetOverview | PublicTeamAssets, vie
     footCopy: player.preferredFoot ?? '—',
     atCopy: player.atRating === null ? '—' : String(player.atRating),
     salaryCopy: money(player.salaryMinor),
-    tagLabels: player.tags?.includes('FIXED_B') ? ['固B'] : [],
+    tagLabels: [
+      ...(player.tags?.includes('FIXED_B') ? ['固B'] : []),
+      ...(player.tags?.includes('BIRD') ? ['伯德'] : [])
+    ],
     valueCopy: player.currentValueMinor === null ? '待设置' : money(player.currentValueMinor),
     valuationCopy: player.lastEffectiveAt === null ? '暂无正式身价' : `更新于 ${date(player.lastEffectiveAt)}`,
     releaseEnabled: Boolean(owner) && player.rosterStatus === 'ACTIVE' && canRelease === true

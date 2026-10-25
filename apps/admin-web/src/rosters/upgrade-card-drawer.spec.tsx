@@ -12,3 +12,11 @@ it('previews the salary impact of a card upgrade and blocks an over-cap result',
   expect(screen.queryByText(/DT/)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '确认升级' })).toBeDisabled();
 });
+
+it('uses the Bird salary returned for this ownership in the upgrade preview', async () => {
+  const request = vi.fn().mockResolvedValue({ items: [{ playerId: entry.playerId, playerName: '博努奇', ownedByTeamId: entry.leagueTeamId, recommendedPlayerCardId: '77777777-7777-4777-8777-777777777777', cards: [{ id: '77777777-7777-4777-8777-777777777777', cardName: '新卡', imageUrl: null, position: 'CB', overallRating: 90, maxOverall: 100, salaryMinor: 900, upgradeSalaryMinor: 700, recommended: true }] }] });
+  const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request };
+  render(<UpgradeCardDrawer open leagueId={entry.leagueId} seasonId="88888888-8888-4888-8888-888888888888" entry={entry} currentSalaryMinor={1800} salaryCapMinor={2000} api={api} onClose={vi.fn()} onCompleted={vi.fn()} />);
+  expect(await screen.findByText('2000/2000')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '确认升级' })).toBeEnabled();
+});

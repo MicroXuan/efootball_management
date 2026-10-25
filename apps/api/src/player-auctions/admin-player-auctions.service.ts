@@ -43,6 +43,8 @@ type BatchSummaryInput = Pick<BatchRecord, 'id' | 'leagueId' | 'groupBindingId' 
 };
 type LotRecord = BatchRecord['lots'][number];
 type ReviewRecord = NonNullable<LotRecord['review']>;
+const NOMINATION_NO_BID_PRICE = 10;
+type NoBidAwardPreview = { leagueTeamId: string; teamNumber: number | null; teamName: string; ownerAlias: string; price: number };
 
 @Injectable()
 export class AdminPlayerAuctionsService {
@@ -80,7 +82,7 @@ export class AdminPlayerAuctionsService {
         batch = await this.batch(this.prisma, leagueId, batchId);
       }
     }
-    return this.view(batch);
+    return this.view(batch, await this.noBidAwardPreviews(batch));
   }
 
   async create(actorAdminId: string, leagueId: string, input: CreatePlayerAuctionBatchRequest, key: string) {
@@ -354,7 +356,22 @@ export class AdminPlayerAuctionsService {
       }
       let reviewedTeamId = lot.currentHighestBid?.leagueTeamId ?? null;
       let reviewedPrice = lot.currentPrice;
-      if (input.decision === 'ADJUST') {
+      if (lot.status === 'NO_BID' && input.decision === 'CONFIRM' && lot.nominationId) {
+        const source = await tx.playerNomination.findUnique({
+          where: { id: lot.nominationId },
+          include: { window: { include: { season: { select: { leagueId: true } } } } }
+        });
+        if (!source || source.footballPlayerId !== lot.footballPlayerId || source.window.season.leagueId !== leagueId) {
+          throw new PlayerAuctionError('AUCTION_NOMINATION_INELIGIBLE', '提名来源已失效，不能确认底价入队', 409);
+        }
+        const earliest = await tx.playerNomination.findFirst({
+          where: { windowId: source.windowId, footballPlayerId: lot.footballPlayerId, withdrawnAt: null, leagueTeam: { leagueId, status: 'ACTIVE' } },
+          orderBy: [{ effectiveSubmittedAt: 'asc' }, { id: 'asc' }]
+        });
+        if (!earliest) throw new PlayerAuctionError('AUCTION_NOMINATION_INELIGIBLE', '没有有效提名者，不能确认底价入队', 409);
+        reviewedTeamId = earliest.leagueTeamId;
+        reviewedPrice = NOMINATION_NO_BID_PRICE;
+      } else if (input.decision === 'ADJUST') {
         reviewedTeamId = input.reviewedTeamId;
         reviewedPrice = input.reviewedPrice;
       } else if (input.decision === 'VOID') {
@@ -466,21 +483,60 @@ export class AdminPlayerAuctionsService {
     };
   }
 
-  private view(batch: BatchRecord) {
+  private async noBidAwardPreviews(batch: BatchRecord): Promise<Map<string, NoBidAwardPreview>> {
+    const lots = batch.lots.filter((lot) => lot.status === 'NO_BID' && lot.nominationId);
+    const result = new Map<string, NoBidAwardPreview>();
+    if (!lots.length) return result;
+    const sources = await this.prisma.playerNomination.findMany({
+      where: { id: { in: lots.map((lot) => lot.nominationId!) } },
+      select: { id: true, windowId: true, footballPlayerId: true, window: { select: { season: { select: { leagueId: true } } } } }
+    });
+    const sourceById = new Map(sources.map((source) => [source.id, source]));
+    const valid = lots.flatMap((lot) => {
+      const source = sourceById.get(lot.nominationId!);
+      return source && source.footballPlayerId === lot.footballPlayerId && source.window.season.leagueId === batch.leagueId
+        ? [{ lot, source }] : [];
+    });
+    if (!valid.length) return result;
+    const nominations = await this.prisma.playerNomination.findMany({
+      where: { withdrawnAt: null, leagueTeam: { leagueId: batch.leagueId, status: 'ACTIVE' },
+        OR: valid.map(({ lot, source }) => ({ windowId: source.windowId, footballPlayerId: lot.footballPlayerId })) },
+      select: { windowId: true, footballPlayerId: true, leagueTeamId: true, leagueTeam: { select: { teamNumber: true, name: true, ownerAlias: true, status: true } } },
+      orderBy: [{ effectiveSubmittedAt: 'asc' }, { id: 'asc' }]
+    });
+    const earliest = new Map<string, typeof nominations[number]>();
+    for (const nomination of nominations) {
+      const key = `${nomination.windowId}:${nomination.footballPlayerId}`;
+      if (!earliest.has(key)) earliest.set(key, nomination);
+    }
+    for (const { lot, source } of valid) {
+      const nomination = earliest.get(`${source.windowId}:${lot.footballPlayerId}`);
+      if (nomination?.leagueTeam.status === 'ACTIVE') result.set(lot.id, {
+        leagueTeamId: nomination.leagueTeamId,
+        teamNumber: nomination.leagueTeam.teamNumber,
+        teamName: nomination.leagueTeam.name,
+        ownerAlias: nomination.leagueTeam.ownerAlias,
+        price: NOMINATION_NO_BID_PRICE
+      });
+    }
+    return result;
+  }
+
+  private view(batch: BatchRecord, noBidAwards = new Map<string, NoBidAwardPreview>()) {
     return {
       id: batch.id, leagueId: batch.leagueId, groupBindingId: batch.groupBindingId,
       bidChannel: batch.bidChannel, name: batch.name, status: batch.status,
       currentLotId: batch.currentLotId, version: batch.version,
       startedAt: batch.startedAt?.toISOString() ?? null, completedAt: batch.completedAt?.toISOString() ?? null,
       cancelledAt: batch.cancelledAt?.toISOString() ?? null, createdAt: batch.createdAt.toISOString(),
-      updatedAt: batch.updatedAt.toISOString(), lots: batch.lots.map((lot) => this.lotView(lot))
+      updatedAt: batch.updatedAt.toISOString(), lots: batch.lots.map((lot) => this.lotView(lot, noBidAwards.get(lot.id) ?? null))
     };
   }
 
-  private lotView(lot: LotRecord) {
+  private lotView(lot: LotRecord, noBidAward: NoBidAwardPreview | null) {
     return {
       id: lot.id, displayOrder: lot.displayOrder, playerId: lot.footballPlayerId,
-      playerCardId: lot.playerCardId, nominationId: lot.nominationId, playerName: lot.playerNameSnapshot,
+      playerCardId: lot.playerCardId, nominationId: lot.nominationId, noBidAward, playerName: lot.playerNameSnapshot,
       playerSnapshot: lot.playerSnapshot, startingPrice: lot.startingPrice,
       minimumIncrement: lot.minimumIncrement, status: lot.status, currentPrice: lot.currentPrice,
       currentHighestBidId: lot.currentHighestBidId, deadlineAt: lot.deadlineAt?.toISOString() ?? null,

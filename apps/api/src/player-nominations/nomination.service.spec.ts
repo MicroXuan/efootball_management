@@ -21,7 +21,12 @@ function harness() {
       count: jest.fn(async () => nominations.filter((item) => item.withdrawnAt === null).length),
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => { const value = { id: `nomination-${nominations.length + 1}`, createdAt: new Date(), withdrawnAt: null, footballPlayer: player, ...data }; nominations.push(value); return value; }),
       update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => { Object.assign(nominations[0]!, data); return nominations[0]!; }),
-      findMany: jest.fn(async () => nominations)
+      findMany: jest.fn(async ({ orderBy }: { orderBy?: Array<Record<string, string>> } = {}) =>
+        orderBy?.[0]?.effectiveSubmittedAt
+          ? [...nominations].sort((left, right) =>
+            (left.effectiveSubmittedAt as Date).getTime() - (right.effectiveSubmittedAt as Date).getTime()
+            || String(left.id).localeCompare(String(right.id)))
+          : nominations)
     }
   };
   const prisma = { nominationWindow: tx.nominationWindow, playerNomination: tx.playerNomination, leaguePlayerOwnership: { findMany: jest.fn(async () => [] as Array<{ footballPlayerId: string }>) } };
@@ -91,5 +96,37 @@ describe('NominationService', () => {
     expect(authorization.requireLeagueManager).toHaveBeenCalledWith('admin-1', 'league-1');
     expect(candidates.items).toHaveLength(1);
     expect(candidates.items[0]).toMatchObject({ playerId: player.id, nominatorCount: 2 });
+  });
+
+  it('gives a withdrawn and resubmitted nomination a new priority behind an active nomination', async () => {
+    const { service, nominations } = harness();
+    nominations.push({ id: 'n1', windowId: window.id, leagueTeamId: 'team-1', footballPlayerId: player.id,
+      footballPlayer: player, leagueTeam: { id: 'team-1', name: '巴萨', teamNumber: 4, ownerAlias: '小新' },
+      createdAt: new Date('2026-10-20T01:00:00.000Z'), effectiveSubmittedAt: new Date('2026-10-20T01:00:00.000Z'),
+      withdrawnAt: new Date('2026-10-20T02:00:00.000Z') });
+    nominations.push({ id: 'n2', windowId: window.id, leagueTeamId: 'team-2', footballPlayerId: player.id,
+      footballPlayer: player, leagueTeam: { id: 'team-2', name: '阿贾克斯', teamNumber: 3, ownerAlias: 'Tidus' },
+      createdAt: new Date('2026-10-20T03:00:00.000Z'), effectiveSubmittedAt: new Date('2026-10-20T03:00:00.000Z'),
+      withdrawnAt: null });
+
+    await service.submit('user-1', window.id, { playerId: player.id }, 'resubmit', new Date('2026-10-21T01:00:00.000Z'));
+    const result = await service.candidates('admin-1', 'league-1', window.id);
+
+    expect(result.items[0]?.sourceNominationId).toBe('n2');
+  });
+
+  it('uses nomination ID to break an equal effective-time tie', async () => {
+    const { service, nominations } = harness();
+    const sameTime = new Date('2026-10-20T03:00:00.000Z');
+    nominations.push({ id: 'n2', windowId: window.id, leagueTeamId: 'team-2', footballPlayerId: player.id,
+      footballPlayer: player, leagueTeam: { id: 'team-2', name: '阿贾克斯', teamNumber: 3, ownerAlias: 'Tidus' },
+      createdAt: sameTime, effectiveSubmittedAt: sameTime, withdrawnAt: null });
+    nominations.push({ id: 'n1', windowId: window.id, leagueTeamId: 'team-1', footballPlayerId: player.id,
+      footballPlayer: player, leagueTeam: { id: 'team-1', name: '巴萨', teamNumber: 4, ownerAlias: '小新' },
+      createdAt: sameTime, effectiveSubmittedAt: sameTime, withdrawnAt: null });
+
+    const result = await service.candidates('admin-1', 'league-1', window.id);
+
+    expect(result.items[0]?.sourceNominationId).toBe('n1');
   });
 });

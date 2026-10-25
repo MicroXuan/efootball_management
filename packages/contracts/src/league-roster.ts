@@ -240,6 +240,31 @@ export const SalaryRecalculationResponseSchema = z.object({
   }))
 });
 
+export const SalaryRefreshPreviewResponseSchema = z.object({
+  leagueId: ResourceIdSchema,
+  seasonId: ResourceIdSchema,
+  salaryRuleVersionId: ResourceIdSchema,
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  players: z.array(z.object({
+    ownershipId: ResourceIdSchema,
+    leagueTeamId: ResourceIdSchema,
+    playerName: z.string(),
+    oldOverall: OverallRatingSchema,
+    newOverall: OverallRatingSchema,
+    oldSalaryMinor: NonNegativeMoneyMinorSchema,
+    newSalaryMinor: NonNegativeMoneyMinorSchema,
+    birdDiscountApplied: z.boolean()
+  })),
+  teams: z.array(z.object({
+    leagueTeamId: ResourceIdSchema,
+    teamName: z.string(),
+    currentSalaryMinor: NonNegativeMoneyMinorSchema,
+    projectedSalaryMinor: NonNegativeMoneyMinorSchema,
+    salaryCapMinor: NonNegativeMoneyMinorSchema.nullable(),
+    projectedOverCap: z.boolean()
+  }))
+});
+
 export const FinanceLedgerDirectionSchema = z.enum(['DEBIT', 'CREDIT']);
 export const FinanceSettlementCategorySchema = z.enum([
   'TRANSACTION_AMOUNT',
@@ -317,6 +342,7 @@ export const RosterCandidateCardSchema = z.object({
   overallRating: z.number().int().positive(),
   maxOverall: OverallRatingSchema.min(1).nullable(),
   salaryMinor: NonNegativeMoneyMinorSchema.nullable(),
+  upgradeSalaryMinor: NonNegativeMoneyMinorSchema.nullable().optional(),
   recommended: z.boolean()
 });
 export const RosterPlayerCandidateSchema = z.object({
@@ -398,6 +424,7 @@ export const UpgradePlayerCardRequestSchema = RosterMutationBaseSchema.extend({
 export const RecalculateLeagueSalaryRequestSchema = RosterMutationBaseSchema.extend({
   leagueId: ResourceIdSchema,
   salaryRuleVersionId: ResourceIdSchema,
+  expectedPreviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   confirm: z.literal(true)
 });
 export const EmergencyCorrectRosterRequestSchema = RosterMutationBaseSchema.extend({

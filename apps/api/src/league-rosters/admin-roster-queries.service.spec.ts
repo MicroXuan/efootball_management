@@ -5,6 +5,25 @@ const leagueId = '11111111-1111-4111-8111-111111111111';
 const packId = '22222222-2222-4222-8222-222222222222';
 
 describe('AdminRosterQueriesService candidate filters', () => {
+  it('quotes a same-team card upgrade with the Bird discount without changing purchase salary', async () => {
+    const prisma = {
+      leagueSalaryRuleVersion: { findFirst: async () => ({ tiers: [
+        { minOverall: 0, maxOverall: 92, salaryMinor: 100 },
+        { minOverall: 93, maxOverall: 94, salaryMinor: 200 },
+        { minOverall: 95, maxOverall: 120, salaryMinor: 400 }
+      ] }) },
+      footballPlayer: { findMany: async () => [{
+        id: '33333333-3333-4333-8333-333333333333', nameZh: '球员', nameEn: null, shortName: null,
+        bestCard: null,
+        leagueOwnerships: [{ leagueTeamId: 'team-1', maxOverallSnapshot: 93, birdBaselineOverall: 93 }],
+        cards: [{ id: '44444444-4444-4444-8444-444444444444', cardName: '新卡', imageUrl: null,
+          position: 'CB', overallRating: 95, attributes: null, autoBuilds: [{ maxOverall: 95 }] }]
+      }] }
+    };
+    const service = new AdminRosterQueriesService(prisma as never, { requireVisible: async () => leagueId } as never);
+    const card = (await service.candidates(leagueId, { keyword: '球员' })).items[0]?.cards[0];
+    expect(card).toMatchObject({ salaryMinor: 400, upgradeSalaryMinor: 200 });
+  });
   it('paginates finance records and includes the team number', async () => {
     const findMany = jest.fn(async () => [1, 2].map((number) => ({
       id: `entry-${number}`, leagueId, leagueTeamId: 'team-1', seasonId: null,

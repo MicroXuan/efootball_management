@@ -43,7 +43,8 @@ const reviewFailure: Record<string, string> = {
   PLAYER_ALREADY_OWNED: '球员已归属本联赛其他球队，审核未通过；请先核对归属。',
   SALARY_RULE_NOT_CONFIGURED: '当前没有生效的工资规则，审核未通过。',
   AUCTION_SEASON_REQUIRED: '联赛尚无当前赛季，无法完成拍卖入队。',
-  PLAYER_AUTO_BUILD_MISSING: '球员卡缺少自动加点结果，无法加入阵容。'
+  PLAYER_AUTO_BUILD_MISSING: '球员卡缺少自动加点结果，无法加入阵容。',
+  AUCTION_NOMINATION_INELIGIBLE: '提名来源已失效或没有有效提名者，请核对提名名单。'
 };
 
 export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
@@ -106,7 +107,7 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
       await api.request(`/v1/admin/leagues/${leagueId}/player-auctions/${batchId}/lots/${lot.id}/review`, {
         method: 'POST', headers: { 'Idempotency-Key': requestKey() }, schema: reviewResponseSchema, body
       });
-      setNotice(decision === 'VOID' || lot.status === 'NO_BID' ? `${lot.playerName}的拍卖结果已记录。` : `${lot.playerName}已加入成交球队，并按成交价扣款。`); await load();
+      setNotice(decision === 'VOID' || (lot.status === 'NO_BID' && !lot.nominationId) ? `${lot.playerName}的拍卖结果已记录。` : lot.status === 'NO_BID' ? `${lot.playerName}已按底价 10 加入最早有效提名球队。` : `${lot.playerName}已加入成交球队，并按成交价扣款。`); await load();
     } catch (caught) {
       setError(caught instanceof ApiError && caught.code === 'VERSION_CONFLICT' ? '结果已被其他管理员处理，页面已刷新' : caught instanceof ApiError ? reviewFailure[caught.code] ?? '审核提交失败，输入内容已保留' : '审核提交失败，输入内容已保留');
       if (caught instanceof ApiError && caught.code === 'VERSION_CONFLICT') await load();
@@ -160,9 +161,9 @@ export function AuctionDetailPage({ api = adminApi }: { api?: AdminApi }) {
           { title: '判定', dataIndex: 'result', render: (value: string) => <Tag color={value === 'VALID' ? 'success' : 'default'}>{resultLabel[value] ?? value}</Tag> }
         ]} />
         {lot.review ? <div className="auction-reviewed"><strong>结果记录：{lot.review.decision === 'CONFIRM' ? '确认' : lot.review.decision === 'ADJUST' ? '调整' : '作废'}</strong><span>{lot.review.reviewedWinnerTeamName ? identity(lot.review.reviewedWinnerTeamNumber, lot.review.reviewedWinnerTeamName, lot.review.reviewedWinnerDisplayName) : '无归属'} · <MoneyAmount value={lot.review.reviewedPrice} /></span>{lot.review.reason ? <p>{lot.review.reason}</p> : null}</div> : null}
-        {['PENDING_REVIEW', 'NO_BID'].includes(lot.status) ? <section className="auction-review-form" aria-label={`${lot.playerName}审核`}><h3>结果核对与纠错</h3><Radio.Group value={decision} onChange={(event) => { const next = event.target.value as ReviewDecision; setDecisionByLot((current) => ({ ...current, [lot.id]: next })); if (next === 'ADJUST') void loadTeams(); }}><Radio.Button value="CONFIRM">{lot.status === 'NO_BID' ? '记录流拍' : '确认成交并入队扣款'}</Radio.Button>{lot.status === 'PENDING_REVIEW' ? <Radio.Button value="ADJUST">调整成交并入队扣款</Radio.Button> : null}<Radio.Button value="VOID">作废</Radio.Button></Radio.Group>
+          {['PENDING_REVIEW', 'NO_BID'].includes(lot.status) ? <section className="auction-review-form" aria-label={`${lot.playerName}审核`}><h3>结果核对与纠错</h3>{lot.status === 'NO_BID' && lot.nominationId ? <p>{lot.noBidAward ? `预计归属：${identity(lot.noBidAward.teamNumber, lot.noBidAward.teamName, lot.noBidAward.ownerAlias)} · 底价 ${lot.noBidAward.price} 资金。提交时重新核验。` : '当前没有可确认的有效提名球队，请核对提名名单。'}</p> : null}<Radio.Group value={decision} onChange={(event) => { const next = event.target.value as ReviewDecision; setDecisionByLot((current) => ({ ...current, [lot.id]: next })); if (next === 'ADJUST') void loadTeams(); }}><Radio.Button value="CONFIRM">{lot.status === 'NO_BID' ? lot.nominationId ? '底价归最早提名者' : '记录流拍' : '确认成交并入队扣款'}</Radio.Button>{lot.status === 'PENDING_REVIEW' ? <Radio.Button value="ADJUST">调整成交并入队扣款</Radio.Button> : null}<Radio.Button value="VOID">作废</Radio.Button></Radio.Group>
           {decision === 'ADJUST' ? <div className="auction-adjust-grid"><label>最终球队<Select aria-label="最终球队" loading={!teams} value={teamByLot[lot.id]} onChange={(value) => setTeamByLot((current) => ({ ...current, [lot.id]: value }))} options={(teams ?? []).map((team) => ({ value: team.id, label: identity(team.teamNumber, team.name, team.ownerAlias) }))} /></label><label>最终价格<InputNumber aria-label="最终价格" min={1} precision={0} value={priceByLot[lot.id] ?? lot.currentPrice ?? lot.startingPrice} onChange={(value) => setPriceByLot((current) => ({ ...current, [lot.id]: value ?? 1 }))} /></label></div> : null}
-          <label>{decision === 'CONFIRM' ? '备注（可选）' : '原因'}<Input.TextArea aria-label="审核原因" rows={2} value={reasonByLot[lot.id]} onChange={(event) => setReasonByLot((current) => ({ ...current, [lot.id]: event.target.value }))} /></label><Button type="primary" loading={busyLotId === lot.id} onClick={() => void submitReview(lot)}>{decision === 'VOID' ? '确认作废' : lot.status === 'NO_BID' ? '确认流拍' : '确认成交并入队扣款'}</Button></section> : null}
+          <label>{decision === 'CONFIRM' ? '备注（可选）' : '原因'}<Input.TextArea aria-label="审核原因" rows={2} value={reasonByLot[lot.id]} onChange={(event) => setReasonByLot((current) => ({ ...current, [lot.id]: event.target.value }))} /></label><Button type="primary" loading={busyLotId === lot.id} onClick={() => void submitReview(lot)}>{decision === 'VOID' ? '确认作废' : lot.status === 'NO_BID' ? lot.nominationId ? '确认底价入队' : '确认流拍' : '确认成交并入队扣款'}</Button></section> : null}
       </Card>;
     })}</>} />}
   </div>;
