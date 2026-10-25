@@ -25,7 +25,7 @@ it('presents every player asset field with Chinese labels and readable fallbacks
     activePlayerCount: 2, activeSalaryMinor: 450, salaryCapMinor: 1000, salaryCapConfirmed: true,
     players: [
       {
-        playerId: 'player-1', playerName: '莱昂内尔·梅西', cardName: '史诗高光', tags: ['FIXED_B'],
+        playerId: 'player-1', playerName: '莱昂内尔·梅西', cardName: '史诗高光', tags: ['FIXED_B', 'BIRD'],
         cardImageUrl: 'https://example.com/player.png', position: 'RWF', nationality: '阿根廷', club: '迈阿密国际',
         age: 39, heightCm: 170, preferredFoot: '左脚', atRating: 103,
         acquiredAt: '2026-10-01T12:30:00.000Z', salaryMinor: 300, rosterStatus: 'ACTIVE',
@@ -60,7 +60,7 @@ it('presents every player asset field with Chinese labels and readable fallbacks
   expect(view.active[0]).toMatchObject({
     playerName: '莱昂内尔·梅西', positionCopy: 'RWF', originCopy: '阿根廷 · 迈阿密国际',
     joinedCopy: '2026.10.01', ageCopy: '39 岁', heightCopy: '170 cm', footCopy: '左脚', atCopy: '103',
-    salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02', tagLabels: ['固B']
+    salaryCopy: '300', valueCopy: '8,800', valuationCopy: '更新于 2026.10.02', tagLabels: ['固B', '伯德']
   })
   expect(view.active[1]).toMatchObject({
     positionCopy: '位置待补', originCopy: '国籍待补 · 俱乐部待补', ageCopy: '—', heightCopy: '—',

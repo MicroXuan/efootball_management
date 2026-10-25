@@ -118,7 +118,10 @@ export class PlayerMarketReviewService {
           where: { leagueTeamId: application.applicantLeagueTeamId, status: 'ACTIVE' },
           _sum: { salaryMinor: true }
         });
-        if ((salary._sum.salaryMinor ?? 0) + ownership.salaryMinor > salaryCapMinor) {
+        const transferQuote = await this.salaryRules.quoteWithClient(
+          tx, application.leagueId, ownership.maxOverallSnapshot, mutationAt
+        );
+        if ((salary._sum.salaryMinor ?? 0) + transferQuote.salaryMinor > salaryCapMinor) {
           return this.mark(tx, application, adminId, 'INELIGIBLE', input.reason, 'SALARY_CAP_EXCEEDED');
         }
         const queue = await tx.playerAcquisitionApplication.findMany({
@@ -136,7 +139,7 @@ export class PlayerMarketReviewService {
         if (sortForcedQueue(queue)[0]?.id !== application.id) {
           throw playerMarketError('FORCED_QUEUE_ORDER_VIOLATION', '只能审核当前强报队列首位');
         }
-        return this.settleForced(tx, adminId, application, ownership, input.reason, mutationAt);
+        return this.settleForced(tx, adminId, application, ownership, transferQuote, input.reason, mutationAt);
       }
 
       if (ownership?.status === 'ACTIVE') {
@@ -158,6 +161,8 @@ export class PlayerMarketReviewService {
           footballPlayerId: application.footballPlayerId,
           currentPlayerCardId: application.playerCardId,
           maxOverallSnapshot: build.maxOverall,
+          birdBaselineOverall: build.maxOverall,
+          birdDiscountApplied: false,
           dtRatingSnapshot: build.dtRating,
           salaryRuleVersionId: quote.salaryRuleVersionId,
           salaryMinor: quote.salaryMinor,
@@ -248,6 +253,7 @@ export class PlayerMarketReviewService {
     adminId: string,
     application: Prisma.PlayerAcquisitionApplicationGetPayload<{ include: { playerCard: { include: { autoBuilds: true } } } }>,
     ownership: NonNullable<Awaited<ReturnType<Prisma.TransactionClient['leaguePlayerOwnership']['findUnique']>>>,
+    transferQuote: Awaited<ReturnType<SalaryRulesService['quoteWithClient']>>,
     reason: string,
     at: Date
   ): Promise<PlayerMarketReviewResult> {
@@ -259,8 +265,10 @@ export class PlayerMarketReviewService {
         currentPlayerCardId: ownership.currentPlayerCardId,
         maxOverallSnapshot: ownership.maxOverallSnapshot,
         dtRatingSnapshot: ownership.dtRatingSnapshot,
-        salaryRuleVersionId: ownership.salaryRuleVersionId,
-        salaryMinor: ownership.salaryMinor,
+        salaryRuleVersionId: transferQuote.salaryRuleVersionId,
+        salaryMinor: transferQuote.salaryMinor,
+        birdBaselineOverall: ownership.maxOverallSnapshot,
+        birdDiscountApplied: false,
         acquisitionType: 'FORCED_TRANSFER',
         acquisitionSeasonId: application.seasonId,
         acquiredAt: at,
@@ -277,7 +285,7 @@ export class PlayerMarketReviewService {
       oldPlayerCardId: ownership.currentPlayerCardId,
       newPlayerCardId: ownership.currentPlayerCardId,
       oldSalaryMinor: ownership.salaryMinor,
-      newSalaryMinor: ownership.salaryMinor,
+      newSalaryMinor: transferQuote.salaryMinor,
       amountMinor: application.amountMinor,
       valuationSnapshotMinor: application.valuationMinorSnapshot,
       playerApplicationId: application.id,

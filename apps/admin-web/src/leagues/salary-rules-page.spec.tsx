@@ -7,6 +7,34 @@ import { SalaryRulesPage } from './salary-rules-page';
 const leagueId = '11111111-1111-4111-8111-111111111111';
 const tiers = [{ minOverall: 0, maxOverall: 92, salaryMinor: 100 }, { minOverall: 93, maxOverall: 120, salaryMinor: 200 }];
 
+it('previews a rating change and confirms the exact preview hash', async () => {
+  const seasonId = '22222222-2222-4222-8222-222222222222';
+  const ruleId = '33333333-3333-4333-8333-333333333333';
+  const request = vi.fn(async (path: string, options?: { method?: string; body?: unknown }) => {
+    if (path.endsWith('/salary-rules')) return { items: [{ id: ruleId, version: 3, salaryCapMinor: 12_000, tiers }] };
+    if (path.endsWith('/seasons')) return { items: [{ id: seasonId, displayName: 'S1', status: 'READY' }], nextCursor: null };
+    if (path.includes('/salary-refresh-preview')) return {
+      leagueId, seasonId, salaryRuleVersionId: ruleId, previewHash: 'a'.repeat(64),
+      players: [{ ownershipId: '44444444-4444-4444-8444-444444444444', leagueTeamId: '55555555-5555-4555-8555-555555555555', playerName: '球员甲', oldOverall: 93, newOverall: 95, oldSalaryMinor: 200, newSalaryMinor: 300, birdDiscountApplied: true }],
+      teams: [{ leagueTeamId: '55555555-5555-4555-8555-555555555555', teamName: '甲队', currentSalaryMinor: 200, projectedSalaryMinor: 300, salaryCapMinor: 12_000, projectedOverCap: false }]
+    };
+    if (path.endsWith('/salary-recalculations') && options?.method === 'POST') return { recalculatedPlayers: 1 };
+    throw new Error(path);
+  });
+  const api: AdminApi = { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), onSessionExpired: vi.fn().mockReturnValue(() => undefined), request: request as AdminApi['request'] };
+  render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/salary-rules`]}><Routes><Route path="/leagues/:leagueId/salary-rules" element={<SalaryRulesPage api={api} />} /></Routes></MemoryRouter>);
+  await screen.findByText('当前版本 v3');
+  await userEvent.click(screen.getByRole('button', { name: '选择重算赛季' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /预览数值与工资/ })).toBeEnabled());
+  await userEvent.click(screen.getByRole('button', { name: /预览数值与工资/ }));
+  expect(await screen.findByText('93 → 95')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('工资重算原因'), { target: { value: '球员数值更新' } });
+  await userEvent.click(screen.getByRole('button', { name: '确认工资重算' }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith('/v1/admin/roster/salary-recalculations', expect.objectContaining({
+    body: expect.objectContaining({ expectedPreviewHash: 'a'.repeat(64), salaryRuleVersionId: ruleId, reason: '球员数值更新' })
+  })));
+});
+
 it('does not flash a draft validation error while a published rule loads', async () => {
   let resolveLoad: (value: unknown) => void = () => undefined;
   const request = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveLoad = resolve; }));

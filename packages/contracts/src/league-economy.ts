@@ -20,7 +20,7 @@ export const TeamAssetPlayerSchema = z.object({
   playerName: z.string().min(1),
   cardName: z.string().min(1),
   cardImageUrl: z.string().nullable(),
-  tags: z.array(z.enum(['FIXED_B'])).optional(),
+  tags: z.array(z.enum(['FIXED_B', 'BIRD'])).optional(),
   position: z.string().nullable(),
   nationality: z.string().nullable(),
   club: z.string().nullable(),

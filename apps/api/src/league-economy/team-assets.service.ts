@@ -140,7 +140,10 @@ export class TeamAssetsService {
             ?? '未命名球员',
           cardName: ownership.currentPlayerCard.cardName,
           cardImageUrl: ownership.currentPlayerCard.imageUrl,
-          tags: fixedBPlayerIds.has(ownership.footballPlayerId) ? ['FIXED_B'] : [],
+          tags: [
+            ...(fixedBPlayerIds.has(ownership.footballPlayerId) ? ['FIXED_B' as const] : []),
+            ...(ownership.status === 'ACTIVE' && ownership.birdDiscountApplied ? ['BIRD' as const] : [])
+          ],
           position: ownership.currentPlayerCard.position ?? null,
           nationality: ownership.footballPlayer.nationality,
           club: ownership.footballPlayer.club,
@@ -234,7 +237,10 @@ export class TeamAssetsService {
           playerName: ownership.footballPlayer.nameZh ?? ownership.footballPlayer.nameEn ?? ownership.footballPlayer.shortName ?? '未命名球员',
           cardName: ownership.currentPlayerCard.cardName,
           cardImageUrl: ownership.currentPlayerCard.imageUrl,
-          tags: fixedBPlayerIds.has(ownership.footballPlayerId) ? ['FIXED_B'] : [],
+          tags: [
+            ...(fixedBPlayerIds.has(ownership.footballPlayerId) ? ['FIXED_B' as const] : []),
+            ...(ownership.status === 'ACTIVE' && ownership.birdDiscountApplied ? ['BIRD' as const] : [])
+          ],
           position: ownership.currentPlayerCard.position ?? null,
           nationality: ownership.footballPlayer.nationality,
           club: ownership.footballPlayer.club,

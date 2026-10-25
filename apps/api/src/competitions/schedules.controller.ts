@@ -30,6 +30,15 @@ const PublishScheduleRequestSchema = z.object({
 export class SchedulesController {
   constructor(@Inject(SchedulesService) private readonly schedules: SchedulesService) {}
 
+  @Get('admin/leagues/:leagueId/seasons/:seasonId/roster-readiness')
+  @UseGuards(AdminAuthGuard, AdminScopeGuard)
+  rosterReadiness(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('seasonId', new ZodValidationPipe(ResourceIdSchema)) seasonId: string
+  ) {
+    return this.schedules.seasonRosterReadiness(leagueId, seasonId);
+  }
+
   @Post('admin/competitions/:id/schedule/generate')
   @HttpCode(200)
   @UseGuards(JwtAuthGuard, ScopeGuard)

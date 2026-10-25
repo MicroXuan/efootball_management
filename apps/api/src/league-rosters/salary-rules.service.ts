@@ -12,7 +12,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { LeagueRosterError } from './league-roster.errors.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 import { TeamSalaryCapService } from './team-salary-cap.service.js';
-import { findActiveSalaryRule, matchSalaryTier } from './salary-quote.js';
+import { birdSalaryQuote, findActiveSalaryRule, matchSalaryTier } from './salary-quote.js';
 
 export function defaultSalaryTiers() {
   return [
@@ -37,6 +37,11 @@ function salaryFor(tiers: PreviewSalaryRuleRequest['tiers'], overall: number) {
     );
   }
   return tier.salaryMinor;
+}
+
+export function salaryForOwnership(tiers: PreviewSalaryRuleRequest['tiers'], overall: number, baseline: number | null | undefined) {
+  const regularSalary = salaryFor(tiers, overall);
+  return birdSalaryQuote(tiers, overall, baseline) ?? { salaryMinor: regularSalary, birdDiscountApplied: false };
 }
 
 @Injectable()
@@ -153,7 +158,8 @@ export class SalaryRulesService {
     client: PrismaService | Prisma.TransactionClient,
     leagueId: string,
     overall: number,
-    at = new Date()
+    at = new Date(),
+    birdBaselineOverall?: number | null
   ) {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
     const rule = await findActiveSalaryRule(client, leagueId, at);
@@ -164,7 +170,7 @@ export class SalaryRulesService {
       salaryRuleVersionId: rule.id,
       version: rule.version,
       maxOverall: overall,
-      salaryMinor: salaryFor(rule.tiers, overall),
+      ...salaryForOwnership(rule.tiers, overall, birdBaselineOverall),
       salaryCapMinor: rule.salaryCapMinor
     };
   }
@@ -173,7 +179,8 @@ export class SalaryRulesService {
     client: PrismaService | Prisma.TransactionClient,
     leagueId: string,
     salaryRuleVersionId: string,
-    overall: number
+    overall: number,
+    birdBaselineOverall?: number | null
   ) {
     await this.visibility.requireVisible({ type: 'LEAGUE', id: leagueId }, client as Prisma.TransactionClient);
     const rule = await client.leagueSalaryRuleVersion.findFirst({
@@ -187,7 +194,7 @@ export class SalaryRulesService {
       salaryRuleVersionId: rule.id,
       version: rule.version,
       maxOverall: overall,
-      salaryMinor: salaryFor(rule.tiers, overall),
+      ...salaryForOwnership(rule.tiers, overall, birdBaselineOverall),
       salaryCapMinor: rule.salaryCapMinor
     };
   }
@@ -209,7 +216,7 @@ export class SalaryRulesService {
         projectedSalaryMinor: 0
       };
       aggregate.currentSalaryMinor += ownership.salaryMinor;
-      aggregate.projectedSalaryMinor += salaryFor(input.tiers, ownership.maxOverallSnapshot);
+      aggregate.projectedSalaryMinor += salaryForOwnership(input.tiers, ownership.maxOverallSnapshot, ownership.birdBaselineOverall).salaryMinor;
       teams.set(ownership.leagueTeamId, aggregate);
     }
     return {

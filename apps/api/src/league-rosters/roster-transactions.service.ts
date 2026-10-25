@@ -169,6 +169,8 @@ export class RosterTransactionsService {
           leagueTeamId: input.targetLeagueTeamId,
           currentPlayerCardId: input.playerCardId,
           maxOverallSnapshot: build.maxOverall,
+          birdBaselineOverall: build.maxOverall,
+          birdDiscountApplied: false,
           salaryRuleVersionId: quote.salaryRuleVersionId,
           salaryMinor: quote.salaryMinor,
           acquiredAt: at,
@@ -183,6 +185,8 @@ export class RosterTransactionsService {
           footballPlayerId,
           currentPlayerCardId: input.playerCardId,
           maxOverallSnapshot: build.maxOverall,
+          birdBaselineOverall: build.maxOverall,
+          birdDiscountApplied: false,
           salaryRuleVersionId: quote.salaryRuleVersionId,
           salaryMinor: quote.salaryMinor,
           acquiredAt: at
@@ -282,7 +286,7 @@ export class RosterTransactionsService {
 
         const ownership = await tx.leaguePlayerOwnership.update({
           where: { id: locked.id },
-          data: { status: 'RELEASED', version: { increment: 1 } }
+          data: { status: 'RELEASED', birdDiscountApplied: false, version: { increment: 1 } }
         });
         const transaction = await tx.rosterTransaction.create({
           data: {
@@ -409,6 +413,8 @@ export class RosterTransactionsService {
           where: { id: locked.id },
           data: {
             leagueTeamId: input.targetLeagueTeamId,
+            birdBaselineOverall: locked.maxOverallSnapshot,
+            birdDiscountApplied: false,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }
@@ -535,7 +541,8 @@ export class RosterTransactionsService {
           tx,
           locked.leagueId,
           build.maxOverall,
-          at
+          at,
+          locked.birdBaselineOverall ?? locked.maxOverallSnapshot
         );
         const roster = await this.rosterAggregate(tx, locked.leagueTeamId);
         const projectedSalaryMinor = roster.salaryMinor - locked.salaryMinor + quote.salaryMinor;
@@ -558,6 +565,8 @@ export class RosterTransactionsService {
           data: {
             currentPlayerCardId: input.newPlayerCardId,
             maxOverallSnapshot: build.maxOverall,
+            birdBaselineOverall: locked.birdBaselineOverall ?? locked.maxOverallSnapshot,
+            birdDiscountApplied: quote.birdDiscountApplied,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }
@@ -666,7 +675,8 @@ export class RosterTransactionsService {
           tx,
           locked.leagueId,
           build.maxOverall,
-          at
+          at,
+          targetTeamId === locked.leagueTeamId ? (locked.birdBaselineOverall ?? locked.maxOverallSnapshot) : undefined
         );
         const targetRoster = await this.rosterAggregate(tx, targetTeamId);
         const movingTeams = targetTeamId !== locked.leagueTeamId;
@@ -696,6 +706,8 @@ export class RosterTransactionsService {
             leagueTeamId: targetTeamId,
             currentPlayerCardId: newCardId,
             maxOverallSnapshot: build.maxOverall,
+            birdBaselineOverall: movingTeams ? build.maxOverall : (locked.birdBaselineOverall ?? locked.maxOverallSnapshot),
+            birdDiscountApplied: movingTeams ? false : quote.birdDiscountApplied,
             salaryRuleVersionId: quote.salaryRuleVersionId,
             salaryMinor: quote.salaryMinor,
             version: { increment: 1 }
@@ -780,8 +792,19 @@ export class RosterTransactionsService {
     if (!['ACTIVE', 'DISAPPEARED', 'RETIRED'].includes(locked.status)) {
       throw new LeagueRosterError('ROSTER_LIFECYCLE_CHANGE_NOT_ALLOWED', 'Released or transferred entries cannot be restored directly', 409);
     }
+    const returningFromDisappearance = input.status === 'ACTIVE' && locked.status === 'DISAPPEARED';
+    const returnQuote = returningFromDisappearance
+      ? await this.salaryRules.quoteWithClient(tx, locked.leagueId, locked.maxOverallSnapshot)
+      : null;
     const ownership = await tx.leaguePlayerOwnership.update({
-      where: { id: locked.id }, data: { status: input.status, version: { increment: 1 } }
+      where: { id: locked.id }, data: {
+        status: input.status,
+        ...(returnQuote
+          ? { birdBaselineOverall: locked.maxOverallSnapshot, birdDiscountApplied: false,
+              salaryMinor: returnQuote.salaryMinor, salaryRuleVersionId: returnQuote.salaryRuleVersionId }
+          : input.status !== 'ACTIVE' ? { birdDiscountApplied: false } : {}),
+        version: { increment: 1 }
+      }
     });
     await this.audit.record(tx, {
       actorAdminId: adminId, leagueId: locked.leagueId, action: 'ROSTER_PLAYER_LIFECYCLE_UPDATED',

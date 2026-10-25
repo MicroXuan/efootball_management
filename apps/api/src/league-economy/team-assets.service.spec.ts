@@ -15,7 +15,7 @@ function harness() {
   const ownerships = [
     {
       id: 'ownership-1', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-1',
-      acquiredAt: at, status: 'ACTIVE', salaryMinor: 800, version: 2, acquisitionType: 'FORCED_TRANSFER', acquisitionSeasonId: 'season-1',
+      acquiredAt: at, status: 'ACTIVE', salaryMinor: 800, birdDiscountApplied: true, version: 2, acquisitionType: 'FORCED_TRANSFER', acquisitionSeasonId: 'season-1',
       footballPlayer: { nameZh: '有效球员', nameEn: null, shortName: null, nationality: '中国', club: '上海海港' },
       currentPlayerCard: {
         cardName: '精选卡', imageUrl: null, position: 'CF',
@@ -31,7 +31,7 @@ function harness() {
     },
     {
       id: 'ownership-3', leagueId: 'league-1', leagueTeamId: 'team-1', footballPlayerId: 'player-3',
-      acquiredAt: at, status: 'DISAPPEARED', salaryMinor: 300, version: 1, acquisitionType: 'NORMAL', acquisitionSeasonId: null,
+      acquiredAt: at, status: 'DISAPPEARED', salaryMinor: 300, birdDiscountApplied: true, version: 1, acquisitionType: 'NORMAL', acquisitionSeasonId: null,
       footballPlayer: { nameZh: '消失球员', nameEn: null, shortName: null, nationality: null, club: null },
       currentPlayerCard: { cardName: '旧卡', imageUrl: null, position: 'AMF', attributes: null, autoBuilds: [] }
     },
@@ -108,7 +108,7 @@ describe('TeamAssetsService', () => {
       atRating: 103, salaryMinor: 800, currentValueMinor: 8000,
       ownershipId: 'ownership-1', ownershipVersion: 2, canRelease: true, forcedTransferBadge: true
     });
-    expect(result.players.map(({ tags }) => tags)).toEqual([['FIXED_B'], [], [], []]);
+    expect(result.players.map(({ tags }) => tags)).toEqual([['FIXED_B', 'BIRD'], [], [], []]);
     expect(prisma.playerCard.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { playerId: { in: ['player-1', 'player-2', 'player-3', 'player-4'] }, status: 'ACTIVE', publishedAt: { not: null } }
     }));
@@ -133,7 +133,7 @@ describe('TeamAssetsService', () => {
     expect(assets.activePlayerCount).toBe(2);
     expect(assets.activeSalaryMinor).toBe(1200);
     expect(assets.knownPlayerValueMinor).toBe(8000);
-    expect(assets.players.map(({ tags }) => tags)).toEqual([['FIXED_B'], [], [], []]);
+    expect(assets.players.map(({ tags }) => tags)).toEqual([['FIXED_B', 'BIRD'], [], [], []]);
     for (const privateField of ['ownershipId', 'ownershipVersion', 'ownerPublicUserNo', 'activeTransferWindowId', 'canRelease']) {
       expect(JSON.stringify(assets)).not.toContain(privateField);
     }

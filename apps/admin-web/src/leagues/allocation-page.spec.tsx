@@ -27,9 +27,12 @@ const proposal = {
   }]
 };
 
-function renderPage(request: ReturnType<typeof vi.fn>) {
+function renderPage(request: ReturnType<typeof vi.fn>, readiness: { ready: boolean; teams: unknown[] } = { ready: true, teams: [] }) {
+  const routedRequest = (path: string, options?: unknown) => path.endsWith('/roster-readiness')
+    ? Promise.resolve({ seasonId, ...readiness })
+    : request(path, options);
   render(<MemoryRouter initialEntries={[`/leagues/${leagueId}/allocation`]}><Routes>
-    <Route path="/leagues/:leagueId/allocation" element={<AllocationPage api={{ request } as unknown as AdminApi} />} />
+    <Route path="/leagues/:leagueId/allocation" element={<AllocationPage api={{ request: routedRequest } as unknown as AdminApi} />} />
   </Routes></MemoryRouter>);
 }
 
@@ -83,6 +86,7 @@ it('publishes an empty group and adds its first match later', async () => {
     throw new Error(`unexpected ${path}`);
   });
   renderPage(request);
+  await waitFor(() => expect(screen.getByRole('button', { name: '发布组别（暂不安排比赛）' })).toBeEnabled());
   await userEvent.click(await screen.findByRole('button', { name: '发布组别（暂不安排比赛）' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
     expect.stringContaining(`${stageId}/schedule/publish`),
