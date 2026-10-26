@@ -1,3 +1,4 @@
+import { WechatBotMembersPanel } from './wechat-bot-members-panel';
 import {
   AdminWechatBotDeviceListSchema,
   UpdateWechatBotDeviceStatusRequestSchema,
@@ -20,6 +21,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
   const [devices, setDevices] = useState<AdminWechatBotDevice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [memberDevice, setMemberDevice] = useState<AdminWechatBotDevice | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -152,6 +154,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
           </Space>
         </div>
         <h2>{device.name}</h2>
+        <Button onClick={() => setMemberDevice(device)}>管理群成员</Button>
         <div className={`wechat-device-signal${healthy ? ' is-active' : ''}${device.circuitStatus === 'OPEN' ? ' is-open' : ''}`} aria-label={healthy ? '设备信号正常' : '设备信号异常'}>
           {Array.from({ length: 12 }, (_, signalIndex) => <i key={signalIndex} />)}
         </div>
@@ -170,6 +173,9 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
         </div>
       </Card>;
     })}</div>} /> : null}
+    <Modal title={`${memberDevice?.name ?? ''} · 群成员`} open={!!memberDevice} width={920} footer={null} onCancel={() => setMemberDevice(null)} destroyOnHidden>
+      {memberDevice ? <WechatBotMembersPanel key={memberDevice.id} deviceId={memberDevice.id} deviceName={memberDevice.name} api={api} /> : null}
+    </Modal>
     <Modal
       title="创建机器人设备"
       open={createOpen}
