@@ -71,6 +71,8 @@ export class PlayerAuctionBidService {
       const lot = await tx.playerAuctionLot.findUnique({ where: { id: batch.currentLotId } });
       if (!lot) throw new PlayerAuctionError('AUCTION_INACTIVE', '当前没有进行中的拍卖', 409);
       const now = await this.locks.now(tx);
+      // Serialize with administrator reassignment and self-unbinding until the bid commits.
+      await tx.$queryRaw`SELECT id FROM wechat_identity_bindings WHERE device_id = ${inbound.deviceId} AND wechat_contact_id = ${inbound.senderId} FOR UPDATE`;
       const identity = await tx.wechatIdentityBinding.findFirst({
         where: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId, status: 'ACTIVE' },
         include: { user: { select: { status: true } } }

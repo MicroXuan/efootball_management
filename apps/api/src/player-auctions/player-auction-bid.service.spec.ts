@@ -25,6 +25,7 @@ describe('PlayerAuctionBidService', () => {
     const bids: any[] = [];
     let deadlineUpdates = 0;
     const tx: any = {
+      $queryRaw: jest.fn(async () => []),
       playerAuctionBatch: {
         findUnique: jest.fn(async () => batch),
         findFirst: jest.fn(async () => batch)
@@ -75,6 +76,7 @@ describe('PlayerAuctionBidService', () => {
     const lot: any = { id: 'lot-1', status: 'ACTIVE', startingPrice: 50, minimumIncrement: 10, currentPrice: null, deadlineAt: new Date('2026-10-09T12:00:20.000Z'), deadlineEpoch: 0 };
     const bids: any[] = [];
     const tx: any = {
+      $queryRaw: jest.fn(async () => []),
       wechatInboundMessage: { findUnique: jest.fn(async () => inbound) },
       playerAuctionBid: {
         findUnique: jest.fn(async () => null),
@@ -93,6 +95,8 @@ describe('PlayerAuctionBidService', () => {
     );
 
     await expect(service.placeBid('in-1', 50)).resolves.toMatchObject({ result: 'VALID', amount: 50, teamName: '申花' });
+    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.wechatIdentityBinding.findFirst.mock.invocationCallOrder[0]);
     expect(lot.deadlineAt.toISOString()).toBe('2026-10-09T12:00:30.000Z');
     inbound.id = 'in-2'; inbound.messageId = 'm-2'; inbound.sequence = '002';
     await expect(service.placeBid('in-2', 55)).resolves.toMatchObject({ result: 'BELOW_MINIMUM_INCREMENT' });
@@ -102,6 +106,7 @@ describe('PlayerAuctionBidService', () => {
     const now = new Date('2026-10-09T12:00:00.000Z');
     const create = jest.fn(async ({ data }: any) => ({ id: 'bid-1', ...data }));
     const tx: any = {
+      $queryRaw: jest.fn(async () => []),
       wechatInboundMessage: { findUnique: jest.fn(async () => ({ id: 'in-1', deviceId: 'device-1', senderId: 'wx-1', groupBindingId: 'group-1', messageId: 'm-1', sequence: '001', wechatSentAt: now, receivedAt: now, groupBinding: { leagueId: 'league-1' } })) },
       playerAuctionBid: { findUnique: jest.fn(async () => null), create },
       playerAuctionBatch: { findFirst: jest.fn(async () => ({ id: 'batch-1', bidChannel: 'WECHAT_GROUP', status: 'ACTIVE', currentLotId: 'lot-1', leagueId: 'league-1' })) },
@@ -119,6 +124,7 @@ describe('PlayerAuctionBidService', () => {
     const lot: any = { id: 'lot-1', status: 'ACTIVE', startingPrice: 50, minimumIncrement: 10, currentPrice: null, deadlineAt: new Date('2026-10-09T12:00:20.000Z') };
     const bids: any[] = [];
     const tx: any = {
+      $queryRaw: jest.fn(async () => []),
       wechatInboundMessage: { findUnique: jest.fn(async () => ({ ...inbound })) },
       playerAuctionBid: {
         findUnique: jest.fn(async () => null),
@@ -144,6 +150,7 @@ describe('PlayerAuctionBidService', () => {
   it('rejects a group bid when the active batch uses the miniprogram channel', async () => {
     const now = new Date('2026-10-09T12:00:00.000Z');
     const tx: any = {
+      $queryRaw: jest.fn(async () => []),
       wechatInboundMessage: { findUnique: jest.fn(async () => ({
         id: 'in-1', deviceId: 'device-1', senderId: 'wx-1', groupBindingId: 'group-1',
         messageId: 'm-1', sequence: '001', wechatSentAt: now, receivedAt: now,

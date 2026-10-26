@@ -38,7 +38,7 @@ export class PlayerAuctionCommandHandler {
           where: { deviceId_wechatContactId: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId } }
         });
         if (!identity || identity.status !== 'ACTIVE') {
-          text = '请先在小程序获取验证码并完成微信身份绑定。';
+          text = '请联系管理员在后台关联账号。';
         } else {
           const activeBatch = command === '继续拍卖'
             ? await this.prisma.playerAuctionBatch.findFirst({

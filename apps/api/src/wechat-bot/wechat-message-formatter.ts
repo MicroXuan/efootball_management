@@ -56,7 +56,7 @@ export function formatWechatHelp(capabilities: readonly WechatGroupCapabilityTyp
   }
   lines.push('帮助：查看本群命令说明');
   if (enabled.has('SCHEDULE_QUERY')) {
-    lines.push('', '首次使用“我的赛程”时，请先在小程序获取验证码，再私聊机器人发送：绑定 123456');
+    lines.push('', '首次使用“我的赛程”时，请联系管理员在后台关联账号，无需验证码或私聊绑定。');
   }
   return lines.join('\n');
 }

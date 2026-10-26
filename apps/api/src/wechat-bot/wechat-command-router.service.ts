@@ -85,10 +85,10 @@ export class WechatCommandRouterService {
             wechatContactId: inbound.senderId
           }
         },
-        select: { userId: true, status: true }
+        select: { userId: true, status: true, user: { select: { status: true } } }
       });
-      if (!identity || identity.status !== 'ACTIVE') {
-        await this.reply(inbound, ['请先在小程序获取验证码，再私聊机器人发送：绑定 123456']);
+      if (!identity || identity.status !== 'ACTIVE' || identity.user.status !== 'ACTIVE') {
+        await this.reply(inbound, ['请联系管理员在后台关联账号，无需验证码或私聊绑定。']);
         await this.finish(inbound.id, 'PROCESSED', 'IDENTITY_BINDING_REQUIRED');
         return;
       }

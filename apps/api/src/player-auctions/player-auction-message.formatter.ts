@@ -43,7 +43,7 @@ export class PlayerAuctionMessageFormatter {
       VALID: '出价有效',
       BELOW_STARTING_PRICE: `出价低于起拍价${amount}`,
       BELOW_MINIMUM_INCREMENT: `出价未达到最低加价幅度${amount}`,
-      UNBOUND: '请先在小程序获取验证码并完成微信身份绑定',
+      UNBOUND: '请联系管理员在后台关联账号',
       NO_ACTIVE_TEAM: '你在当前联赛没有有效球队',
       WRONG_LEAGUE: '你的球队不属于当前联赛',
       INACTIVE: '当前没有进行中的拍卖',

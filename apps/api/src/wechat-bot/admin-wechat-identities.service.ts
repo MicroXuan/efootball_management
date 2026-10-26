@@ -76,6 +76,8 @@ export class AdminWechatIdentitiesService {
       if (!await tx.wechatGroupBinding.findFirst({ where: { deviceId, wechatGroupId: member.wechatGroupId, enabled: true, league: { isDeleted: false } } })) {
         throw conflict('WECHAT_GROUP_DISABLED', '成员所在群未启用');
       }
+      // A concurrent bid must finish before checking whether this identity has history.
+      await tx.$queryRaw`SELECT id FROM wechat_identity_bindings WHERE device_id = ${deviceId} AND wechat_contact_id = ${member.wechatContactId} FOR UPDATE`;
       const existing = await tx.wechatIdentityBinding.findUnique({ where: { deviceId_wechatContactId: { deviceId, wechatContactId: member.wechatContactId } }, include: { user: true } });
       if ((existing?.id ?? null) !== input.expectedBindingId || (existing?.version ?? null) !== input.expectedVersion) {
         throw conflict('VERSION_CONFLICT', '绑定已被更新，请刷新后重新核对');
