@@ -1,3 +1,5 @@
+import { AdminWechatIdentitiesService } from './admin-wechat-identities.service.js';
+import { AdminWechatIdentitiesController, AdminLeagueWechatMembersController } from './admin-wechat-identities.controller.js';
 import { WechatObservedMembersService } from './wechat-observed-members.service.js';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -24,6 +26,7 @@ import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
 @Module({
   imports: [AdminAuthModule, AdminModule, JwtModule.register({})],
   controllers: [
+    AdminWechatIdentitiesController, AdminLeagueWechatMembersController,
     AdminLeagueWechatBotController,
     AdminWechatBotDevicesController,
     WechatBridgeController,
@@ -36,6 +39,7 @@ import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
       useFactory: (config: ConfigService): WechatBotRuntimeConfig => config.getOrThrow('wechatBot')
     },
     AdminWechatBotService,
+    AdminWechatIdentitiesService,
     WechatObservedMembersService,
     WechatBridgeAuthGuard,
     WechatBindingService,

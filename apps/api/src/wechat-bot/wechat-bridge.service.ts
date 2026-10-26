@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
@@ -18,7 +18,17 @@ export class WechatBridgeService {
 
   async heartbeat(deviceId: string, input: WechatBridgeHeartbeat) {
     const now = new Date();
-    await this.prisma.wechatBotDevice.update({
+    const changedAccount = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM wechat_bot_devices WHERE id = ${deviceId} FOR UPDATE`;
+      const device = await tx.wechatBotDevice.findUniqueOrThrow({ where: { id: deviceId } });
+      if (input.wechatAccountId && device.wechatAccountId && input.wechatAccountId !== device.wechatAccountId) {
+        await tx.wechatIdentityBinding.updateMany({ where: { deviceId, status: 'ACTIVE' }, data: {
+          status: 'DISABLED', version: { increment: 1 }, unboundAt: now, revokedReason: 'ROBOT_ACCOUNT_CHANGED'
+        } });
+        await tx.wechatBotDevice.update({ where: { id: deviceId }, data: { status: 'DISABLED', circuitStatus: 'OPEN', circuitReason: 'ROBOT_ACCOUNT_CHANGED', circuitOpenedAt: now } });
+        return true;
+      }
+    await tx.wechatBotDevice.update({
       where: { id: deviceId },
       data: {
         ...(input.wechatAccountId !== undefined ? { wechatAccountId: input.wechatAccountId } : {}),
@@ -30,6 +40,9 @@ export class WechatBridgeService {
         lastHeartbeatAt: now
       }
     });
+      return false;
+    });
+    if (changedAccount) throw new ConflictException({ code: 'ROBOT_ACCOUNT_CHANGED', message: '机器人账号已变更，设备已停用，请为新账号配置新设备' });
     const recovery = this.moduleRef?.get<PlayerAuctionRecoveryHook>(PLAYER_AUCTION_RECOVERY_HOOK, { strict: false });
     if (input.loginStatus !== 'LOGGED_IN' || input.screenLocked) {
       await recovery?.onBridgeUnavailable(deviceId, input.screenLocked ? 'WINDOW_SESSION_LOCKED' : 'WECHAT_NOT_LOGGED_IN');
