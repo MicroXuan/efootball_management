@@ -219,3 +219,51 @@ export type SaveWechatGroupBindingRequest = z.infer<typeof SaveWechatGroupBindin
 export type CreateWechatBotDeviceRequest = z.infer<typeof CreateWechatBotDeviceRequestSchema>;
 export type UpdateWechatBotDeviceStatusRequest = z.infer<typeof UpdateWechatBotDeviceStatusRequestSchema>;
 export type AdminLeagueWechatBotConfig = z.infer<typeof AdminLeagueWechatBotConfigSchema>;
+
+export const WechatObservedMemberInputSchema = z.strictObject({
+  wechatGroupId: WechatStableIdSchema,
+  wechatContactId: WechatStableIdSchema,
+  displayName: DisplayNameSchema.nullable(),
+  observedAt: TimestampSchema
+});
+export const WechatObservedMembersBatchSchema = z.strictObject({
+  items: z.array(WechatObservedMemberInputSchema).min(1).max(100)
+});
+export const WechatIdentityUserQuerySchema = z.strictObject({ publicUserNo: z.string().regex(/^\d{6}$/) });
+export const AdminWechatMembersQuerySchema = z.object({
+  wechatGroupId: WechatStableIdSchema.optional(),
+  cursor: ResourceIdSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30)
+});
+export const AdminWechatIdentityMutationSchema = z.strictObject({
+  observedMemberId: ResourceIdSchema,
+  userId: ResourceIdSchema.nullable(),
+  expectedBindingId: ResourceIdSchema.nullable(),
+  expectedVersion: ExpectedVersionSchema.nullable(),
+  reason: z.string().trim().min(1).max(512),
+  idempotencyKey: ResourceIdSchema
+}).refine((v) => (v.expectedBindingId === null) === (v.expectedVersion === null), 'Binding and version must both be provided or null');
+export const WechatIdentityUserSchema = z.object({
+  id: ResourceIdSchema, publicUserNo: z.string().nullable(), displayName: z.string(),
+  teams: z.array(z.object({ name: z.string(), leagueName: z.string() }))
+});
+export const WechatIdentityUserResultSchema = z.object({ user: WechatIdentityUserSchema.nullable() });
+export const AdminWechatIdentityViewSchema = z.object({
+  id: ResourceIdSchema, version: ExpectedVersionSchema,
+  status: z.enum(['ACTIVE', 'DISABLED']), userId: ResourceIdSchema,
+  publicUserNo: z.string().nullable(), userName: z.string(), boundAt: TimestampSchema
+});
+export const AdminWechatMemberSchema = z.object({
+  id: ResourceIdSchema, deviceId: ResourceIdSchema, wechatGroupId: WechatStableIdSchema,
+  groupName: z.string(), wechatContactId: WechatStableIdSchema, displayName: z.string().nullable(),
+  lastObservedAt: TimestampSchema, binding: AdminWechatIdentityViewSchema.nullable()
+});
+export const AdminWechatMembersResponseSchema = z.object({
+  items: z.array(AdminWechatMemberSchema), nextCursor: ResourceIdSchema.nullable()
+});
+export const AdminWechatIdentityMutationResultSchema = z.object({ binding: AdminWechatIdentityViewSchema });
+export type WechatObservedMembersBatch = z.infer<typeof WechatObservedMembersBatchSchema>;
+export type AdminWechatIdentityMutation = z.infer<typeof AdminWechatIdentityMutationSchema>;
+export type AdminWechatMembersQuery = z.infer<typeof AdminWechatMembersQuerySchema>;
+export type AdminWechatMember = z.infer<typeof AdminWechatMemberSchema>;
+export type WechatIdentityUser = z.infer<typeof WechatIdentityUserSchema>;

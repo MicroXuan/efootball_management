@@ -3042,6 +3042,7 @@ model WechatBotDevice {
   createdAt            DateTime                     @default(now()) @map("created_at")
   updatedAt            DateTime                     @updatedAt @map("updated_at")
   createdByAdmin       AdminAccount                 @relation("WechatBotDeviceCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  observedMembers      WechatObservedMember[]
   observedGroups       WechatObservedGroup[]
   groupBindings        WechatGroupBinding[]
   identityBindings     WechatIdentityBinding[]
@@ -3053,6 +3054,21 @@ model WechatBotDevice {
   @@index([status, lastHeartbeatAt], map: "wechat_bot_devices_status_heartbeat_idx")
   @@index([createdByAdminId], map: "wechat_bot_devices_creator_idx")
   @@map("wechat_bot_devices")
+}
+
+model WechatObservedMember {
+  id String @id @default(uuid()) @db.Char(36)
+  deviceId String @map("device_id") @db.Char(36)
+  wechatGroupId String @map("wechat_group_id") @db.VarChar(256)
+  wechatContactId String @map("wechat_contact_id") @db.VarChar(256)
+  displayName String? @map("display_name") @db.VarChar(128)
+  firstObservedAt DateTime @map("first_observed_at")
+  lastObservedAt DateTime @map("last_observed_at")
+  device WechatBotDevice @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, wechatGroupId, wechatContactId], map: "wechat_members_device_group_contact_key")
+  @@index([deviceId, wechatGroupId, id], map: "wechat_members_group_page_idx")
+  @@map("wechat_observed_members")
 }
 
 model WechatObservedGroup {
@@ -3129,6 +3145,7 @@ model WechatGroupScheduleSource {
 }
 
 model WechatIdentityBinding {
+  version Int @default(1) @db.UnsignedInt
   id                String                      @id @default(uuid()) @db.Char(36)
   deviceId          String                      @map("device_id") @db.Char(36)
   wechatContactId   String                      @map("wechat_contact_id") @db.VarChar(256)
