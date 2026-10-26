@@ -343,3 +343,35 @@ def test_discovers_normal_chat_identity_without_uploading_its_content() -> None:
     receiver.normalize(raw_message(content="别的群", conversation_id="other@chatroom"))
     receiver.normalize(raw_message(content="私聊", conversation_id="contact-wxid"))
     assert len(receiver.observed_members()) == 1
+
+
+def test_mixed_chat_load_compacts_members_and_preserves_commands_across_restart(tmp_path):
+    from efm_wechat_bridge.spool import BridgeSpool
+
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids={"league@chatroom"}, robot_user_id="robot-wxid")
+    spool_path = tmp_path / "mixed.sqlite"
+    spool = BridgeSpool(spool_path)
+    expected_ids = []
+    for index in range(1500):
+        text = "我的赛程" if index % 50 == 0 else str(100 + index) if index % 10 == 0 else "普通聊天不上传"
+        event = receiver.normalize(raw_message(server_id=str(900000000000 + index), sort_seq=8000 + index,
+            sender_username=f"wxid_member_{index % 30}", content=text))
+        if event:
+            expected_ids.append(event.message_id)
+            spool.append_inbound(event, sort_key=event.sequence)
+        members = receiver.observed_members()
+        spool.upsert_observed_members(members)
+        receiver.ack_observed_members(members)
+    assert len(expected_ids) == 150
+    spool = BridgeSpool(spool_path)
+    members = spool.pending_observed_members()
+    assert len(members) == 30
+    assert {m.wechat_contact_id for m in members} == {f"wxid_member_{i}" for i in range(30)}
+    first = spool.pending_inbound(limit=100)
+    assert [e.message_id for e in first] == expected_ids[:100]
+    assert "普通聊天" not in repr(members)
+    spool.ack_observed_members(members)
+    assert spool.pending_observed_members() == []
+    assert spool.health_snapshot().pending_inbound == 150
+    spool.ack_inbound([e.message_id for e in first], watermark=first[-1].sequence)
+    assert [e.message_id for e in spool.pending_inbound(limit=100)] == expected_ids[100:]
