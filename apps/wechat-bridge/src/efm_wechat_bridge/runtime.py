@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -77,6 +78,9 @@ class BridgeRuntime:
         self._stop = threading.Event()
         self._send_blocked = threading.Event()
         self._doctor_passed_at: datetime | None = None
+        self._member_retry_at = 0.0
+        self._member_failures = 0
+        self._authorized_member_groups: frozenset[str] | None = None
         self._doctor_path = settings.state_dir / "doctor.json"
 
     def doctor(self) -> DoctorReport:
@@ -133,6 +137,10 @@ class BridgeRuntime:
         try:
             cursor_payload = json.dumps(self.spool.scan_cursors(), separators=(",", ":"))
             events = self.transport.poll(cursor_payload)
+            members = getattr(self.transport, "observed_members", lambda: [])()
+            self.spool.upsert_observed_members(members)
+            if members:
+                self.transport.ack_observed_members(members)
             for event in events:
                 self.spool.append_inbound(event, sort_key=event.sequence or event.message_id)
             pending = self.spool.pending_inbound(limit=self.settings.inbound_batch_size)
@@ -234,8 +242,30 @@ class BridgeRuntime:
         if callable(getter):
             self.spool.update_scan_cursors(getter())
 
+    def upload_members_once(self) -> int:
+        if time.monotonic() < self._member_retry_at or self._authorized_member_groups is None:
+            return 0
+        pending = self.spool.pending_observed_members()
+        unauthorized = [m for m in pending if m.wechat_group_id not in self._authorized_member_groups]
+        self.spool.ack_observed_members(unauthorized)
+        items = [m for m in pending if m.wechat_group_id in self._authorized_member_groups]
+        if not items:
+            return 0
+        try:
+            self.api.upload_observed_members(items)
+            self.spool.ack_observed_members(items)
+            self._member_failures = 0
+            self.logger.emit("members_uploaded", count=len(items), pending=self.spool.member_queue_depth())
+            return len(items)
+        except Exception as error:
+            self._member_failures = min(6, self._member_failures + 1)
+            self._member_retry_at = time.monotonic() + min(60, 2 ** self._member_failures)
+            self.logger.emit("members_upload_failed", code=self._error_code(error, "MEMBERS_UPLOAD_FAILED"), pending=self.spool.member_queue_depth())
+            return 0
+
     def run_forever(self) -> None:
         workers = [
+            threading.Thread(target=self._supervise, args=("members", self.upload_members_once, 5), daemon=True),
             threading.Thread(
                 target=self._supervise,
                 args=("receive", self.receive_upload_once, self.settings.poll_interval_seconds),
@@ -307,6 +337,7 @@ class BridgeRuntime:
         if not callable(configure):
             raise ValueError("TRANSPORT_CONFIGURATION_UNSUPPORTED")
         configure(groups)
+        self._authorized_member_groups = frozenset(groups)
 
     def _write_doctor_record(self, report: DoctorReport) -> None:
         payload = {

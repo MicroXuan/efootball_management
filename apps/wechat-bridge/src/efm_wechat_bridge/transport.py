@@ -114,6 +114,12 @@ class LiveWechatTransport:
         getattr(self._sender, "configure_authorized_private_targets")(private_targets)
         return events
 
+    def observed_members(self):
+        return self._receiver.observed_members()
+
+    def ack_observed_members(self, members):
+        self._receiver.ack_observed_members(members)
+
     def scanned_cursors(self) -> dict[str, int]:
         return getattr(self._receiver, "scanned_cursors")()
 

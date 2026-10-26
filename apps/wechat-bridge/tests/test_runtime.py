@@ -322,3 +322,24 @@ def test_runtime_persists_per_conversation_scan_cursors_only_after_upload(tmp_pa
 
     assert runtime.receive_upload_once() == 1
     assert spool.scan_cursors() == {"league@chatroom": 10, "contact-wxid": 200}
+
+
+def test_member_upload_retries_independently_and_drops_disabled_groups(tmp_path):
+    from efm_wechat_bridge.models import ObservedMember
+    api = FakeApi()
+    attempts = []
+    def upload(items):
+        attempts.append(items)
+        if len(attempts) == 1:
+            raise OSError("offline")
+    api.upload_observed_members = upload
+    spool = BridgeSpool(tmp_path / "members.sqlite")
+    runtime = BridgeRuntime(settings=settings(tmp_path), spool=spool, api=api, transport=FakeWechatTransport())
+    member = ObservedMember(wechat_group_id="league@chatroom", wechat_contact_id="wxid_a", display_name=None, observed_at=datetime.now(UTC))
+    spool.upsert_observed_members([member, member.model_copy(update={"wechat_group_id": "disabled@chatroom"})])
+    assert runtime.heartbeat_once()
+    assert runtime.upload_members_once() == 0
+    assert len(spool.pending_observed_members()) == 1
+    runtime._member_retry_at = 0
+    assert runtime.upload_members_once() == 1
+    assert spool.pending_observed_members() == []

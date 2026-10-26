@@ -30,6 +30,13 @@ class ObservedGroup(BridgeModel):
     display_name: DisplayName
 
 
+class ObservedMember(AwareDateTimeModel):
+    wechat_group_id: StableId
+    wechat_contact_id: StableId
+    display_name: DisplayName | None
+    observed_at: datetime
+
+
 class InboundEvent(AwareDateTimeModel):
     message_id: StableId
     conversation_type: Literal["GROUP", "PRIVATE"]

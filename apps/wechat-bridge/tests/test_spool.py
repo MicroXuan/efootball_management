@@ -152,3 +152,20 @@ def test_supports_concurrent_readers_and_writers(tmp_path: Path) -> None:
     snapshot = spool.health_snapshot()
     assert snapshot.pending_inbound == 100
     assert snapshot.ambiguous_outbox == 0
+
+
+def test_member_observations_survive_restart_and_old_ack_preserves_newer_version(tmp_path):
+    from datetime import UTC, datetime
+    from efm_wechat_bridge.models import ObservedMember
+    member = ObservedMember(wechat_group_id="league@chatroom", wechat_contact_id="wxid_a", display_name="旧名", observed_at=datetime(2026, 10, 26, tzinfo=UTC))
+    spool = BridgeSpool(tmp_path / "members.sqlite")
+    spool.upsert_observed_members([member])
+    spool = BridgeSpool(tmp_path / "members.sqlite")
+    old = spool.pending_observed_members()
+    assert len(old) == 1
+    newer = member.model_copy(update={"display_name": "新名", "observed_at": datetime(2026, 10, 27, tzinfo=UTC)})
+    spool.upsert_observed_members([newer])
+    spool.ack_observed_members(old)
+    assert spool.pending_observed_members()[0].display_name == "新名"
+    spool.ack_observed_members([newer])
+    assert spool.pending_observed_members() == []

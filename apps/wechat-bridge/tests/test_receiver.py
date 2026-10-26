@@ -330,3 +330,16 @@ def test_poll_paginates_and_tracks_each_conversation_without_skipping_filtered_r
     assert [event.text for event in events] == ["查询赛程", "绑定 123456"]
     assert receiver.scanned_cursors() == {"contact-wxid": 201, "league@chatroom": 10}
     assert receiver.private_targets() == {"contact-wxid": "contact-wxid"}
+
+
+def test_discovers_normal_chat_identity_without_uploading_its_content() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids={"league@chatroom"}, robot_user_id="robot-wxid")
+    assert receiver.normalize(raw_message(content="今天晚上见")) is None
+    members = receiver.observed_members()
+    assert len(members) == 1
+    assert members[0].wechat_contact_id == "member-wxid"
+    assert members[0].display_name is None
+    assert "今天晚上见" not in members[0].model_dump_json()
+    receiver.normalize(raw_message(content="别的群", conversation_id="other@chatroom"))
+    receiver.normalize(raw_message(content="私聊", conversation_id="contact-wxid"))
+    assert len(receiver.observed_members()) == 1

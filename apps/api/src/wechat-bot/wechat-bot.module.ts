@@ -1,3 +1,4 @@
+import { WechatObservedMembersService } from './wechat-observed-members.service.js';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -35,6 +36,7 @@ import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
       useFactory: (config: ConfigService): WechatBotRuntimeConfig => config.getOrThrow('wechatBot')
     },
     AdminWechatBotService,
+    WechatObservedMembersService,
     WechatBridgeAuthGuard,
     WechatBindingService,
     WechatBridgeService,

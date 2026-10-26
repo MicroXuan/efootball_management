@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from threading import RLock
 from typing import Any, Protocol
 
-from .models import InboundEvent, ObservedGroup, OutboxTask
+from .models import InboundEvent, ObservedGroup, ObservedMember, OutboxTask
 from .dependency_safety import initialize_wechat_dependency, silence_wechat_logging
 from .transport import SendResult, SendStatus, TransportHealth
 
@@ -53,6 +53,8 @@ class WechatautoReceiver:
         self._database_lock = RLock()
         self._scanned_cursors: dict[str, int] = {}
         self._private_targets: dict[str, str] = {}
+        self._observed_members: dict[tuple[str, str], ObservedMember] = {}
+        self._session_offset = 0
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         with self._database_lock:
@@ -141,7 +143,14 @@ class WechatautoReceiver:
         cursors = self._parse_cursors(after_watermark)
         rows: list[dict[str, object]] = []
         scanned: dict[str, int] = dict(cursors)
-        for session in self._sessions():
+        sessions = self._sessions()
+        if sessions:
+            offset = self._session_offset % len(sessions)
+            sessions = sessions[offset:] + sessions[:offset]
+            self._session_offset = (offset + 1) % len(sessions)
+        for session in sessions:
+            if len(rows) >= 2000:
+                break
             username = self._safe_string(session.get("username"))
             if not username:
                 continue
@@ -169,7 +178,7 @@ class WechatautoReceiver:
                     break
                 cursor = page_max
                 scanned[username] = cursor
-                if len(messages) < 200:
+                if len(messages) < 200 or len(rows) >= 2000:
                     break
 
         self._scanned_cursors = {key: value for key, value in scanned.items() if key != "*"}
@@ -182,6 +191,17 @@ class WechatautoReceiver:
                 if event.conversation_type == "PRIVATE":
                     self._private_targets[event.conversation_id] = self._nickname(event.conversation_id)
         return sorted(unique.values(), key=lambda event: (event.sequence or "", event.message_id))
+
+    def observed_members(self) -> list[ObservedMember]:
+        with self._database_lock:
+            return list(self._observed_members.values())
+
+    def ack_observed_members(self, members: list[ObservedMember]) -> None:
+        with self._database_lock:
+            for member in members:
+                key = (member.wechat_group_id, member.wechat_contact_id)
+                if self._observed_members.get(key) == member:
+                    self._observed_members.pop(key, None)
 
     def scanned_cursors(self) -> dict[str, int]:
         with self._database_lock:
@@ -229,6 +249,18 @@ class WechatautoReceiver:
             or sender_id == self._robot_user_id
         ):
             return None
+        if group:
+            observed_at = self._datetime(raw.get("create_time"))
+            if observed_at is not None and self._positive_int(raw.get("sort_seq")) is not None:
+                key = (conversation_id, sender_id)
+                previous = self._observed_members.get(key)
+                if previous is None or previous.observed_at < observed_at:
+                    nickname = self._nickname(sender_id)
+                    self._observed_members[key] = ObservedMember(
+                        wechat_group_id=conversation_id, wechat_contact_id=sender_id,
+                        display_name=nickname if nickname != sender_id[:128] else None,
+                        observed_at=observed_at,
+                    )
         if not text or len(text) > 2_000:
             return None
         if group and not _GROUP_COMMAND.fullmatch(text):
