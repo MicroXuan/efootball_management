@@ -23,3 +23,5 @@ apps/wechat-bridge/**/*.sqlite*
 apps/wechat-bridge/diagnostics/
 apps/wechat-bridge/screenshots/
 apps/wechat-bridge/**/*.key
+
+apps/wechat-bridge/logs/

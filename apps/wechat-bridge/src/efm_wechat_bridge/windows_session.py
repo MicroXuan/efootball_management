@@ -4,6 +4,8 @@ import ctypes
 import os
 import platform
 import subprocess
+import time
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -76,6 +78,8 @@ class NativeWindowsProbe:
     def __init__(self) -> None:
         self._window_handle: int | None = None
         self._process_path: Path | None = None
+        self._version_cache: tuple[object, float, str] | None = None
+        self._version_lock = threading.Lock()
 
     def inspect(self) -> SessionSnapshot:
         if platform.system() != "Windows":
@@ -86,7 +90,7 @@ class NativeWindowsProbe:
         self._window_handle = window
         self._process_path = process_path
         executable = process_path.name if process_path else None
-        version = self._file_version(process_path) if process_path else None
+        version = self._cached_file_version(process_path) if process_path else None
         visible = bool(window)
         return SessionSnapshot(
             is_windows=True,
@@ -111,14 +115,42 @@ class NativeWindowsProbe:
             user32.GetForegroundWindow.argtypes = []
             user32.GetForegroundWindow.restype = ctypes.c_void_p
             window = ctypes.c_void_p(self._window_handle)
-            user32.ShowWindow(window, 9)
-            if not user32.SetForegroundWindow(window):
-                return False
-            foreground = user32.GetForegroundWindow()
-            foreground_value = foreground.value if isinstance(foreground, ctypes.c_void_p) else foreground
-            return int(foreground_value or 0) == self._window_handle
+            def is_current() -> bool:
+                foreground = user32.GetForegroundWindow()
+                value = foreground.value if isinstance(foreground, ctypes.c_void_p) else foreground
+                return int(value or 0) == self._window_handle
+
+            if is_current():
+                return True
+            user32.IsIconic.argtypes = [ctypes.c_void_p]
+            user32.IsIconic.restype = ctypes.c_bool
+            if user32.IsIconic(window):
+                user32.ShowWindow(window, 9)
+            # Windows may activate asynchronously or return false despite activation.
+            # Always verify ownership; never send to whichever window has focus.
+            for _ in range(3):
+                user32.SetForegroundWindow(window)
+                for _ in range(5):
+                    if is_current():
+                        return True
+                    time.sleep(0.05)
+            return False
         except Exception:
             return False
+
+    def _cached_file_version(self, path: Path) -> str | None:
+        try:
+            stat = path.stat()
+            key = (path, stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            return self._file_version(path)
+        with self._version_lock:
+            now = time.monotonic()
+            if self._version_cache and self._version_cache[0] == key and now - self._version_cache[1] < 30:
+                return self._version_cache[2]
+            version = self._file_version(path)
+            self._version_cache = (key, now, version) if version else None
+            return version
 
     @staticmethod
     def _interactive_session() -> bool:

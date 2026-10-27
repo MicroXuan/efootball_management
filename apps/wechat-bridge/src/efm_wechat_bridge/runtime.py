@@ -211,8 +211,11 @@ class BridgeRuntime:
 
             self.spool.remember_outbox(task)
             self.spool.mark_outbox_in_flight(task.id)
+            send_started = time.monotonic()
             try:
                 result = self.transport.send(task)
+                self.logger.emit("send_result", task_id=str(task.id), status=result.status.value,
+                                 code=result.error_code, duration_ms=round((time.monotonic() - send_started) * 1000))
             except Exception:
                 code = "WECHAT_SEND_EXCEPTION"
                 self.spool.mark_outbox_ambiguous(task.id, code)

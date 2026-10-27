@@ -261,23 +261,12 @@ def test_live_driver_rejects_duplicate_display_names_and_marker_failures() -> No
         raise AssertionError("marker capture must fail closed")
 
 
-def test_live_driver_uses_exactly_one_physical_enter() -> None:
-    class Input:
-        def __init__(self) -> None:
-            self.keys: list[int] = []
-
-        def key(self, key: int) -> None:
-            self.keys.append(key)
-
-    class Gui:
-        def __init__(self) -> None:
-            self._input = Input()
-
-    gui = Gui()
+def test_live_driver_refuses_enter_without_verified_input() -> None:
+    keys = []
+    gui = SimpleNamespace(_input=SimpleNamespace(key=lambda key: keys.append(key)))
     live = WechatautoGuiDriver(gui=gui, database=object())
-
-    assert live.press_enter() is True
-    assert gui._input.keys == [0x0D]
+    assert live.press_enter() is False
+    assert keys == []
 
 
 def test_live_driver_refuses_to_destroy_non_text_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -293,3 +282,82 @@ def test_live_driver_refuses_to_destroy_non_text_clipboard(monkeypatch: pytest.M
 
     with pytest.raises(RuntimeError, match="UNSUPPORTED_CLIPBOARD_CONTENT"):
         live.capture_clipboard()
+
+class ExactEdit:
+    def __init__(self):
+        self.HasKeyboardFocus = False
+        self.value = ''
+    def GetRuntimeId(self):
+        return [1, 42]
+    def SetFocus(self):
+        self.HasKeyboardFocus = True
+
+class ExactUia:
+    def __init__(self):
+        self.edit = ExactEdit()
+        self.title = 'CELL 联赛群'
+    def current_chat(self):
+        return self.title
+    def _chat_input(self):
+        return self.edit
+    def _set_text(self, edit, text):
+        edit.value = text
+        return True
+    def _read_edit_value(self, edit):
+        return edit.value
+
+def exact_driver():
+    uia = ExactUia()
+    keys = []
+    gui = SimpleNamespace(_get_uia=lambda: uia,
+                          _input=SimpleNamespace(key=lambda key: keys.append(key)),
+                          input_text=lambda text: pytest.fail('coordinate input must never be used'))
+    driver = WechatautoGuiDriver(gui=gui, database=object())
+    driver._current = ConversationTarget(stable_id='league@chatroom', title='CELL 联赛群')
+    return driver, uia, keys
+
+def test_exact_edit_is_used_for_input_and_one_enter():
+    driver, uia, keys = exact_driver()
+    assert driver.paste_text('帮助回复')
+    assert uia.edit.value == '帮助回复'
+    assert driver.press_enter()
+    assert keys == [0x0D]
+
+@pytest.mark.parametrize('change', ['title', 'focus', 'text', 'control'])
+def test_live_driver_refuses_enter_if_target_changes_after_input(change):
+    driver, uia, keys = exact_driver()
+    assert driver.paste_text('帮助回复')
+    if change == 'title':
+        uia.title = 'AI灵感群'
+    elif change == 'focus':
+        uia.edit.HasKeyboardFocus = False
+    elif change == 'text':
+        uia.edit.value = '其他内容'
+    else:
+        uia.edit.GetRuntimeId = lambda: [1, 99]
+    assert driver.press_enter() is False
+    assert keys == []
+
+def test_live_driver_does_not_overwrite_existing_draft_or_unreadable_edit():
+    for value in ['已有草稿', None]:
+        driver, uia, keys = exact_driver()
+        uia.edit.value = value
+        assert driver.paste_text('帮助回复') is False
+        assert uia.edit.value == value
+        assert keys == []
+
+
+def test_live_driver_does_not_fallback_when_direct_edit_is_unsupported():
+    driver, uia, keys = exact_driver()
+    uia._set_text = lambda edit, text: False
+    assert driver.paste_text('帮助回复') is False
+    assert driver.press_enter() is False
+    assert keys == []
+
+
+def test_live_driver_requires_new_verified_input_for_each_enter():
+    driver, uia, keys = exact_driver()
+    assert driver.paste_text('帮助回复')
+    assert driver.press_enter()
+    assert driver.press_enter() is False
+    assert keys == [0x0D]

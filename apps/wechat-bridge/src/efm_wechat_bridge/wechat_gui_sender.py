@@ -153,6 +153,7 @@ class WechatautoGuiDriver:
         self._database = database
         self._sleep = sleep
         self._current: ConversationTarget | None = None
+        self._prepared_input: tuple[tuple[int, ...], str] | None = None
 
     @classmethod
     def from_live(cls) -> "WechatautoGuiDriver":
@@ -192,11 +193,15 @@ class WechatautoGuiDriver:
         return ConversationTarget(stable_id=stable_id, title=title)
 
     def open_exact(self, target: ConversationTarget) -> bool:
+        self._prepared_input = None
+        self._current = None
         try:
             uia = getattr(self._gui, "_get_uia")()
-            opened = bool(uia and uia.open_chat(target.title) and uia.current_chat() == target.title)
+            opened = bool(uia and (uia.current_chat() == target.title or uia.open_chat(target.title))
+                          and uia.current_chat() == target.title)
         except Exception:
             return False
+        self._prepared_input = None
         self._current = target if opened else None
         return opened
 
@@ -249,15 +254,63 @@ class WechatautoGuiDriver:
             },
         }
 
+    def _exact_edit(self):
+        # Never fall back to OCR/coordinate input after checking a UIA title.
+        if self._current is None:
+            return None
+        uia = getattr(self._gui, "_get_uia")()
+        if uia is None or uia.current_chat() != self._current.title:
+            return None
+        edit = uia._chat_input()
+        if edit is None:
+            return None
+        identity = tuple(edit.GetRuntimeId())
+        if not identity:
+            return None
+        return uia, edit, identity
+
     def paste_text(self, text: str) -> bool:
+        self._prepared_input = None
         try:
-            return bool(getattr(self._gui, "input_text")(text))
+            exact = self._exact_edit()
+            if exact is None:
+                return False
+            uia, edit, identity = exact
+            # Unknown content is not an empty draft; never overwrite a user's text.
+            if uia._read_edit_value(edit) != "":
+                return False
+            edit.SetFocus()
+            current = self._exact_edit()
+            if current is None or current[2] != identity or not edit.HasKeyboardFocus:
+                return False
+            # ValuePattern targets this control directly, with no global paste,
+            # coordinate click, pinyin fallback or implicit Enter.
+            if not uia._set_text(edit, text):
+                return False
+            current = self._exact_edit()
+            if (current is None or current[2] != identity
+                    or not edit.HasKeyboardFocus or uia._read_edit_value(edit) != text):
+                return False
+            self._prepared_input = (identity, text)
+            return True
         except Exception:
             return False
 
     def press_enter(self) -> bool:
-        getattr(self._gui, "_input").key(0x0D)
-        return True
+        prepared = self._prepared_input
+        self._prepared_input = None
+        try:
+            exact = self._exact_edit()
+            if prepared is None or exact is None:
+                return False
+            uia, edit, identity = exact
+            if (identity != prepared[0] or not edit.HasKeyboardFocus
+                    or uia._read_edit_value(edit) != prepared[1]):
+                return False
+            getattr(self._gui, "_input").key(0x0D)
+            return True
+        except Exception:
+            return False
 
     def read_back(
         self,
