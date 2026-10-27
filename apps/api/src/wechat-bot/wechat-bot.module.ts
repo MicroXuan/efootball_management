@@ -1,3 +1,7 @@
+import { CompetitionsModule } from '../competitions/competitions.module.js';
+import { WechatPrivateScoreService } from './wechat-private-score.service.js';
+import { AdminWechatAdminsService } from './admin-wechat-admins.service.js';
+import { AdminWechatAdminsController } from './admin-wechat-admins.controller.js';
 import { AdminWechatIdentitiesService } from './admin-wechat-identities.service.js';
 import { AdminWechatIdentitiesController, AdminLeagueWechatMembersController } from './admin-wechat-identities.controller.js';
 import { WechatObservedMembersService } from './wechat-observed-members.service.js';
@@ -24,8 +28,8 @@ import { WechatRetentionService } from './wechat-retention.service.js';
 import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
 
 @Module({
-  imports: [AdminAuthModule, AdminModule, JwtModule.register({})],
-  controllers: [
+  imports: [CompetitionsModule, AdminAuthModule, AdminModule, JwtModule.register({})],
+  controllers: [AdminWechatAdminsController,
     AdminWechatIdentitiesController, AdminLeagueWechatMembersController,
     AdminLeagueWechatBotController,
     AdminWechatBotDevicesController,
@@ -38,6 +42,7 @@ import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService): WechatBotRuntimeConfig => config.getOrThrow('wechatBot')
     },
+    WechatPrivateScoreService, AdminWechatAdminsService,
     AdminWechatBotService,
     AdminWechatIdentitiesService,
     WechatObservedMembersService,

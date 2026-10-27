@@ -32,6 +32,7 @@ export const EnvironmentSchema = z.object({
   CLOUDBASE_APIKEY: z.string().trim().min(1).optional(),
   CLOUDBASE_SECRET_ID: z.string().trim().min(1).optional(),
   CLOUDBASE_SECRET_KEY: z.string().trim().min(1).optional(),
+  WECHAT_BOT_PRIVATE_SCORE_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   WECHAT_BOT_OUTBOX_LEASE_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
   WECHAT_BOT_OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
   WECHAT_BOT_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(600_000).default(60_000),

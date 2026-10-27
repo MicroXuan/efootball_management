@@ -1,3 +1,4 @@
+import { WechatBotAdminsPanel } from './wechat-bot-admins-panel';
 import { WechatBotMembersPanel } from './wechat-bot-members-panel';
 import {
   AdminWechatBotDeviceListSchema,
@@ -22,6 +23,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [memberDevice, setMemberDevice] = useState<AdminWechatBotDevice | null>(null);
+  const [adminDevice, setAdminDevice] = useState<AdminWechatBotDevice | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -155,7 +157,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
         </div>
         <h2>{device.name}</h2>
         <p style={{ overflowWrap: 'anywhere' }}>设备 ID：<Typography.Text copyable={{ text: device.id }}>{device.id}</Typography.Text></p>
-        <Button onClick={() => setMemberDevice(device)}>管理群成员</Button>
+        <Space wrap><Button onClick={() => setMemberDevice(device)}>管理群成员</Button><Button onClick={() => setAdminDevice(device)}>私聊管理员</Button></Space>
         <div className={`wechat-device-signal${healthy ? ' is-active' : ''}${device.circuitStatus === 'OPEN' ? ' is-open' : ''}`} aria-label={healthy ? '设备信号正常' : '设备信号异常'}>
           {Array.from({ length: 12 }, (_, signalIndex) => <i key={signalIndex} />)}
         </div>
@@ -174,6 +176,9 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
         </div>
       </Card>;
     })}</div>} /> : null}
+    <Modal title={`${adminDevice?.name ?? ''} · 私聊管理员`} open={!!adminDevice} width={720} footer={null} onCancel={() => setAdminDevice(null)} destroyOnHidden>
+      {adminDevice ? <WechatBotAdminsPanel key={adminDevice.id} deviceId={adminDevice.id} api={api} /> : null}
+    </Modal>
     <Modal title={`${memberDevice?.name ?? ''} · 群成员`} open={!!memberDevice} width={920} footer={null} onCancel={() => setMemberDevice(null)} destroyOnHidden>
       {memberDevice ? <WechatBotMembersPanel key={memberDevice.id} deviceId={memberDevice.id} deviceName={memberDevice.name} api={api} /> : null}
     </Modal>

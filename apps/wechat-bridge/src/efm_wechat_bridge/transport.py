@@ -76,10 +76,15 @@ class LiveWechatTransport:
         self._receiver = receiver
         self._sender = sender
         self._session_guard = session_guard
+        self._server_private_targets: dict[str, str] = {}
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         getattr(self._receiver, "configure_authorized_groups")(groups)
         getattr(self._sender, "configure_authorized_groups")(groups)
+
+    def configure_private_reply_contacts(self, contacts: list[str]) -> None:
+        self._server_private_targets = self._receiver.private_reply_names(contacts)
+        self._sender.configure_authorized_private_targets({**self._server_private_targets, **self._receiver.private_targets()})
 
     def health(self) -> TransportHealth:
         receiver_health = getattr(self._receiver, "health")()
@@ -114,7 +119,7 @@ class LiveWechatTransport:
     def poll(self, after_watermark: str | None) -> list[InboundEvent]:
         events = getattr(self._receiver, "poll")(after_watermark)
         private_targets = getattr(self._receiver, "private_targets", lambda: {})()
-        getattr(self._sender, "configure_authorized_private_targets")(private_targets)
+        getattr(self._sender, "configure_authorized_private_targets")({**self._server_private_targets, **private_targets})
         return events
 
     def observed_members(self):

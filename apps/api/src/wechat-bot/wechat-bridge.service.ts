@@ -1,3 +1,4 @@
+import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.config.js';
 import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
@@ -6,14 +7,15 @@ import { WechatCommandRouterService } from './wechat-command-router.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
 
 const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|\d+)$/;
-const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
+const PRIVATE_PRIVATE_COMMAND = /^(?:绑定\s+\d{6}|帮助|联赛|赛季|赛程(?:\s+[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|确认|取消|操作)\s+.{1,1000})$/u;
 
 @Injectable()
 export class WechatBridgeService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Optional() @Inject(WechatCommandRouterService) private readonly router?: WechatCommandRouterService,
-    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef
+    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef,
+    @Optional() @Inject(WECHAT_BOT_CONFIG) private readonly config?: WechatBotRuntimeConfig
   ) {}
 
   async heartbeat(deviceId: string, input: WechatBridgeHeartbeat) {
@@ -25,6 +27,12 @@ export class WechatBridgeService {
         await tx.wechatIdentityBinding.updateMany({ where: { deviceId, status: 'ACTIVE' }, data: {
           status: 'DISABLED', version: { increment: 1 }, unboundAt: now, revokedReason: 'ROBOT_ACCOUNT_CHANGED'
         } });
+        if (this.config?.privateScoreEnabled) {
+          await tx.wechatScoreOperation.updateMany({ where: { contact: { deviceId }, status: 'PENDING' }, data: { status: 'CANCELLED', completedAt: now } });
+          await tx.wechatAdminContact.updateMany({ where: { deviceId }, data: {
+            adminId: null, boundAt: null, leagueId: null, seasonId: null, version: { increment: 1 }
+          } });
+        }
         await tx.wechatBotDevice.update({ where: { id: deviceId }, data: { status: 'DISABLED', circuitStatus: 'OPEN', circuitReason: 'ROBOT_ACCOUNT_CHANGED', circuitOpenedAt: now } });
         return true;
       }
@@ -65,7 +73,13 @@ export class WechatBridgeService {
       select: { wechatGroupId: true, displayName: true },
       orderBy: [{ wechatGroupId: 'asc' }]
     });
-    return { acceptedAt: now.toISOString(), enabledGroups };
+    const privateContacts = this.config?.privateScoreEnabled ? await this.prisma.wechatInboundMessage.findMany({
+      where: { deviceId, conversationType: 'PRIVATE', receivedAt: { gte: new Date(now.getTime() - 24 * 3600_000) } },
+      select: { conversationId: true }, distinct: ['conversationId'], orderBy: { receivedAt: 'desc' }, take: 100
+    }) : null;
+    return { acceptedAt: now.toISOString(), enabledGroups,
+      ...(privateContacts ? { privateReplyContactIds: privateContacts.map((c) => c.conversationId) } : {}) };
+
   }
 
   async acceptBatch(deviceId: string, input: WechatInboundBatch): Promise<WechatInboundBatchResult> {
@@ -100,7 +114,7 @@ export class WechatBridgeService {
           continue;
         }
         groupBindingId = binding.id;
-      } else if (!PRIVATE_BINDING_COMMAND.test(commandText)) {
+      } else if (message.conversationId !== message.senderId || !PRIVATE_PRIVATE_COMMAND.test(commandText)) {
         results.push({ messageId: message.messageId, status: 'IGNORED', inboundId: null, resultCode: 'IGNORED' });
         continue;
       }

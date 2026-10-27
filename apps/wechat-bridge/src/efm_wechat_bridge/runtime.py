@@ -357,6 +357,13 @@ class BridgeRuntime:
             raise ValueError("TRANSPORT_CONFIGURATION_UNSUPPORTED")
         configure(groups)
         self._authorized_member_groups = frozenset(groups)
+        contacts = response.get("privateReplyContactIds", [])
+        if not isinstance(contacts, list) or len(contacts) > 100 or not all(isinstance(c, str) for c in contacts):
+            raise ValueError("HEARTBEAT_INVALID_PRIVATE_CONTACTS")
+        configure_private = getattr(self.transport, "configure_private_reply_contacts", None)
+        if callable(configure_private) and "privateReplyContactIds" in response:
+            configure_private(contacts)
+
 
     def _write_doctor_record(self, report: DoctorReport) -> None:
         payload = {

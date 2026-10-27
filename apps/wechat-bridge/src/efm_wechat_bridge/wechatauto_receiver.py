@@ -12,7 +12,7 @@ from .models import InboundEvent, ObservedGroup, ObservedMember, OutboxTask
 from .dependency_safety import initialize_wechat_dependency, silence_wechat_logging
 from .transport import SendResult, SendStatus, TransportHealth
 
-_BINDING_COMMAND = re.compile(r"^绑定\s+\d{6}$")
+_PRIVATE_COMMAND = re.compile(r"^(?:绑定\s+\d{6}|帮助|联赛|赛季|赛程(?:\s+[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|确认|取消|操作)\s+.{1,1000})$")
 _GROUP_COMMAND = re.compile(r"^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$")
 _GROUP_SENDER_PREFIX = re.compile(r"^(wxid_[0-9A-Za-z_]+):\s*\r?\n")
 _TRAILING_CONTROL_PADDING = re.compile(r"[\x00-\x1f\x7f]+$")
@@ -212,6 +212,11 @@ class WechatautoReceiver:
         with self._database_lock:
             return dict(self._scanned_cursors)
 
+    def private_reply_names(self, contacts: list[str]) -> dict[str, str]:
+        with self._database_lock:
+            return {contact: self._nickname(contact) for contact in contacts
+                    if _SAFE_ID.fullmatch(contact) and not contact.endswith("@chatroom")}
+
     def private_targets(self) -> dict[str, str]:
         with self._database_lock:
             return dict(self._private_targets)
@@ -270,7 +275,7 @@ class WechatautoReceiver:
             return None
         if group and not _GROUP_COMMAND.fullmatch(text):
             return None
-        if not group and not _BINDING_COMMAND.fullmatch(text):
+        if not group and (sender_id != conversation_id or not _PRIVATE_COMMAND.fullmatch(text)):
             return None
 
         sort_seq = self._positive_int(raw.get("sort_seq"))

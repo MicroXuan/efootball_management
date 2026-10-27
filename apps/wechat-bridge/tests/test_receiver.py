@@ -375,3 +375,19 @@ def test_mixed_chat_load_compacts_members_and_preserves_commands_across_restart(
     assert spool.health_snapshot().pending_inbound == 150
     spool.ack_inbound([e.message_id for e in first], watermark=first[-1].sequence)
     assert [e.message_id for e in spool.pending_inbound(limit=100)] == expected_ids[100:]
+
+
+def test_private_administrator_commands_require_same_stable_sender() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+    commands = ["帮助", "联赛", "赛季", "切换联赛 CELL", "切换赛季 第一季", "赛程 2",
+                "报分 M12 2:1 原因：核实", "确认 AABBCCDDEEFF", "取消 AABBCCDDEEFF", "操作 AABBCCDDEEFF"]
+    for text in commands:
+        raw = raw_message(conversation_id="contact-wxid", sender_username="contact-wxid", content=text)
+        assert receiver.normalize(raw) is not None
+        assert receiver.normalize({**raw, "sender_username": "other-wxid"}) is None
+    assert receiver.normalize(raw_message(conversation_id="contact-wxid", sender_username="contact-wxid", content="随便聊天")) is None
+
+
+def test_restart_private_target_names_only_use_server_authorized_stable_contacts() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+    assert receiver.private_reply_names(["contact-wxid", "league@chatroom", "bad id"]) == {"contact-wxid": "contact-wxid"}

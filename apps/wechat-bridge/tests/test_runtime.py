@@ -379,3 +379,16 @@ def test_live_account_identity_reaches_heartbeat_and_unknown_identity_fails_clos
     assert runtime.upload_members_once() == 0
     assert not runtime.doctor().passed
     assert not transport.health().ready
+
+
+def test_heartbeat_restores_private_reply_allowlist_after_restart(tmp_path: Path) -> None:
+    class PrivateApi(FakeApi):
+        def heartbeat(self, payload):
+            return {**super().heartbeat(payload), "privateReplyContactIds": ["wxid_admin"]}
+    class PrivateTransport(FakeWechatTransport):
+        def configure_private_reply_contacts(self, contacts):
+            self.private_contacts = contacts
+    transport = PrivateTransport()
+    runtime, _, _, _ = make_runtime(tmp_path, transport=transport, api=PrivateApi())
+    assert runtime.doctor().passed
+    assert transport.private_contacts == ["wxid_admin"]

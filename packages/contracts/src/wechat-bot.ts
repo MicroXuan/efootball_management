@@ -37,6 +37,7 @@ export const WechatBridgeHeartbeatSchema = z.object({
 
 export const WechatBridgeHeartbeatResponseSchema = z.object({
   acceptedAt: TimestampSchema,
+  privateReplyContactIds: z.array(WechatStableIdSchema).max(100).optional(),
   enabledGroups: z.array(WechatObservedGroupInputSchema).max(500)
 });
 

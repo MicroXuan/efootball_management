@@ -42,7 +42,7 @@ describe('leagueNavigationItems', () => {
   it('includes the optional bot only when enabled', () => {
     expect(leagueNavigationItems('l1', true).at(-1)).toMatchObject({
       key: 'more', path: '/leagues/l1/wechat-bot',
-      children: [{ key: 'wechat-bot', path: '/leagues/l1/wechat-bot' }],
+      label: '微信群机器人',
     });
     expect(leagueNavigationItems('l1', false).some(({ key }) => key === 'more')).toBe(false);
   });
