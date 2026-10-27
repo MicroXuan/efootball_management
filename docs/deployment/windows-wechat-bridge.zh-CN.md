@@ -131,3 +131,37 @@ uv run efm-wechat-bridge --config .\bridge.toml doctor
 本次仅交付成员观察/后台身份管理。管理员私聊报分、晋级、转会和拍卖控制另按总体设计实施。真实 Windows 验收清单见 [身份关联验收](../development/wechat-admin-identities-verification.zh-CN.md)。
 
 账号检测从固定依赖的 `get_self_info().username` 读取数据库账号，经 transport 和实际心跳上报；无法识别时暂停接收、成员同步和发送。专用电脑只登录一个机器人账号，更换账号须停 Bridge 并重新配置设备，重启后核验真实账号。该依赖可能缓存数据库账号，不能把运行中即时换号检测作为已验收保证。
+
+
+## 使用 Git 同步 Windows Bridge
+
+Mac 开发端在 dev 提交并推送后，Windows 才能从 GitHub 获取更新。Windows 只运行 Bridge，无需安装后台的 Node/pnpm，也无需复制 Mac 的 `.env`。设备令牌保存在 Windows 用户环境变量，`bridge.toml`、`state/`、`.venv/` 已被忽略；只编辑本地 `bridge.toml`，不要修改受 Git 管理的 `config.example.toml`。
+
+首次取得代码（普通 PowerShell，安装 Git 后）：
+
+```powershell
+cd $HOME
+git clone --branch dev --single-branch https://github.com/MicroXuan/efootball_management.git
+cd .\efootball_management\apps\wechat-bridge
+Copy-Item .\config.example.toml .\bridge.toml
+```
+
+如果 Windows 已有 Git 克隆，使用该目录，先 `git status` 确认本地修改并妥善保留，再切换到 `dev`，无需重复克隆。若只有之前的 ZIP 文件夹，则使用上面的新克隆。将旧配置复制到新位置；已有运行历史时停止旧 Bridge 后保留并迁移原 `state/`，不要以空状态目录重新处理旧消息。
+
+每次更新前，先 Ctrl+C 停止正在运行的 Bridge；若已注册计划任务，先停止该任务并避免更新期间自动启动。之后在仓库根目录执行：
+
+```powershell
+git status --short
+git branch --show-current
+# 确认当前分支为 dev；若存在受跟踪文件的本地修改，先处理修改再继续。
+git pull --ff-only origin dev
+# 上一条成功后才继续：
+cd .\apps\wechat-bridge
+uv sync --python 3.12 --extra windows --frozen
+# 依赖同步成功后再检查连接：
+uv run efm-wechat-bridge --config .\bridge.toml doctor
+# doctor 通过后，以不发送模式启动：
+.\scripts\run.ps1 -Config .\bridge.toml
+```
+
+命令逐条执行，任一步报错就停止；不要用 `reset --hard` 或 `clean -fdx` 解决拉取问题，以免丢失配置和状态。需要真实发送时沿用既有验收及 `-EnableSend` 流程，不因代码更新自动打开。涉及数据库迁移或 API 升级时，仍须先完成服务端部署，再更新 Bridge。
