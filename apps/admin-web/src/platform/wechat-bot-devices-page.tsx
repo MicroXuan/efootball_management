@@ -5,7 +5,7 @@ import {
   WechatBotDeviceCredentialResponseSchema,
   type AdminWechatBotDevice,
 } from '@efm/contracts';
-import { Alert, Button, Card, Input, Modal, Space, Spin, Tag } from 'antd';
+import { Alert, Button, Card, Input, Modal, Space, Spin, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminApi } from '../lib/api';
 import { formatDateTime } from '../lib/date-time';
@@ -154,6 +154,7 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
           </Space>
         </div>
         <h2>{device.name}</h2>
+        <p style={{ overflowWrap: 'anywhere' }}>设备 ID：<Typography.Text copyable={{ text: device.id }}>{device.id}</Typography.Text></p>
         <Button onClick={() => setMemberDevice(device)}>管理群成员</Button>
         <div className={`wechat-device-signal${healthy ? ' is-active' : ''}${device.circuitStatus === 'OPEN' ? ' is-open' : ''}`} aria-label={healthy ? '设备信号正常' : '设备信号异常'}>
           {Array.from({ length: 12 }, (_, signalIndex) => <i key={signalIndex} />)}
