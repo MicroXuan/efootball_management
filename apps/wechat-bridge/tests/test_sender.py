@@ -361,3 +361,44 @@ def test_live_driver_requires_new_verified_input_for_each_enter():
     assert driver.press_enter()
     assert driver.press_enter() is False
     assert keys == [0x0D]
+
+
+def test_readback_accepts_new_sequence_despite_wechat_clock_behind_windows():
+    class Database:
+        rows = [{'sort_seq': 1000, 'local_id': 21, 'create_time': 100,
+                 'sender_id': 3, 'content': '帮助'}]
+        def get_messages(self, stable_id, limit=10):
+            return self.rows
+    database = Database()
+    driver = WechatautoGuiDriver(gui=object(), database=database)
+    marker = driver.capture_readback_marker('league@chatroom')
+    database.rows = [{'sort_seq': 2000, 'local_id': 22, 'create_time': 101,
+                      'sender_id': 2, 'content': '帮助回复'}]
+    assert driver.read_back('league@chatroom', '帮助回复', marker, 0) == 'local:2000:22'
+
+
+def test_readback_rejects_older_identical_reply_even_if_not_in_snapshot():
+    class Database:
+        rows = [{'sort_seq': 2000, 'local_id': 22, 'sender_id': 3, 'content': '帮助'}]
+        def get_messages(self, stable_id, limit=10):
+            return self.rows
+    database = Database()
+    driver = WechatautoGuiDriver(gui=object(), database=database)
+    marker = driver.capture_readback_marker('league@chatroom')
+    database.rows = [{'sort_seq': 1000, 'local_id': 18, 'create_time': datetime.now(UTC).timestamp(),
+                      'sender_id': 2, 'content': '帮助回复'}]
+    assert driver.read_back('league@chatroom', '帮助回复', marker, 0) is None
+
+
+@pytest.mark.parametrize('sender_id,content', [(3, '帮助回复'), (2, '其他正文')])
+def test_readback_still_requires_robot_sender_and_exact_content(sender_id, content):
+    class Database:
+        rows = []
+        def get_messages(self, stable_id, limit=10):
+            return self.rows
+    database = Database()
+    driver = WechatautoGuiDriver(gui=object(), database=database)
+    marker = driver.capture_readback_marker('league@chatroom')
+    database.rows = [{'sort_seq': 2000, 'local_id': 22, 'sender_id': sender_id, 'content': content}]
+    assert driver.read_back('league@chatroom', '帮助回复', marker, 0) is None
+    assert driver.read_back('other@chatroom', content, marker, 0) is None

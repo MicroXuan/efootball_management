@@ -3,7 +3,6 @@ from __future__ import annotations
 import platform
 import threading
 import time
-from datetime import UTC, datetime
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -246,7 +245,7 @@ class WechatautoGuiDriver:
         except Exception as error:
             raise RuntimeError("READBACK_MARKER_UNAVAILABLE") from error
         return {
-            "captured_at": datetime.now(UTC).timestamp(),
+            "target_id": stable_id,
             "identities": {
                 (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
                 for row in rows
@@ -319,8 +318,14 @@ class WechatautoGuiDriver:
         marker: object,
         timeout_seconds: float,
     ) -> str | None:
-        previous = marker.get("identities", set()) if isinstance(marker, dict) else set()
-        captured_at = float(marker.get("captured_at", 0)) if isinstance(marker, dict) else 0
+        if not isinstance(marker, dict) or marker.get("target_id") != stable_id:
+            return None
+        previous = marker.get("identities")
+        if not isinstance(previous, set):
+            return None
+        # WeChat timestamps and the Windows wall clock can differ. Compare the
+        # target conversation's sequence watermark, never unrelated clocks.
+        watermark = max(previous, default=(0, 0))
         deadline = time.monotonic() + timeout_seconds
         while True:
             try:
@@ -331,10 +336,9 @@ class WechatautoGuiDriver:
                 if not isinstance(row, dict):
                     continue
                 identity = (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
-                created = float(row.get("create_time") or 0)
                 if (
                     identity in previous
-                    or created < captured_at - 5
+                    or identity <= watermark
                     or row.get("sender_id") != 2
                     or row.get("content") != text
                 ):
