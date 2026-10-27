@@ -73,10 +73,12 @@ export class PlayerAuctionBidService {
       const now = await this.locks.now(tx);
       // Serialize with administrator reassignment and self-unbinding until the bid commits.
       await tx.$queryRaw`SELECT id FROM wechat_identity_bindings WHERE device_id = ${inbound.deviceId} AND wechat_contact_id = ${inbound.senderId} FOR UPDATE`;
-      const identity = await tx.wechatIdentityBinding.findFirst({
+      const currentIdentity = await tx.wechatIdentityBinding.findFirst({
         where: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId, status: 'ACTIVE' },
         include: { user: { select: { status: true } } }
       });
+      // Offline messages must not acquire an identity granted after they were sent.
+      const identity = currentIdentity && currentIdentity.boundAt <= inbound.wechatSentAt ? currentIdentity : null;
       let team = identity
         ? await tx.leagueTeam.findFirst({
             where: { ownerUserId: identity.userId, leagueId: batch.leagueId, status: 'ACTIVE' }

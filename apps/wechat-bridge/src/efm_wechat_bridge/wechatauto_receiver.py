@@ -96,12 +96,17 @@ class WechatautoReceiver:
             info = getter()
             if not info:
                 return self._unhealthy("WECHAT_NOT_LOGGED_IN")
+            account_id = self._safe_string(info.get("username")) if isinstance(info, Mapping) else None
+            if not account_id or not _SAFE_ID.fullmatch(account_id) or account_id.endswith("@chatroom"):
+                return self._unhealthy("WECHAT_ACCOUNT_UNAVAILABLE")
+            self._robot_user_id = account_id
             version = self._version_provider() if self._version_provider else self._expected_wechat_version
             if version != self._expected_wechat_version:
                 return self._unhealthy("WECHAT_VERSION_MISMATCH", version=version)
             return TransportHealth(
                 ready=True,
                 login_status="LOGGED_IN",
+                wechat_account_id=account_id,
                 wechat_version=version,
                 screen_locked=False,
                 database_available=True,

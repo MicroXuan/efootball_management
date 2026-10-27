@@ -343,3 +343,39 @@ def test_member_upload_retries_independently_and_drops_disabled_groups(tmp_path)
     runtime._member_retry_at = 0
     assert runtime.upload_members_once() == 1
     assert spool.pending_observed_members() == []
+
+
+def test_live_account_identity_reaches_heartbeat_and_unknown_identity_fails_closed(tmp_path):
+    from types import SimpleNamespace
+    from efm_wechat_bridge.transport import LiveWechatTransport
+    from efm_wechat_bridge.wechatauto_receiver import WechatautoReceiver
+
+    class Database:
+        username = "wxid_robot_a"
+        def get_self_info(self):
+            return {"username": self.username, "nick_name": "same nickname"}
+        def get_sessions(self, limit=500):
+            return []
+    class Sender:
+        def configure_authorized_groups(self, groups):
+            pass
+    database = Database()
+    receiver = WechatautoReceiver(database=database, enabled_group_ids=set(), robot_user_id="__resolved_by_sender_id__")
+    transport = LiveWechatTransport(receiver=receiver, sender=Sender(), session_guard=SimpleNamespace(check=lambda **kwargs: SimpleNamespace(ready=True)))
+    runtime, _, api, _ = make_runtime(tmp_path, transport=transport)
+    assert runtime.doctor().passed
+    assert api.heartbeats[-1]["wechatAccountId"] == "wxid_robot_a"
+    database.username = "wxid_robot_b"
+    assert runtime.heartbeat_once()
+    assert api.heartbeats[-1]["wechatAccountId"] == "wxid_robot_b"
+    api.heartbeat_error = BridgeApiError("ROBOT_ACCOUNT_CHANGED", terminal=True)
+    database.username = "wxid_robot_c"
+    assert not runtime.heartbeat_once()
+    assert runtime.receive_upload_once() == 0
+    assert api.uploads == []
+    assert runtime.send_once() == 0
+    database.username = ""
+    assert runtime.receive_upload_once() == 0
+    assert runtime.upload_members_once() == 0
+    assert not runtime.doctor().passed
+    assert not transport.health().ready

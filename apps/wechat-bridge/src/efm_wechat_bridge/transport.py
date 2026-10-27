@@ -14,6 +14,7 @@ class TransportHealth(BaseModel):
 
     ready: bool
     login_status: str = Field(min_length=1, max_length=32)
+    wechat_account_id: str | None = Field(default=None, min_length=1, max_length=256)
     wechat_version: str | None = Field(default=None, max_length=64)
     screen_locked: bool
     database_available: bool
@@ -90,6 +91,7 @@ class LiveWechatTransport:
                 ready=False,
                 login_status=receiver_health.login_status,
                 wechat_version=receiver_health.wechat_version,
+                wechat_account_id=receiver_health.wechat_account_id,
                 screen_locked=session.error_code == "WINDOW_SESSION_LOCKED",
                 database_available=True,
                 sender_available=False,
@@ -100,6 +102,7 @@ class LiveWechatTransport:
             ready=True,
             login_status=receiver_health.login_status,
             wechat_version=receiver_health.wechat_version,
+            wechat_account_id=receiver_health.wechat_account_id,
             screen_locked=False,
             database_available=True,
             sender_available=True,

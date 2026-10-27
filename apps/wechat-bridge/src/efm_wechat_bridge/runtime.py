@@ -78,6 +78,7 @@ class BridgeRuntime:
         self._stop = threading.Event()
         self._send_blocked = threading.Event()
         self._doctor_passed_at: datetime | None = None
+        self._confirmed_account_id: str | None = None
         self._member_retry_at = 0.0
         self._member_failures = 0
         self._authorized_member_groups: frozenset[str] | None = None
@@ -86,6 +87,8 @@ class BridgeRuntime:
     def doctor(self) -> DoctorReport:
         errors: list[str] = []
         health = self.transport.health()
+        if not health.wechat_account_id:
+            errors.append("WECHAT_ACCOUNT_UNAVAILABLE")
         if not health.ready:
             errors.append(health.error_code or "TRANSPORT_UNHEALTHY")
         try:
@@ -100,6 +103,7 @@ class BridgeRuntime:
             try:
                 response = self.api.heartbeat(self._heartbeat_payload(health, groups))
                 self._apply_authorized_groups(response)
+                self._confirmed_account_id = health.wechat_account_id
             except Exception as error:
                 errors.append(self._error_code(error, "BRIDGE_API_UNAVAILABLE"))
 
@@ -123,6 +127,7 @@ class BridgeRuntime:
         try:
             response = self.api.heartbeat(self._heartbeat_payload(health, groups))
             self._apply_authorized_groups(response)
+            self._confirmed_account_id = health.wechat_account_id
             retention_cutoff = datetime.now(UTC) - timedelta(days=7)
             self.spool.purge_acknowledged(before=retention_cutoff)
             self.spool.purge_completed(before=retention_cutoff)
@@ -130,10 +135,17 @@ class BridgeRuntime:
                 self._doctor_passed_at = datetime.now(UTC)
             return True
         except Exception as error:
+            self._confirmed_account_id = None
             self.logger.emit("heartbeat_failed", code=self._error_code(error, "BRIDGE_API_UNAVAILABLE"))
             return False
 
     def receive_upload_once(self) -> int:
+        health = self.transport.health()
+        if not health.database_available or not health.wechat_account_id:
+            return 0
+        if self._confirmed_account_id != health.wechat_account_id:
+            if not self.heartbeat_once() or self._confirmed_account_id != health.wechat_account_id:
+                return 0
         try:
             cursor_payload = json.dumps(self.spool.scan_cursors(), separators=(",", ":"))
             events = self.transport.poll(cursor_payload)
@@ -168,7 +180,7 @@ class BridgeRuntime:
         if not self._send_gate_open():
             return 0
         health = self.transport.health()
-        if not health.ready or health.screen_locked or not health.sender_available:
+        if not health.ready or health.screen_locked or not health.sender_available or not health.wechat_account_id or health.wechat_account_id != self._confirmed_account_id:
             return 0
         try:
             tasks = self.api.claim_outbox(limit=self.settings.outbox_claim_limit)
@@ -245,6 +257,9 @@ class BridgeRuntime:
     def upload_members_once(self) -> int:
         if time.monotonic() < self._member_retry_at or self._authorized_member_groups is None:
             return 0
+        health = self.transport.health()
+        if not health.wechat_account_id or health.wechat_account_id != self._confirmed_account_id:
+            return 0
         pending = self.spool.pending_observed_members()
         unauthorized = [m for m in pending if m.wechat_group_id not in self._authorized_member_groups]
         self.spool.ack_observed_members(unauthorized)
@@ -310,6 +325,7 @@ class BridgeRuntime:
     def _heartbeat_payload(self, health: object, groups: Sequence[object]) -> dict[str, object]:
         snapshot = self.spool.health_snapshot()
         return {
+            **({"wechatAccountId": health.wechat_account_id} if getattr(health, "wechat_account_id", None) else {}),
             "wechatVersion": getattr(health, "wechat_version", None) or self.settings.expected_wechat_version,
             "loginStatus": getattr(health, "login_status", "UNKNOWN"),
             **({"listenerWatermark": snapshot.watermark} if snapshot.watermark else {}),

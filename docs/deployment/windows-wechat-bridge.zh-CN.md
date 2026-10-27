@@ -122,10 +122,12 @@ uv run efm-wechat-bridge --config .\bridge.toml doctor
 
 升级顺序：先对目标环境执行 `pnpm db:status` 核对待应用迁移，经受控部署应用 `20261026120000_wechat_observed_members`，再部署 API 和后台，最后升级 Bridge。目标环境连接须由部署流程提供，不能用本机测试结果代替目标迁移验收。禁止在共享环境执行 seed 或开发迁移。
 
-旧 Bridge 不上报成员仍可运行原查询/竞价；新 Bridge 对旧 API 上报失败时独立退避，必须观察 `member_observation_upload_failed` 日志及待传深度，不能当作升级成功。既有身份映射保留，新验证码签发/消费返回 `WECHAT_BINDING_ADMIN_MANAGED`。
+旧 Bridge 不上报成员仍可运行原查询/竞价；新 Bridge 对旧 API 上报失败时独立退避，必须观察 `members_upload_failed` 日志及待传深度，不能当作升级成功。既有身份映射保留，新验证码签发/消费返回 `WECHAT_BINDING_ADMIN_MANAGED`。
 
 平台后台 → 微信机器人设备 → 管理群成员 → 选择实际观察到的联系人 → 输入六位用户编号 → 核对旧/新用户、球队和设备级影响 → 填写核实说明 → 确认关联。联赛管理员仅查看本联赛成员，不可修改设备级身份。没有出现的成员需要在授权群自然发言后才可选择；不承诺读取完整群成员名单。
 
 关联具有版本校验与操作回执，冲突刷新重做；有历史报价的关联禁止直接换成其他用户。机器人账号变化会停用原设备及身份，需要为新账号登记新设备，不能重新启用旧设备来继承身份。
 
 本次仅交付成员观察/后台身份管理。管理员私聊报分、晋级、转会和拍卖控制另按总体设计实施。真实 Windows 验收清单见 [身份关联验收](../development/wechat-admin-identities-verification.zh-CN.md)。
+
+账号检测从固定依赖的 `get_self_info().username` 读取数据库账号，经 transport 和实际心跳上报；无法识别时暂停接收、成员同步和发送。专用电脑只登录一个机器人账号，更换账号须停 Bridge 并重新配置设备，重启后核验真实账号。该依赖可能缓存数据库账号，不能把运行中即时换号检测作为已验收保证。

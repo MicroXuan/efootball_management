@@ -31,7 +31,7 @@ export class WechatBridgeService {
     await tx.wechatBotDevice.update({
       where: { id: deviceId },
       data: {
-        ...(input.wechatAccountId !== undefined ? { wechatAccountId: input.wechatAccountId } : {}),
+        ...(input.wechatAccountId ? { wechatAccountId: input.wechatAccountId } : {}),
         wechatVersion: input.wechatVersion,
         loginStatus: input.loginStatus,
         ...(input.listenerWatermark !== undefined ? { listenerWatermark: input.listenerWatermark } : {}),

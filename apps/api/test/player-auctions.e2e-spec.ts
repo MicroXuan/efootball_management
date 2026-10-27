@@ -257,6 +257,16 @@ describe('Player auction group acceptance', () => {
     expect(startReply?.text).toContain('接下来即将拍卖的球员：');
     expect(startReply?.text).toContain('提名拍卖：第1名球员拍卖开始！');
 
+    const currentIdentity = await prisma.wechatIdentityBinding.findUniqueOrThrow({ where: { deviceId_wechatContactId: { deviceId, wechatContactId: contacts[0]! } } });
+    const backlogId = `before-binding-${randomUUID()}`;
+    await bridgePost('/v1/wechat-bot/bridge/messages', { messages: [{
+      messageId: backlogId, conversationType: 'GROUP', conversationId: groupWechatId, senderId: contacts[0]!,
+      sentAt: new Date(currentIdentity.boundAt.getTime() - 1000).toISOString(), sequence: '0001', messageType: 'TEXT', text: '999'
+    }] }).expect(200);
+    const rejectedBacklog = await prisma.playerAuctionBid.findFirstOrThrow({ where: { wechatMessageId: backlogId } });
+    expect(rejectedBacklog).toMatchObject({ result: 'UNBOUND', identityBindingId: null, userId: null });
+    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: first.id } })).currentPrice).toBeNull();
+
     await groupMessage(contacts[0]!, '40');
     expect((await prisma.playerAuctionBid.findFirstOrThrow({ where: { lotId: first.id, amount: 40 } })).result).toBe('BELOW_STARTING_PRICE');
     await groupMessage(contacts[0]!, '50');
