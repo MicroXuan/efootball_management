@@ -2,7 +2,6 @@ import { Alert, Tabs } from 'antd';
 import { useLayoutEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { useAdminSession } from '../auth/admin-session';
-import { featureFlags } from '../config/features';
 import { AdminIcon } from '../design-system/icons';
 import { leagueNavigationItems, resolveLeagueNavigation } from './league-navigation';
 
@@ -17,7 +16,7 @@ export function LeagueShell() {
   const { identity } = useAdminSession();
   const grant = identity?.leagueGrants.find((item) => item.leagueId === leagueId);
   const active = resolveLeagueNavigation(location.pathname);
-  const items = leagueNavigationItems(leagueId, featureFlags.wechatBot);
+  const items = leagueNavigationItems(leagueId, true);
   const selectedGroup = items.find(({ key }) => key === active.topKey);
   const groupNavRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
