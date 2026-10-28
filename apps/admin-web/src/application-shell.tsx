@@ -42,6 +42,7 @@ export function ApplicationShell() {
         <Header className="admin-header">
           <div><span className="section-kicker">赛事运营</span><strong>管理工作台</strong></div>
           <div className="admin-identity">
+            <Link to="/mobile">手机工作台</Link>
             <Tag color="success">{session.identity?.platformAdmin ? '平台管理员' : '联赛管理员'}</Tag>
             <span>{presentAdminDisplayName(admin?.displayName)}</span>
             <Button type="text" onClick={() => void session.logout()}>退出登录</Button>
