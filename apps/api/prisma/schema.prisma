@@ -2748,6 +2748,8 @@ model SeasonAllocationDecision {
 }
 
 model CompetitionMatch {
+  advancementWinnerParticipantId String? @map("advancement_winner_participant_id") @db.Char(36)
+  advancementReason String? @map("advancement_reason") @db.VarChar(512)
   wechatReference WechatMatchReference?
   wechatScoreOperations WechatScoreOperation[]
   id                           String                      @id @default(uuid()) @db.Char(36)
@@ -3435,4 +3437,34 @@ model WechatScoreOperation {
   match CompetitionMatch @relation(fields: [matchId], references: [id], onDelete: Restrict)
   @@index([contactId, status])
   @@map("wechat_score_operations")
+}
+
+
+model WechatEntityReference {
+  id Int @id @default(autoincrement()) @db.UnsignedInt
+  kind String @db.VarChar(16)
+  entityId String @map("entity_id") @db.Char(36)
+  @@unique([kind, entityId])
+  @@map("wechat_entity_references")
+}
+
+model WechatAdminOperation {
+  id String @id @default(uuid()) @db.Char(36)
+  code String @unique @db.VarChar(12)
+  contactId String @map("contact_id") @db.Char(36)
+  bindingVersion Int @map("binding_version") @db.UnsignedInt
+  inboundId String @unique @map("inbound_id") @db.Char(36)
+  adminId String @map("admin_id") @db.Char(36)
+  leagueId String @map("league_id") @db.Char(36)
+  seasonId String @map("season_id") @db.Char(36)
+  kind String @db.VarChar(24)
+  payload Json
+  preview String @db.Text
+  status String @default("PENDING") @db.VarChar(16)
+  result String? @db.Text
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+  @@index([contactId, status])
+  @@map("wechat_admin_operations")
 }

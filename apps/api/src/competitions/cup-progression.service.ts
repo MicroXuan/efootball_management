@@ -28,23 +28,22 @@ export class CupProgressionService {
     awayScore: number,
     allowCorrection = false
   ): Promise<void> {
-    // Production callers already own this lock before their source-match lock. Reacquiring
-    // it is harmless; standalone progression callers also serialize before reading pairings.
+    await this.lockCompetition(transaction, matchId);
+    const pairing = await transaction.cupBracketPairing.findUnique({ where: { matchId } });
+    if (!pairing) return;
+    if (homeScore === awayScore) throw new CompetitionError('KNOCKOUT_DRAW_NOT_ALLOWED', '淘汰赛比分不能为平局', 409);
+    const winner = homeScore > awayScore ? pairing.homeParticipantId : pairing.awayParticipantId;
+    if (!winner) throw new CompetitionError('CUP_BRACKET_PAIRING_INVALID', '淘汰赛对阵缺少参赛队伍', 409);
+    await this.recordAdvancement(transaction, matchId, winner, allowCorrection);
+  }
+
+  async recordAdvancement(transaction: CompetitionTransaction, matchId: string, winnerParticipantId: string, allowCorrection = false): Promise<void> {
     await this.lockCompetition(transaction, matchId);
     await this.visibility?.requireVisible({ type: 'MATCH', id: matchId }, transaction);
-    const pairing = await transaction.cupBracketPairing.findUnique({
-      where: { matchId },
-      include: { round: { include: { proposal: true } } }
-    });
+    const pairing = await transaction.cupBracketPairing.findUnique({ where: { matchId }, include: { round: { include: { proposal: true } } } });
     if (!pairing) return;
-    if (homeScore === awayScore) {
-      throw new CompetitionError('KNOCKOUT_DRAW_NOT_ALLOWED', '淘汰赛比分不能为平局', 409);
-    }
-    const winnerParticipantId = homeScore > awayScore
-      ? pairing.homeParticipantId
-      : pairing.awayParticipantId;
-    if (!winnerParticipantId) {
-      throw new CompetitionError('CUP_BRACKET_PAIRING_INVALID', '淘汰赛对阵缺少参赛队伍', 409);
+    if (![pairing.homeParticipantId, pairing.awayParticipantId].includes(winnerParticipantId)) {
+      throw new CompetitionError('CUP_BRACKET_PAIRING_INVALID', '晋级球队不属于该对阵', 409);
     }
     if (pairing.winnerParticipantId && pairing.winnerParticipantId !== winnerParticipantId) {
       if (allowCorrection) {

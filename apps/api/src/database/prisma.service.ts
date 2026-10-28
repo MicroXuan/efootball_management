@@ -33,7 +33,9 @@ export const PRISMA_TRANSACTION_OPTIONS = {
 
 export function prismaClientOptions(databaseUrl: string | undefined) {
   return {
-    adapter: new PrismaMariaDb(parseDatabaseUrl(databaseUrl)),
+    // MySQL does not accept SAVEPOINT over prepared statements. The driver
+    // still escapes bound values; text protocol allows transactional previews.
+    adapter: new PrismaMariaDb(parseDatabaseUrl(databaseUrl), { useTextProtocol: true }),
     transactionOptions: PRISMA_TRANSACTION_OPTIONS
   };
 }

@@ -379,7 +379,7 @@ def test_mixed_chat_load_compacts_members_and_preserves_commands_across_restart(
 
 def test_private_administrator_commands_require_same_stable_sender() -> None:
     receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
-    commands = ["帮助", "联赛", "赛季", "切换联赛 CELL", "切换赛季 第一季", "赛程 2",
+    commands = ["晋级 M12 主队 原因：弃权", "转会 P2 T1 T2 500 原因：同意", "球队", "阵容 T1", "拍卖列表", "拍卖 A1", "开始拍卖 A1", "暂停拍卖 A1", "继续拍卖 A1", "取消拍卖 A1 原因：取消", "恢复拍卖 A1 原因：已核对", "审核成交 L1", "调整成交 L1 T2 100 原因：核实", "作废成交 L1 原因：无效", "帮助", "联赛", "赛季", "切换联赛 CELL", "切换赛季 第一季", "赛程 2",
                 "报分 M12 2:1 原因：核实", "确认 AABBCCDDEEFF", "取消 AABBCCDDEEFF", "操作 AABBCCDDEEFF"]
     for text in commands:
         raw = raw_message(conversation_id="contact-wxid", sender_username="contact-wxid", content=text)

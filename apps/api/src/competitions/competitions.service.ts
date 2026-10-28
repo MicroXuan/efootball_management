@@ -264,9 +264,9 @@ export class CompetitionsService {
       if (target === 'COMPLETED') {
         const matches = await transaction.competitionMatch.findMany({
           where: { stage: { competitionId, status: 'PUBLISHED' } },
-          select: { officialResultVersionId: true }
+          select: { officialResultVersionId: true, advancementWinnerParticipantId: true }
         });
-        if (matches.length === 0 || matches.some(({ officialResultVersionId }) => !officialResultVersionId)) {
+        if (matches.length === 0 || matches.some(({ officialResultVersionId, advancementWinnerParticipantId }) => !officialResultVersionId && !advancementWinnerParticipantId)) {
           throw new CompetitionError('COMPETITION_RESULTS_INCOMPLETE', 'Every match requires an official result', 409);
         }
       }

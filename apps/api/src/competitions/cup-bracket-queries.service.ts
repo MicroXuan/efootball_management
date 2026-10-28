@@ -93,6 +93,7 @@ export class CupBracketQueriesService {
           match: pairing.match ? {
             id: pairing.match.id,
             status: pairing.match.status,
+            advancement: pairing.match.advancementWinnerParticipantId ? { winnerParticipantId: pairing.match.advancementWinnerParticipantId, reason: pairing.match.advancementReason ?? "" } : null,
             homeScore: pairing.match.officialResultVersion?.homeScore ?? null,
             awayScore: pairing.match.officialResultVersion?.awayScore ?? null
           } : null

@@ -116,6 +116,21 @@ export class PlayerAuctionStateService {
     return { transition: 'RESUMED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
   }
 
+  async recoverBatch(tx: Prisma.TransactionClient, batchId: string, expectedVersion: number) {
+    await this.locks.lockBatch(tx, batchId);
+    const batch = await tx.playerAuctionBatch.findUnique({ where: { id: batchId } });
+    if (!batch || batch.status !== 'RECOVERY_REQUIRED' || !batch.currentLotId || batch.bidChannel !== 'WECHAT_GROUP') throw new PlayerAuctionError('AUCTION_RECOVERY_NOT_REQUIRED', '当前批次不需要恢复', 409);
+    if (batch.version !== expectedVersion) throw new PlayerAuctionError('VERSION_CONFLICT', '拍卖已变化，请重新预览', 409);
+    await this.locks.lockLot(tx, batch.currentLotId);
+    const lot = await tx.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.currentLotId } });
+    if (lot.status !== 'PAUSED') throw new PlayerAuctionError('AUCTION_STATE_INVALID', '恢复状态不一致', 409);
+    const now = await this.locks.now(tx);
+    const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
+    await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', recoveryDetectedAt: null, recoveryReason: null, version: { increment: 1 } } });
+    return { transition: 'RECOVERED' as const, batchId, lotId: lot.id, deadlineAt };
+  }
+
   private withAuthorizedGroup<T>(groupBindingId: string, actorUserId: string, work: (tx: Prisma.TransactionClient, group: { id: string; leagueId: string }) => Promise<T>) {
     return this.prisma.$transaction(async (tx) => {
       const snapshot = await tx.wechatGroupBinding.findUnique({ where: { id: groupBindingId } });

@@ -45,6 +45,7 @@ export class AdminWechatAdminsService {
         const bound = await tx.wechatAdminContact.findUnique({ where: { deviceId_adminId: { deviceId, adminId: input.adminId } } });
         if (bound && bound.id !== contactId) throw new ConflictException('该管理员已关联其他微信，请先解除原关联');
       }
+      if (this.config.privateManagementEnabled) await tx.wechatAdminOperation.updateMany({ where: { contactId, status: 'PENDING' }, data: { status: 'CANCELLED', completedAt: new Date() } });
       await tx.wechatScoreOperation.updateMany({ where: { contactId, status: 'PENDING' }, data: { status: 'CANCELLED', completedAt: new Date() } });
       await tx.wechatAdminContact.update({ where: { id: contactId }, data: { adminId: input.adminId, boundAt: input.adminId ? new Date() : null,
         version: { increment: 1 }, leagueId: null, seasonId: null } });

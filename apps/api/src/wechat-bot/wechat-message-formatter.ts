@@ -47,10 +47,7 @@ export function formatWechatHelp(capabilities: readonly WechatGroupCapabilityTyp
   }
   if (enabled.has('PLAYER_AUCTION')) {
     lines.push(
-      '开始拍卖：开始待开拍的批次',
-      '暂停拍卖：暂停当前拍卖',
-      '继续拍卖：恢复暂停的拍卖',
-      '取消拍卖：取消当前拍卖',
+      '拍卖管理：管理员请私聊机器人',
       '纯数字出价（例如 120）：对当前球员出价'
     );
   }

@@ -156,10 +156,8 @@ describe('WechatCommandRouterService', () => {
     expect(queryOnly).not.toContain('纯数字出价');
 
     const auctionOnly = formatWechatHelp(['PLAYER_AUCTION']);
-    expect(auctionOnly).toContain('开始拍卖');
-    expect(auctionOnly).toContain('暂停拍卖');
-    expect(auctionOnly).toContain('继续拍卖');
-    expect(auctionOnly).toContain('取消拍卖');
+    expect(auctionOnly).toContain('管理员请私聊');
+    expect(auctionOnly).not.toContain('开始拍卖：');
     expect(auctionOnly).toContain('纯数字出价');
     expect(auctionOnly).not.toContain('查询赛程');
     expect(auctionOnly).not.toContain('下一位');

@@ -478,6 +478,7 @@ export class SchedulesService {
       status: match.status,
       resultConfirmationDeadlineAt: match.resultConfirmationDeadlineAt?.toISOString() ?? null,
       version: match.version,
+      advancement: match.advancementWinnerParticipantId ? { winnerParticipantId: match.advancementWinnerParticipantId, reason: match.advancementReason ?? "" } : null,
       officialResult: match.officialResultVersion ? {
         resultVersionId: match.officialResultVersion.id,
         version: match.officialResultVersion.version,

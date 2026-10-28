@@ -1,3 +1,5 @@
+import { WechatPrivateManagementService } from './wechat-private-management.service.js';
+import { WechatManagementEffectsService } from './wechat-management-effects.service.js';
 import { CompetitionsModule } from '../competitions/competitions.module.js';
 import { WechatPrivateScoreService } from './wechat-private-score.service.js';
 import { AdminWechatAdminsService } from './admin-wechat-admins.service.js';
@@ -42,7 +44,7 @@ import { WechatScheduleQueryService } from './wechat-schedule-query.service.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService): WechatBotRuntimeConfig => config.getOrThrow('wechatBot')
     },
-    WechatPrivateScoreService, AdminWechatAdminsService,
+    WechatPrivateManagementService, WechatManagementEffectsService, WechatPrivateScoreService, AdminWechatAdminsService,
     AdminWechatBotService,
     AdminWechatIdentitiesService,
     WechatObservedMembersService,

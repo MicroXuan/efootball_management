@@ -1,5 +1,6 @@
+import { WechatPrivateManagementService, MANAGEMENT_HELP } from './wechat-private-management.service.js';
 import { randomBytes } from 'node:crypto';
-import { HttpException, Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Optional } from '@nestjs/common';
 import { PrismaService, PRISMA_TRANSACTION_OPTIONS } from '../database/prisma.service.js';
 import { Prisma, type WechatAdminContact, type WechatInboundMessage } from '../generated/prisma/client.js';
 import { ResultsService } from '../competitions/results.service.js';
@@ -18,7 +19,8 @@ export function parseScoreCommand(text: string) {
 export class WechatPrivateScoreService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ResultsService) private readonly results: ResultsService,
-    @Inject(WECHAT_BOT_CONFIG) private readonly config: WechatBotRuntimeConfig) {}
+    @Inject(WECHAT_BOT_CONFIG) private readonly config: WechatBotRuntimeConfig,
+    @Optional() @Inject(WechatPrivateManagementService) private readonly management?: WechatPrivateManagementService) {}
 
   async handle(inbound: WechatInboundMessage): Promise<string> {
     if (!this.config.privateScoreEnabled) return '管理员私聊录分尚未启用，请使用管理后台。';
@@ -39,7 +41,7 @@ export class WechatPrivateScoreService {
         const admin = await tx.adminAccount.findUnique({ where: { id: contact.adminId } });
         if (admin?.status !== 'ACTIVE') return fail('管理员账号已停用。');
         if (text !== '帮助' && (!contact.boundAt || inbound.receivedAt < contact.boundAt)) return fail('此指令早于当前管理员绑定，请重新发送。');
-        if (text === '帮助') return HELP;
+        if (text === '帮助') return HELP + (this.config.privateManagementEnabled ? MANAGEMENT_HELP : '');
         const action = /^(确认|取消|操作)\s+([0-9a-f]{12})$/i.exec(text);
         if (action) return this.operation(tx, contact, action[1]!, action[2]!.toUpperCase());
         const leagueFilter: Prisma.LeagueWhereInput = { isDeleted: false,
@@ -68,6 +70,8 @@ export class WechatPrivateScoreService {
         }
         const season = seasons.find((s) => s.id === contact.seasonId) ?? seasons.find((s) => s.id === league.currentSeasonId) ?? (seasons.length === 1 ? seasons[0] : undefined);
         if (!season) return '请先发送“赛季”，再选择要管理的赛季。';
+        const managementReply = await this.management?.handle(tx, contact, { adminId: admin.id, deviceId: inbound.deviceId, leagueId: league.id, seasonId: season.id }, text, inbound);
+        if (managementReply != null) return managementReply;
         const page = /^赛程(?:\s+([1-9]\d{0,3}))?$/.exec(text);
         if (page) {
           const pageNo = Number(page[1] ?? 1);
@@ -77,12 +81,12 @@ export class WechatPrivateScoreService {
           const lines = [];
           for (const match of matches.slice(0, 8)) {
             const ref = await tx.wechatMatchReference.upsert({ where: { matchId: match.id }, create: { matchId: match.id }, update: {} });
-            lines.push(`M${ref.id} ${match.stage.competition.name} 第${match.roundNumber}轮\n主：${match.homeParticipant.displayNameSnapshot} / 客：${match.awayParticipant.displayNameSnapshot}\n${match.officialResultVersion ? `${match.officialResultVersion.homeScore}:${match.officialResultVersion.awayScore}` : '未录分'} · ${match.status}`);
+            lines.push(`M${ref.id} ${match.stage.competition.name} 第${match.roundNumber}轮\n主：${match.homeParticipant.displayNameSnapshot} / 客：${match.awayParticipant.displayNameSnapshot}\n${match.advancementWinnerParticipantId ? `裁定${match.advancementWinnerParticipantId === match.homeParticipantId ? '主队' : '客队'}晋级（无比分）` : match.officialResultVersion ? `${match.officialResultVersion.homeScore}:${match.officialResultVersion.awayScore}` : '未录分'} · ${match.status}`);
           }
           return `${league.name} / ${season.displayName}（第${pageNo}页）\n${lines.join('\n\n') || '没有可录分的已发布比赛。'}${matches.length > 8 ? `\n下一页：赛程 ${pageNo + 1}` : ''}`;
         }
         const score = parseScoreCommand(text);
-        if (!score || !score.reason) return HELP;
+        if (!score || !score.reason) return HELP + (this.config.privateManagementEnabled ? MANAGEMENT_HELP : '');
         const existing = await tx.wechatScoreOperation.findUnique({ where: { inboundId: inbound.id } });
         if (existing) return existing.preview;
         const reference = await tx.wechatMatchReference.findUnique({ where: { id: score.reference }, include: { match: { include: {
@@ -93,7 +97,7 @@ export class WechatPrivateScoreService {
         if (match.stage.status !== 'PUBLISHED' || !['IN_PROGRESS', 'COMPLETED'].includes(match.stage.competition.status)) return fail('比赛当前不可录分。');
         if (match.stage.format === 'SINGLE_ELIMINATION' && score.homeScore === score.awayScore) return fail('淘汰赛比分不能为平局。');
         const code = randomBytes(6).toString('hex').toUpperCase();
-        const preview = `录分预览（尚未提交）\n${league.name} / ${season.displayName}\n${match.stage.competition.name} 第${match.roundNumber}轮 M${reference!.id}\n主：${match.homeParticipant.displayNameSnapshot}\n客：${match.awayParticipant.displayNameSnapshot}\n原比分：${match.officialResultVersion ? `${match.officialResultVersion.homeScore}:${match.officialResultVersion.awayScore}` : '未录入'}\n新比分：${score.homeScore}:${score.awayScore}\n原因：${score.reason}\n将按赛事规则更新积分或淘汰赛签表。\n2分钟内回复：确认 ${code}\n放弃：取消 ${code}`;
+        const preview = `录分预览（尚未提交）\n${league.name} / ${season.displayName}\n${match.stage.competition.name} 第${match.roundNumber}轮 M${reference!.id}\n主：${match.homeParticipant.displayNameSnapshot}\n客：${match.awayParticipant.displayNameSnapshot}\n原比分：${match.officialResultVersion ? `${match.officialResultVersion.homeScore}:${match.officialResultVersion.awayScore}` : match.advancementWinnerParticipantId ? '已裁定晋级（无比分），本次将改为比分结果' : '未录入'}\n新比分：${score.homeScore}:${score.awayScore}\n原因：${score.reason}\n将按赛事规则更新积分或淘汰赛签表。\n2分钟内回复：确认 ${code}\n放弃：取消 ${code}`;
         await tx.wechatScoreOperation.create({ data: { code, contactId: contact.id, bindingVersion: contact.version, inboundId: inbound.id,
           adminId: admin.id, matchId: match.id, leagueId: league.id, expectedVersion: match.version, homeScore: score.homeScore, awayScore: score.awayScore,
           reason: score.reason, preview, expiresAt: new Date(Date.now() + 120_000) } });
@@ -123,6 +127,7 @@ export class WechatPrivateScoreService {
 
   private async operation(tx: Tx, contact: WechatAdminContact, action: string, code: string) {
     const op = await tx.wechatScoreOperation.findUnique({ where: { code } });
+    if (!op && this.management) return this.management.operation(tx, contact, action, code, (leagueId) => this.requireLeague(tx, contact.adminId!, leagueId));
     if (!op || op.contactId !== contact.id || op.adminId !== contact.adminId || op.bindingVersion !== contact.version) return fail('确认码不存在或不属于当前管理员绑定。');
     await this.requireLeague(tx, contact.adminId!, op.leagueId);
     if (action === '操作') return `操作 ${code}：${op.status}${op.result ? `\n${op.result}` : op.expiresAt <= new Date() ? '\n已过期，请重新报分。' : '\n等待确认。'}`;

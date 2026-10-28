@@ -4,7 +4,7 @@ import { CupProgressionService } from './cup-progression.service.js';
 const competitionLookup = () => ({ stage: { competitionId: 'cup-1' } });
 
 describe('CupProgressionService', () => {
-  it.each(['AWAITING_RESULT', 'PENDING_CONFIRMATION'])('repairs an unplayed successor but refuses a successor already reporting results: %s', async (status) => {
+  it.each(['AWAITING_RESULT', 'PENDING_CONFIRMATION', 'ADMIN_DECIDED'].flatMap(status => ['score', 'advancement'].map(mode => [status, mode])))('repairs only an unplayed successor: %s / %s', async (status, mode) => {
     const pairing = { id: 'semi-1', matchId: 'match-1', homeParticipantId: 'p1', awayParticipantId: 'p2', winnerParticipantId: 'p1',
       round: { id: 'round-1', proposalId: 'proposal', proposal: { competitionId: 'cup-1' } } };
     const next = { id: 'final', homeSourcePairingId: 'semi-1', awaySourcePairingId: 'semi-2', homeParticipantId: 'p1', awayParticipantId: 'p3', matchId: 'next', winnerParticipantId: null };
@@ -15,11 +15,12 @@ describe('CupProgressionService', () => {
       stageParticipant: { updateMany: jest.fn<(input: unknown) => Promise<{ count: number }>>().mockResolvedValue({ count: 1 }) }
     };
     const service = new CupProgressionService();
-    if (status === 'PENDING_CONFIRMATION') {
-      await expect(service.recordWinner(tx as never, 'match-1', 0, 2, true)).rejects.toMatchObject({ response: { code: 'CUP_RESULT_LOCKED' } });
+    const correct = () => mode === 'advancement' ? service.recordAdvancement(tx as never, 'match-1', 'p2', true) : service.recordWinner(tx as never, 'match-1', 0, 2, true);
+    if (status !== 'AWAITING_RESULT') {
+      await expect(correct()).rejects.toMatchObject({ response: { code: 'CUP_RESULT_LOCKED' } });
       expect(pairing.winnerParticipantId).toBe('p1');
     } else {
-      await service.recordWinner(tx as never, 'match-1', 0, 2, true);
+      await correct();
       expect(pairing.winnerParticipantId).toBe('p2');
       expect(tx.competitionMatch.update).toHaveBeenCalledWith({ where: { id: 'next' }, data: { homeParticipantId: 'p2', version: { increment: 1 } } });
       expect(tx.stageParticipant.updateMany).toHaveBeenCalledWith({ where: { stageId: 'final-stage', participantId: 'p1' }, data: { participantId: 'p2' } });
