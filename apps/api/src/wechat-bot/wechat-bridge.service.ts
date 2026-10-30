@@ -7,7 +7,7 @@ import { WechatCommandRouterService } from './wechat-command-router.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
 
 const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|\d+)$/;
-const PRIVATE_PRIVATE_COMMAND = /^(?:绑定\s+\d{6}|帮助|联赛|赛季|球队|拍卖列表|赛程(?:\s+[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|晋级|转会|阵容|拍卖|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)\s+.{1,1000})$/u;
+const PRIVATE_PRIVATE_COMMAND = /^(?:绑定\s+\d{6}|帮助|联赛|赛季|球队|拍卖列表|赛程(?:\s*[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|晋级|转会|阵容|拍卖|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)\s+.{1,1000})$/u;
 
 @Injectable()
 export class WechatBridgeService {

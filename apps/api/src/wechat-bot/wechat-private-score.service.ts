@@ -8,11 +8,16 @@ import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.con
 
 type Tx = Prisma.TransactionClient;
 const fail = (message: string): never => { throw new HttpException({ message }, 409); };
-const HELP = '管理员私聊录分\n联赛 / 切换联赛 联赛名称或ID\n赛季 / 切换赛季 赛季名称或ID\n赛程 [页码]\n报分 M编号 主队比分:客队比分 原因：核实说明\n确认 确认码 / 取消 确认码 / 操作 确认码\n报分先预览，2分钟内确认；比分按系统主客顺序。';
+const HELP = '管理员私聊录分\n联赛 / 切换联赛 联赛名称或ID\n赛季 / 切换赛季 赛季名称或ID\n赛程[页码]（如赛程2或赛程 2）\n报分 M编号 主队比分:客队比分 原因：核实说明\n确认 确认码 / 取消 确认码 / 操作 确认码\n报分先预览，2分钟内确认；比分按系统主客顺序。';
 
 export function parseScoreCommand(text: string) {
   const match = /^报分\s+M([1-9]\d{0,8})\s+(\d{1,2})[:：](\d{1,2})\s+原因[:：]\s*(.{1,512})$/u.exec(text);
   return match ? { reference: Number(match[1]), homeScore: Number(match[2]), awayScore: Number(match[3]), reason: match[4]!.trim() } : null;
+}
+
+export function parseSchedulePageCommand(text: string): number | null {
+  const match = /^赛程(?:\s*([1-9]\d{0,3}))?$/.exec(text);
+  return match ? Number(match[1] ?? 1) : null;
 }
 
 @Injectable()
@@ -72,9 +77,8 @@ export class WechatPrivateScoreService {
         if (!season) return '请先发送“赛季”，再选择要管理的赛季。';
         const managementReply = await this.management?.handle(tx, contact, { adminId: admin.id, deviceId: inbound.deviceId, leagueId: league.id, seasonId: season.id }, text, inbound);
         if (managementReply != null) return managementReply;
-        const page = /^赛程(?:\s+([1-9]\d{0,3}))?$/.exec(text);
-        if (page) {
-          const pageNo = Number(page[1] ?? 1);
+        const pageNo = parseSchedulePageCommand(text);
+        if (pageNo !== null) {
           const matches = await tx.competitionMatch.findMany({ where: { stage: { status: 'PUBLISHED', competition: { seasonId: season.id, status: { in: ['IN_PROGRESS', 'COMPLETED'] } } } },
             include: { stage: { include: { competition: true } }, homeParticipant: true, awayParticipant: true, officialResultVersion: true },
             orderBy: [{ plannedAt: 'asc' }, { id: 'asc' }], skip: (pageNo - 1) * 8, take: 9 });
