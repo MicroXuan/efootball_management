@@ -57,7 +57,7 @@ export class PlayerAuctionMessageFormatter {
   }
 
   countdown(mark: 20 | 10 | 3 | 2 | 1) {
-    return String(mark);
+    return `拍卖剩余时间 ${mark}s`;
   }
 
   pendingReview(playerName: string, teamName: string, amount: number) {

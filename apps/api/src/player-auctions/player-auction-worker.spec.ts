@@ -106,7 +106,9 @@ describe('PlayerAuctionWorker', () => {
       await worker.tick();
     }
 
-    expect(outbox.enqueue.mock.calls.map(([input]: any[]) => input.text)).toEqual(['20', '10', '3', '2', '1']);
+    expect(outbox.enqueue.mock.calls.map(([input]: any[]) => input.text)).toEqual([
+      '拍卖剩余时间 20s', '拍卖剩余时间 10s', '拍卖剩余时间 3s', '拍卖剩余时间 2s', '拍卖剩余时间 1s'
+    ]);
     expect(outbox.enqueue.mock.calls.map(([input]: any[]) => input.text)).not.toEqual(expect.arrayContaining(['30', '5', '4', '0']));
   });
 
