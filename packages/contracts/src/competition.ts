@@ -411,6 +411,16 @@ export const CupBracketParticipantSchema = z.object({
   teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable()
 });
 
+export const AdminMatchAdvancementRequestSchema = VersionedMutationRequestSchema.extend({
+  winnerParticipantId: ResourceIdSchema,
+  reason: z.string().trim().min(1).max(512)
+});
+export type AdminMatchAdvancementRequest = z.infer<typeof AdminMatchAdvancementRequestSchema>;
+export const AdminMatchAdvancementResponseSchema = z.object({
+  winnerParticipantId: ResourceIdSchema,
+  winnerName: z.string()
+});
+
 export const MatchAdvancementSummarySchema = z.object({ winnerParticipantId: ResourceIdSchema, reason: z.string() });
 
 export const CupBracketMatchSummarySchema = z.object({

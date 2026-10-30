@@ -7,24 +7,15 @@ import { useAdminSession } from '../auth/admin-session';
 import { adminApi, type AdminApi } from '../lib/api';
 import { collectCursorPages } from '../lib/cursor-pages';
 import { formatDateTime } from '../lib/date-time';
-import { filterFixtures, loadFixtures, teamName, type Fixture } from './mobile-data';
+import { canDecideAdvancement, filterFixtures, loadFixtures, teamName, type Fixture } from './mobile-data';
 import { ScoreEditor, TransferEditor, transferStatus, type Proposal } from './mobile-editors';
 import './mobile.css';
+import { useResource } from './mobile-resource';
+import { AdvancementEditor } from './mobile-advancement';
+import { DirectTransfer } from './mobile-transfer';
 
 const SeasonsSchema = z.object({ items: z.array(LeagueSeasonSummarySchema), nextCursor: z.string().nullable() });
 type LeagueOption = { id: string; name: string };
-
-// Each dependency change hides the previous response immediately; late responses are discarded.
-function useResource<T>(load: () => Promise<T>, revision = 0): { data?: T; failed?: boolean } {
-  const [state, setState] = useState<{ load: typeof load; revision: number; data?: T; failed?: boolean }>();
-  useEffect(() => {
-    let active = true;
-    void load().then((data) => { if (active) setState({ load, revision, data }); })
-      .catch(() => { if (active) setState({ load, revision, failed: true }); });
-    return () => { active = false; };
-  }, [load, revision]);
-  return state?.load === load && state.revision === revision ? state : {};
-}
 
 export function MobileWorkbench({ api = adminApi }: { api?: AdminApi }) {
   const session = useAdminSession();
@@ -59,7 +50,7 @@ export function MobileWorkbench({ api = adminApi }: { api?: AdminApi }) {
       : !selected ? <Alert type="error" title="你没有此联赛的管理权限" />
       : <LeagueWorkspace key={selected.id} leagueId={selected.id} tab={validTab} api={api} />}
     <footer className="mobile-account"><span>使用现有管理员账号</span><button onClick={() => void session.logout()}>退出登录</button></footer>
-    {selected && <nav className="mobile-bottom-nav" aria-label="手机工作台导航">{[['home', '工作台'], ['matches', '赛程 / 比分'], ['transfers', '转会审核']].map(([value, label]) => <Link key={value} to={`/mobile/${selected.id}/${value}`} aria-current={validTab === value ? 'page' : undefined}>{label}</Link>)}</nav>}
+    {selected && <nav className="mobile-bottom-nav" aria-label="手机工作台导航">{[['home', '工作台'], ['matches', '赛程 / 比分'], ['transfers', '转会管理']].map(([value, label]) => <Link key={value} to={`/mobile/${selected.id}/${value}`} aria-current={validTab === value ? 'page' : undefined}>{label}</Link>)}</nav>}
   </main>;
 }
 
@@ -76,14 +67,15 @@ function LeagueWorkspace({ leagueId, tab, api }: { leagueId: string; tab: string
     ?? seasons.data?.find((season) => season.status === 'IN_PROGRESS') ?? seasons.data?.[0];
   const refresh = () => { setNotice(''); setRevision((value) => value + 1); };
   return <>
-    <div className="mobile-section-heading"><h2>{tab === 'home' ? '联赛事务，随手处理' : tab === 'matches' ? '赛程与比分' : '转会审核'}</h2><Button onClick={refresh}>刷新</Button></div>
+    <div className="mobile-section-heading"><h2>{tab === 'home' ? '联赛事务，随手处理' : tab === 'matches' ? '赛程与比分' : '转会管理'}</h2><Button onClick={refresh}>刷新</Button></div>
     {notice && <Alert role="status" type="success" title={notice} closable onClose={() => setNotice('')} />}
-    {tab !== 'transfers' && <>
+    <>
       {seasons.failed ? <Failure text="赛季加载失败，请重试。" retry={refresh} /> : !seasons.data ? <Loading /> : seasons.data.length ?
         <label className="mobile-season-picker">赛季<select aria-label="赛季" value={selectedSeason?.id ?? ''} onChange={(event) => { setSeasonId(event.target.value); setNotice(''); }}>{seasons.data.map((season) => <option key={season.id} value={season.id}>{season.displayName}</option>)}</select></label>
         : <Empty text="此联赛暂无赛季，请在完整后台创建。" />}
-      {selectedSeason && <MatchSection key={selectedSeason.id} api={api} leagueId={leagueId} seasonId={selectedSeason.id} revision={revision} compact={tab === 'home'} onSaved={() => { setNotice('官方比分已保存，赛程正在刷新。'); setRevision((value) => value + 1); }} />}
-    </>}
+      {selectedSeason && tab !== 'transfers' && <MatchSection key={selectedSeason.id} api={api} leagueId={leagueId} seasonId={selectedSeason.id} revision={revision} compact={tab === 'home'} onSaved={() => { setNotice('比赛结果已保存，赛程正在刷新。'); setRevision((value) => value + 1); }} />}
+    </>
+    {tab === 'transfers' && selectedSeason && <DirectTransfer key={selectedSeason.id} leagueId={leagueId} seasonId={selectedSeason.id} api={api} onSaved={() => { setNotice('转会已办理，列表正在刷新。'); setRevision((value) => value + 1); }} />}
     {tab !== 'matches' && <TransferSection api={api} leagueId={leagueId} revision={revision} compact={tab === 'home'} onSaved={() => { setNotice('转会审核已保存，列表正在刷新。'); setRevision((value) => value + 1); }} />}
   </>;
 }
@@ -95,6 +87,7 @@ function MatchSection({ api, leagueId, seasonId, revision, compact, onSaved }: {
   const [round, setRound] = useState('');
   const [status, setStatus] = useState('ALL');
   const [selected, setSelected] = useState<CompetitionMatchResponse | null>(null);
+  const [action, setAction] = useState<'score' | 'advance'>('score');
   const [limit, setLimit] = useState(20);
   const items = resource.data ?? [];
   const filtered = filterFixtures(items, { query, round, status: compact ? 'UPCOMING' : status });
@@ -105,22 +98,26 @@ function MatchSection({ api, leagueId, seasonId, revision, compact, onSaved }: {
     {compact ? <div className="mobile-section-heading"><div><span className="mobile-eyebrow">所选赛季 · 已发布比赛</span><h3>待录比分 <b>{filtered.length}</b></h3></div><Link to={`/mobile/${leagueId}/matches`}>全部赛程 →</Link></div> : <div className="mobile-filters">
       <label>搜索球队<input type="search" placeholder="球队名称或编号" maxLength={64} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(20); }} /></label>
       <label>轮次<select aria-label="轮次" value={round} onChange={(event) => { setRound(event.target.value); setLimit(20); }}><option value="">全部轮次</option>{[...new Set(items.map(({ match }) => match.roundNumber))].sort((a, b) => a - b).map((number) => <option key={number} value={number}>第 {number} 轮</option>)}</select></label>
-      <div className="mobile-segments" aria-label="比分状态">{[['ALL', '全部'], ['UPCOMING', '待录比分'], ['FINISHED', '已有比分']].map(([value, label]) => <button key={value} aria-pressed={status === value} onClick={() => { setStatus(value!); setLimit(20); }}>{label}</button>)}</div>
+      <div className="mobile-segments" aria-label="比分状态">{[['ALL', '全部'], ['UPCOMING', '待录比分'], ['FINISHED', '已有赛果']].map(([value, label]) => <button key={value} aria-pressed={status === value} onClick={() => { setStatus(value!); setLimit(20); }}>{label}</button>)}</div>
       <p className="mobile-muted">共 {filtered.length} 场已发布比赛 · 时间为北京时间</p>
     </div>}
-    {!shown.length && <Empty text={!items.length ? '暂无已发布赛程' : compact ? '此赛季已发布比赛的比分均已录入。' : '没有符合筛选条件的比赛。'} />}
-    <div className="mobile-card-list">{shown.map((fixture) => <MatchCard key={fixture.match.id} fixture={fixture} onEdit={() => setSelected(fixture.match)} />)}</div>
+    {!shown.length && <Empty text={!items.length ? '暂无已发布赛程' : compact ? '此赛季已发布比赛均已有赛果。' : '没有符合筛选条件的比赛。'} />}
+    <div className="mobile-card-list">{shown.map((fixture) => <MatchCard key={fixture.match.id} fixture={fixture} onEdit={() => { setAction('score'); setSelected(fixture.match); }} onAdvance={() => { setAction('advance'); setSelected(fixture.match); }} />)}</div>
     {!compact && filtered.length > limit && <Button block onClick={() => setLimit((value) => value + 20)}>继续显示比赛（剩余 {filtered.length - limit} 场）</Button>}
-    {selected && <ScoreEditor match={selected} leagueId={leagueId} api={api} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); onSaved(); }} />}
+    {selected && action === 'score' && <ScoreEditor match={selected} leagueId={leagueId} api={api} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); onSaved(); }} />}
+    {selected && action === 'advance' && <AdvancementEditor match={selected} leagueId={leagueId} api={api} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); onSaved(); }} />}
   </section>;
 }
 
-function MatchCard({ fixture: { competition, match }, onEdit }: { fixture: Fixture; onEdit(): void }) {
+function MatchCard({ fixture, onEdit, onAdvance }: { fixture: Fixture; onEdit(): void; onAdvance(): void }) {
+  const { competition, match } = fixture;
+  const hasResult = Boolean(match.officialResult || match.advancement);
   const canScore = ['IN_PROGRESS', 'COMPLETED'].includes(competition.status);
   return <article className="mobile-match-card">
-    <div className="mobile-match-meta"><span>{competition.name} · {match.stageDisplayName ?? '赛事'} · 第 {match.roundNumber} 轮</span><span className={match.officialResult ? 'mobile-badge done' : 'mobile-badge'}>{match.officialResult ? '已有比分' : '待录比分'}</span></div>
-    <div className="mobile-scoreboard"><div><small>主队</small><strong>{teamName(match.homeParticipant)}</strong></div><b>{match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</b><div><small>客队</small><strong>{teamName(match.awayParticipant)}</strong></div></div>
-    <div className="mobile-match-footer"><span>{match.plannedAt ? `${formatDateTime(match.plannedAt)}（北京时间）` : '比赛时间待定'}</span><Button disabled={!canScore} onClick={onEdit}>{match.officialResult ? '修正比分' : '录入比分'}</Button></div>
+    <div className="mobile-match-meta"><span>{competition.name} · {match.stageDisplayName ?? '赛事'} · 第 {match.roundNumber} 轮</span><span className={hasResult ? 'mobile-badge done' : 'mobile-badge'}>{match.advancement ? '已裁定晋级' : match.officialResult ? '已有比分' : '待录比分'}</span></div>
+    <div className="mobile-scoreboard"><div><small>主队</small><strong>{teamName(match.homeParticipant)}</strong></div><b className={match.advancement ? 'mobile-advancement-label' : undefined}>{match.advancement ? '晋级' : match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</b><div><small>客队</small><strong>{teamName(match.awayParticipant)}</strong></div></div>
+    {match.advancement && <div className="mobile-advancement-result"><strong>{teamName(match.advancement.winnerParticipantId === match.homeParticipant.id ? match.homeParticipant : match.awayParticipant)}晋级</strong><p>原因：{match.advancement.reason}</p></div>}
+    <div className="mobile-match-footer"><span>{match.plannedAt ? `${formatDateTime(match.plannedAt)}（北京时间）` : '比赛时间待定'}</span><div className="mobile-match-actions"><Button disabled={!canScore} onClick={onEdit}>{hasResult ? '修正比分' : '录入比分'}</Button>{canDecideAdvancement(fixture) && <Button onClick={onAdvance}>{match.advancement ? '更正晋级' : '裁定晋级'}</Button>}</div></div>
     {!canScore && <p className="mobile-muted">{competition.status === 'CANCELLED' ? '赛事已取消' : '赛事尚未开赛'}，暂不可录分。</p>}
   </article>;
 }

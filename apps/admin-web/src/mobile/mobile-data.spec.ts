@@ -25,3 +25,17 @@ describe('mobile fixture queries', () => {
     expect(filterFixtures(fixtures as never, { query: '', round: '', status: 'UPCOMING' })).toHaveLength(0);
   });
 });
+
+it('counts advancement decisions as finished results, not pending scores', () => {
+  const fixtures = [{ competition: { id: 'c' }, match: { roundNumber: 1, officialResult: null, advancement: { winnerParticipantId: 'home', reason: '弃权' }, homeParticipant: { displayName: '主队' }, awayParticipant: { displayName: '客队' } } }];
+  expect(filterFixtures(fixtures as never, { query: '', round: '', status: 'FINISHED' })).toHaveLength(1);
+  expect(filterFixtures(fixtures as never, { query: '', round: '', status: 'UPCOMING' })).toHaveLength(0);
+});
+
+it('only offers advancement for a started knockout round', async () => {
+  const { canDecideAdvancement } = await import('./mobile-data');
+  const fixture = { competition: { format: 'GROUP_KNOCKOUT', status: 'IN_PROGRESS' }, match: { stageCode: 'SEMI_FINAL' } };
+  expect(canDecideAdvancement(fixture as never)).toBe(true);
+  expect(canDecideAdvancement({ ...fixture, match: { stageCode: 'GROUP_A' } } as never)).toBe(false);
+  expect(canDecideAdvancement({ ...fixture, competition: { ...fixture.competition, status: 'PUBLISHED' } } as never)).toBe(false);
+});

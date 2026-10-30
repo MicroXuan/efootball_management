@@ -26,7 +26,13 @@ export async function loadFixtures(api: AdminApi, seasonId: string): Promise<Fix
 export function filterFixtures(items: Fixture[], filter: { query: string; round: string; status: string }) {
   const query = filter.query.normalize('NFKC').trim().toLocaleLowerCase();
   return items.filter(({ match }) => (!filter.round || String(match.roundNumber) === filter.round)
-    && (filter.status === 'ALL' || Boolean(match.officialResult) === (filter.status === 'FINISHED'))
+    && (filter.status === 'ALL' || Boolean(match.officialResult || match.advancement) === (filter.status === 'FINISHED'))
     && (!query || [match.homeParticipant, match.awayParticipant].some((team) =>
       teamName(team).normalize('NFKC').toLocaleLowerCase().includes(query))));
+}
+
+export function canDecideAdvancement({ competition, match }: Fixture) {
+  return ['SINGLE_ELIMINATION', 'GROUP_KNOCKOUT'].includes(competition.format)
+    && /^(ROUND_OF_(16|32|64|128)|QUARTER_FINAL|SEMI_FINAL|FINAL)$/.test(match.stageCode ?? '')
+    && ['IN_PROGRESS', 'COMPLETED'].includes(competition.status);
 }

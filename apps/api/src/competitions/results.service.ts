@@ -1,5 +1,6 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
+  AdminMatchAdvancementRequest,
   ManagerMatchResultRequest,
   MatchResultVersionResponse,
   RejectMatchResultRequest,
@@ -261,6 +262,24 @@ export class ResultsService {
       },
       input
     );
+  }
+
+  async advanceByLeagueAdmin(actorAdminId: string, leagueId: string, competitionId: string,
+    matchId: string, input: AdminMatchAdvancementRequest, key: string) {
+    if (!this.adminReceipts || !this.adminAuthorization || !this.audit) {
+      throw new Error('League administrator result dependencies are not configured');
+    }
+    const [matchLeagueId, competitionLeagueId] = await Promise.all([
+      this.visibility.requireVisible({ type: 'MATCH', id: matchId }),
+      this.visibility.requireVisible({ type: 'COMPETITION', id: competitionId })
+    ]);
+    if (matchLeagueId !== leagueId || competitionLeagueId !== leagueId) throw this.visibility.notFound();
+    await this.adminAuthorization.requireLeagueAccess(actorAdminId, leagueId);
+    return this.adminReceipts.execute(actorAdminId, `admin.competition-result.advance:${matchId}`, key, async (transaction) => {
+      await this.lockForOfficialResult(transaction, matchId);
+      const match = await this.managerMatch(transaction, competitionId, matchId);
+      return this.applyAdministratorAdvancement(transaction, match.id, input, { adminId: actorAdminId, leagueId });
+    }, input);
   }
 
   // All official writers share this ordering, including ordinary participant confirmation.

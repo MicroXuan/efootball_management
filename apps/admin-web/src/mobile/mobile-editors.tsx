@@ -10,12 +10,14 @@ import { teamName } from './mobile-data';
 export type Proposal = z.infer<typeof AdminTransferProposalSchema>;
 export const transferStatus: Record<string, string> = { PENDING_COUNTERPARTY: '待对方确认', PENDING_ADMIN: '待审核', APPROVED: '已批准', REJECTED: '已驳回', WITHDRAWN: '已撤回', EXPIRED: '已过期', INVALIDATED: '已失效' };
 type Common = { leagueId: string; api: AdminApi; onClose(): void; onSaved(): void };
-function failure(error: unknown) {
+export function failure(error: unknown) {
   if (error instanceof ApiError) {
     if (error.code === 'VERSION_CONFLICT' || error.code.includes('VERSION')) return '记录已被其他管理员更新，请关闭此窗口、刷新列表后重新核对。';
     if (error.status === 403) return '当前账号没有此操作权限，请联系平台管理员。';
-    if (error.code === 'MATCH_RESULT_NOT_ALLOWED') return '当前赛事尚未开赛或已取消，暂时不能录入比分。';
-    if (error.code === 'DISPUTE_NOT_READY') return '此比赛仍在争议举证阶段，暂时不能录入比分。';
+    if (error.code === 'MATCH_RESULT_NOT_ALLOWED') return '当前赛事状态不允许修改比赛结果，请刷新核对。';
+    if (error.code === 'DISPUTE_NOT_READY') return '此比赛存在待处理争议，请先在完整后台处理。';
+    if (error.code === 'TRANSFER_WINDOW_CLOSED') return '当前转会窗口未开放，请核对窗口设置。';
+    if (error.code === 'CUP_RESULT_LOCKED') return '下一轮已进行，不能直接更改晋级结果。';
     if (error.code.includes('KNOCKOUT')) return '淘汰赛需要分出胜负，请核对比分。';
     if (error.status < 500) return `提交未通过，请刷新后核对记录及业务条件（${error.code}）。`;
   }
@@ -45,10 +47,11 @@ export function ScoreEditor({ leagueId, match, api, onClose, onSaved }: Common &
     finally { lock.current = false; setBusy(false); }
   };
   const edit = () => { key.reset(); setError(''); };
-  return <Modal open title={match.officialResult ? '修正官方比分' : '录入官方比分'} onCancel={() => { if (!lock.current) onClose(); }} closable={!busy} mask={{ closable: false }} footer={null} className="mobile-modal">
+  return <Modal open title={(match.officialResult || match.advancement) ? '修正官方比分' : '录入官方比分'} onCancel={() => { if (!lock.current) onClose(); }} closable={!busy} mask={{ closable: false }} footer={null} className="mobile-modal">
     <div className="mobile-editor">
       <p>第 {match.roundNumber} 轮 · {teamName(match.homeParticipant)} 对 {teamName(match.awayParticipant)}</p>
       {match.officialResult && <p className="mobile-muted">原比分 {match.officialResult.homeScore} : {match.officialResult.awayScore}，修正后将重新计算相关赛果。</p>}
+      {match.advancement && <Alert type="warning" title="本场已裁定晋级，提交比分将替换原晋级结果。" />}
       {error && <Alert role="alert" type="error" title={error} />}
       {preview ? <>
         <div className="mobile-score-preview"><span>{teamName(match.homeParticipant)}</span><strong>{home} : {away}</strong><span>{teamName(match.awayParticipant)}</span></div>

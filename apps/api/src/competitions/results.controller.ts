@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Headers, HttpCode, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import {
+  AdminMatchAdvancementRequestSchema,
+  type AdminMatchAdvancementRequest,
   ManagerMatchResultRequestSchema,
   ResourceIdSchema,
   type ManagerMatchResultRequest
@@ -48,6 +50,20 @@ export class ResultsController {
     @Body(new ZodValidationPipe(ManagerMatchResultRequestSchema)) body: ManagerMatchResultRequest
   ) {
     return this.results.recordByLeagueAdmin(admin.id, leagueId, id, matchId, body, this.key(key));
+  }
+
+  @Post('admin/leagues/:leagueId/competitions/:id/matches/:matchId/advancement')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard, AdminScopeGuard)
+  leagueAdminAdvancement(
+    @CurrentAdmin() admin: CurrentAdminIdentity,
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('id', new ZodValidationPipe(ResourceIdSchema)) id: string,
+    @Param('matchId', new ZodValidationPipe(ResourceIdSchema)) matchId: string,
+    @Headers('idempotency-key') key: string | undefined,
+    @Body(new ZodValidationPipe(AdminMatchAdvancementRequestSchema)) body: AdminMatchAdvancementRequest
+  ) {
+    return this.results.advanceByLeagueAdmin(admin.id, leagueId, id, matchId, body, this.key(key));
   }
 
   @Get('competitions/:id/standings')
