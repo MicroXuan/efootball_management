@@ -76,7 +76,7 @@ export class AdminPlayerAuctionsService {
       ? batch.lots.find((lot) => lot.id === currentLotId)
       : null;
     if (current?.status === 'ACTIVE' && current.deadlineAt) {
-      const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
+      const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT UTC_TIMESTAMP(3) AS databaseNow`;
       if (rows[0]?.databaseNow && current.deadlineAt <= rows[0].databaseNow) {
         await this.worker.closeDueLot(current.id, current.deadlineEpoch);
         batch = await this.batch(this.prisma, leagueId, batchId);

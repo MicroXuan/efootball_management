@@ -20,7 +20,9 @@ export class PlayerAuctionLockRepository {
   }
 
   async now(tx: Prisma.TransactionClient): Promise<Date> {
-    const rows = await tx.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
+    // The DB session uses Beijing time; Prisma Date values are UTC instants.
+    // Read UTC here so deadlines match the worker clock. UI renders Beijing time.
+    const rows = await tx.$queryRaw<Array<{ databaseNow: Date }>>`SELECT UTC_TIMESTAMP(3) AS databaseNow`;
     const value = rows[0]?.databaseNow;
     if (!value) throw new Error('DATABASE_TIME_UNAVAILABLE');
     return value;
