@@ -81,10 +81,10 @@ export class WechatPrivateManagementService {
       return `${team.name} 当前阵容：\n${lines.join('\n') || '暂无球员'}`;
     }
     if (text === '拍卖列表') {
-      const batches = await tx.playerAuctionBatch.findMany({ where: { leagueId: scope.leagueId, bidChannel: 'WECHAT_GROUP', groupBinding: { deviceId: scope.deviceId } }, orderBy: { createdAt: 'desc' }, take: 30 });
+      const batches = await tx.playerAuctionBatch.findMany({ where: { leagueId: scope.leagueId, bidChannel: 'WECHAT_GROUP', status: { not: 'COMPLETED' }, groupBinding: { deviceId: scope.deviceId } }, orderBy: { createdAt: 'desc' }, take: 30 });
       const lines = [];
       for (const b of batches) lines.push(`${await this.ref(tx, 'BATCH', b.id, 'A')} ${b.name} / ${b.status}`);
-      return '最近30个本机器人拍卖批次：\n' + (lines.join('\n') || '暂无批次，请先在后台创建并准备。');
+      return '最近30个本机器人未完成的拍卖批次：\n' + (lines.join('\n') || '暂无未完成批次，请先在后台创建并准备。');
     }
     const detail = /^拍卖\s+A([1-9]\d{0,8})(?:\s+([1-9]\d{0,3}))?$/.exec(text);
     if (!detail) return null;

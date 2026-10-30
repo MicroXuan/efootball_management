@@ -163,6 +163,16 @@ describe('private administrator management integration', () => {
     expect(await db.competitionMatch.count({ where: { id: matchId } })).toBe(0);
     await db.$disconnect();
   });
+  it('hides completed batches from the private list while keeping direct detail access', async () => {
+    expect(await command('拍卖列表')).toContain(`A${batchRef} `);
+    await db.playerAuctionBatch.update({ where: { id: batchId }, data: { status: 'COMPLETED' } });
+    try {
+      expect(await command('拍卖列表')).not.toContain(`A${batchRef} `);
+      expect(await command(`拍卖 A${batchRef}`)).toContain('COMPLETED');
+    } finally {
+      await db.playerAuctionBatch.update({ where: { id: batchId }, data: { status: 'READY' } });
+    }
+  });
 
   it('previews and confirms advancement without fake scores, and replays exactly once', async () => {
     const code = await managementPreview(`晋级 M${reference} 客队 原因：主队弃权`);
