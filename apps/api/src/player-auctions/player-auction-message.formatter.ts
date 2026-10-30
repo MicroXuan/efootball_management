@@ -24,11 +24,9 @@ export class PlayerAuctionMessageFormatter {
     const descriptor = [card?.position, card?.overallRating].filter((value) => value !== undefined).join(' / ');
     return [
       `提名拍卖：第${lot.displayOrder}名球员拍卖开始！`,
-      '************************',
       `球员信息：【${descriptor ? `${descriptor} / ` : ''}${lot.playerName}】`,
       `起拍价：${this.money(lot.startingPrice)}`,
       `最低加价：${this.money(lot.minimumIncrement)}`,
-      '************************',
       '请在30秒内发送纯数字出价；以机器人确认消息和倒计时为准。'
     ].join('\n');
   }
@@ -62,7 +60,7 @@ export class PlayerAuctionMessageFormatter {
 
   pendingReview(playerName: string, bidder: { teamNumber: number | null; teamName: string; bidderDisplayName: string }, amount: number) {
     const teamNumber = bidder.teamNumber === null ? '未编号' : `T${bidder.teamNumber}`;
-    return `【${playerName}】倒计时结束，计算结果：${teamNumber} ${bidder.teamName}（出价用户：${bidder.bidderDisplayName}）${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
+    return `【${playerName}】倒计时结束，计算结果：${teamNumber} ${bidder.teamName}（出价用户：${bidder.bidderDisplayName}），出价 ${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
   }
 
   noBid(playerName: string) {

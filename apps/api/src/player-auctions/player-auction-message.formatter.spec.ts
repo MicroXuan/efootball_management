@@ -3,21 +3,21 @@ import { PlayerAuctionMessageFormatter } from './player-auction-message.formatte
 describe('PlayerAuctionMessageFormatter', () => {
   const formatter = new PlayerAuctionMessageFormatter();
 
-  it('renders every price between stars and preserves the required bid confirmation', () => {
-    expect(formatter.validBid('申花', 120)).toBe('【申花】出价有效：⭐120⭐，倒计时重置为 30 秒。');
-    expect(formatter.opening({ displayOrder: 37, playerName: '车范根', playerSnapshot: { card: { position: 'CF', overallRating: 96 } }, startingPrice: 50, minimumIncrement: 10 }))
-      .toContain('起拍价：⭐50⭐');
-    expect(formatter.opening({ displayOrder: 37, playerName: '车范根', playerSnapshot: { card: { position: 'CF', overallRating: 96 } }, startingPrice: 50, minimumIncrement: 10 }))
-      .toContain('最低加价：⭐10⭐');
+  it('renders auction prices as plain numbers and preserves the required bid confirmation', () => {
+    const opening = formatter.opening({ displayOrder: 37, playerName: '车范根', playerSnapshot: { card: { position: 'CF', overallRating: 96 } }, startingPrice: 50, minimumIncrement: 10 });
+    expect(formatter.validBid('申花', 120)).toBe('【申花】出价有效：120，倒计时重置为 30 秒。');
+    expect(opening).toContain('起拍价：50');
+    expect(opening).toContain('最低加价：10');
+    expect(opening).not.toMatch(/[⭐*]/);
   });
 
   it('formats countdown, invalid bids, pending review, no bid, recovery and completion', () => {
     expect([20, 10, 3, 2, 1].map((mark) => formatter.countdown(mark as 20 | 10 | 3 | 2 | 1))).toEqual([
       '拍卖剩余时间 20s', '拍卖剩余时间 10s', '拍卖剩余时间 3s', '拍卖剩余时间 2s', '拍卖剩余时间 1s'
     ]);
-    expect(formatter.invalidBid('BELOW_MINIMUM_INCREMENT', 130)).toContain('⭐130⭐');
+    expect(formatter.invalidBid('BELOW_MINIMUM_INCREMENT', 130)).toContain('130');
     expect(formatter.pendingReview('车范根', { teamNumber: 1, teamName: '申花', bidderDisplayName: 'Dust' }, 120))
-      .toBe('【车范根】倒计时结束，计算结果：T1 申花（出价用户：Dust）⭐120⭐。结果待管理员后台审核，系统将自动进入下一位或结束批次。');
+      .toBe('【车范根】倒计时结束，计算结果：T1 申花（出价用户：Dust），出价 120。结果待管理员后台审核，系统将自动进入下一位或结束批次。');
     expect(formatter.noBid('车范根')).toContain('流拍');
     expect(formatter.noBid('车范根')).toContain('自动进入下一位');
     expect(formatter.recovery()).toContain('暂停');

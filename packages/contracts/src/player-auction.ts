@@ -344,7 +344,7 @@ export const PlayerAuctionBatchDetailSchema = z.object({
 
 export function formatAuctionMoney(value: number): string {
   const parsed = PositiveMoneySchema.parse(value);
-  return `⭐${parsed}⭐`;
+  return String(parsed);
 }
 
 export type PlayerAuctionBatchStatus = z.infer<typeof PlayerAuctionBatchStatusSchema>;

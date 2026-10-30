@@ -129,7 +129,7 @@ describe('PlayerAuctionWorker', () => {
     expect(messages[0]).toMatchObject({ businessKey: 'auction:lot-1:epoch:3:closed' });
     expect(messages[1]).toMatchObject({ businessKey: 'auction:lot-2:epoch:1:opened' });
     expect(messages[0].priority).toBeGreaterThan(messages[1].priority);
-    expect(messages[0].text).toContain('⭐120⭐');
+    expect(messages[0].text).toContain('出价 120');
     expect(messages[0].text).toContain('T1 申花（出价用户：Dust）');
     expect(messages[1].text).toContain('第2名球员拍卖开始');
   });

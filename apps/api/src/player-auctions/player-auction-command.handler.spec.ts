@@ -31,7 +31,7 @@ describe('PlayerAuctionCommandHandler', () => {
     const { handler, bids, outbox } = harness('120', null);
     await expect(handler.handle('in-1')).resolves.toBe(true);
     expect(bids.placeBid).toHaveBeenCalledWith('in-1', 120);
-    expect(outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: '【申花】出价有效：⭐120⭐，倒计时重置为 30 秒。' }));
+    expect(outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: '【申花】出价有效：120，倒计时重置为 30 秒。' }));
     await expect(harness('120元').handler.handle('in-1')).resolves.toBe(false);
   });
 

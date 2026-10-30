@@ -3145,7 +3145,7 @@ describe('player auction contracts', () => {
     });
     assert.equal(detail.lots[0]?.currentPrice, 120);
     assert.equal(detail.bidChannel, 'WECHAT_GROUP');
-    assert.equal(formatAuctionMoney(120), '⭐120⭐');
+    assert.equal(formatAuctionMoney(120), '120');
     assert.equal('currentPriceDisplay' in detail.lots[0]!, false);
   });
 
