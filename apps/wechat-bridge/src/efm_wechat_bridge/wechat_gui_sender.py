@@ -104,9 +104,17 @@ class WechatGuiSender:
 
         try:
             marker = self._driver.capture_readback_marker(task.target_id)
-            clipboard = self._driver.capture_clipboard()
         except Exception:
-            return SendResult(status=SendStatus.FAILED, error_code="SEND_PREPARATION_FAILED")
+            return SendResult(status=SendStatus.FAILED, error_code="READBACK_MARKER_UNAVAILABLE")
+        try:
+            clipboard = self._driver.capture_clipboard()
+        except Exception as error:
+            code = (
+                "CLIPBOARD_CONTENT_UNSUPPORTED"
+                if isinstance(error, RuntimeError) and str(error) == "UNSUPPORTED_CLIPBOARD_CONTENT"
+                else "CLIPBOARD_CAPTURE_FAILED"
+            )
+            return SendResult(status=SendStatus.FAILED, error_code=code)
 
         entered = False
         try:

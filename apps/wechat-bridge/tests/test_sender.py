@@ -139,6 +139,40 @@ def test_dry_run_opens_and_confirms_target_without_input() -> None:
     assert driver.enter_calls == 0
 
 
+@pytest.mark.parametrize(
+    ("failed_step", "expected_code"),
+    [
+        ("marker", "READBACK_MARKER_UNAVAILABLE"),
+        ("clipboard", "CLIPBOARD_CAPTURE_FAILED"),
+        ("rich_clipboard", "CLIPBOARD_CONTENT_UNSUPPORTED"),
+    ],
+)
+def test_preparation_failure_identifies_step_without_entering_text(
+    failed_step: str, expected_code: str
+) -> None:
+    class PreparationDriver(Driver):
+        def capture_readback_marker(self, stable_id: str) -> object:
+            if failed_step == "marker":
+                raise RuntimeError("READBACK_MARKER_UNAVAILABLE")
+            return super().capture_readback_marker(stable_id)
+
+        def capture_clipboard(self) -> object:
+            if failed_step == "rich_clipboard":
+                raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
+            if failed_step == "clipboard":
+                raise OSError("clipboard temporarily busy")
+            return super().capture_clipboard()
+
+    driver = PreparationDriver()
+
+    result = sender(driver).send(task())
+
+    assert result.status is SendStatus.FAILED
+    assert result.error_code == expected_code
+    assert driver.pasted == []
+    assert driver.enter_calls == 0
+
+
 def test_restores_clipboard_and_returns_failed_when_paste_never_reached_enter() -> None:
     driver = Driver()
     driver.fail_paste = True
