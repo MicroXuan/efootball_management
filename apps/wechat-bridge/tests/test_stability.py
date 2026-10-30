@@ -121,3 +121,10 @@ def test_health_probe_exception_does_not_kill_workers_or_claim_send(tmp_path):
     assert runtime.upload_members_once() == 0
     assert runtime.receive_upload_once() == 0
     assert not runtime._stop.is_set()
+
+
+def test_heartbeat_success_timestamp_is_canonical_utc(tmp_path):
+    runtime, transport, api, spool = make_runtime(tmp_path)
+    runtime.receive_upload_once()
+    assert runtime.heartbeat_once()
+    assert api.heartbeats[-1]['receiverHealth']['lastSuccessAt'].endswith('Z')

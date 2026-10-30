@@ -129,11 +129,11 @@ class BridgeRuntime:
 
     def _receiver_succeeded(self) -> None:
         if self._group_error:
-            self._receiver_status = {**self._receiver_status, "lastSuccessAt": datetime.now(UTC).isoformat()}
+            self._receiver_status = {**self._receiver_status, "lastSuccessAt": datetime.now(UTC).isoformat().replace("+00:00", "Z")}
             return
         if self._receiver_status["status"] == "RECOVERING":
             self.logger.emit("receiver_recovered", attempts=self._receiver_failures)
-        self._receiver_status = {"status": "HEALTHY", "errorCode": None, "lastSuccessAt": datetime.now(UTC).isoformat()}
+        self._receiver_status = {"status": "HEALTHY", "errorCode": None, "lastSuccessAt": datetime.now(UTC).isoformat().replace("+00:00", "Z")}
         self._receiver_failures = 0
         self._receiver_retry_at = 0.0
 

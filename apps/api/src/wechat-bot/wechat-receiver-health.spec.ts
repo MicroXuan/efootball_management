@@ -14,8 +14,8 @@ it('persists receiver diagnostics and clears stale diagnostics for older clients
   prisma.$transaction = async (work: any) => work(prisma);
   const service = new WechatBridgeService(prisma);
   const input = { wechatAccountId: 'robot', wechatVersion: '4.1', loginStatus: 'LOGGED_IN', screenLocked: false, outboundQueueDepth: 0, observedGroups: [] };
-  const health = { status: 'RECOVERING', errorCode: 'WECHAT_DATABASE_UNAVAILABLE', lastSuccessAt: '2026-10-30T14:00:00Z' };
-  await service.heartbeat('device', WechatBridgeHeartbeatSchema.parse({ ...input, receiverHealth: health }));
+  const health = { status: 'RECOVERING', errorCode: 'WECHAT_DATABASE_UNAVAILABLE', lastSuccessAt: '2026-10-30T14:00:00.000Z' };
+  await service.heartbeat('device', WechatBridgeHeartbeatSchema.parse({ ...input, receiverHealth: { ...health, lastSuccessAt: "2026-10-30T14:00:00+00:00" } }));
   expect(prisma.wechatBotDevice.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ receiverHealth: health }) }));
   await service.heartbeat('device', WechatBridgeHeartbeatSchema.parse(input));
   expect(prisma.wechatBotDevice.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ receiverHealth: Prisma.DbNull }) }));

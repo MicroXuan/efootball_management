@@ -28,7 +28,7 @@ export const WechatObservedGroupInputSchema = z.object({
 export const WechatReceiverHealthSchema = z.object({
   status: z.enum(['STARTING', 'HEALTHY', 'RECOVERING']),
   errorCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).nullable(),
-  lastSuccessAt: TimestampSchema.nullable()
+  lastSuccessAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString()).nullable()
 });
 
 export const WechatBridgeHeartbeatSchema = z.object({
