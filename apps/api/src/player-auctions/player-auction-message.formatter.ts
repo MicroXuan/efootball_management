@@ -60,8 +60,9 @@ export class PlayerAuctionMessageFormatter {
     return `拍卖剩余时间 ${mark}s`;
   }
 
-  pendingReview(playerName: string, teamName: string, amount: number) {
-    return `【${playerName}】倒计时结束，计算结果：${teamName} ${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
+  pendingReview(playerName: string, bidder: { teamNumber: number | null; teamName: string; bidderDisplayName: string }, amount: number) {
+    const teamNumber = bidder.teamNumber === null ? '未编号' : `T${bidder.teamNumber}`;
+    return `【${playerName}】倒计时结束，计算结果：${teamNumber} ${bidder.teamName}（出价用户：${bidder.bidderDisplayName}）${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
   }
 
   noBid(playerName: string) {

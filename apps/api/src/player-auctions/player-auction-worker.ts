@@ -102,7 +102,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
       await this.locks.lockLot(tx, lotId);
       const lot = await tx.playerAuctionLot.findUnique({
         where: { id: lotId },
-        include: { currentHighestBid: { include: { leagueTeam: { select: { name: true } } } } }
+        include: { currentHighestBid: { include: { leagueTeam: { select: { teamNumber: true, name: true } }, user: { select: { displayName: true } } } } }
       });
       if (!lot || lot.status !== 'ACTIVE' || lot.deadlineEpoch !== epoch || !lot.deadlineAt) return false;
       const batch = await tx.playerAuctionBatch.findUnique({
@@ -152,7 +152,11 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
       if (batch.bidChannel !== 'WECHAT_GROUP') return true;
       if (!batch.groupBinding) return false;
       const text = lot.currentHighestBid?.leagueTeam
-        ? this.formatter.pendingReview(lot.playerNameSnapshot, lot.currentHighestBid.leagueTeam.name, lot.currentPrice ?? lot.startingPrice)
+        ? this.formatter.pendingReview(lot.playerNameSnapshot, {
+          teamNumber: lot.currentHighestBid.leagueTeam.teamNumber,
+          teamName: lot.currentHighestBid.leagueTeam.name,
+          bidderDisplayName: lot.currentHighestBid.user?.displayName ?? '未知用户'
+        }, lot.currentPrice ?? lot.startingPrice)
         : this.formatter.noBid(lot.playerNameSnapshot);
       await tx.wechatOutboxMessage.create({
         data: {

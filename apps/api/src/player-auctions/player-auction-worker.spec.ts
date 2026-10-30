@@ -19,7 +19,7 @@ function closingHarness({ highestBid = true, includeNext = true, bidChannel = 'W
     playerSnapshot: { card: { position: 'CF', overallRating: 96 } }, startingPrice: 50,
     minimumIncrement: 10, currentPrice: highestBid ? 120 : null, status: 'ACTIVE',
     deadlineAt: now, deadlineEpoch: 3, currentHighestBidId: highestBid ? 'bid-1' : null,
-    currentHighestBid: highestBid ? { leagueTeam: { name: '申花' } } : null, version: 1,
+    currentHighestBid: highestBid ? { leagueTeam: { teamNumber: 1, name: '申花' }, user: { displayName: 'Dust' } } : null, version: 1,
     batch: { id: 'batch-1', leagueId: 'league-1' }
   };
   const next: any = {
@@ -128,6 +128,7 @@ describe('PlayerAuctionWorker', () => {
     expect(messages[1]).toMatchObject({ businessKey: 'auction:lot-2:epoch:1:opened' });
     expect(messages[0].priority).toBeGreaterThan(messages[1].priority);
     expect(messages[0].text).toContain('⭐120⭐');
+    expect(messages[0].text).toContain('T1 申花（出价用户：Dust）');
     expect(messages[1].text).toContain('第2名球员拍卖开始');
   });
 
