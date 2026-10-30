@@ -12,10 +12,12 @@ describe('PlayerAuctionMessageFormatter', () => {
   });
 
   it('formats countdown, invalid bids, pending review, no bid, recovery and completion', () => {
-    expect([20, 10, 3, 2, 1].map((mark) => formatter.countdown(mark as 20 | 10 | 3 | 2 | 1))).toEqual(['20', '10', '3', '2', '1']);
+    expect([20, 10, 3, 2, 1].map((mark) => formatter.countdown(mark as 20 | 10 | 3 | 2 | 1))).toEqual([
+      '拍卖剩余时间 20s', '拍卖剩余时间 10s', '拍卖剩余时间 3s', '拍卖剩余时间 2s', '拍卖剩余时间 1s'
+    ]);
     expect(formatter.invalidBid('BELOW_MINIMUM_INCREMENT', 130)).toContain('⭐130⭐');
-    expect(formatter.pendingReview('车范根', '申花', 120)).toContain('⭐120⭐');
-    expect(formatter.pendingReview('车范根', '申花', 120)).toContain('自动进入下一位');
+    expect(formatter.pendingReview('车范根', { teamNumber: 1, teamName: '申花', bidderDisplayName: 'Dust' }, 120))
+      .toBe('【车范根】倒计时结束，计算结果：T1 申花（出价用户：Dust）⭐120⭐。结果待管理员后台审核，系统将自动进入下一位或结束批次。');
     expect(formatter.noBid('车范根')).toContain('流拍');
     expect(formatter.noBid('车范根')).toContain('自动进入下一位');
     expect(formatter.recovery()).toContain('暂停');

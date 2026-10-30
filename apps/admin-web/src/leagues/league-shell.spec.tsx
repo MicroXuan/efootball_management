@@ -61,7 +61,7 @@ describe('role-aware administration navigation', () => {
     expect(screen.getByRole('link', { name: '联赛管理' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '审计日志' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '数据同步' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '群机器人' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '群机器人' })).toHaveAttribute('href', '/platform/wechat-bot');
     expect(screen.getByRole('link', { name: '数据同步' }).closest('.ant-menu-item')?.querySelector('.admin-icon')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '联赛管理' })).toHaveAttribute('aria-current', 'page');
   });
@@ -71,7 +71,7 @@ describe('role-aware administration navigation', () => {
 
     const navigation = await screen.findByRole('navigation', { name: '联赛工作区导航' });
     expect(navigation).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '微信群机器人' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '微信群机器人' })).toHaveAttribute('href', `/leagues/${leagueId}/wechat-bot`);
     expect(screen.getByRole('link', { name: '赛季管理' })).toHaveAttribute('aria-current', 'page');
     expect(navigation.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
     expect(screen.queryByRole('navigation', { name: '联赛分组导航' })).not.toBeInTheDocument();

@@ -27,8 +27,8 @@ export function matchCard(item: SeasonFixtureListItem) {
     matchId: item.match.id,
     scheduleMeta: `第 ${item.match.roundNumber} 轮 · ${item.match.stageDisplayName ?? '赛程'}`,
     plannedLabel: plannedAt(item.match.plannedAt),
-    stateCopy: result ? '已结束' : '未开始',
-    resultCopy: result ? `${result.homeScore} : ${result.awayScore}` : '对阵',
+    stateCopy: result || item.match.advancement ? '已结束' : '未开始',
+    resultCopy: item.match.advancement ? '裁定晋级（无比分）' : result ? `${result.homeScore} : ${result.awayScore}` : '对阵',
     home: participantView(item.match.homeParticipant),
     away: participantView(item.match.awayParticipant)
   }

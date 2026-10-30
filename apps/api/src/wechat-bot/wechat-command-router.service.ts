@@ -1,3 +1,5 @@
+import { WechatPrivateScoreService } from './wechat-private-score.service.js';
+import { paginateWechatMessage } from './wechat-message-formatter.js';
 import { HttpException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../database/prisma.service.js';
@@ -19,7 +21,8 @@ export class WechatCommandRouterService {
     @Inject(WechatBindingService) private readonly bindings: WechatBindingService,
     @Inject(WechatScheduleQueryService) private readonly schedules: WechatScheduleQueryService,
     @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService,
-    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef
+    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef,
+    @Optional() @Inject(WechatPrivateScoreService) private readonly privateScores?: WechatPrivateScoreService
   ) {}
 
   async route(inboundId: string): Promise<void> {
@@ -27,7 +30,12 @@ export class WechatCommandRouterService {
     if (!inbound || inbound.processingStatus !== 'PENDING' || !inbound.commandText) return;
 
     if (inbound.conversationType === 'PRIVATE') {
-      await this.routePrivateBinding(inbound);
+      if (inbound.commandText?.startsWith('绑定 ')) await this.routePrivateBinding(inbound);
+      else if (this.privateScores) {
+        const reply = await this.privateScores.handle(inbound);
+        await this.reply(inbound, paginateWechatMessage('管理员私聊', reply.split('\n')));
+        await this.finish(inbound.id, 'PROCESSED', 'PRIVATE_SCORE_REPLIED');
+      }
       return;
     }
 
@@ -85,10 +93,10 @@ export class WechatCommandRouterService {
             wechatContactId: inbound.senderId
           }
         },
-        select: { userId: true, status: true }
+        select: { userId: true, status: true, user: { select: { status: true } } }
       });
-      if (!identity || identity.status !== 'ACTIVE') {
-        await this.reply(inbound, ['请先在小程序获取验证码，再私聊机器人发送：绑定 123456']);
+      if (!identity || identity.status !== 'ACTIVE' || identity.user.status !== 'ACTIVE') {
+        await this.reply(inbound, ['请联系管理员在后台关联账号，无需验证码或私聊绑定。']);
         await this.finish(inbound.id, 'PROCESSED', 'IDENTITY_BINDING_REQUIRED');
         return;
       }

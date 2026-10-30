@@ -19,7 +19,9 @@ describe('PlayerAuctionStateService', () => {
     const auth: any = { can: jest.fn(async () => true) };
     const service = new PlayerAuctionStateService(prisma, locks, auth);
 
+    expect(service.activity.isAwake()).toBe(false);
     await service.start('group-1', 'user-1');
+    expect(service.activity.isAwake()).toBe(true);
     expect(lot.deadlineAt.toISOString()).toBe('2026-10-09T12:00:30.000Z');
     now.setTime(Date.parse('2026-10-09T12:00:07.250Z'));
     await service.pause('group-1', 'user-1');
@@ -27,6 +29,10 @@ describe('PlayerAuctionStateService', () => {
     now.setTime(Date.parse('2026-10-09T12:01:00.000Z'));
     await service.resume('group-1', 'user-1');
     expect(lot.deadlineAt.toISOString()).toBe('2026-10-09T12:01:22.750Z');
+    expect(batch.pausedAt).toBeNull();
+    now.setTime(Date.parse('2026-10-09T12:01:02.000Z'));
+    await service.pause('group-1', 'user-1');
+    expect(batch.pausedAt.toISOString()).toBe('2026-10-09T12:01:02.000Z');
   });
 
   it('refuses to start if a queued player joined a league team after preparation', async () => {
@@ -56,5 +62,39 @@ describe('PlayerAuctionStateService', () => {
       { can: jest.fn(async () => false) } as never
     );
     await expect(service.start('group-1', 'user-1')).rejects.toMatchObject({ code: 'AUCTION_FORBIDDEN' });
+  });
+});
+
+describe('auction continuous pause deadline', () => {
+  it.each(['PAUSED', 'RECOVERY_REQUIRED'])('rejects resuming %s at the one-hour boundary', async (status) => {
+    const now = new Date('2026-10-30T13:00:00.000Z');
+    const batch: any = { id: 'batch-1', leagueId: 'league-1', status, bidChannel: 'WECHAT_GROUP',
+      currentLotId: 'lot-1', version: 1, pausedAt: new Date('2026-10-30T12:00:00.000Z') };
+    const lot: any = { id: 'lot-1', status: 'PAUSED', pausedRemainingMs: 500 };
+    const tx: any = {
+      playerAuctionBatch: { findUnique: jest.fn(async () => batch), update: jest.fn() },
+      playerAuctionLot: { findUnique: jest.fn(async () => lot), findUniqueOrThrow: jest.fn(async () => lot), update: jest.fn() }
+    };
+    const state = new PlayerAuctionStateService({} as never,
+      { lockBatch: jest.fn(), lockLot: jest.fn(), now: async () => now } as never, {} as never);
+    const result = status === 'PAUSED' ? state.resumeBatch(tx, batch.id, 1) : state.recoverBatch(tx, batch.id, 1);
+    await expect(result).rejects.toMatchObject({ code: 'AUCTION_PAUSE_EXPIRED' });
+    expect(tx.playerAuctionLot.update).not.toHaveBeenCalled();
+  });
+
+  it('preserves the original pause time when a manually paused auction enters recovery', async () => {
+    const pausedAt = new Date('2026-10-30T12:00:00.000Z');
+    const now = new Date('2026-10-30T12:50:00.000Z');
+    const batch: any = { id: 'batch-1', leagueId: 'league-1', status: 'PAUSED', currentLotId: 'lot-1', pausedAt };
+    const lot = { id: 'lot-1', status: 'PAUSED', pausedRemainingMs: 500 };
+    const tx: any = {
+      playerAuctionBatch: { findFirst: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) },
+      playerAuctionLot: { findUnique: jest.fn(async () => lot), update: jest.fn() }
+    };
+    const state = new PlayerAuctionStateService({ $transaction: async (work: any) => work(tx) } as never,
+      { lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: async () => now } as never, {} as never);
+    await state.enterRecovery('group-1', 'HEARTBEAT_TIMEOUT');
+    expect(batch.pausedAt).toEqual(pausedAt);
+    expect(batch.status).toBe('RECOVERY_REQUIRED');
   });
 });

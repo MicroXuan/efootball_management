@@ -1,3 +1,4 @@
+import { WechatPrivateScoreService } from '../src/wechat-bot/wechat-private-score.service.js';
 import { createHmac, randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { config } from 'dotenv';
@@ -7,6 +8,7 @@ import { PrismaService } from '../src/database/prisma.service.js';
 import { defaultSalaryTiers } from '../src/league-rosters/salary-rules.service.js';
 import { PlayerBuildsService } from '../src/player-builds/player-builds.service.js';
 import { PlayerAuctionRecoveryService } from '../src/player-auctions/player-auction-recovery.service.js';
+import { PlayerAuctionPauseTimeoutService } from '../src/player-auctions/player-auction-pause-timeout.service.js';
 import { PlayerAuctionWorker } from '../src/player-auctions/player-auction-worker.js';
 import { createTestApp } from './test-app.js';
 
@@ -75,6 +77,16 @@ describe('Player auction group acceptance', () => {
       .set(adminHeaders()).send({ expectedVersion: configured.body.version }).expect(201);
     return prepared.body as { id: string; version: number; lots: Array<{ id: string; version: number }> };
   };
+  const privateControl = async (batchId: string, verb: string) => {
+    await prisma.wechatAdminContact.upsert({ where: { deviceId_wechatContactId: { deviceId, wechatContactId: 'auction-private-admin' } },
+      create: { deviceId, wechatContactId: 'auction-private-admin', adminId, leagueId, seasonId, boundAt: new Date(0) }, update: {} });
+    const ref = await prisma.wechatEntityReference.upsert({ where: { kind_entityId: { kind: 'BATCH', entityId: batchId } }, create: { kind: 'BATCH', entityId: batchId }, update: {} });
+    const send = async (text: string) => app.get(WechatPrivateScoreService).handle(await prisma.wechatInboundMessage.create({ data: { deviceId, conversationType: 'PRIVATE', conversationId: 'auction-private-admin', senderId: 'auction-private-admin', messageId: randomUUID(), commandText: text, wechatSentAt: new Date() } }));
+    const preview = await send(`${verb} A${ref.id}${verb === '恢复拍卖' ? ' 原因：已核对群消息' : ''}`);
+    const code = /确认 ([0-9A-F]{12})/.exec(preview)?.[1];
+    if (!code) throw new Error(preview);
+    expect(await send(`确认 ${code}`)).toContain('操作成功');
+  };
   const closeLot = async (lotId: string) => {
     const lot = await prisma.playerAuctionLot.update({ where: { id: lotId }, data: { deadlineAt: new Date(Date.now() - 1_000) } });
     const closedByThisCall = await worker.closeDueLot(lot.id, lot.deadlineEpoch);
@@ -83,7 +95,10 @@ describe('Player auction group acceptance', () => {
     }
   };
 
+  const originalFlags = [process.env.WECHAT_BOT_PRIVATE_SCORE_ENABLED, process.env.WECHAT_BOT_PRIVATE_MANAGEMENT_ENABLED];
   beforeAll(async () => {
+    process.env.WECHAT_BOT_PRIVATE_SCORE_ENABLED = 'true';
+    process.env.WECHAT_BOT_PRIVATE_MANAGEMENT_ENABLED = 'true';
     await prisma.$connect();
     app = await createTestApp();
     worker = app.get(PlayerAuctionWorker);
@@ -197,7 +212,10 @@ describe('Player auction group acceptance', () => {
   });
 
   afterAll(async () => {
+    if (app) await app.close();
+    await prisma.auditLog.deleteMany({ where: { resourceId: { in: batchIds }, action: 'player-auction.pause-timeout' } });
     if (batchIds.length) {
+      await prisma.wechatEntityReference.deleteMany({ where: { kind: 'BATCH', entityId: { in: batchIds } } });
       await prisma.playerAuctionReview.deleteMany({ where: { lot: { batchId: { in: batchIds } } } });
       await prisma.playerAuctionLot.updateMany({ where: { batchId: { in: batchIds } }, data: { currentHighestBidId: null } });
       await prisma.playerAuctionBid.deleteMany({ where: { lot: { batchId: { in: batchIds } } } });
@@ -206,6 +224,8 @@ describe('Player auction group acceptance', () => {
       await prisma.playerAuctionBatch.deleteMany({ where: { id: { in: batchIds } } });
     }
     if (deviceId) {
+      await prisma.wechatAdminOperation.deleteMany({ where: { contactId: { in: (await prisma.wechatAdminContact.findMany({ where: { deviceId }, select: { id: true } })).map(c => c.id) } } });
+      await prisma.wechatAdminContact.deleteMany({ where: { deviceId } });
       await prisma.wechatIdentityBinding.deleteMany({ where: { deviceId } });
       await prisma.wechatOutboxMessage.deleteMany({ where: { deviceId } });
       await prisma.wechatInboundMessage.deleteMany({ where: { deviceId } });
@@ -244,18 +264,30 @@ describe('Player auction group acceptance', () => {
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.adminSession.deleteMany({ where: { adminId } });
     await prisma.adminAccount.deleteMany({ where: { id: adminId } });
-    if (app) await app.close();
     await prisma.$disconnect();
+    for (const [i, key] of ['WECHAT_BOT_PRIVATE_SCORE_ENABLED', 'WECHAT_BOT_PRIVATE_MANAGEMENT_ENABLED'].entries()) {
+      if (originalFlags[i] === undefined) delete process.env[key]; else process.env[key] = originalFlags[i];
+    }
   });
 
   it('runs three lots with automatic bid/no-bid progression, exact countdowns, and background review', async () => {
     const batch = await createPreparedBatch('端到端三人拍卖', 3);
-    await groupMessage(contacts[0]!, '开始拍卖');
+    await privateControl(batch.id, '开始拍卖');
     const first = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
     const startReply = await prisma.wechatOutboxMessage.findFirst({ where: { deviceId }, orderBy: { createdAt: 'desc' } });
     expect(first.status).toBe('ACTIVE');
     expect(startReply?.text).toContain('接下来即将拍卖的球员：');
     expect(startReply?.text).toContain('提名拍卖：第1名球员拍卖开始！');
+
+    const currentIdentity = await prisma.wechatIdentityBinding.findUniqueOrThrow({ where: { deviceId_wechatContactId: { deviceId, wechatContactId: contacts[0]! } } });
+    const backlogId = `before-binding-${randomUUID()}`;
+    await bridgePost('/v1/wechat-bot/bridge/messages', { messages: [{
+      messageId: backlogId, conversationType: 'GROUP', conversationId: groupWechatId, senderId: contacts[0]!,
+      sentAt: new Date(currentIdentity.boundAt.getTime() - 1000).toISOString(), sequence: '0001', messageType: 'TEXT', text: '999'
+    }] }).expect(200);
+    const rejectedBacklog = await prisma.playerAuctionBid.findFirstOrThrow({ where: { wechatMessageId: backlogId } });
+    expect(rejectedBacklog).toMatchObject({ result: 'UNBOUND', identityBindingId: null, userId: null });
+    expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: first.id } })).currentPrice).toBeNull();
 
     await groupMessage(contacts[0]!, '40');
     expect((await prisma.playerAuctionBid.findFirstOrThrow({ where: { lotId: first.id, amount: 40 } })).result).toBe('BELOW_STARTING_PRICE');
@@ -273,7 +305,7 @@ describe('Player auction group acceptance', () => {
       where: { deviceId, businessKey: { startsWith: `auction:${first.id}:epoch:${afterBid.deadlineEpoch}:countdown:` } },
       orderBy: { createdAt: 'asc' }, select: { text: true }
     });
-    expect(countdowns.map((message) => message.text)).toEqual(['20', '10', '3', '2', '1']);
+    expect(countdowns.map((message) => message.text)).toEqual(['拍卖剩余时间 20s', '拍卖剩余时间 10s', '拍卖剩余时间 3s', '拍卖剩余时间 2s', '拍卖剩余时间 1s']);
     await closeLot(first.id);
     expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('PENDING_REVIEW');
     expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[1]!.id } })).status).toBe('ACTIVE');
@@ -479,7 +511,7 @@ describe('Player auction group acceptance', () => {
       ownership: await prisma.leaguePlayerOwnership.count({ where: { leagueId } })
     };
     const batch = await createPreparedBatch('恢复保护拍卖', 1, { playerOffset: 5 });
-    await groupMessage(contacts[0]!, '开始拍卖');
+    await privateControl(batch.id, '开始拍卖');
     await groupMessage(contacts[1]!, '50');
     await recovery.onBridgeUnavailable(deviceId, 'HEARTBEAT_TIMEOUT');
     expect((await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } })).status).toBe('RECOVERY_REQUIRED');
@@ -496,7 +528,7 @@ describe('Player auction group acceptance', () => {
       screenLocked: false, outboundQueueDepth: 0,
       observedGroups: [{ wechatGroupId: groupWechatId, displayName: 'CELL 拍卖验收群' }]
     }).expect(200);
-    await groupMessage(contacts[0]!, '继续拍卖');
+    await privateControl(batch.id, '恢复拍卖');
     const recoveredLot = await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[0]!.id } });
     expect(recoveredLot.deadlineAt!.getTime()).toBeGreaterThan(Date.now() + 29_000);
     await closeLot(batch.lots[0]!.id);
@@ -537,4 +569,44 @@ describe('Player auction group acceptance', () => {
     expect(await prisma.leaguePlayerOwnership.findUnique({ where: { leagueId_footballPlayerId: { leagueId, footballPlayerId: playerIds[6]! } } })).toMatchObject({ leagueTeamId: teamIds[0], status: 'ACTIVE' });
     expect(await prisma.financeLedgerEntry.count({ where: { leagueId, amountMinor: 100, leagueTeamId: teamIds[0]! } })).toBe(1);
   });
+  it('cancels manual and abnormal hour-long pauses without allowing late resumes or touching finances', async () => {
+    const timeout = app.get(PlayerAuctionPauseTimeoutService);
+    await timeout.onModuleDestroy(); // Drive the boundary deterministically, not by wall-clock sleeps.
+    const baseline = await prisma.financeLedgerEntry.count({ where: { leagueId } });
+    for (const channel of ['MINIPROGRAM', 'WECHAT_GROUP'] as const) {
+      const batch = await createPreparedBatch(`暂停超时-${channel}`, 1, { bidChannel: channel, playerOffset: 5 });
+      const basePath = `/v1/admin/leagues/${leagueId}/player-auctions/${batch.id}`;
+      await request(app.getHttpServer()).post(`${basePath}/start`).set(adminHeaders())
+        .send({ expectedVersion: batch.version }).expect(201);
+      if (channel === 'MINIPROGRAM') {
+        const active = await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } });
+        await request(app.getHttpServer()).post(`${basePath}/pause`).set(adminHeaders())
+          .send({ expectedVersion: active.version }).expect(201);
+      } else {
+        await recovery.onBridgeUnavailable(deviceId, 'HEARTBEAT_TIMEOUT');
+      }
+      const paused = await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } });
+      expect(paused.pausedAt).not.toBeNull();
+      expect(paused.status).toBe(channel === 'MINIPROGRAM' ? 'PAUSED' : 'RECOVERY_REQUIRED');
+      await expect(timeout.cancelExpired()).resolves.toBe(0);
+      await prisma.playerAuctionBatch.update({ where: { id: batch.id }, data: { pausedAt: new Date(Date.now() - 3_601_000) } });
+      if (channel === 'MINIPROGRAM') {
+        await request(app.getHttpServer()).post(`${basePath}/resume`).set(adminHeaders())
+          .send({ expectedVersion: paused.version }).expect(409)
+          .expect(({ body }) => expect(body.error.code).toBe('AUCTION_PAUSE_EXPIRED'));
+      } else {
+        await expect(recovery.recover(batch.id, userIds[0]!, false)).rejects.toMatchObject({ code: 'AUCTION_PAUSE_EXPIRED' });
+      }
+      await expect(timeout.cancelExpired()).resolves.toBe(1);
+      await expect(timeout.cancelExpired()).resolves.toBe(0);
+      await request(app.getHttpServer()).get(basePath).set({ Authorization: `Bearer ${adminToken}` }).expect(200)
+        .expect(({ body }) => {
+          expect(body.status).toBe('CANCELLED');
+          expect(body.lots[0].status).toBe('VOID');
+        });
+      expect(await prisma.auditLog.count({ where: { resourceId: batch.id, action: 'player-auction.pause-timeout' } })).toBe(1);
+    }
+    expect(await prisma.financeLedgerEntry.count({ where: { leagueId } })).toBe(baseline);
+  });
+
 });

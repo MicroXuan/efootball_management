@@ -76,7 +76,7 @@ export class AdminPlayerAuctionsService {
       ? batch.lots.find((lot) => lot.id === currentLotId)
       : null;
     if (current?.status === 'ACTIVE' && current.deadlineAt) {
-      const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
+      const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT UTC_TIMESTAMP(3) AS databaseNow`;
       if (rows[0]?.databaseNow && current.deadlineAt <= rows[0].databaseNow) {
         await this.worker.closeDueLot(current.id, current.deadlineEpoch);
         batch = await this.batch(this.prisma, leagueId, batchId);
@@ -308,7 +308,10 @@ export class AdminPlayerAuctionsService {
 
   async cancel(actorAdminId: string, leagueId: string, batchId: string, input: CancelPlayerAuctionBatchRequest, key: string) {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
-    return this.receipts.execute(actorAdminId, `admin.player-auction.cancel:${batchId}`, key, async (tx) => {
+    return this.receipts.execute(actorAdminId, `admin.player-auction.cancel:${batchId}`, key, (tx) => this.cancelWithClient(tx, actorAdminId, leagueId, batchId, input), input);
+  }
+
+  async cancelWithClient(tx: Prisma.TransactionClient, actorAdminId: string, leagueId: string, batchId: string, input: CancelPlayerAuctionBatchRequest) {
       const batch = await this.batch(tx, leagueId, batchId);
       if (['COMPLETED', 'CANCELLED'].includes(batch.status)) {
         throw new PlayerAuctionError('AUCTION_CANNOT_CANCEL', '已结束的拍卖不能取消', 409);
@@ -328,7 +331,8 @@ export class AdminPlayerAuctionsService {
         resourceId: batchId, reason: input.reason, metadata: { previousStatus: batch.status }
       });
       return this.view(await this.batch(tx, leagueId, batchId));
-    }, input);
+
+
   }
 
   async reviewLot(
@@ -340,7 +344,10 @@ export class AdminPlayerAuctionsService {
     key: string
   ) {
     await this.authorization.requireLeagueAccess(actorAdminId, leagueId);
-    return this.receipts.execute(actorAdminId, `admin.player-auction.review:${lotId}`, key, async (tx) => {
+    return this.receipts.execute(actorAdminId, `admin.player-auction.review:${lotId}`, key, (tx) => this.reviewLotWithClient(tx, actorAdminId, leagueId, batchId, lotId, input), input);
+  }
+
+  async reviewLotWithClient(tx: Prisma.TransactionClient, actorAdminId: string, leagueId: string, batchId: string, lotId: string, input: ReviewPlayerAuctionLotRequest) {
       await this.batch(tx, leagueId, batchId);
       const lot = await tx.playerAuctionLot.findFirst({
         where: { id: lotId, batchId, batch: { leagueId } },
@@ -430,7 +437,8 @@ export class AdminPlayerAuctionsService {
         metadata: { decision: input.decision, computedWinnerTeamId: lot.currentHighestBid?.leagueTeamId ?? null, computedPrice: lot.currentPrice, reviewedWinnerTeamId: reviewedTeamId, reviewedPrice }
       });
       return { lotId, status: input.decision === 'VOID' ? 'VOID' : 'REVIEWED', review: this.reviewView(review) };
-    }, input);
+
+
   }
 
   private async batch(client: AuctionClient, leagueId: string, batchId: string): Promise<BatchRecord> {

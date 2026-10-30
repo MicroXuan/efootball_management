@@ -15,6 +15,8 @@ export function configuration() {
       devOpenId: environment.DEV_WECHAT_OPEN_ID
     },
     wechatBot: {
+      privateManagementEnabled: environment.WECHAT_BOT_PRIVATE_MANAGEMENT_ENABLED,
+      privateScoreEnabled: environment.WECHAT_BOT_PRIVATE_SCORE_ENABLED,
       outboxLeaseMs: environment.WECHAT_BOT_OUTBOX_LEASE_MS,
       outboxMaxAttempts: environment.WECHAT_BOT_OUTBOX_MAX_ATTEMPTS,
       heartbeatTimeoutMs: environment.WECHAT_BOT_HEARTBEAT_TIMEOUT_MS,

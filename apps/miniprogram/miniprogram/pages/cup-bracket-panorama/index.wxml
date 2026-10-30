@@ -47,13 +47,13 @@
                     <image wx:if="{{pairing.homeParticipant && pairing.homeParticipant.teamLogoUrl}}" src="{{pairing.homeParticipant.teamLogoUrl}}" mode="aspectFit" />
                     <view wx:else class="route-team__crest">{{pairing.homeParticipant ? '队' : '?'}}</view>
                     <view class="route-team__identity"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.homeParticipant && pairing.homeParticipant.teamNumber !== null ? '球队编号 ' + pairing.homeParticipant.teamNumber : '席位待确认'}}</text></view>
-                    <text class="route-team__score">{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
+                    <text class="route-team__score">{{pairing.match && pairing.match.advancement ? (pairing.homeParticipant && pairing.match.advancement.winnerParticipantId === pairing.homeParticipant.id ? '裁定晋级' : '—') : pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
                   </view>
                   <view class="route-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}} {{pairing.awayParticipant && pairing.awayParticipant.isMine ? 'is-mine' : ''}}">
                     <image wx:if="{{pairing.awayParticipant && pairing.awayParticipant.teamLogoUrl}}" src="{{pairing.awayParticipant.teamLogoUrl}}" mode="aspectFit" />
                     <view wx:else class="route-team__crest">{{pairing.awayParticipant ? '队' : '?'}}</view>
                     <view class="route-team__identity"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.awayParticipant && pairing.awayParticipant.teamNumber !== null ? '球队编号 ' + pairing.awayParticipant.teamNumber : '席位待确认'}}</text></view>
-                    <text class="route-team__score">{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
+                    <text class="route-team__score">{{pairing.match && pairing.match.advancement ? (pairing.awayParticipant && pairing.match.advancement.winnerParticipantId === pairing.awayParticipant.id ? '裁定晋级' : '—') : pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
                   </view>
                 </view>
               </view>
@@ -87,13 +87,13 @@
                     <image wx:if="{{pairing.homeParticipant && pairing.homeParticipant.teamLogoUrl}}" src="{{pairing.homeParticipant.teamLogoUrl}}" mode="aspectFit" />
                     <view wx:else class="panorama-team__crest">{{pairing.homeParticipant ? '队' : '?'}}</view>
                     <view class="panorama-team__identity"><text>{{pairing.homeParticipant ? pairing.homeParticipant.displayName : '待定'}}</text><text>{{pairing.homeParticipant && pairing.homeParticipant.teamNumber !== null ? '#' + pairing.homeParticipant.teamNumber : '席位待确认'}}</text></view>
-                    <text class="panorama-team__score">{{pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
+                    <text class="panorama-team__score">{{pairing.match && pairing.match.advancement ? (pairing.homeParticipant && pairing.match.advancement.winnerParticipantId === pairing.homeParticipant.id ? '裁定晋级' : '—') : pairing.match && pairing.match.homeScore !== null ? pairing.match.homeScore : (pairing.isBye ? '轮空' : '—')}}</text>
                   </view>
                   <view class="panorama-team {{pairing.winnerParticipant && pairing.awayParticipant && pairing.winnerParticipant.id === pairing.awayParticipant.id ? 'is-winner' : ''}}">
                     <image wx:if="{{pairing.awayParticipant && pairing.awayParticipant.teamLogoUrl}}" src="{{pairing.awayParticipant.teamLogoUrl}}" mode="aspectFit" />
                     <view wx:else class="panorama-team__crest">{{pairing.awayParticipant ? '队' : '?'}}</view>
                     <view class="panorama-team__identity"><text>{{pairing.awayParticipant ? pairing.awayParticipant.displayName : (pairing.isBye ? '轮空' : '待定')}}</text><text>{{pairing.awayParticipant && pairing.awayParticipant.teamNumber !== null ? '#' + pairing.awayParticipant.teamNumber : '席位待确认'}}</text></view>
-                    <text class="panorama-team__score">{{pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
+                    <text class="panorama-team__score">{{pairing.match && pairing.match.advancement ? (pairing.awayParticipant && pairing.match.advancement.winnerParticipantId === pairing.awayParticipant.id ? '裁定晋级' : '—') : pairing.match && pairing.match.awayScore !== null ? pairing.match.awayScore : '—'}}</text>
                   </view>
                   <view wx:if="{{item.roundNumber !== rounds.length}}" class="bracket-connector">
                     <view class="bracket-connector__lead"></view>

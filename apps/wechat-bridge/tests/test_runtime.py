@@ -322,3 +322,73 @@ def test_runtime_persists_per_conversation_scan_cursors_only_after_upload(tmp_pa
 
     assert runtime.receive_upload_once() == 1
     assert spool.scan_cursors() == {"league@chatroom": 10, "contact-wxid": 200}
+
+
+def test_member_upload_retries_independently_and_drops_disabled_groups(tmp_path):
+    from efm_wechat_bridge.models import ObservedMember
+    api = FakeApi()
+    attempts = []
+    def upload(items):
+        attempts.append(items)
+        if len(attempts) == 1:
+            raise OSError("offline")
+    api.upload_observed_members = upload
+    spool = BridgeSpool(tmp_path / "members.sqlite")
+    runtime = BridgeRuntime(settings=settings(tmp_path), spool=spool, api=api, transport=FakeWechatTransport())
+    member = ObservedMember(wechat_group_id="league@chatroom", wechat_contact_id="wxid_a", display_name=None, observed_at=datetime.now(UTC))
+    spool.upsert_observed_members([member, member.model_copy(update={"wechat_group_id": "disabled@chatroom"})])
+    assert runtime.heartbeat_once()
+    assert runtime.upload_members_once() == 0
+    assert len(spool.pending_observed_members()) == 1
+    runtime._member_retry_at = 0
+    assert runtime.upload_members_once() == 1
+    assert spool.pending_observed_members() == []
+
+
+def test_live_account_identity_reaches_heartbeat_and_unknown_identity_fails_closed(tmp_path):
+    from types import SimpleNamespace
+    from efm_wechat_bridge.transport import LiveWechatTransport
+    from efm_wechat_bridge.wechatauto_receiver import WechatautoReceiver
+
+    class Database:
+        username = "wxid_robot_a"
+        def get_self_info(self):
+            return {"username": self.username, "nick_name": "same nickname"}
+        def get_sessions(self, limit=500):
+            return []
+    class Sender:
+        def configure_authorized_groups(self, groups):
+            pass
+    database = Database()
+    receiver = WechatautoReceiver(database=database, enabled_group_ids=set(), robot_user_id="__resolved_by_sender_id__")
+    transport = LiveWechatTransport(receiver=receiver, sender=Sender(), session_guard=SimpleNamespace(check=lambda **kwargs: SimpleNamespace(ready=True)))
+    runtime, _, api, _ = make_runtime(tmp_path, transport=transport)
+    assert runtime.doctor().passed
+    assert api.heartbeats[-1]["wechatAccountId"] == "wxid_robot_a"
+    database.username = "wxid_robot_b"
+    assert runtime.heartbeat_once()
+    assert api.heartbeats[-1]["wechatAccountId"] == "wxid_robot_b"
+    api.heartbeat_error = BridgeApiError("ROBOT_ACCOUNT_CHANGED", terminal=True)
+    database.username = "wxid_robot_c"
+    assert not runtime.heartbeat_once()
+    assert runtime.receive_upload_once() == 0
+    assert api.uploads == []
+    assert runtime.send_once() == 0
+    database.username = ""
+    assert runtime.receive_upload_once() == 0
+    assert runtime.upload_members_once() == 0
+    assert not runtime.doctor().passed
+    assert not transport.health().ready
+
+
+def test_heartbeat_restores_private_reply_allowlist_after_restart(tmp_path: Path) -> None:
+    class PrivateApi(FakeApi):
+        def heartbeat(self, payload):
+            return {**super().heartbeat(payload), "privateReplyContactIds": ["wxid_admin"]}
+    class PrivateTransport(FakeWechatTransport):
+        def configure_private_reply_contacts(self, contacts):
+            self.private_contacts = contacts
+    transport = PrivateTransport()
+    runtime, _, _, _ = make_runtime(tmp_path, transport=transport, api=PrivateApi())
+    assert runtime.doctor().passed
+    assert transport.private_contacts == ["wxid_admin"]

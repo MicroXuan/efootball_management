@@ -411,7 +411,10 @@ export const CupBracketParticipantSchema = z.object({
   teamLifecycleStatus: LeagueTeamLifecycleStatusSchema.nullable()
 });
 
+export const MatchAdvancementSummarySchema = z.object({ winnerParticipantId: ResourceIdSchema, reason: z.string() });
+
 export const CupBracketMatchSummarySchema = z.object({
+  advancement: MatchAdvancementSummarySchema.nullable().optional(),
   id: ResourceIdSchema,
   status: CompetitionMatchStatusSchema,
   homeScore: ScoreSchema.nullable(),
@@ -595,6 +598,7 @@ export const OfficialResultSummarySchema = z.object({
 });
 
 export const CompetitionMatchResponseSchema = z.object({
+  advancement: MatchAdvancementSummarySchema.nullable().optional(),
   id: ResourceIdSchema,
   competitionId: ResourceIdSchema,
   stageId: ResourceIdSchema,

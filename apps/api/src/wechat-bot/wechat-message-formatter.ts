@@ -47,16 +47,13 @@ export function formatWechatHelp(capabilities: readonly WechatGroupCapabilityTyp
   }
   if (enabled.has('PLAYER_AUCTION')) {
     lines.push(
-      '开始拍卖：开始待开拍的批次',
-      '暂停拍卖：暂停当前拍卖',
-      '继续拍卖：恢复暂停的拍卖',
-      '取消拍卖：取消当前拍卖',
+      '拍卖管理：管理员请私聊机器人',
       '纯数字出价（例如 120）：对当前球员出价'
     );
   }
   lines.push('帮助：查看本群命令说明');
   if (enabled.has('SCHEDULE_QUERY')) {
-    lines.push('', '首次使用“我的赛程”时，请先在小程序获取验证码，再私聊机器人发送：绑定 123456');
+    lines.push('', '首次使用“我的赛程”时，请联系管理员在后台关联账号，无需验证码或私聊绑定。');
   }
   return lines.join('\n');
 }

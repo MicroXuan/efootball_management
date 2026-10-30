@@ -16,10 +16,12 @@ const config = {
 describe('WechatBridgeService', () => {
   it('upserts observed groups from a heartbeat', async () => {
     const prisma: any = {
-      wechatBotDevice: { update: jest.fn(async ({ data }: any) => data) },
+      wechatBotDevice: { update: jest.fn(async ({ data }: any) => data), findUniqueOrThrow: jest.fn(async () => ({ wechatAccountId: null })) },
+      $queryRaw: jest.fn(async () => []),
       wechatObservedGroup: { upsert: jest.fn(async ({ create }: any) => create) },
       wechatGroupBinding: { findMany: jest.fn(async () => [{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]) }
     };
+    prisma.$transaction = async (work: any) => work(prisma);
     const service = new WechatBridgeService(prisma);
     const response = await service.heartbeat('device-1', {
       wechatAccountId: 'wxid_robot',
@@ -53,6 +55,7 @@ describe('WechatBridgeService', () => {
           : null)
       }
     };
+    prisma.$transaction = async (work: any) => work(prisma);
     const service = new WechatBridgeService(prisma);
     const base = {
       sentAt: '2026-10-09T12:00:00.000Z',

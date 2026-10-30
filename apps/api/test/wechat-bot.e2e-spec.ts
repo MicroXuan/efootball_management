@@ -206,6 +206,7 @@ describe('WeChat bot foundation acceptance', () => {
       await prisma.wechatGroupScheduleSource.deleteMany({ where: { groupBinding: { deviceId } } });
       await prisma.wechatGroupCapability.deleteMany({ where: { groupBinding: { deviceId } } });
       await prisma.wechatGroupBinding.deleteMany({ where: { deviceId } });
+      await prisma.wechatObservedMember.deleteMany({ where: { deviceId } });
       await prisma.wechatObservedGroup.deleteMany({ where: { deviceId } });
       await prisma.wechatBotDevice.deleteMany({ where: { id: deviceId } });
     }
@@ -224,6 +225,7 @@ describe('WeChat bot foundation acceptance', () => {
     if (leagueId) await prisma.league.deleteMany({ where: { id: leagueId } });
     await prisma.refreshSession.deleteMany({ where: { userId: { in: [userId, opponentUserId].filter(Boolean) } } });
     await prisma.user.deleteMany({ where: { id: { in: [userId, opponentUserId].filter(Boolean) } } });
+    await prisma.adminMutationReceipt.deleteMany({ where: { adminId } });
     await prisma.adminSession.deleteMany({ where: { adminId } });
     await prisma.adminAccount.deleteMany({ where: { id: adminId } });
     if (app) await app.close();
@@ -274,11 +276,19 @@ describe('WeChat bot foundation acceptance', () => {
         .expect(200);
     }
 
-    const issued = await request(app.getHttpServer())
-      .post('/v1/me/wechat-bot/binding-code')
-      .set({ Authorization: `Bearer ${userToken}` })
-      .expect(201);
-    expect(issued.body.code).toMatch(/^\d{6}$/);
+    await request(app.getHttpServer()).post('/v1/me/wechat-bot/binding-code')
+      .set({ Authorization: `Bearer ${userToken}` }).expect(409);
+    await bridgePost('/v1/wechat-bot/bridge/observed-members', { items: [{
+      wechatGroupId: groupWechatIds.query, wechatContactId: contactWechatId,
+      displayName: '群成员', observedAt: new Date().toISOString()
+    }] }).expect(200);
+    const members = await request(app.getHttpServer()).get(`/v1/admin/wechat-bot/devices/${deviceId}/members`).set(adminAuth()).expect(200);
+    const mutation = { observedMemberId: members.body.items[0].id, userId, expectedBindingId: null,
+      expectedVersion: null, reason: '管理员已核实身份', idempotencyKey: randomUUID() };
+    await request(app.getHttpServer()).put(`/v1/admin/wechat-bot/devices/${deviceId}/identity-bindings`)
+      .set({ Authorization: `Bearer ${userToken}` }).send(mutation).expect(401);
+    await request(app.getHttpServer()).put(`/v1/admin/wechat-bot/devices/${deviceId}/identity-bindings`)
+      .set(adminAuth()).send(mutation).expect(200);
 
     const sentAt = new Date().toISOString();
     const messages = [
@@ -289,7 +299,7 @@ describe('WeChat bot foundation acceptance', () => {
           senderId: contactWechatId,
           sentAt,
           messageType: 'TEXT',
-          text: `绑定 ${issued.body.code as string}`,
+          text: '绑定 123456',
         },
         {
           messageId: `query-schedule-${runId}`,
@@ -350,7 +360,7 @@ describe('WeChat bot foundation acceptance', () => {
     expect(new Set(persistedReplies.map((message) => message.businessKey)).size).toBe(8);
     expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `query-number-${runId}`)?.id}:`))).toBe(false);
     expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `auction-schedule-${runId}`)?.id}:`))).toBe(false);
-    expect(persistedReplies.map((message) => message.text).join('\n')).toContain('绑定成功');
+    expect(persistedReplies.map((message) => message.text).join('\n')).toContain('请联系管理员在后台关联账号');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('赛程（1场）');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('我的赛程（1场）');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('上海申花 vs 成都蓉城');

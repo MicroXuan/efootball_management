@@ -1,3 +1,4 @@
+import { WechatBotMembersPanel } from '../platform/wechat-bot-members-panel';
 import {
   AdminLeagueWechatBotConfigSchema,
   AdminWechatGroupBindingSchema,
@@ -176,6 +177,7 @@ export function WechatBotPage({ api = adminApi }: { api?: AdminApi }) {
           <Tag>{competitionStatus[source.status]}</Tag>
         </div>)}</div>} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可作为查询来源的赛事，请先创建联赛或杯赛。" />}
       </Card> : null}
+      <WechatBotMembersPanel key={leagueId} leagueId={leagueId} api={api} />
       <Card className="wechat-config-footer">
         <div>
           <strong>启用群机器人</strong>

@@ -285,6 +285,83 @@ def test_pinned_library_rows_are_hydrated_with_server_id_and_contact_name() -> N
     assert receiver.poll(None)[0].message_id == "900000000001"
 
 
+def test_private_message_without_sender_index_uses_verified_conversation_identity() -> None:
+    class PrivateDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}]
+
+        def get_nickname(self, username: str) -> str:
+            return "管理员微信"
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 42, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8100}] if since_seq < 8100 else []
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"local_id": 42, "sort_seq": 8100, "sender_id": 3, "server_id": "private-server-id"}
+
+    receiver = WechatautoReceiver(database=PrivateDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    event = receiver.poll(None)[0]
+
+    assert event.conversation_type == "PRIVATE"
+    assert event.sender_id == "contact-wxid"
+    assert event.text == "帮助"
+
+
+def test_private_message_without_server_id_gets_stable_local_identity_only_after_row_verification() -> None:
+    class PrivateDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}]
+
+        def get_nickname(self, username: str) -> str:
+            return "管理员微信"
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 43, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8101}] if since_seq < 8101 else []
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"local_id": 43, "sort_seq": 8101, "sender_id": 3, "server_id": ""}
+
+    receiver = WechatautoReceiver(database=PrivateDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    first = receiver.poll(None)[0]
+    second = receiver.poll(None)[0]
+
+    assert first.message_id.startswith("local:")
+    assert first.message_id == second.message_id
+    assert first.sender_id == "contact-wxid"
+
+
+def test_private_traditional_help_is_normalized_before_upload() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    event = receiver.normalize(raw_message(
+        conversation_id="contact-wxid", sender_username="contact-wxid", content="幫助",
+    ))
+
+    assert event is not None
+    assert event.text == "帮助"
+
+
+def test_private_message_with_unverified_sender_is_not_inferred_from_chat_identity() -> None:
+    class PrivateDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}]
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 44, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8102}]
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"local_id": 44, "sort_seq": 8102, "sender_id": 7, "server_id": ""}
+
+    receiver = WechatautoReceiver(database=PrivateDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    assert receiver.poll(None) == []
+
+
 def test_poll_paginates_and_tracks_each_conversation_without_skipping_filtered_rows() -> None:
     class BacklogDatabase:
         def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
@@ -330,3 +407,64 @@ def test_poll_paginates_and_tracks_each_conversation_without_skipping_filtered_r
     assert [event.text for event in events] == ["查询赛程", "绑定 123456"]
     assert receiver.scanned_cursors() == {"contact-wxid": 201, "league@chatroom": 10}
     assert receiver.private_targets() == {"contact-wxid": "contact-wxid"}
+
+
+def test_discovers_normal_chat_identity_without_uploading_its_content() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids={"league@chatroom"}, robot_user_id="robot-wxid")
+    assert receiver.normalize(raw_message(content="今天晚上见")) is None
+    members = receiver.observed_members()
+    assert len(members) == 1
+    assert members[0].wechat_contact_id == "member-wxid"
+    assert members[0].display_name is None
+    assert "今天晚上见" not in members[0].model_dump_json()
+    receiver.normalize(raw_message(content="别的群", conversation_id="other@chatroom"))
+    receiver.normalize(raw_message(content="私聊", conversation_id="contact-wxid"))
+    assert len(receiver.observed_members()) == 1
+
+
+def test_mixed_chat_load_compacts_members_and_preserves_commands_across_restart(tmp_path):
+    from efm_wechat_bridge.spool import BridgeSpool
+
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids={"league@chatroom"}, robot_user_id="robot-wxid")
+    spool_path = tmp_path / "mixed.sqlite"
+    spool = BridgeSpool(spool_path)
+    expected_ids = []
+    for index in range(1500):
+        text = "我的赛程" if index % 50 == 0 else str(100 + index) if index % 10 == 0 else "普通聊天不上传"
+        event = receiver.normalize(raw_message(server_id=str(900000000000 + index), sort_seq=8000 + index,
+            sender_username=f"wxid_member_{index % 30}", content=text))
+        if event:
+            expected_ids.append(event.message_id)
+            spool.append_inbound(event, sort_key=event.sequence)
+        members = receiver.observed_members()
+        spool.upsert_observed_members(members)
+        receiver.ack_observed_members(members)
+    assert len(expected_ids) == 150
+    spool = BridgeSpool(spool_path)
+    members = spool.pending_observed_members()
+    assert len(members) == 30
+    assert {m.wechat_contact_id for m in members} == {f"wxid_member_{i}" for i in range(30)}
+    first = spool.pending_inbound(limit=100)
+    assert [e.message_id for e in first] == expected_ids[:100]
+    assert "普通聊天" not in repr(members)
+    spool.ack_observed_members(members)
+    assert spool.pending_observed_members() == []
+    assert spool.health_snapshot().pending_inbound == 150
+    spool.ack_inbound([e.message_id for e in first], watermark=first[-1].sequence)
+    assert [e.message_id for e in spool.pending_inbound(limit=100)] == expected_ids[100:]
+
+
+def test_private_administrator_commands_require_same_stable_sender() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+    commands = ["晋级 M12 主队 原因：弃权", "转会 P2 T1 T2 500 原因：同意", "球队", "阵容 T1", "拍卖列表", "拍卖 A1", "开始拍卖 A1", "暂停拍卖 A1", "继续拍卖 A1", "取消拍卖 A1 原因：取消", "恢复拍卖 A1 原因：已核对", "审核成交 L1", "调整成交 L1 T2 100 原因：核实", "作废成交 L1 原因：无效", "帮助", "联赛", "赛季", "切换联赛 CELL", "切换赛季 第一季", "赛程2", "赛程 2",
+                "报分 M12 2:1 原因：核实", "确认 AABBCCDDEEFF", "取消 AABBCCDDEEFF", "操作 AABBCCDDEEFF"]
+    for text in commands:
+        raw = raw_message(conversation_id="contact-wxid", sender_username="contact-wxid", content=text)
+        assert receiver.normalize(raw) is not None
+        assert receiver.normalize({**raw, "sender_username": "other-wxid"}) is None
+    assert receiver.normalize(raw_message(conversation_id="contact-wxid", sender_username="contact-wxid", content="随便聊天")) is None
+
+
+def test_restart_private_target_names_only_use_server_authorized_stable_contacts() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+    assert receiver.private_reply_names(["contact-wxid", "league@chatroom", "bad id"]) == {"contact-wxid": "contact-wxid"}

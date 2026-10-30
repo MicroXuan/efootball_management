@@ -1,0 +1,63 @@
+/* The existing pitch-green identity, with a compact match-sheet layout. */
+.mobile-workbench { --mobile-ink: #182126; --mobile-muted: #5e6a70; --mobile-line: #d8e0e4; --mobile-accent: #b6f13a; width: 100%; max-width: 640px; min-height: 100dvh; margin: 0 auto; padding: 24px 20px calc(100px + env(safe-area-inset-bottom)); background: #f2f5f7; color: var(--mobile-ink); }
+.mobile-workbench *, .mobile-modal * { box-sizing: border-box; }
+.mobile-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+.mobile-header h1 { font-size: 26px; letter-spacing: -.8px; margin: 6px 0 0; }
+.mobile-header a { color: #344b17; font-size: 13px; flex-shrink: 0; padding: 10px 0; }
+.mobile-eyebrow { font-size: 11px; font-weight: 700; color: var(--mobile-muted); letter-spacing: 1px; }
+.mobile-workbench label, .mobile-editor label { display: grid; gap: 7px; font-size: 13px; font-weight: 650; min-width: 0; }
+.mobile-workbench select, .mobile-workbench input, .mobile-editor input, .mobile-editor textarea { display: block; width: 100%; min-width: 0; max-width: 100%; border: 1px solid #c3cdd2; border-radius: 10px; background: white; color: #182126; padding: 11px 12px; font: inherit; font-size: 16px; line-height: 1.5; }
+.mobile-workbench select { padding-right: 30px; overflow: hidden; text-overflow: ellipsis; }
+.mobile-editor textarea { resize: vertical; }
+.mobile-workbench :focus-visible, .mobile-modal :focus-visible { outline: 2px solid #52720f; outline-offset: 3px; }
+.mobile-league-picker { padding: 16px; background: #182126; border-radius: 16px; display: grid; gap: 9px; }
+.mobile-league-picker label { color: #d6dee1; }
+.mobile-league-picker select { border-color: transparent; }
+.mobile-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 24px 0 14px; }
+.mobile-section-heading h2 { font-size: 19px; margin: 0; }
+.mobile-section-heading h3 { font-size: 17px; margin: 5px 0 0; }
+.mobile-section-heading h3 b { font-family: 'SF Pro Rounded', 'Arial Rounded MT Bold', sans-serif; padding-left: 6px; }
+.mobile-section-heading a { flex-shrink: 0; color: #466016; font-size: 13px; padding: 8px 0; }
+.mobile-section { margin-top: 16px; }
+.mobile-filters { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
+.mobile-filters .mobile-segments, .mobile-filters p { grid-column: 1 / -1; }
+.mobile-segments { display: flex; gap: 4px; padding: 4px; background: #e2e8eb; border-radius: 12px; margin: 12px 0; min-width: 0; }
+.mobile-segments button { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; align-items: center; min-height: 44px; padding: 8px 3px; border: 0; background: transparent; color: #44535b; font: inherit; font-size: 13px; font-weight: 650; border-radius: 9px; cursor: pointer; }
+.mobile-segments button[aria-pressed='true'] { background: white; color: #182126; box-shadow: 0 1px 4px #18212614; }
+.mobile-segments button:disabled { opacity: .5; cursor: default; }
+.mobile-card-list { display: grid; gap: 12px; margin: 12px 0; }
+.mobile-match-card, .mobile-transfer-card { min-width: 0; padding: 16px; border: 1px solid var(--mobile-line); border-radius: 14px; background: white; }
+.mobile-match-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--mobile-muted); }
+.mobile-match-meta > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.mobile-match-meta h3 { color: var(--mobile-ink); font-size: 18px; margin: 0; }
+.mobile-badge { flex-shrink: 0; background: #f5ecd9; color: #795718; padding: 4px 6px; border-radius: 5px; font-size: 11px; }
+.mobile-badge.done { background: #edf5df; color: #466016; }
+.mobile-scoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; margin: 21px 0; }
+.mobile-scoreboard > div { display: grid; gap: 6px; min-width: 0; }
+.mobile-scoreboard > div:last-child { text-align: right; }
+.mobile-scoreboard small { color: var(--mobile-muted); font-size: 11px; }
+.mobile-scoreboard strong { font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.mobile-scoreboard > b { font-family: 'SF Pro Rounded', 'Arial Rounded MT Bold', sans-serif; font-size: 25px; letter-spacing: -1px; white-space: nowrap; }
+.mobile-match-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px solid #edf0f2; }
+.mobile-match-footer > :first-child { min-width: 0; overflow-wrap: anywhere; font-size: 12px; color: var(--mobile-muted); }
+.mobile-match-footer > .ant-btn { flex-shrink: 0; min-height: 44px; }
+.mobile-transfer-card > p { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; margin: 14px 0; }
+.mobile-muted { color: #5e6a70; font-size: 12px; line-height: 1.7; }
+.mobile-empty { padding: 30px 16px; background: white; border: 1px dashed #d8e0e4; border-radius: 12px; color: #5e6a70; text-align: center; line-height: 1.7; }
+.mobile-error { display: grid; gap: 12px; margin: 16px 0; }
+.mobile-account { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 30px; color: #5e6a70; font-size: 12px; }
+.mobile-account button { min-height: 44px; border: 0; background: none; color: inherit; cursor: pointer; }
+.mobile-bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 640px; display: flex; background: #fff; border-top: 1px solid #d8e0e4; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); z-index: 20; gap: 6px; }
+.mobile-bottom-nav a { display: flex; justify-content: center; align-items: center; flex: 1 1 0; min-width: 0; min-height: 48px; padding: 8px 2px; font-size: 13px; font-weight: 650; border-radius: 10px; color: #5e6a70; }
+.mobile-bottom-nav a[aria-current='page'] { background: #182126; color: #b6f13a; }
+.mobile-editor { display: grid; gap: 14px; }
+.mobile-editor p, .mobile-editor h2 { margin: 0; overflow-wrap: anywhere; line-height: 1.7; }
+.mobile-score-fields { display: grid; grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr); align-items: end; gap: 10px; }
+.mobile-score-fields > span { align-self: center; padding-top: 24px; text-align: center; }
+.mobile-score-fields input { font-size: 28px; text-align: center; font-variant-numeric: tabular-nums; }
+.mobile-score-preview { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 20px 12px; border-radius: 12px; background: #edf5df; text-align: center; overflow-wrap: anywhere; }
+.mobile-score-preview strong { font-size: 28px; white-space: nowrap; }
+.mobile-modal .ant-modal-content { padding: 20px; }
+.mobile-editor .ant-btn { min-height: 44px; height: auto; white-space: normal; padding: 10px; }
+.mobile-editor summary { cursor: pointer; padding: 10px 0; }
+@media (max-width: 360px) { .mobile-workbench { padding-left: 12px; padding-right: 12px; } .mobile-match-card, .mobile-transfer-card { padding: 12px; } .mobile-scoreboard { gap: 8px; } .mobile-header h1 { font-size: 23px; } }

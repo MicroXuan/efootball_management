@@ -3,16 +3,17 @@ from __future__ import annotations
 import platform
 import re
 import json
+from hashlib import sha256
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from threading import RLock
 from typing import Any, Protocol
 
-from .models import InboundEvent, ObservedGroup, OutboxTask
+from .models import InboundEvent, ObservedGroup, ObservedMember, OutboxTask
 from .dependency_safety import initialize_wechat_dependency, silence_wechat_logging
 from .transport import SendResult, SendStatus, TransportHealth
 
-_BINDING_COMMAND = re.compile(r"^绑定\s+\d{6}$")
+_PRIVATE_COMMAND = re.compile(r"^(?:绑定\s+\d{6}|帮助|联赛|赛季|球队|拍卖列表|赛程(?:\s*[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|晋级|转会|阵容|拍卖|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)\s+.{1,1000})$")
 _GROUP_COMMAND = re.compile(r"^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$")
 _GROUP_SENDER_PREFIX = re.compile(r"^(wxid_[0-9A-Za-z_]+):\s*\r?\n")
 _TRAILING_CONTROL_PADDING = re.compile(r"[\x00-\x1f\x7f]+$")
@@ -53,6 +54,8 @@ class WechatautoReceiver:
         self._database_lock = RLock()
         self._scanned_cursors: dict[str, int] = {}
         self._private_targets: dict[str, str] = {}
+        self._observed_members: dict[tuple[str, str], ObservedMember] = {}
+        self._session_offset = 0
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         with self._database_lock:
@@ -94,12 +97,17 @@ class WechatautoReceiver:
             info = getter()
             if not info:
                 return self._unhealthy("WECHAT_NOT_LOGGED_IN")
+            account_id = self._safe_string(info.get("username")) if isinstance(info, Mapping) else None
+            if not account_id or not _SAFE_ID.fullmatch(account_id) or account_id.endswith("@chatroom"):
+                return self._unhealthy("WECHAT_ACCOUNT_UNAVAILABLE")
+            self._robot_user_id = account_id
             version = self._version_provider() if self._version_provider else self._expected_wechat_version
             if version != self._expected_wechat_version:
                 return self._unhealthy("WECHAT_VERSION_MISMATCH", version=version)
             return TransportHealth(
                 ready=True,
                 login_status="LOGGED_IN",
+                wechat_account_id=account_id,
                 wechat_version=version,
                 screen_locked=False,
                 database_available=True,
@@ -141,7 +149,14 @@ class WechatautoReceiver:
         cursors = self._parse_cursors(after_watermark)
         rows: list[dict[str, object]] = []
         scanned: dict[str, int] = dict(cursors)
-        for session in self._sessions():
+        sessions = self._sessions()
+        if sessions:
+            offset = self._session_offset % len(sessions)
+            sessions = sessions[offset:] + sessions[:offset]
+            self._session_offset = (offset + 1) % len(sessions)
+        for session in sessions:
+            if len(rows) >= 2000:
+                break
             username = self._safe_string(session.get("username"))
             if not username:
                 continue
@@ -169,7 +184,7 @@ class WechatautoReceiver:
                     break
                 cursor = page_max
                 scanned[username] = cursor
-                if len(messages) < 200:
+                if len(messages) < 200 or len(rows) >= 2000:
                     break
 
         self._scanned_cursors = {key: value for key, value in scanned.items() if key != "*"}
@@ -183,9 +198,25 @@ class WechatautoReceiver:
                     self._private_targets[event.conversation_id] = self._nickname(event.conversation_id)
         return sorted(unique.values(), key=lambda event: (event.sequence or "", event.message_id))
 
+    def observed_members(self) -> list[ObservedMember]:
+        with self._database_lock:
+            return list(self._observed_members.values())
+
+    def ack_observed_members(self, members: list[ObservedMember]) -> None:
+        with self._database_lock:
+            for member in members:
+                key = (member.wechat_group_id, member.wechat_contact_id)
+                if self._observed_members.get(key) == member:
+                    self._observed_members.pop(key, None)
+
     def scanned_cursors(self) -> dict[str, int]:
         with self._database_lock:
             return dict(self._scanned_cursors)
+
+    def private_reply_names(self, contacts: list[str]) -> dict[str, str]:
+        with self._database_lock:
+            return {contact: self._nickname(contact) for contact in contacts
+                    if _SAFE_ID.fullmatch(contact) and not contact.endswith("@chatroom")}
 
     def private_targets(self) -> dict[str, str]:
         with self._database_lock:
@@ -223,17 +254,31 @@ class WechatautoReceiver:
                 sender_id = prefixed_sender_id
                 text = text[prefix.end():].strip()
         text = _TRAILING_CONTROL_PADDING.sub("", text).strip()
+        if not group and text == "幫助":
+            text = "帮助"
         if (
             not sender_id
             or not _SAFE_ID.fullmatch(sender_id)
             or sender_id == self._robot_user_id
         ):
             return None
+        if group:
+            observed_at = self._datetime(raw.get("create_time"))
+            if observed_at is not None and self._positive_int(raw.get("sort_seq")) is not None:
+                key = (conversation_id, sender_id)
+                previous = self._observed_members.get(key)
+                if previous is None or previous.observed_at < observed_at:
+                    nickname = self._nickname(sender_id)
+                    self._observed_members[key] = ObservedMember(
+                        wechat_group_id=conversation_id, wechat_contact_id=sender_id,
+                        display_name=nickname if nickname != sender_id[:128] else None,
+                        observed_at=observed_at,
+                    )
         if not text or len(text) > 2_000:
             return None
         if group and not _GROUP_COMMAND.fullmatch(text):
             return None
-        if not group and not _BINDING_COMMAND.fullmatch(text):
+        if not group and (sender_id != conversation_id or not _PRIVATE_COMMAND.fullmatch(text)):
             return None
 
         sort_seq = self._positive_int(raw.get("sort_seq"))
@@ -282,6 +327,19 @@ class WechatautoReceiver:
         if not isinstance(full, Mapping) or self._positive_int(full.get("sort_seq")) != self._positive_int(row.get("sort_seq")):
             return row
         row["server_id"] = full.get("server_id")
+        sender_id = self._positive_int(row.get("sender_id"))
+        verified_private_sender = (
+            not username.endswith("@chatroom")
+            and sender_id is not None and sender_id != 2
+            and self._positive_int(full.get("local_id")) == local_id
+            and self._positive_int(full.get("sender_id")) == sender_id
+        )
+        if verified_private_sender:
+            if not self._safe_string(row.get("sender_username")):
+                row["sender_username"] = username
+            if not self._safe_string(row.get("server_id")):
+                stable_key = f"{username}\0{row['sort_seq']}\0{local_id}".encode("utf-8")
+                row["server_id"] = f"local:{sha256(stable_key).hexdigest()}"
         return row
 
     @classmethod

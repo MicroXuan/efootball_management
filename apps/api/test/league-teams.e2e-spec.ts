@@ -50,6 +50,8 @@ describe('league-scoped team API', () => {
       .send({ username: manager.username, password: 'manager-password-123' }).expect(200);
     managerToken = managerLogin.body.accessToken as string;
 
+    // Keep this regression independent of seed-only public number sequences.
+    await prisma.user.create({ data: { wechatOpenId: `test-openid-league-team-${suffix}`, publicUserNo: '612345', displayName: '球队验证用户' } });
     const playerLogin = await request(app.getHttpServer()).post('/v1/auth/wechat')
       .send({ code: `test-code-league-team-${suffix}` }).expect(200);
     playerToken = playerLogin.body.accessToken as string;

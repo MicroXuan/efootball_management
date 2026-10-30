@@ -80,3 +80,14 @@ def test_send_result_states_are_closed_and_fake_results_are_injectable() -> None
     assert sent.readback_message_id == "wechat-server-1"
     assert {status.value for status in SendStatus} == {"SENT", "FAILED", "AMBIGUOUS"}
 
+
+
+def test_stale_heartbeat_does_not_remove_newly_observed_private_sender():
+    from types import SimpleNamespace
+    from efm_wechat_bridge.transport import LiveWechatTransport
+    captured = []
+    receiver = SimpleNamespace(private_reply_names=lambda contacts: {}, private_targets=lambda: {"wxid_new": "新管理员"})
+    sender = SimpleNamespace(configure_authorized_private_targets=lambda targets: captured.append(targets))
+    transport = LiveWechatTransport(receiver=receiver, sender=sender, session_guard=object())
+    transport.configure_private_reply_contacts([])
+    assert captured[-1] == {"wxid_new": "新管理员"}

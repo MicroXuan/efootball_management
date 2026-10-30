@@ -6,7 +6,7 @@
 
 - 一个微信群只能绑定一个联赛，一个联赛可以绑定多个微信群；后台为每个群独立选择“赛程查询”“球员拍卖”或两者。
 - 只有已启用且勾选“球员拍卖”的群可创建或准备拍卖；存在未结束批次时，不允许停用该群或移除其拍卖能力。
-- 用户在小程序获得 5 分钟一次性验证码，私聊机器人发送 `绑定 123456`；出价和管理命令都依赖该绑定。
+- 平台管理员在后台按六位用户编号关联已观察到的微信成员；用户无需验证码或私聊，既有绑定继续有效。
 - 只有具备 `league.auction.manage` 权限的已绑定用户能发送管理命令。
 - 群成员出价只发送纯数字，例如 `120`。有效回复必须为 `【球队名称】出价有效：⭐120⭐，倒计时重置为 30 秒。`
 - 每名球员有出价或无人出价结束后，系统都会自动开始下一位；最后一位结束后自动完成批次，不再使用日常 `下一位` 命令。
@@ -15,15 +15,15 @@
 
 ## 2. 自动化验收
 
-先启动 MySQL、应用迁移和种子数据：
+只在本机隔离测试库验收。显式设置 `EFM_VERIFY_DATABASE_URL`，确认主机为 localhost/127.0.0.1，库名含 test 或 verify；不能继承 `.env`。目标环境迁移另走受控发布。
 
 ```bash
-pnpm dev:db
-pnpm db:migrate
-pnpm --filter @efm/api exec prisma db seed
-pnpm --filter @efm/api test:e2e -- player-auctions.e2e-spec.ts --runInBand
-pnpm verify
-pnpm db:status
+# 示例为仓库本机 Docker 的隔离库；先创建该库并授权本机账号。
+export EFM_VERIFY_DATABASE_URL='mysql://efm:efm_local@127.0.0.1:3307/efm_wechat_verify'
+DATABASE_URL="$EFM_VERIFY_DATABASE_URL" pnpm db:status
+DATABASE_URL="$EFM_VERIFY_DATABASE_URL" pnpm db:migrate
+DATABASE_URL="$EFM_VERIFY_DATABASE_URL" SEED_ECONOMY_DEMO=false SEED_TIERED_LEAGUE_DEMO=false LOCAL_ADMIN_USERNAME='' LOCAL_ADMIN_PASSWORD_HASH='' pnpm --filter @efm/api exec tsx prisma/seed.ts
+DATABASE_URL="$EFM_VERIFY_DATABASE_URL" WECHAT_GATEWAY_MODE=fake STORAGE_PROVIDER=local pnpm --filter @efm/api test:e2e --runInBand player-auctions.e2e-spec.ts wechat-bot.e2e-spec.ts wechat-admin-identities.e2e-spec.ts league-teams.e2e-spec.ts
 git diff --check
 ```
 
@@ -36,7 +36,7 @@ git diff --check
 1. 微信版本固定为已经在目标电脑验证的 `4.1.15.50`，并在 `bridge.toml` 明确设置 `expected_wechat_version = "4.1.15.50"`；机器人账号只加入授权测试群。
 2. `doctor` 确认微信已登录、桌面未锁定、数据库可读、API 鉴权正常。
 3. 管理后台启用设备，把拍卖测试群绑定到目标联赛并勾选“球员拍卖”；同一联赛可另绑赛程群，但确认没有第二个联赛占用同一群。
-4. 至少准备两名小程序用户、两支当前联赛的有效球队，并分别完成私聊验证码绑定。
+4. 至少准备两名小程序用户、两支当前联赛的有效球队，并由平台管理员在后台完成微信成员关联。
 5. 给一名测试用户授予联赛拍卖管理权限。
 6. 在后台“球员拍卖”创建三名球员的批次，分别设置不同的起拍价和最低加价，保存并准备。
 7. 先在 `--dry-send` 下确认入站可读、outbox 可见且不会操作微信，再短时开启真实发送。

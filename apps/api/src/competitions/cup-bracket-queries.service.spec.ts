@@ -68,7 +68,7 @@ describe('CupBracketQueriesService', () => {
     expect(result.proposalStatus).toBe('CONFIRMED');
     expect(result.rounds[0]?.pairings[0]).toEqual(expect.objectContaining({
       homeParticipant: { id: 'p1', displayName: '上海海港', teamLifecycleStatus: null },
-      match: { id: 'match-1', status: 'CONFIRMED', homeScore: 2, awayScore: 1 }
+      match: { id: 'match-1', status: 'CONFIRMED', homeScore: 2, awayScore: 1, advancement: null }
     }));
   });
 

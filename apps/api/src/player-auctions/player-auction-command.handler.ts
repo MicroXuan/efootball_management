@@ -34,39 +34,7 @@ export class PlayerAuctionCommandHandler {
           ? this.formatter.validBid(result.teamName ?? '未知球队', result.amount)
           : this.formatter.invalidBid(result.result, requiredMinimum);
       } else {
-        const identity = await this.prisma.wechatIdentityBinding.findUnique({
-          where: { deviceId_wechatContactId: { deviceId: inbound.deviceId, wechatContactId: inbound.senderId } }
-        });
-        if (!identity || identity.status !== 'ACTIVE') {
-          text = '请先在小程序获取验证码并完成微信身份绑定。';
-        } else {
-          const activeBatch = command === '继续拍卖'
-            ? await this.prisma.playerAuctionBatch.findFirst({
-                where: { groupBindingId: inbound.groupBindingId, status: { in: ['PAUSED', 'RECOVERY_REQUIRED'] } },
-                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
-              })
-            : null;
-          const transition = command === '开始拍卖'
-            ? await this.state.start(inbound.groupBindingId, identity.userId)
-            : command === '暂停拍卖'
-              ? await this.state.pause(inbound.groupBindingId, identity.userId)
-              : command === '继续拍卖'
-                ? activeBatch?.status === 'RECOVERY_REQUIRED'
-                  ? await this.recovery.recover(activeBatch.id, identity.userId, false)
-                  : await this.state.resume(inbound.groupBindingId, identity.userId)
-                : await this.state.cancel(inbound.groupBindingId, identity.userId);
-          text = transition.transition === 'PAUSED'
-              ? '拍卖已由管理员暂停。'
-              : transition.transition === 'CANCELLED'
-                ? '本批次拍卖已由管理员取消。'
-                : transition.transition === 'RECOVERED'
-                  ? '拍卖已由管理员恢复，当前球员重新开始 30 秒倒计时。'
-                : transition.transition === 'RESUMED'
-                  ? '拍卖已继续，保留暂停时的剩余倒计时。'
-                  : transition.lotId
-                    ? await this.openingText(transition.batchId, transition.lotId, transition.transition === 'STARTED')
-                    : '拍卖已开始，倒计时 30 秒。';
-        }
+        text = '拍卖管理仅限管理员私聊机器人，请私聊发送“帮助”。';
       }
     } catch (error) {
       const response = error instanceof HttpException ? error.getResponse() : null;

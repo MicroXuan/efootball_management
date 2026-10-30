@@ -43,7 +43,7 @@ export class PlayerAuctionMessageFormatter {
       VALID: '出价有效',
       BELOW_STARTING_PRICE: `出价低于起拍价${amount}`,
       BELOW_MINIMUM_INCREMENT: `出价未达到最低加价幅度${amount}`,
-      UNBOUND: '请先在小程序获取验证码并完成微信身份绑定',
+      UNBOUND: '请联系管理员在后台关联账号',
       NO_ACTIVE_TEAM: '你在当前联赛没有有效球队',
       WRONG_LEAGUE: '你的球队不属于当前联赛',
       INACTIVE: '当前没有进行中的拍卖',
@@ -57,11 +57,12 @@ export class PlayerAuctionMessageFormatter {
   }
 
   countdown(mark: 20 | 10 | 3 | 2 | 1) {
-    return String(mark);
+    return `拍卖剩余时间 ${mark}s`;
   }
 
-  pendingReview(playerName: string, teamName: string, amount: number) {
-    return `【${playerName}】倒计时结束，计算结果：${teamName} ${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
+  pendingReview(playerName: string, bidder: { teamNumber: number | null; teamName: string; bidderDisplayName: string }, amount: number) {
+    const teamNumber = bidder.teamNumber === null ? '未编号' : `T${bidder.teamNumber}`;
+    return `【${playerName}】倒计时结束，计算结果：${teamNumber} ${bidder.teamName}（出价用户：${bidder.bidderDisplayName}）${this.money(amount)}。结果待管理员后台审核，系统将自动进入下一位或结束批次。`;
   }
 
   noBid(playerName: string) {

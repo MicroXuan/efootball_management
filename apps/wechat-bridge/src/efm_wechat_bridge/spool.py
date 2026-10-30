@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from .models import InboundEvent, OutboxTask, SendAck
+from .models import InboundEvent, ObservedMember, OutboxTask, SendAck
 
 OutboxLocalStatus = Literal["PENDING", "IN_FLIGHT", "AMBIGUOUS", "COMPLETED"]
 
@@ -52,6 +52,13 @@ class BridgeSpool:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA synchronous = FULL")
             connection.executescript("""
+                CREATE TABLE IF NOT EXISTS observed_member_spool (
+                    group_id TEXT NOT NULL,
+                    contact_id TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    PRIMARY KEY (group_id, contact_id)
+                );
                 CREATE TABLE IF NOT EXISTS inbound_spool (
                     message_id TEXT PRIMARY KEY,
                     sort_key TEXT NOT NULL,
@@ -336,3 +343,36 @@ class BridgeSpool:
             ambiguous_outbox=outbox_counts.get("AMBIGUOUS", 0),
             watermark=str(row["value"]) if row else None,
         )
+
+    def upsert_observed_members(self, items: Iterable[ObservedMember]) -> None:
+        with closing(self._connect()) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                for item in items:
+                    connection.execute(
+                        """INSERT INTO observed_member_spool VALUES (?, ?, ?, ?)
+                        ON CONFLICT(group_id, contact_id) DO UPDATE SET
+                        observed_at=excluded.observed_at, payload_json=excluded.payload_json
+                        WHERE excluded.observed_at > observed_member_spool.observed_at""",
+                        (item.wechat_group_id, item.wechat_contact_id, item.observed_at.isoformat(), item.model_dump_json()),
+                    )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def pending_observed_members(self, limit: int = 100) -> list[ObservedMember]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute("SELECT payload_json FROM observed_member_spool ORDER BY observed_at, group_id, contact_id LIMIT ?", (limit,)).fetchall()
+        return [ObservedMember.model_validate_json(row[0]) for row in rows]
+
+    def ack_observed_members(self, items: Iterable[ObservedMember]) -> None:
+        with closing(self._connect()) as connection:
+            connection.executemany(
+                "DELETE FROM observed_member_spool WHERE group_id=? AND contact_id=? AND observed_at=?",
+                [(m.wechat_group_id, m.wechat_contact_id, m.observed_at.isoformat()) for m in items],
+            )
+
+    def member_queue_depth(self) -> int:
+        with closing(self._connect()) as connection:
+            return int(connection.execute("SELECT COUNT(*) FROM observed_member_spool").fetchone()[0])

@@ -13,7 +13,7 @@ import httpx
 from pydantic import ValidationError
 
 from .config import BridgeSettings
-from .models import InboundEvent, OutboxTask, SendAck
+from .models import InboundEvent, ObservedMember, OutboxTask, SendAck
 
 MAX_ATTEMPTS = 3
 
@@ -63,6 +63,15 @@ class EfmBridgeClient:
 
     def heartbeat(self, payload: Mapping[str, object]) -> dict[str, Any]:
         return self._post("/v1/wechat-bot/bridge/heartbeat", dict(payload))
+
+    def upload_observed_members(self, items: Sequence[ObservedMember]) -> None:
+        response = self._post("/v1/wechat-bot/bridge/observed-members", {"items": [
+            {"wechatGroupId": m.wechat_group_id, "wechatContactId": m.wechat_contact_id,
+             "displayName": m.display_name, "observedAt": m.observed_at.astimezone(UTC).isoformat().replace("+00:00", "Z")}
+            for m in items
+        ]})
+        if response.get("processed") != len(items):
+            raise BridgeApiError("MEMBER_UPLOAD_INCOMPLETE", terminal=False)
 
     def upload_messages(self, events: Sequence[InboundEvent]) -> list[dict[str, Any]]:
         payload = {

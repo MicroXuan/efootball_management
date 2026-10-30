@@ -50,7 +50,7 @@ if ($ValidateOnly) {
 if ($PSCmdlet.ShouldProcess($BridgeRoot, "Create locked Bridge virtual environment")) {
     & uv.exe sync --project $BridgeRoot --python 3.12 --extra windows --frozen
     if ($LASTEXITCODE -ne 0) { throw "DEPENDENCY_INSTALL_FAILED" }
-    & uv.exe run --project $BridgeRoot efm-wechat-bridge --config $Config doctor
+    & uv.exe run --project $BridgeRoot --extra windows --frozen efm-wechat-bridge --config $Config doctor
     if ($LASTEXITCODE -ne 0) { throw "DOCTOR_FAILED" }
 }
 

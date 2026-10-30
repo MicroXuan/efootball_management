@@ -22,6 +22,7 @@ class FakeWechatTransport:
         self._health = health or TransportHealth(
             ready=True,
             login_status="LOGGED_IN",
+            wechat_account_id=robot_user_id,
             wechat_version="4.1.15.13",
             screen_locked=False,
             database_available=True,

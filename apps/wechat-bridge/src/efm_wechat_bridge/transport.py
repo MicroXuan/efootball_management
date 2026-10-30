@@ -14,6 +14,7 @@ class TransportHealth(BaseModel):
 
     ready: bool
     login_status: str = Field(min_length=1, max_length=32)
+    wechat_account_id: str | None = Field(default=None, min_length=1, max_length=256)
     wechat_version: str | None = Field(default=None, max_length=64)
     screen_locked: bool
     database_available: bool
@@ -75,10 +76,15 @@ class LiveWechatTransport:
         self._receiver = receiver
         self._sender = sender
         self._session_guard = session_guard
+        self._server_private_targets: dict[str, str] = {}
 
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         getattr(self._receiver, "configure_authorized_groups")(groups)
         getattr(self._sender, "configure_authorized_groups")(groups)
+
+    def configure_private_reply_contacts(self, contacts: list[str]) -> None:
+        self._server_private_targets = self._receiver.private_reply_names(contacts)
+        self._sender.configure_authorized_private_targets({**self._server_private_targets, **self._receiver.private_targets()})
 
     def health(self) -> TransportHealth:
         receiver_health = getattr(self._receiver, "health")()
@@ -90,6 +96,7 @@ class LiveWechatTransport:
                 ready=False,
                 login_status=receiver_health.login_status,
                 wechat_version=receiver_health.wechat_version,
+                wechat_account_id=receiver_health.wechat_account_id,
                 screen_locked=session.error_code == "WINDOW_SESSION_LOCKED",
                 database_available=True,
                 sender_available=False,
@@ -100,6 +107,7 @@ class LiveWechatTransport:
             ready=True,
             login_status=receiver_health.login_status,
             wechat_version=receiver_health.wechat_version,
+            wechat_account_id=receiver_health.wechat_account_id,
             screen_locked=False,
             database_available=True,
             sender_available=True,
@@ -111,8 +119,14 @@ class LiveWechatTransport:
     def poll(self, after_watermark: str | None) -> list[InboundEvent]:
         events = getattr(self._receiver, "poll")(after_watermark)
         private_targets = getattr(self._receiver, "private_targets", lambda: {})()
-        getattr(self._sender, "configure_authorized_private_targets")(private_targets)
+        getattr(self._sender, "configure_authorized_private_targets")({**self._server_private_targets, **private_targets})
         return events
+
+    def observed_members(self):
+        return self._receiver.observed_members()
+
+    def ack_observed_members(self, members):
+        self._receiver.ack_observed_members(members)
 
     def scanned_cursors(self) -> dict[str, int]:
         return getattr(self._receiver, "scanned_cursors")()

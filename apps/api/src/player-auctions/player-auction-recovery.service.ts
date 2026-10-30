@@ -5,6 +5,7 @@ import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from '../wechat-bot/we
 import { WechatOutboxService } from '../wechat-bot/wechat-outbox.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js';
+import { assertAuctionPauseNotExpired } from './player-auction-pause.js';
 import { PlayerAuctionStateService } from './player-auction-state.service.js';
 
 @Injectable()
@@ -105,9 +106,11 @@ export class PlayerAuctionRecoveryService {
       const lot = await tx.playerAuctionLot.findUnique({ where: { id: batch.currentLotId } });
       if (!lot || lot.status !== 'PAUSED') throw new PlayerAuctionError('AUCTION_STATE_INVALID', '恢复状态不一致', 409);
       const now = await this.locks.now(tx);
+      const lockedBatch = await tx.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } });
+      assertAuctionPauseNotExpired(lockedBatch, now);
       const deadlineAt = new Date(now.getTime() + 30_000);
       await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } } });
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', recoveryDetectedAt: null, recoveryReason: null, version: { increment: 1 } } });
+      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', pausedAt: null, recoveryDetectedAt: null, recoveryReason: null, version: { increment: 1 } } });
       if (announce && batch.groupBinding) {
         await this.outbox.enqueue({
           deviceId: batch.groupBinding.deviceId, targetType: 'GROUP', targetId: batch.groupBinding.wechatGroupId,
@@ -115,6 +118,7 @@ export class PlayerAuctionRecoveryService {
           text: '拍卖已由管理员恢复，当前球员重新开始 30 秒倒计时。', priority: 500
         });
       }
+      this.state.activity.wake();
       return { transition: 'RECOVERED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
     });
   }
