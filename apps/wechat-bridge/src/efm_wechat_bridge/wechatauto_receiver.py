@@ -155,9 +155,14 @@ class WechatautoReceiver:
             return self._observed_groups_unlocked()
 
     def _observed_groups_unlocked(self) -> list[ObservedGroup]:
-        sessions = self._sessions()
+        sessions = getattr(self._database, "get_groups")()
         groups: dict[str, ObservedGroup] = {}
         for session in sessions:
+            if not isinstance(session, Mapping):
+                raise ValueError("Invalid group snapshot")
+            members = session.get("members", [])
+            if not any(isinstance(member, Mapping) and member.get("username") == self._robot_user_id for member in members):
+                continue
             username = self._safe_string(session.get("username"))
             if not username or not username.endswith("@chatroom"):
                 continue

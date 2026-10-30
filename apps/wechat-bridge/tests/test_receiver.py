@@ -135,6 +135,9 @@ def test_rejects_disabled_self_non_text_oversized_and_malformed_rows() -> None:
 
 
 class FakeDatabase:
+    def get_groups(self):
+        return [{**session, "members": [{"username": "robot-wxid"}]} for session in self.get_sessions() if str(session["username"]).endswith("@chatroom")]
+
     def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
         assert limit == 500
         return [
@@ -215,7 +218,7 @@ def test_health_sanitizes_database_failures() -> None:
 
 
 def test_serializes_database_access_across_health_and_group_scans() -> None:
-    class NonThreadSafeDatabase:
+    class NonThreadSafeDatabase(FakeDatabase):
         def __init__(self) -> None:
             self.health_entered = Event()
             self.release_health = Event()
@@ -252,7 +255,7 @@ def test_serializes_database_access_across_health_and_group_scans() -> None:
 
 
 def test_pinned_library_rows_are_hydrated_with_server_id_and_contact_name() -> None:
-    class PinnedShapeDatabase:
+    class PinnedShapeDatabase(FakeDatabase):
         def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
             return [{"username": "league@chatroom", "unread": 1, "summary": "120"}]
 
@@ -509,3 +512,15 @@ def test_command_aliases_and_new_help_reach_api_without_accepting_ordinary_chat(
         assert event is not None and event.text == expected
     assert receiver.normalize(raw_message(content='赛程')).text == '查询赛程'
     assert receiver.normalize(raw_message(content='今天讨论赛程')) is None
+
+
+def test_observed_groups_excludes_left_groups_even_with_retained_sessions() -> None:
+    class MembershipDatabase(FakeDatabase):
+        def get_groups(self):
+            return [
+                {"username": "league@chatroom", "name": "联赛群", "members": [{"username": "robot-wxid"}]},
+                {"username": "other@chatroom", "name": "已退出群", "members": [{"username": "other-wxid"}]},
+            ]
+
+    receiver = WechatautoReceiver(database=MembershipDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+    assert [g.wechat_group_id for g in receiver.observed_groups()] == ["league@chatroom"]

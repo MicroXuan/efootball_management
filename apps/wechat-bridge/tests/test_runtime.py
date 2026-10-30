@@ -143,6 +143,7 @@ def test_heartbeat_reports_inventory_and_applies_authorized_group_config(tmp_pat
     report = runtime.doctor()
 
     assert report.passed is True
+    assert api.heartbeats[0]["observedGroupsComplete"] is True
     assert api.heartbeats[0]["observedGroups"] == [
         {"wechatGroupId": "league@chatroom", "displayName": "CELL 联赛群"}
     ]
@@ -355,6 +356,8 @@ def test_live_account_identity_reaches_heartbeat_and_unknown_identity_fails_clos
         def get_self_info(self):
             return {"username": self.username, "nick_name": "same nickname"}
         def get_sessions(self, limit=500):
+            return []
+        def get_groups(self):
             return []
     class Sender:
         def configure_authorized_groups(self, groups):

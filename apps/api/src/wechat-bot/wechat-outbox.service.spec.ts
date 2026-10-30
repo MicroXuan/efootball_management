@@ -33,9 +33,29 @@ describe('WechatBridgeService', () => {
       observedGroups: [{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]
     });
     expect(prisma.wechatObservedGroup.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { deviceId_wechatGroupId: { deviceId: 'device-1', wechatGroupId: 'room-1@chatroom' } }
+      where: { deviceId_wechatGroupId: { deviceId: 'device-1', wechatGroupId: 'room-1@chatroom' } },
+      update: expect.objectContaining({ available: true })
     }));
     expect(response.enabledGroups).toEqual([{ wechatGroupId: 'room-1@chatroom', displayName: '测试群' }]);
+  });
+
+  it.each([[true, 'LOGGED_IN', true], [false, 'LOGGED_IN', false], [true, 'LOGGED_OUT', false]])('reconciles availability only for complete logged-in snapshots: %s %s', async (complete, loginStatus, reconciles) => {
+    const prisma: any = {
+      $queryRaw: jest.fn(async () => []),
+      wechatBotDevice: { findUniqueOrThrow: jest.fn(async () => ({ wechatAccountId: 'robot' })), update: jest.fn(async () => ({})) },
+      wechatObservedGroup: { upsert: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 1 })) },
+      wechatGroupBinding: { findMany: jest.fn(async () => []) }
+    };
+    prisma.$transaction = async (work: any) => work(prisma);
+    await new WechatBridgeService(prisma).heartbeat('device-1', {
+      wechatAccountId: 'robot', wechatVersion: '4.1', loginStatus,
+      screenLocked: false, outboundQueueDepth: 0, observedGroups: [],
+      observedGroupsComplete: complete
+    } as any);
+    if (reconciles) expect(prisma.wechatObservedGroup.updateMany).toHaveBeenCalledWith({
+      where: { deviceId: 'device-1', wechatGroupId: { notIn: [] } }, data: { available: false }
+    });
+    else expect(prisma.wechatObservedGroup.updateMany).not.toHaveBeenCalled();
   });
 
   it('persists only enabled group commands and private binding commands, with duplicate results', async () => {

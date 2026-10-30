@@ -108,6 +108,19 @@ describe('AdminWechatBotService', () => {
     }));
   });
 
+  it('filters unavailable groups from both selectors and rejects stale binding submissions', async () => {
+    const { service, prisma } = harness();
+    await service.listObservedGroups('device-1');
+    expect(prisma.wechatObservedGroup.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { deviceId: 'device-1', available: true } }));
+    await service.getLeagueConfig('league-1');
+    expect(prisma.wechatObservedGroup.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { available: true, device: { status: 'ACTIVE' } } }));
+    prisma.wechatObservedGroup.findUnique.mockResolvedValueOnce({ deviceId: 'device-1', available: false, device: { status: 'ACTIVE' } });
+    await expect(service.saveGroupBinding('admin-1', 'league-1', {
+      observedGroupId: 'observed-1', deviceId: 'device-1', enabled: true, capabilities: [], scheduleSourceIds: []
+    })).rejects.toThrow(BadRequestException);
+    expect(prisma.wechatGroupBinding.create).not.toHaveBeenCalled();
+  });
+
   it('returns every configured capability in league group bindings', async () => {
     const { service, prisma } = harness();
     prisma.wechatGroupBinding.findMany.mockResolvedValueOnce([{

@@ -39,19 +39,38 @@ export class WechatBridgeService {
         await tx.wechatBotDevice.update({ where: { id: deviceId }, data: { status: 'DISABLED', circuitStatus: 'OPEN', circuitReason: 'ROBOT_ACCOUNT_CHANGED', circuitOpenedAt: now } });
         return true;
       }
-    await tx.wechatBotDevice.update({
-      where: { id: deviceId },
-      data: {
-        ...(input.wechatAccountId ? { wechatAccountId: input.wechatAccountId } : {}),
-        wechatVersion: input.wechatVersion,
-        loginStatus: input.loginStatus,
-        receiverHealth: input.receiverHealth ?? Prisma.DbNull,
-        ...(input.listenerWatermark !== undefined ? { listenerWatermark: input.listenerWatermark } : {}),
-        screenLocked: input.screenLocked,
-        outboundQueueDepth: input.outboundQueueDepth,
-        lastHeartbeatAt: now
+      await tx.wechatBotDevice.update({
+        where: { id: deviceId },
+        data: {
+          ...(input.wechatAccountId ? { wechatAccountId: input.wechatAccountId } : {}),
+          wechatVersion: input.wechatVersion,
+          loginStatus: input.loginStatus,
+          receiverHealth: input.receiverHealth ?? Prisma.DbNull,
+          ...(input.listenerWatermark !== undefined ? { listenerWatermark: input.listenerWatermark } : {}),
+          screenLocked: input.screenLocked,
+          outboundQueueDepth: input.outboundQueueDepth,
+          lastHeartbeatAt: now
+        }
+      });
+      // Synchronize under the device lock, preserving bindings and history.
+      if (input.observedGroupsComplete && input.loginStatus === 'LOGGED_IN') {
+        await tx.wechatObservedGroup.updateMany({
+          where: { deviceId, wechatGroupId: { notIn: input.observedGroups.map((group) => group.wechatGroupId) } },
+          data: { available: false }
+        });
       }
-    });
+      await Promise.all(input.observedGroups.map((group) => tx.wechatObservedGroup.upsert({
+        where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: group.wechatGroupId } },
+        create: {
+          deviceId,
+          available: true,
+          wechatGroupId: group.wechatGroupId,
+          displayName: group.displayName,
+          firstObservedAt: now,
+          lastObservedAt: now
+        },
+        update: { available: true, displayName: group.displayName, lastObservedAt: now }
+      })));
       return false;
     });
     if (changedAccount) throw new ConflictException({ code: 'ROBOT_ACCOUNT_CHANGED', message: '机器人账号已变更，设备已停用，请为新账号配置新设备' });
@@ -61,19 +80,8 @@ export class WechatBridgeService {
     } else {
       recovery?.bridgeAvailable(deviceId);
     }
-    await Promise.all(input.observedGroups.map((group) => this.prisma.wechatObservedGroup.upsert({
-      where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: group.wechatGroupId } },
-      create: {
-        deviceId,
-        wechatGroupId: group.wechatGroupId,
-        displayName: group.displayName,
-        firstObservedAt: now,
-        lastObservedAt: now
-      },
-      update: { displayName: group.displayName, lastObservedAt: now }
-    })));
     const enabledGroups = await this.prisma.wechatGroupBinding.findMany({
-      where: { deviceId, enabled: true },
+      where: { deviceId, enabled: true, observedGroup: { available: true } },
       select: { wechatGroupId: true, displayName: true },
       orderBy: [{ wechatGroupId: 'asc' }]
     });

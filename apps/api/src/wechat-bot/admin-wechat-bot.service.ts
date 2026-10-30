@@ -139,7 +139,7 @@ export class AdminWechatBotService {
   async listObservedGroups(deviceId: string) {
     await this.requireDevice(deviceId);
     const groups = await this.prisma.wechatObservedGroup.findMany({
-      where: { deviceId },
+      where: { deviceId, available: true },
       select: {
         id: true,
         deviceId: true,
@@ -168,7 +168,7 @@ export class AdminWechatBotService {
         orderBy: [{ name: 'asc' }, { id: 'asc' }]
       }),
       this.prisma.wechatObservedGroup.findMany({
-        where: { device: { status: 'ACTIVE' } },
+        where: { available: true, device: { status: 'ACTIVE' } },
         select: { id: true, deviceId: true, wechatGroupId: true, displayName: true, lastObservedAt: true },
         orderBy: [{ displayName: 'asc' }, { id: 'asc' }]
       }),
@@ -194,7 +194,7 @@ export class AdminWechatBotService {
       where: { id: input.observedGroupId },
       include: { device: { select: { status: true } } }
     });
-    if (!observed || observed.deviceId !== input.deviceId || observed.device.status !== 'ACTIVE') {
+    if (!observed || observed.available === false || observed.deviceId !== input.deviceId || observed.device.status !== 'ACTIVE') {
       throw new BadRequestException({ code: 'WECHAT_GROUP_NOT_AVAILABLE', message: '微信群或机器人设备不可用' });
     }
     const existing = await this.prisma.wechatGroupBinding.findUnique({

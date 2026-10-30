@@ -39,6 +39,7 @@ export const WechatBridgeHeartbeatSchema = z.object({
   screenLocked: z.boolean(),
   outboundQueueDepth: z.number().int().min(0).max(100_000),
   receiverHealth: WechatReceiverHealthSchema.optional(),
+  observedGroupsComplete: z.boolean().optional(),
   observedGroups: z.array(WechatObservedGroupInputSchema).max(500)
 });
 

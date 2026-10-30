@@ -429,6 +429,7 @@ class BridgeRuntime:
             **({"listenerWatermark": snapshot.watermark} if snapshot.watermark else {}),
             "screenLocked": bool(getattr(health, "screen_locked", True)),
             "outboundQueueDepth": snapshot.pending_outbox + snapshot.ambiguous_outbox,
+            "observedGroupsComplete": bool(getattr(health, "database_available", False)) and getattr(health, "login_status", "UNKNOWN") == "LOGGED_IN",
             "observedGroups": [
                 {"wechatGroupId": group.wechat_group_id, "displayName": group.display_name}
                 for group in groups
