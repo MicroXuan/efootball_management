@@ -8,7 +8,23 @@ import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.con
 
 type Tx = Prisma.TransactionClient;
 const fail = (message: string): never => { throw new HttpException({ message }, 409); };
-const HELP = '管理员私聊录分\n联赛 / 切换联赛 联赛名称或ID\n赛季 / 切换赛季 赛季名称或ID\n赛程[页码]（如赛程2或赛程 2）\n报分 M编号 主队比分:客队比分 原因：核实说明\n确认 确认码 / 取消 确认码 / 操作 确认码\n报分先预览，2分钟内确认；比分按系统主客顺序。';
+const HELP = [
+  '查询与切换：',
+  '联赛',
+  '切换联赛 联赛名称或ID',
+  '赛季',
+  '切换赛季 赛季名称或ID',
+  '赛程[页码]（如赛程2或赛程 2）',
+  '',
+  '录入比分：',
+  '报分 M编号 主队比分:客队比分 原因：核实说明',
+  '',
+  '确认与查看：',
+  '确认 确认码',
+  '取消 确认码',
+  '操作 确认码',
+  '报分先预览，2分钟内确认；比分按系统主客顺序。',
+].join('\n');
 
 export function parseScoreCommand(text: string) {
   const match = /^报分\s+M([1-9]\d{0,8})\s+(\d{1,2})[:：](\d{1,2})\s+原因[:：]\s*(.{1,512})$/u.exec(text);

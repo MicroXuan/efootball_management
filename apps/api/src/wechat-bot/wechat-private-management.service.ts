@@ -5,7 +5,29 @@ import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.con
 import { parseAdminCommand } from './wechat-admin-command.js';
 import { WechatManagementEffectsService, managementFail, outcomeHash, previewWithRollback, type ManagementPayload, type ManagementScope, type ManagementTx } from './wechat-management-effects.service.js';
 
-export const MANAGEMENT_HELP = '\n管理命令：\n晋级 M编号 主队/客队 原因：弃权说明\n球队 / 阵容 T球队编号\n转会 P编号 T转出 T转入 金额 原因：说明\n拍卖列表 / 拍卖 A编号 [页码]\n开始拍卖 A编号 / 暂停拍卖 A编号 / 继续拍卖 A编号\n取消拍卖 A编号 原因：说明\n恢复拍卖 A编号 原因：已核对群消息\n审核成交 L编号\n调整成交 L编号 T球队编号 金额 原因：说明\n作废成交 L编号 原因：说明\n除紧急暂停外先预览后确认。金额使用后台系统单位。';
+export const MANAGEMENT_HELP = '\n\n' + [
+  '赛事与球队：',
+  '晋级 M编号 主队/客队 原因：弃权说明',
+  '球队',
+  '阵容 T球队编号',
+  '转会 P编号 T转出 T转入 金额 原因：说明',
+  '',
+  '拍卖查询与控制：',
+  '拍卖列表',
+  '拍卖 A编号 [页码]',
+  '开始拍卖 A编号',
+  '暂停拍卖 A编号',
+  '继续拍卖 A编号',
+  '取消拍卖 A编号 原因：说明',
+  '恢复拍卖 A编号 原因：已核对群消息',
+  '',
+  '拍卖成交审核：',
+  '审核成交 L编号',
+  '调整成交 L编号 T球队编号 金额 原因：说明',
+  '作废成交 L编号 原因：说明',
+  '',
+  '除紧急暂停外先预览后确认。金额使用后台系统单位。',
+].join('\n');
 @Injectable()
 export class WechatPrivateManagementService {
   constructor(@Inject(WechatManagementEffectsService) private readonly effects: WechatManagementEffectsService,
