@@ -30,10 +30,6 @@ class GuiDriver(Protocol):
 
     def current_title(self) -> str | None: ...
 
-    def capture_clipboard(self) -> object: ...
-
-    def restore_clipboard(self, value: object) -> None: ...
-
     def capture_readback_marker(self, stable_id: str) -> object: ...
 
     def paste_text(self, text: str) -> bool: ...
@@ -106,44 +102,26 @@ class WechatGuiSender:
             marker = self._driver.capture_readback_marker(task.target_id)
         except Exception:
             return SendResult(status=SendStatus.FAILED, error_code="READBACK_MARKER_UNAVAILABLE")
+        # The pinned UIA ValuePattern writes to the exact edit control without using
+        # the system clipboard; its contents must not block or be changed by a send.
+        if not self._driver.paste_text(task.text):
+            return SendResult(status=SendStatus.FAILED, error_code="WECHAT_INPUT_FAILED")
         try:
-            clipboard = self._driver.capture_clipboard()
-        except Exception as error:
-            code = (
-                "CLIPBOARD_CONTENT_UNSUPPORTED"
-                if isinstance(error, RuntimeError) and str(error) == "UNSUPPORTED_CLIPBOARD_CONTENT"
-                else "CLIPBOARD_CAPTURE_FAILED"
+            self._driver.press_enter()
+        except Exception:
+            pass
+        try:
+            readback_id = self._driver.read_back(
+                task.target_id,
+                task.text,
+                marker,
+                self._readback_timeout_seconds,
             )
-            return SendResult(status=SendStatus.FAILED, error_code=code)
-
-        entered = False
-        try:
-            if not self._driver.paste_text(task.text):
-                return SendResult(status=SendStatus.FAILED, error_code="WECHAT_INPUT_FAILED")
-            entered = True
-            try:
-                pressed = self._driver.press_enter()
-            except Exception:
-                pressed = False
-            if not pressed and not entered:
-                return SendResult(status=SendStatus.FAILED, error_code="WECHAT_ENTER_FAILED")
-            try:
-                readback_id = self._driver.read_back(
-                    task.target_id,
-                    task.text,
-                    marker,
-                    self._readback_timeout_seconds,
-                )
-            except Exception:
-                readback_id = None
-            if readback_id:
-                return SendResult(status=SendStatus.SENT, readback_message_id=readback_id)
-            return SendResult(status=SendStatus.AMBIGUOUS, error_code="WECHAT_SEND_UNCONFIRMED")
-        finally:
-            try:
-                self._driver.restore_clipboard(clipboard)
-            except Exception:
-                pass
+        except Exception:
+            readback_id = None
+        if readback_id:
+            return SendResult(status=SendStatus.SENT, readback_message_id=readback_id)
+        return SendResult(status=SendStatus.AMBIGUOUS, error_code="WECHAT_SEND_UNCONFIRMED")
 
 
 class WechatautoGuiDriver:
@@ -221,31 +199,6 @@ class WechatautoGuiDriver:
             return actual if actual == self._current.title else None
         except Exception:
             return None
-
-    def capture_clipboard(self) -> object:
-        import win32clipboard  # type: ignore[import-not-found]
-
-        win32clipboard.OpenClipboard()
-        try:
-            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
-                return ("text", win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT))
-            if win32clipboard.CountClipboardFormats():
-                raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
-            return ("empty", None)
-        finally:
-            win32clipboard.CloseClipboard()
-
-    def restore_clipboard(self, value: object) -> None:
-        import win32clipboard  # type: ignore[import-not-found]
-
-        kind, content = value if isinstance(value, tuple) and len(value) == 2 else ("empty", None)
-        win32clipboard.OpenClipboard()
-        try:
-            win32clipboard.EmptyClipboard()
-            if kind == "text" and isinstance(content, str):
-                win32clipboard.SetClipboardText(content, win32clipboard.CF_UNICODETEXT)
-        finally:
-            win32clipboard.CloseClipboard()
 
     def capture_readback_marker(self, stable_id: str) -> object:
         try:

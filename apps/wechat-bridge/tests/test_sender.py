@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 import time
-import sys
 from types import SimpleNamespace
 from datetime import UTC, datetime
 from uuid import UUID
@@ -27,8 +26,6 @@ class Guard:
 class Driver:
     def __init__(self) -> None:
         self.target = ConversationTarget(stable_id="league@chatroom", title="CELL 联赛群")
-        self.clipboard: object = {"text": "user clipboard"}
-        self.restored: object | None = None
         self.pasted: list[str] = []
         self.enter_calls = 0
         self.open_calls = 0
@@ -49,12 +46,6 @@ class Driver:
 
     def current_title(self) -> str | None:
         return self.target.title
-
-    def capture_clipboard(self) -> object:
-        return self.clipboard
-
-    def restore_clipboard(self, value: object) -> None:
-        self.restored = value
 
     def capture_readback_marker(self, stable_id: str) -> object:
         return {"target": stable_id, "sequence": 80}
@@ -139,41 +130,22 @@ def test_dry_run_opens_and_confirms_target_without_input() -> None:
     assert driver.enter_calls == 0
 
 
-@pytest.mark.parametrize(
-    ("failed_step", "expected_code"),
-    [
-        ("marker", "READBACK_MARKER_UNAVAILABLE"),
-        ("clipboard", "CLIPBOARD_CAPTURE_FAILED"),
-        ("rich_clipboard", "CLIPBOARD_CONTENT_UNSUPPORTED"),
-    ],
-)
-def test_preparation_failure_identifies_step_without_entering_text(
-    failed_step: str, expected_code: str
-) -> None:
+def test_readback_marker_failure_does_not_enter_text() -> None:
     class PreparationDriver(Driver):
         def capture_readback_marker(self, stable_id: str) -> object:
-            if failed_step == "marker":
-                raise RuntimeError("READBACK_MARKER_UNAVAILABLE")
-            return super().capture_readback_marker(stable_id)
-
-        def capture_clipboard(self) -> object:
-            if failed_step == "rich_clipboard":
-                raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
-            if failed_step == "clipboard":
-                raise OSError("clipboard temporarily busy")
-            return super().capture_clipboard()
+            raise RuntimeError("READBACK_MARKER_UNAVAILABLE")
 
     driver = PreparationDriver()
 
     result = sender(driver).send(task())
 
     assert result.status is SendStatus.FAILED
-    assert result.error_code == expected_code
+    assert result.error_code == "READBACK_MARKER_UNAVAILABLE"
     assert driver.pasted == []
     assert driver.enter_calls == 0
 
 
-def test_restores_clipboard_and_returns_failed_when_paste_never_reached_enter() -> None:
+def test_returns_failed_when_input_never_reached_enter() -> None:
     driver = Driver()
     driver.fail_paste = True
 
@@ -182,7 +154,6 @@ def test_restores_clipboard_and_returns_failed_when_paste_never_reached_enter() 
     assert result.status is SendStatus.FAILED
     assert result.error_code == "WECHAT_INPUT_FAILED"
     assert driver.enter_calls == 0
-    assert driver.restored == driver.clipboard
 
 
 def test_success_requires_exact_database_readback() -> None:
@@ -193,7 +164,21 @@ def test_success_requires_exact_database_readback() -> None:
     assert result.status is SendStatus.SENT
     assert result.readback_message_id == "wechat-server-id"
     assert driver.enter_calls == 1
-    assert driver.restored == driver.clipboard
+
+
+def test_direct_uia_send_does_not_read_or_replace_a_rich_clipboard() -> None:
+    class RichClipboardDriver(Driver):
+        def capture_clipboard(self) -> object:
+            raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
+
+        def restore_clipboard(self, value: object) -> None:
+            pytest.fail("direct UIA input must not touch the clipboard")
+
+    driver = RichClipboardDriver()
+    result = sender(driver).send(task())
+
+    assert result.status is SendStatus.SENT
+    assert driver.enter_calls == 1
 
 
 def test_post_enter_failure_is_ambiguous_but_readback_reconciles_it() -> None:
@@ -302,20 +287,6 @@ def test_live_driver_refuses_enter_without_verified_input() -> None:
     assert live.press_enter() is False
     assert keys == []
 
-
-def test_live_driver_refuses_to_destroy_non_text_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = SimpleNamespace(
-        CF_UNICODETEXT=13,
-        OpenClipboard=lambda: None,
-        CloseClipboard=lambda: None,
-        IsClipboardFormatAvailable=lambda _format: False,
-        CountClipboardFormats=lambda: 1,
-    )
-    monkeypatch.setitem(sys.modules, "win32clipboard", fake)
-    live = WechatautoGuiDriver(gui=object(), database=object())
-
-    with pytest.raises(RuntimeError, match="UNSUPPORTED_CLIPBOARD_CONTENT"):
-        live.capture_clipboard()
 
 class ExactEdit:
     def __init__(self):
