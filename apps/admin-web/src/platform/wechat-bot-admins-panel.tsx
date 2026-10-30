@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Input, Modal, Select, Space, Spin } from 'a
 import { WechatAdminContactsResponseSchema } from '@efm/contracts';
 import { z } from 'zod';
 import { adminApi, type AdminApi } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 type Data = z.infer<typeof WechatAdminContactsResponseSchema>;
 export function WechatBotAdminsPanel({ deviceId, api = adminApi }: { deviceId: string; api?: AdminApi }) {
   const [data, setData] = useState<Data>();
@@ -31,6 +32,7 @@ export function WechatBotAdminsPanel({ deviceId, api = adminApi }: { deviceId: s
     {error ? <Alert type="error" role="alert" title={error} /> : null}
     {!data ? <Spin /> : !data.enabled ? <Alert type="info" title="管理员私聊录分尚未启用，请先完成数据库迁移并由部署人员开启功能。" /> : <>
       {!data.items.length ? <Empty description="尚无主动私聊的管理员候选，请先私聊机器人发送“帮助”。" /> : data.items.map((item) => <Card key={item.id} size="small">
+        <p>最近观测称呼：{item.observedName ?? '暂无称呼'}{item.observedNameAt ? `（${formatDateTime(item.observedNameAt)}）` : ''}</p>
         <p style={{ overflowWrap: 'anywhere' }}>微信标识：{item.wechatContactId}</p>
         <p>当前管理员：{item.adminName ?? '未关联'}</p>
         <Button onClick={() => { setSelected(item); setAdminId(item.adminId); setReason(''); setKey(crypto.randomUUID()); }}>管理关联</Button>
@@ -38,6 +40,7 @@ export function WechatBotAdminsPanel({ deviceId, api = adminApi }: { deviceId: s
       <p>显示全部已关联管理员及最近 100 位未关联候选。权限以后台账号实时授权为准。</p>
     </>}
     <Modal title="核对管理员微信关联" open={!!selected} onCancel={() => { if (!saving) setSelected(null); }} onOk={() => void save()} confirmLoading={saving} okText={adminId ? '确认关联管理员' : '确认解除关联'} cancelText="取消">
+      <p>最近观测称呼：{selected?.observedName ?? '暂无称呼'}{selected?.observedNameAt ? `（${formatDateTime(selected.observedNameAt)}）` : ''}</p>
       <p style={{ overflowWrap: 'anywhere' }}>{selected?.wechatContactId}</p>
       <Alert type="warning" title="关联后可私聊操作该管理员有权管理的联赛。换绑或解绑会取消尚未确认的录分操作。" />
       <label htmlFor="private-admin-account" style={{ display: 'block', marginTop: 16, marginBottom: 8 }}>后台管理员账号</label>

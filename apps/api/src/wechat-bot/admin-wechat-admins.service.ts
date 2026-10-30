@@ -22,8 +22,23 @@ export class AdminWechatAdminsService {
       this.prisma.wechatAdminContact.findMany({ where: { deviceId, adminId: null }, include: { admin: { select: { displayName: true } } }, orderBy: { lastObservedAt: 'desc' }, take: 100 }),
       this.prisma.adminAccount.findMany({ where: { status: 'ACTIVE' }, select: { id: true, username: true, displayName: true }, orderBy: { username: 'asc' } })
     ]);
-    return { enabled: true, admins, items: [...bound, ...candidates].map((c) => ({ id: c.id, wechatContactId: c.wechatContactId, version: c.version,
-      lastObservedAt: c.lastObservedAt.toISOString(), adminId: c.adminId, adminName: c.admin?.displayName ?? null })) };
+    const contacts = [...bound, ...candidates];
+    const observed = contacts.length ? await this.prisma.wechatObservedMember.findMany({
+      where: { deviceId, wechatContactId: { in: contacts.map((c) => c.wechatContactId) }, displayName: { not: null } },
+      select: { wechatContactId: true, displayName: true, lastObservedAt: true },
+      orderBy: { lastObservedAt: 'desc' }
+    }) : [];
+    const latestName = new Map<string, { name: string; at: string }>();
+    for (const item of observed) {
+      const name = item.displayName?.trim();
+      if (name && name !== item.wechatContactId && !latestName.has(item.wechatContactId)) {
+        latestName.set(item.wechatContactId, { name, at: item.lastObservedAt.toISOString() });
+      }
+    }
+    return { enabled: true, admins, items: contacts.map((c) => ({ id: c.id, wechatContactId: c.wechatContactId, version: c.version,
+      lastObservedAt: c.lastObservedAt.toISOString(), observedName: latestName.get(c.wechatContactId)?.name ?? null,
+      observedNameAt: latestName.get(c.wechatContactId)?.at ?? null,
+      adminId: c.adminId, adminName: c.admin?.displayName ?? null })) };
   }
 
   async bind(actorId: string, deviceId: string, contactId: string, input: WechatAdminBindingMutation) {

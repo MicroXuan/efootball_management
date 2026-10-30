@@ -26,3 +26,15 @@ it('shows deployment prerequisite while private score feature is disabled', asyn
   expect(await screen.findByText(/请先完成数据库迁移/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '管理关联' })).not.toBeInTheDocument();
 });
+
+it('shows the observed WeChat name alongside the stable ID before confirming a binding', async () => {
+  const request = vi.fn(async () => ({ enabled: true, items: [{ id: 'contact-1', wechatContactId: 'wxid_dust',
+    observedName: 'Dust', observedNameAt: '2026-10-30T01:13:17.000Z', lastObservedAt: '2026-10-30T01:33:15.000Z',
+    version: 1, adminId: null, adminName: null }], admins: [] }));
+  const user = userEvent.setup();
+  render(<WechatBotAdminsPanel deviceId="device-1" api={{ request } as unknown as AdminApi} />);
+  expect(await screen.findByText(/Dust/)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '管理关联' }));
+  expect(screen.getAllByText(/wxid_dust/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Dust/).length).toBeGreaterThan(1);
+});
