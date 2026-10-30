@@ -236,12 +236,15 @@ describe('private administrator management integration', () => {
   it('reviews auction into the roster once with fee preview and private replay protection', async () => {
     await db.playerAuctionBatch.update({ where: { id: batchId }, data: { status: 'COMPLETED', currentLotId: null, version: { increment: 1 } } });
     await db.playerAuctionLot.update({ where: { id: lotId }, data: { status: 'PENDING_REVIEW', deadlineAt: null, currentPrice: 100, version: { increment: 1 } } });
+    expect(await command('拍卖列表')).toContain(`A${batchRef} `);
+    expect(await command(`拍卖 A${batchRef}`)).toContain(`审核成交 L${lotRef}`);
     const code = await managementPreview(`调整成交 L${lotRef} T2 100 原因：核实最终报价`);
     expect(await db.playerAuctionReview.count({ where: { lotId } })).toBe(0);
     expect(await db.leaguePlayerOwnership.count({ where: { leagueId, footballPlayerId: player2 } })).toBe(0);
     const answers = await Promise.all([command(`确认 ${code}`), command(`确认 ${code}`)]);
     expect(answers[0]).toContain('操作成功'); expect(answers[1]).toBe(answers[0]);
     expect(await db.playerAuctionReview.count({ where: { lotId } })).toBe(1);
+    expect(await command('拍卖列表')).not.toContain(`A${batchRef} `);
     expect(await db.leaguePlayerOwnership.count({ where: { leagueId, footballPlayerId: player2, leagueTeamId: team2 } })).toBe(1);
   });
   it('rejects expired and cancelled confirmations without changing advancement', async () => {

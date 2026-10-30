@@ -50,7 +50,7 @@ export class WechatManagementEffectsService {
       if (!o || o.leagueId !== scope.leagueId || o.leagueTeam.teamNumber !== command.sourceTeam || o.leagueTeam.status !== 'ACTIVE') return managementFail('球员归属或来源球队已变化，请重新查询阵容。');
       const target = await this.team(tx, scope.leagueId, command.targetTeam);
       return { command, entityId: o.id, version: o.version, sourceId: o.leagueTeamId, targetId: target.id,
-        title: `P${command.reference} ${(o.footballPlayer.nameZh ?? o.footballPlayer.nameEn ?? '未命名球员')}\n球员卡：${o.currentPlayerCardId}\n转出 T${command.sourceTeam} ${o.leagueTeam.name}\n转入 T${command.targetTeam} ${target.name}\n转会金额：${command.amount}（系统金额单位）` };
+        title: `P${command.reference} ${(o.footballPlayer.nameZh ?? o.footballPlayer.nameEn ?? '未命名球员')}\n球员卡：${o.currentPlayerCardId}\n转出 T${command.sourceTeam} ${o.leagueTeam.name}\n转入 T${command.targetTeam} ${target.name}\n转会金额：${command.amount} 资金` };
     }
     const lot = command.kind === 'REVIEW' ? await tx.playerAuctionLot.findUnique({ where: { id: ref.entityId } }) : null;
     const batchId = command.kind === 'REVIEW' ? lot?.batchId : ref.entityId;
@@ -61,7 +61,7 @@ export class WechatManagementEffectsService {
     let targetId: string | undefined;
     if (command.kind === 'REVIEW' && command.decision === 'ADJUST') targetId = (await this.team(tx, scope.leagueId, command.team!)).id;
     return { command, entityId: ref.entityId, version: lot?.version ?? batch.version, batchId, batchVersion: batch.version, groupId: batch.groupBindingId!, groupVersion: batch.groupBinding.version, ...(targetId ? { targetId } : {}),
-      title: `${batch.name} / 目标群：${batch.groupBinding.displayName}\n${lot ? `L${command.reference} ${lot.playerNameSnapshot} / ${lot.status} / 当前价 ${lot.currentPrice ?? '无'}` : `A${command.reference} / ${batch.status}`}\n${command.kind === 'RECOVER' ? '已人工核对群消息后恢复，当前拍品重新倒计时30秒。' : ''}` };
+      title: `${batch.name} / 目标群：${batch.groupBinding.displayName}\n${lot ? `L${command.reference} ${lot.playerNameSnapshot} / ${lot.status} / 当前价 ${lot.currentPrice == null ? '无' : `${lot.currentPrice} 资金`}` : `A${command.reference} / ${batch.status}`}\n${command.kind === 'RECOVER' ? '已人工核对群消息后恢复，当前拍品重新倒计时30秒。' : ''}` };
   }
 
   async run(tx: ManagementTx, scope: ManagementScope, p: ManagementPayload, operationId: string) {
@@ -85,7 +85,7 @@ export class WechatManagementEffectsService {
       const transaction = await tx.rosterTransaction.findUniqueOrThrow({ where: { id: result.transaction.id } });
       const financial = this.financial(transaction);
       return { fingerprint: { ...financial, salaryRuleVersionId: result.ownership.salaryRuleVersionId, summary: result.summary },
-        text: `转会金额 ${c.amount}；手续费 ${transaction.transactionFeeMinor ?? 0}；转入球队支出合计 ${c.amount + (transaction.transactionFeeMinor ?? 0)}。\n新工资 ${transaction.newSalaryMinor}；转入球队工资 ${result.summary.salaryMinor}/${result.summary.salaryCapMinor}。\n金额均为系统金额单位，与后台一致。` };
+        text: `转会金额：${c.amount} 资金\n手续费：${transaction.transactionFeeMinor ?? 0} 资金\n转入球队合计支出：${c.amount + (transaction.transactionFeeMinor ?? 0)} 资金\n新工资 ${transaction.newSalaryMinor} 资金；转入球队工资 ${result.summary.salaryMinor}/${result.summary.salaryCapMinor} 资金。\n金额单位：资金，与后台一致，不作换算。` };
     }
     const batch = await tx.playerAuctionBatch.findUniqueOrThrow({ where: { id: p.batchId! }, include: { groupBinding: { include: { capabilities: true } } } });
     if (batch.leagueId !== scope.leagueId || batch.bidChannel !== 'WECHAT_GROUP' || batch.groupBinding?.deviceId !== scope.deviceId) return managementFail('拍卖范围已变化。');
@@ -110,7 +110,7 @@ export class WechatManagementEffectsService {
         ReviewPlayerAuctionLotRequestSchema.parse({ decision: c.decision, expectedVersion: p.version, reason: c.reason, ...(c.decision === 'ADJUST' ? { reviewedTeamId: p.targetId, reviewedPrice: c.amount } : {}) }));
       const review = await tx.playerAuctionReview.findUniqueOrThrow({ where: { lotId: lot.id } });
       const settlement = review.reviewedWinnerTeamId ? await tx.rosterTransaction.findFirst({ where: { leagueId: scope.leagueId, seasonId: scope.seasonId, reason: `拍卖成交：${batch.id} / ${lot.id}` }, orderBy: { createdAt: 'desc' } }) : null;
-      const text = `审核：${c.decision}；球队：${review.winnerTeamNameSnapshot ?? '无'}；成交价：${review.reviewedPrice ?? '无'}；手续费：${settlement?.transactionFeeMinor ?? 0}。\n${settlement ? '确认后完成入队和账目结算，不另做转会。' : '本次不入队、不扣款。'}`;
+      const text = `审核：${c.decision}；球队：${review.winnerTeamNameSnapshot ?? '无'}；成交价：${review.reviewedPrice == null ? '无' : `${review.reviewedPrice} 资金`}；手续费：${settlement?.transactionFeeMinor ?? 0} 资金。\n${settlement ? '确认后完成入队和账目结算，不另做转会。' : '本次不入队、不扣款。'}`;
       await this.announce(tx, scope, group.wechatGroupId, operationId, `${batch.name}\n${lot.playerNameSnapshot}\n${text}`);
       return { fingerprint: { status: value.status, teamId: review.reviewedWinnerTeamId, price: review.reviewedPrice, financial: settlement ? this.financial(settlement) : null }, text };
     }

@@ -1,3 +1,4 @@
+import { normalizeWechatCommand, GROUP_COMMAND_CANDIDATE, PRIVATE_COMMAND_CANDIDATE } from './wechat-command-ux.js';
 import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.config.js';
 import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -5,9 +6,6 @@ import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResul
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatCommandRouterService } from './wechat-command-router.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
-
-const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|\d+)$/;
-const PRIVATE_PRIVATE_COMMAND = /^(?:绑定\s+\d{6}|帮助|联赛|赛季|球队|拍卖列表|赛程(?:\s*[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|晋级|转会|阵容|拍卖|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)\s+.{1,1000})$/u;
 
 @Injectable()
 export class WechatBridgeService {
@@ -106,19 +104,19 @@ export class WechatBridgeService {
         continue;
       }
 
-      const commandText = message.text.trim();
+      const commandText = normalizeWechatCommand(message.text, message.conversationType === 'GROUP');
       let groupBindingId: string | null = null;
       if (message.conversationType === 'GROUP') {
         const binding = await this.prisma.wechatGroupBinding.findUnique({
           where: { deviceId_wechatGroupId: { deviceId, wechatGroupId: message.conversationId } },
           select: { id: true, enabled: true }
         });
-        if (!binding?.enabled || !GROUP_COMMAND.test(commandText)) {
+        if (!binding?.enabled || !GROUP_COMMAND_CANDIDATE.test(commandText)) {
           results.push({ messageId: message.messageId, status: 'IGNORED', inboundId: null, resultCode: 'IGNORED' });
           continue;
         }
         groupBindingId = binding.id;
-      } else if (message.conversationId !== message.senderId || !PRIVATE_PRIVATE_COMMAND.test(commandText)) {
+      } else if (message.conversationId !== message.senderId || !PRIVATE_COMMAND_CANDIDATE.test(commandText)) {
         results.push({ messageId: message.messageId, status: 'IGNORED', inboundId: null, resultCode: 'IGNORED' });
         continue;
       }

@@ -13,13 +13,27 @@ from .models import InboundEvent, ObservedGroup, ObservedMember, OutboxTask
 from .dependency_safety import initialize_wechat_dependency, silence_wechat_logging
 from .transport import SendResult, SendStatus, TransportHealth
 
-_PRIVATE_COMMAND = re.compile(r"^(?:绑定\s+\d{6}|帮助|联赛|赛季|球队|拍卖列表|赛程(?:\s*[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|晋级|转会|阵容|拍卖|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)\s+.{1,1000})$")
-_GROUP_COMMAND = re.compile(r"^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|下一位|取消拍卖|\d+)$")
+_PRIVATE_COMMAND = re.compile(r"^(?:绑定\s+\d{6}|帮助|录分帮助|转会帮助|拍卖帮助|当前设置|联赛|赛季|球队|拍卖列表|(?:赛程|阵容|拍卖|切换联赛|切换赛季|报分|晋级|转会|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)(?:\s.*|[A-Za-z0-9].*)?)$")
+_GROUP_COMMAND = re.compile(r"^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|\d+|赛程(?:\s*\d+)?)$")
 _GROUP_SENDER_PREFIX = re.compile(r"^(wxid_[0-9A-Za-z_]+):\s*\r?\n")
 _TRAILING_CONTROL_PADDING = re.compile(r"[\x00-\x1f\x7f]+$")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.@:-]{1,256}$")
 _TEXT_TYPES = {1, "1", "TEXT", "文本"}
 
+
+
+def normalize_command(text: str, group: bool = False) -> str:
+    text = re.sub(r"^查询赛程(?=\s|\d|$)", "赛程", text.strip())
+    if group and text == "赛程":
+        return "查询赛程"
+    text = re.sub(r"^(阵容|拍卖)\s*([ta])([1-9]\d*)(?=\s|$)",
+                  lambda m: f"{m[1]} {m[2].upper()}{m[3]}", text, flags=re.I)
+    if re.match(r"^(报分|晋级|转会|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交)\s", text):
+        reason = re.search(r"\s+原因[:：]", text)
+        end = reason.start() if reason else len(text)
+        return re.sub(r"\s+([mtpal])([1-9]\d*)(?=\s|$)",
+                      lambda m: f" {m[1].upper()}{m[2]}", text[:end], flags=re.I) + text[end:]
+    return text
 
 class WechatDatabase(Protocol):
     def get_self_info(self) -> object: ...
@@ -257,7 +271,7 @@ class WechatautoReceiver:
                     return None
                 sender_id = prefixed_sender_id
                 text = text[prefix.end():].strip()
-        text = _TRAILING_CONTROL_PADDING.sub("", text).strip()
+        text = normalize_command(_TRAILING_CONTROL_PADDING.sub("", text).strip(), group)
         if not group and text == "幫助":
             text = "帮助"
         if (
@@ -356,6 +370,7 @@ class WechatautoReceiver:
         if not isinstance(content, str):
             return False
         text = _TRAILING_CONTROL_PADDING.sub("", content).strip()
+        text = normalize_command(text, username.endswith("@chatroom"))
         if username.endswith("@chatroom"):
             text = _GROUP_SENDER_PREFIX.sub("", text, count=1).strip()
             return bool(_GROUP_COMMAND.fullmatch(text))

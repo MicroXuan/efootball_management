@@ -41,7 +41,7 @@ export function formatWechatHelp(capabilities: readonly WechatGroupCapabilityTyp
   const lines = ['可用命令：'];
   if (enabled.has('SCHEDULE_QUERY')) {
     lines.push(
-      '查询赛程：查看本群可查询的赛程',
+      '赛程 / 查询赛程：查看本群可查询的赛程',
       '我的赛程：查看自己球队的赛程'
     );
   }

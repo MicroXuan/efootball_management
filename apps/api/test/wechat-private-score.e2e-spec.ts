@@ -89,6 +89,17 @@ describe('private administrator score integration', () => {
     expect(await db.competitionMatch.count({ where: { id: matchId } })).toBe(0);
     await db.$disconnect();
   });
+  it('shows settings and supports a reason-free first score preview without writing', async () => {
+    expect(await command('当前设置')).toContain('验证赛季');
+    expect(await command('查询赛程')).toContain(`M${reference}`);
+    expect(await command('录分帮助')).toContain('首次录分');
+    const answer = await command(`报分 M${reference} 2:1`);
+    expect(answer).toContain('管理员录入赛果');
+    expect(answer).toContain('北京时间');
+    expect(await db.matchResultVersion.count({ where: { matchId } })).toBe(0);
+    const code = /确认 ([0-9A-F]{12})/.exec(answer)![1];
+    expect(await command(`取消 ${code}`)).toContain('已取消');
+  });
   it('previews without writing then concurrently confirms once using real official result and standings', async () => {
     const code = await preview();
     expect(await db.matchResultVersion.count({ where: { matchId } })).toBe(0);
@@ -99,6 +110,7 @@ describe('private administrator score integration', () => {
     expect(await db.auditLog.count({ where: { actorAdminId: managerId, action: 'admin.competition-result.record' } })).toBe(1);
   });
   it('rejects group commands, another sender and revoked league permissions', async () => {
+    expect(await command(`报分 M${reference} 3:1`)).toContain('更正已有赛果必须填写原因');
     const code = await preview('3:1');
     const group = await inbound(`确认 ${code}`);
     expect(await scores.handle({ ...group, conversationType: 'GROUP' })).toContain('仅限管理员');
@@ -120,7 +132,7 @@ describe('private administrator score integration', () => {
     expect(await command(`确认 ${stale}`)).toContain('已被其他操作修改');
     const expired = await preview('4:1');
     await db.wechatScoreOperation.update({ where: { code: expired }, data: { expiresAt: new Date(0) } });
-    expect(await command(`确认 ${expired}`)).toContain('已过期');
+    expect(await command(`确认 ${expired}`)).toContain(`请重新发送：报分 M${reference} 4:1 原因：赛后核对`);
     const unlinked = await preview('4:1');
     const contact = await db.wechatAdminContact.findUniqueOrThrow({ where: { id: contactId } });
     await identities.bind(adminId, deviceId, contactId, { adminId: null, expectedVersion: contact.version, reason: '', idempotencyKey: randomUUID() });

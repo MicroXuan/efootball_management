@@ -1,3 +1,4 @@
+import { normalizeWechatCommand } from './wechat-command-ux.js';
 import { WechatPrivateScoreService } from './wechat-private-score.service.js';
 import { paginateWechatMessage } from './wechat-message-formatter.js';
 import { HttpException, Inject, Injectable, Optional } from '@nestjs/common';
@@ -28,6 +29,7 @@ export class WechatCommandRouterService {
   async route(inboundId: string): Promise<void> {
     const inbound = await this.prisma.wechatInboundMessage.findUnique({ where: { id: inboundId } });
     if (!inbound || inbound.processingStatus !== 'PENDING' || !inbound.commandText) return;
+    inbound.commandText = normalizeWechatCommand(inbound.commandText, inbound.conversationType === 'GROUP');
 
     if (inbound.conversationType === 'PRIVATE') {
       if (inbound.commandText?.startsWith('绑定 ')) await this.routePrivateBinding(inbound);
@@ -71,6 +73,7 @@ export class WechatCommandRouterService {
     }
 
     if (isScheduleCommand && !hasSchedule) {
+      await this.reply(inbound, ['本群尚未启用赛程查询，请联系管理员在联赛工作区开启。']);
       await this.finish(inbound.id, 'IGNORED', 'SCHEDULE_CAPABILITY_DISABLED');
       return;
     }
@@ -105,6 +108,9 @@ export class WechatCommandRouterService {
       return;
     }
 
+    if (/^赛程/.test(inbound.commandText)) {
+      await this.reply(inbound, ['群内查询请发送：赛程 或 查询赛程；群内不使用页码。管理员分页查询请私聊发送：赛程2。']);
+    }
     await this.finish(inbound.id, 'IGNORED', 'COMMAND_IGNORED');
   }
 

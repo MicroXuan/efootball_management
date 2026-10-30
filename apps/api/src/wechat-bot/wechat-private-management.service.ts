@@ -1,3 +1,4 @@
+import { confirmationInstructions, auctionNextStep } from './wechat-command-ux.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Prisma, WechatAdminContact, WechatInboundMessage } from '../generated/prisma/client.js';
@@ -26,7 +27,7 @@ export const MANAGEMENT_HELP = '\n\n' + [
   '调整成交 L编号 T球队编号 金额 原因：说明',
   '作废成交 L编号 原因：说明',
   '',
-  '除紧急暂停外先预览后确认。金额使用后台系统单位。',
+  '除紧急暂停外先预览后确认。金额单位：资金，与后台一致。',
 ].join('\n');
 @Injectable()
 export class WechatPrivateManagementService {
@@ -53,12 +54,13 @@ export class WechatPrivateManagementService {
       : await previewWithRollback(tx, () => this.effects.run(tx, scope, payload, id));
     payload.expectedOutcome = outcomeHash(effect.fingerprint);
     const [league, season] = await Promise.all([tx.league.findUniqueOrThrow({ where: { id: scope.leagueId } }), tx.leagueSeason.findUniqueOrThrow({ where: { id: scope.seasonId } })]);
-    const preview = `管理操作预览（尚未提交）\n${league.name} / ${season.displayName}\n${payload.title}\n原因：${command.reason}\n执行效果：${effect.text}\n2分钟内回复：确认 ${code}\n放弃：取消 ${code}`;
+    const expiresAt = new Date(Date.now() + 120_000);
+    const preview = `管理操作预览（尚未提交）\n${league.name} / ${season.displayName}\n${payload.title}\n原因：${command.reason}\n执行效果：${effect.text}\n${confirmationInstructions(expiresAt, code)}`;
     const completed = command.kind === 'PAUSE';
     const reply = completed ? `${payload.title}\n${effect.text}\n操作 ${code} 已完成。` : preview;
     await tx.wechatAdminOperation.create({ data: { id, code, contactId: contact.id, bindingVersion: contact.version, inboundId: inbound.id,
       adminId: scope.adminId, leagueId: scope.leagueId, seasonId: scope.seasonId, kind: command.kind, payload: payload as unknown as Prisma.InputJsonValue,
-      preview, expiresAt: new Date(Date.now() + 120_000), ...(completed ? { status: 'COMPLETED', result: reply, completedAt: new Date() } : {}) } });
+      preview, expiresAt, ...(completed ? { status: 'COMPLETED', result: reply, completedAt: new Date() } : {}) } });
     return reply;
   }
 
@@ -67,14 +69,17 @@ export class WechatPrivateManagementService {
     const op = await tx.wechatAdminOperation.findUnique({ where: { code } });
     if (!op || op.contactId !== contact.id || op.adminId !== contact.adminId || op.bindingVersion !== contact.version) return managementFail('确认码不存在或不属于当前管理员绑定。');
     await authorize(op.leagueId);
-    if (op.status === 'COMPLETED') return op.result!;
+    if (op.status === 'COMPLETED') return action === '取消' ? `此操作已完成，取消确认码不能撤销已完成操作。\n${op.result}` : op.result!;
     if (action === '操作') return `操作 ${code}：${op.status}${op.expiresAt <= new Date() ? '，已过期' : ''}\n${op.preview}`;
     if (op.status !== 'PENDING') return '操作已取消或失效，请重新预览。';
     if (action === '取消') {
       await tx.wechatAdminOperation.update({ where: { id: op.id }, data: { status: 'CANCELLED', completedAt: new Date() } });
       return `已取消 ${code}，没有执行业务操作。`;
     }
-    if (op.expiresAt <= new Date()) return managementFail('确认已过期，请重新预览。');
+    if (op.expiresAt <= new Date()) {
+      const original = await tx.wechatInboundMessage.findUnique({ where: { id: op.inboundId } });
+      return managementFail(`确认已过期，未执行本次操作。\n请重新发送：${original?.commandText ?? '帮助'}`);
+    }
     const scope = { adminId: op.adminId, deviceId: contact.deviceId, leagueId: op.leagueId, seasonId: op.seasonId };
     const payload = op.payload as unknown as ManagementPayload;
     const effect = await this.effects.run(tx, scope, payload, op.id);
@@ -99,14 +104,14 @@ export class WechatPrivateManagementService {
       if (!team) return managementFail('当前联赛没有该现役球队。');
       const rows = await tx.leaguePlayerOwnership.findMany({ where: { leagueTeamId: team.id, status: 'ACTIVE' }, include: { footballPlayer: true }, orderBy: { id: 'asc' } });
       const lines = [];
-      for (const r of rows) lines.push(`${await this.ref(tx, 'OWNERSHIP', r.id, 'P')} ${(r.footballPlayer.nameZh ?? r.footballPlayer.nameEn ?? '未命名球员')} / 工资 ${r.salaryMinor}\n卡ID ${r.currentPlayerCardId}`);
-      return `${team.name} 当前阵容：\n${lines.join('\n') || '暂无球员'}`;
+      for (const r of rows) lines.push(`${await this.ref(tx, 'OWNERSHIP', r.id, 'P')} ${(r.footballPlayer.nameZh ?? r.footballPlayer.nameEn ?? '未命名球员')} / 工资 ${r.salaryMinor} 资金\n卡ID ${r.currentPlayerCardId}`);
+      return `${team.name} 当前阵容：\n${lines.join('\n\n') || '暂无球员'}\n\n转会格式：转会 P编号 T${roster[1]} T转入球队编号 金额 原因：说明`;
     }
     if (text === '拍卖列表') {
-      const batches = await tx.playerAuctionBatch.findMany({ where: { leagueId: scope.leagueId, bidChannel: 'WECHAT_GROUP', status: { not: 'COMPLETED' }, groupBinding: { deviceId: scope.deviceId } }, orderBy: { createdAt: 'desc' }, take: 30 });
+      const batches = await tx.playerAuctionBatch.findMany({ where: { leagueId: scope.leagueId, bidChannel: 'WECHAT_GROUP', OR: [{ status: { notIn: ['COMPLETED', 'CANCELLED'] } }, { lots: { some: { status: { in: ['PENDING_REVIEW', 'NO_BID'] } } } }], groupBinding: { deviceId: scope.deviceId } }, orderBy: { createdAt: 'desc' }, take: 30 });
       const lines = [];
-      for (const b of batches) lines.push(`${await this.ref(tx, 'BATCH', b.id, 'A')} ${b.name} / ${b.status}`);
-      return '最近30个本机器人未完成的拍卖批次：\n' + (lines.join('\n') || '暂无未完成批次，请先在后台创建并准备。');
+      for (const b of batches) { const ref = await this.ref(tx, 'BATCH', b.id, 'A'); lines.push(`${ref} ${b.name} / ${b.status}\n查看：拍卖 ${ref}\n${auctionNextStep(b.status, ref)}`); }
+      return '最近30个进行中或待处理的拍卖批次：\n' + (lines.join('\n') || '暂无待处理批次，请先在后台创建并准备。');
     }
     const detail = /^拍卖\s+A([1-9]\d{0,8})(?:\s+([1-9]\d{0,3}))?$/.exec(text);
     if (!detail) return null;
@@ -117,7 +122,7 @@ export class WechatPrivateManagementService {
     const page = Number(detail[2] ?? 1);
     const lots = await tx.playerAuctionLot.findMany({ where: { batchId: batch.id }, orderBy: { displayOrder: 'asc' }, skip: (page - 1) * 8, take: 9 });
     const lines = [];
-    for (const l of lots.slice(0, 8)) lines.push(`${await this.ref(tx, 'LOT', l.id, 'L')} ${l.playerNameSnapshot} / ${l.status} / 起拍价 ${l.startingPrice} / 当前价 ${l.currentPrice ?? '无'}`);
-    return `${batch.name} / ${batch.status}\n目标群：${batch.groupBinding?.displayName}\n${lines.join('\n') || '本页无拍品'}${lots.length > 8 ? `\n下一页：拍卖 A${detail[1]} ${page + 1}` : ''}`;
+    for (const l of lots.slice(0, 8)) lines.push(`${await this.ref(tx, 'LOT', l.id, 'L')} ${l.playerNameSnapshot} / ${l.status} / 起拍价 ${l.startingPrice} 资金 / 当前价 ${l.currentPrice == null ? '无' : `${l.currentPrice} 资金`}${['PENDING_REVIEW', 'NO_BID'].includes(l.status) ? `\n审核格式：审核成交 ${await this.ref(tx, 'LOT', l.id, 'L')}` : ''}`);
+    return `${batch.name} / ${batch.status}\n目标群：${batch.groupBinding?.displayName}\n${auctionNextStep(batch.status, `A${detail[1]}`)}\n${lines.join('\n') || '本页无拍品'}${lots.length > 8 ? `\n下一页：拍卖 A${detail[1]} ${page + 1}` : ''}`;
   }
 }

@@ -500,3 +500,12 @@ def test_private_administrator_commands_require_same_stable_sender() -> None:
 def test_restart_private_target_names_only_use_server_authorized_stable_contacts() -> None:
     receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
     assert receiver.private_reply_names(["contact-wxid", "league@chatroom", "bad id"]) == {"contact-wxid": "contact-wxid"}
+
+
+def test_command_aliases_and_new_help_reach_api_without_accepting_ordinary_chat() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids={'league@chatroom'}, robot_user_id='robot-wxid')
+    for text, expected in [('查询赛程2', '赛程2'), ('阵容t1', '阵容 T1'), ('拍卖a5 2', '拍卖 A5 2'), ('当前设置', '当前设置'), ('录分帮助', '录分帮助'), ('报分M1', '报分M1')]:
+        event = receiver.normalize(raw_message(conversation_id='contact-wxid', sender_username='contact-wxid', content=text))
+        assert event is not None and event.text == expected
+    assert receiver.normalize(raw_message(content='赛程')).text == '查询赛程'
+    assert receiver.normalize(raw_message(content='今天讨论赛程')) is None

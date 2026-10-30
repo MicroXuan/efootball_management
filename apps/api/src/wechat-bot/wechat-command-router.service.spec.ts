@@ -106,7 +106,7 @@ describe('WechatCommandRouterService', () => {
     await auctionOnly.service.route('inbound-1');
     expect(auctionOnly.row).toMatchObject({ processingStatus: 'IGNORED', resultCode: 'SCHEDULE_CAPABILITY_DISABLED' });
     expect(auctionOnly.schedules.query).not.toHaveBeenCalled();
-    expect(auctionOnly.outbox.enqueue).not.toHaveBeenCalled();
+    expect(auctionOnly.outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('本群尚未启用赛程查询') }));
 
     const auctionManager = harness({ commandText: '开始拍卖' }, ['PLAYER_AUCTION']);
     await auctionManager.service.route('inbound-1');
@@ -121,12 +121,12 @@ describe('WechatCommandRouterService', () => {
     expect(combinedSchedule.schedules.query).toHaveBeenCalledWith('group-binding-1', 'user-1');
   });
 
-  it('silently ignores recognized commands for groups with no capabilities', async () => {
+  it('explains unavailable schedule capability while ignoring unrelated bids', async () => {
     const schedule = harness({ commandText: '我的赛程' }, []);
     await schedule.service.route('inbound-1');
     expect(schedule.row).toMatchObject({ processingStatus: 'IGNORED', resultCode: 'SCHEDULE_CAPABILITY_DISABLED' });
     expect(schedule.prisma.wechatIdentityBinding.findUnique).not.toHaveBeenCalled();
-    expect(schedule.outbox.enqueue).not.toHaveBeenCalled();
+    expect(schedule.outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('本群尚未启用赛程查询') }));
 
     const bid = harness({ commandText: '88' }, []);
     await bid.service.route('inbound-1');
