@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- focused recovery transaction test doubles */
 import { jest } from '@jest/globals';
+import { PlayerAuctionStateService } from './player-auction-state.service.js';
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 
@@ -68,10 +69,10 @@ describe('PlayerAuctionRecoveryService', () => {
       currentLotId: 'lot-1', status: 'RECOVERY_REQUIRED'
     };
     const lot: any = { id: 'lot-1', status: 'PAUSED' };
-    const tx: any = { playerAuctionBatch: { findUnique: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) }, playerAuctionLot: { findUnique: jest.fn(async () => lot), update: jest.fn(async ({ data }: any) => Object.assign(lot, data)) } };
+    const tx: any = { playerAuctionBatch: { findUnique: jest.fn(async () => batch), findUniqueOrThrow: jest.fn(async () => batch), update: jest.fn(async ({ data }: any) => Object.assign(batch, data)) }, playerAuctionLot: { findUnique: jest.fn(async () => lot), update: jest.fn(async ({ data }: any) => Object.assign(lot, data)) } };
     const service = new PlayerAuctionRecoveryService(
       { $transaction: async (work: any) => work(tx) } as never,
-      {} as never,
+      new PlayerAuctionStateService({} as never, {} as never, {} as never),
       { can: jest.fn(async () => true) } as never,
       { lockLeague: jest.fn(), lockGroup: jest.fn(), lockBatch: jest.fn(), lockLot: jest.fn(), now: jest.fn(async () => now) } as never,
       { enqueue: jest.fn() } as never,

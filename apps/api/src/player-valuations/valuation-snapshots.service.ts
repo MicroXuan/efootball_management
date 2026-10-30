@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable, Optional, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import type { ValuationWorkspace } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -15,6 +15,10 @@ import { LeagueVisibilityService } from '../league-visibility/league-visibility.
 @Injectable()
 export class ValuationSnapshotsService implements OnApplicationBootstrap, OnApplicationShutdown {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly logger = new Logger(ValuationSnapshotsService.name);
+  private backgroundRun: Promise<void> | null = null;
+  private nextBackgroundCheckAt = 0;
+  private stopped = false;
   private readonly visibility: LeagueVisibilityService;
 
   constructor(
@@ -26,16 +30,45 @@ export class ValuationSnapshotsService implements OnApplicationBootstrap, OnAppl
   }
 
   onApplicationBootstrap() {
-    void this.initializeDueWindows().catch(() => undefined);
+    this.stopped = false;
+    this.scheduleBackgroundCheck();
     this.timer = setInterval(() => {
-      void this.initializeDueWindows().catch(() => undefined);
+      this.scheduleBackgroundCheck();
     }, 1_000);
     this.timer.unref();
   }
 
-  onApplicationShutdown() {
+  async onApplicationShutdown() {
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await this.backgroundRun;
+  }
+
+  private scheduleBackgroundCheck(): void {
+    if (this.stopped || this.backgroundRun) return;
+    if (Date.now() < this.nextBackgroundCheckAt && !this.windows.activity?.isAwake()) return;
+    this.backgroundRun = this.checkNextWindow()
+      .catch((error: unknown) => {
+        this.nextBackgroundCheckAt = Date.now() + 1_000;
+        this.logger.error('Valuation snapshot background check failed', error);
+      })
+      .finally(() => { this.backgroundRun = null; });
+  }
+
+  private async checkNextWindow(): Promise<void> {
+    const now = new Date();
+    await this.initializeDueWindows(now);
+    const next = await this.prisma.valuationWindow.findFirst({
+      where: {
+        season: { league: { isDeleted: false } },
+        startsAt: { gt: now }, endsAt: { gt: now },
+        closedAt: null, snapshotInitializedAt: null
+      },
+      select: { startsAt: true },
+      orderBy: { startsAt: 'asc' }
+    });
+    this.nextBackgroundCheckAt = Math.min(now.getTime() + 30_000, next?.startsAt.getTime() ?? Infinity);
   }
 
   async initializeDueWindows(at = new Date(), seasonId?: string) {

@@ -15,12 +15,14 @@ describe('private administrator candidates', () => {
             { id: 'contact-2', wechatContactId: 'wxid_unknown', version: 1, lastObservedAt: observedAt, adminId: null, admin: null }]
           : []) },
       adminAccount: { findMany: jest.fn(async () => []) },
-      wechatObservedMember: { findMany: jest.fn(async (_query: unknown) => [
+      wechatObservedMember: { findMany: jest.fn(async (query: unknown) => {
+        void query;
+        return [
         { wechatContactId: 'wxid_dust', displayName: 'Dust', lastObservedAt: observedAt },
         { wechatContactId: 'wxid_dust', displayName: 'Old name', lastObservedAt: new Date('2026-10-01T00:00:00.000Z') }
-      ]) }
+      ]; }) }
     };
-    const auth = { requirePlatformAdmin: jest.fn(async (_adminId: string) => undefined) };
+    const auth = { requirePlatformAdmin: jest.fn(async (adminId: string) => { void adminId; }) };
     const service = new AdminWechatAdminsService(
       prisma as unknown as PrismaService,
       auth as unknown as AdminAuthorizationService,

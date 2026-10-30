@@ -5,10 +5,15 @@ import { AuthorizationService } from '../authorization/authorization.service.js'
 import { PlayerAuctionError } from './player-auction.errors.js';
 import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js';
 
+import { BackgroundActivity } from '../common/scheduling/background-activity.js';
+
+import { assertAuctionPauseNotExpired } from './player-auction-pause.js';
+
 const FULL_DURATION_MS = 30_000;
 
 @Injectable()
 export class PlayerAuctionStateService {
+  readonly activity = new BackgroundActivity();
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PlayerAuctionLockRepository) private readonly locks: PlayerAuctionLockRepository,
@@ -64,7 +69,7 @@ export class PlayerAuctionStateService {
           await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'PAUSED', deadlineAt: null, pausedRemainingMs: remaining, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
         }
       }
-      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'RECOVERY_REQUIRED', recoveryDetectedAt: now, recoveryReason: reason, version: { increment: 1 } } });
+      await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'RECOVERY_REQUIRED', pausedAt: batch.pausedAt ?? now, recoveryDetectedAt: now, recoveryReason: reason, version: { increment: 1 } } });
       return { transition: 'RECOVERY_REQUIRED' as const, batchId: batch.id };
     });
   }
@@ -93,7 +98,8 @@ export class PlayerAuctionStateService {
     const now = await this.locks.now(tx);
     const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
     await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, pausedRemainingMs: null, version: { increment: 1 } } });
-    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', currentLotId: lot.id, startedAt: batch.startedAt ?? now, version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', pausedAt: null, currentLotId: lot.id, startedAt: batch.startedAt ?? now, version: { increment: 1 } } });
+    this.activity.wake();
     return { transition: 'STARTED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
   }
 
@@ -102,17 +108,19 @@ export class PlayerAuctionStateService {
     const now = await this.locks.now(tx);
     const remaining = Math.max(0, (lot.deadlineAt?.getTime() ?? now.getTime()) - now.getTime());
     await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'PAUSED', deadlineAt: null, pausedRemainingMs: remaining, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
-    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'PAUSED', version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'PAUSED', pausedAt: now, version: { increment: 1 } } });
     return { transition: 'PAUSED' as const, batchId: batch.id, lotId: lot.id, remainingMs: remaining };
   }
 
   async resumeBatch(tx: Prisma.TransactionClient, batchId: string, expectedVersion?: number) {
     const { batch, lot } = await this.batchContext(tx, batchId, 'PAUSED', expectedVersion);
     const now = await this.locks.now(tx);
+    assertAuctionPauseNotExpired(batch, now);
     const remaining = lot.pausedRemainingMs ?? FULL_DURATION_MS;
     const deadlineAt = new Date(now.getTime() + remaining);
     await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, version: { increment: 1 } } });
-    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', pausedAt: null, version: { increment: 1 } } });
+    this.activity.wake();
     return { transition: 'RESUMED' as const, batchId: batch.id, lotId: lot.id, deadlineAt };
   }
 
@@ -125,9 +133,11 @@ export class PlayerAuctionStateService {
     const lot = await tx.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.currentLotId } });
     if (lot.status !== 'PAUSED') throw new PlayerAuctionError('AUCTION_STATE_INVALID', '恢复状态不一致', 409);
     const now = await this.locks.now(tx);
+    assertAuctionPauseNotExpired(batch, now);
     const deadlineAt = new Date(now.getTime() + FULL_DURATION_MS);
     await tx.playerAuctionLot.update({ where: { id: lot.id }, data: { status: 'ACTIVE', startedAt: now, deadlineAt, pausedRemainingMs: null, deadlineEpoch: { increment: 1 }, lastCountdownMark: 30, version: { increment: 1 } } });
-    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', recoveryDetectedAt: null, recoveryReason: null, version: { increment: 1 } } });
+    await tx.playerAuctionBatch.update({ where: { id: batch.id }, data: { status: 'ACTIVE', pausedAt: null, recoveryDetectedAt: null, recoveryReason: null, version: { increment: 1 } } });
+    this.activity.wake();
     return { transition: 'RECOVERED' as const, batchId, lotId: lot.id, deadlineAt };
   }
 

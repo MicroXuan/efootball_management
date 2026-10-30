@@ -1,5 +1,7 @@
+import { Logger } from '@nestjs/common';
 import { jest } from '@jest/globals';
 /* eslint-disable @typescript-eslint/no-explicit-any -- focused worker Prisma test doubles */
+import { PlayerAuctionStateService } from './player-auction-state.service.js';
 import { PlayerAuctionWorker } from './player-auction-worker.js';
 import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
 
@@ -69,7 +71,7 @@ function closingHarness({ highestBid = true, includeNext = true, bidChannel = 'W
     { scanUnavailableDevices: jest.fn() } as never,
     new PlayerAuctionMessageFormatter()
   );
-  return { worker, current, next, batch, messages, tx, locks };
+  return { worker, current, next, batch, messages, tx, locks, prisma };
 }
 
 describe('PlayerAuctionWorker', () => {
@@ -163,5 +165,124 @@ describe('PlayerAuctionWorker', () => {
     expect(current.status).toBe('PENDING_REVIEW');
     expect(next.status).toBe('ACTIVE');
     expect(messages).toHaveLength(0);
+  });
+});
+
+describe('PlayerAuctionWorker idle scheduling', () => {
+  afterEach(() => jest.useRealTimers());
+
+  function scheduledWorker(active = false) {
+    const prisma = { playerAuctionLot: { findMany: jest.fn(async () => active ? [{
+      id: 'active', deadlineAt: new Date(Date.now() + 30_000),
+      batch: { bidChannel: 'MINIPROGRAM' }
+    }] : []) } };
+    const recovery = {
+      recoverOverdueOnBootstrap: jest.fn(async () => undefined),
+      scanUnavailableDevices: jest.fn(async () => undefined)
+    };
+    const state = new PlayerAuctionStateService({} as never, {} as never, {} as never);
+    const worker = new PlayerAuctionWorker(prisma as never, { now: () => new Date() } as never,
+      {} as never, {} as never, recovery as never, new PlayerAuctionMessageFormatter(), state);
+    return { worker, prisma, recovery, state };
+  }
+
+  it('limits empty database scans while retaining periodic discovery', async () => {
+    jest.useFakeTimers();
+    const { worker, prisma, recovery } = scheduledWorker();
+    await worker.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(prisma.playerAuctionLot.findMany.mock.calls.length).toBeLessThanOrEqual(13);
+      expect(prisma.playerAuctionLot.findMany.mock.calls.length).toBeGreaterThanOrEqual(12);
+      expect(recovery.scanUnavailableDevices.mock.calls.length).toBeLessThanOrEqual(13);
+    } finally { await worker.onModuleDestroy(); }
+  });
+
+  it('keeps polling across a mutation commit after an empty read, then returns to idle', async () => {
+    jest.useFakeTimers();
+    const { worker, prisma, state } = scheduledWorker();
+    await worker.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(500);
+      state.activity.wake();
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(prisma.playerAuctionLot.findMany).toHaveBeenCalledTimes(3);
+      // A 60-second transaction can commit after the first empty read.
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(prisma.playerAuctionLot.findMany).toHaveBeenCalledTimes(123);
+      await jest.advanceTimersByTimeAsync(60_000);
+      prisma.playerAuctionLot.findMany.mockClear();
+      await jest.advanceTimersByTimeAsync(10_000);
+      expect(prisma.playerAuctionLot.findMany.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally { await worker.onModuleDestroy(); }
+  });
+
+  it('does not overlap a slow scan', async () => {
+    jest.useFakeTimers();
+    const { worker, prisma, recovery } = scheduledWorker();
+    let finish!: () => void;
+    recovery.scanUnavailableDevices.mockImplementationOnce(() => new Promise<undefined>((resolve) => { finish = () => resolve(undefined); }));
+    await worker.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(recovery.scanUnavailableDevices).toHaveBeenCalledTimes(1);
+      finish();
+      await jest.advanceTimersByTimeAsync(500);
+      expect(prisma.playerAuctionLot.findMany).toHaveBeenCalledTimes(1);
+    } finally { await worker.onModuleDestroy(); }
+  });
+
+  it('settles a short resumed auction after commit even when its first wakeup reads empty', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-09T12:00:30.000Z'));
+    const h = closingHarness({ bidChannel: 'MINIPROGRAM', includeNext: false });
+    h.current.status = 'PAUSED';
+    h.current.deadlineAt = null;
+    h.current.pausedRemainingMs = 750;
+    h.batch.status = 'PAUSED';
+    let committed = false;
+    h.prisma.playerAuctionLot = { findMany: jest.fn(async () => committed && h.current.status === 'ACTIVE'
+      ? [{ ...h.current, batch: h.batch }] : []) };
+    const state = new PlayerAuctionStateService(h.prisma, h.locks, {} as never);
+    const worker = new PlayerAuctionWorker(h.prisma, { now: () => new Date() } as never,
+      { ...h.locks, now: async () => new Date() }, {} as never,
+      { recoverOverdueOnBootstrap: async () => undefined, scanUnavailableDevices: async () => undefined } as never,
+      new PlayerAuctionMessageFormatter(), state);
+    await worker.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(500); // empty scan establishes idle backoff
+      await state.resumeBatch(h.tx, h.batch.id);
+      await jest.advanceTimersByTimeAsync(500); // mutation has not committed yet
+      expect(h.current.status).toBe('ACTIVE');
+      committed = true;
+      await jest.advanceTimersByTimeAsync(500);
+      expect(h.current.status).toBe('PENDING_REVIEW');
+      expect(h.batch.status).toBe('COMPLETED');
+    } finally { await worker.onModuleDestroy(); }
+  });
+
+  it('retries after a transient scan failure', async () => {
+    jest.useFakeTimers();
+    const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const { worker, prisma, recovery } = scheduledWorker();
+    recovery.scanUnavailableDevices.mockRejectedValueOnce(new Error('temporary database failure'));
+    await worker.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(500);
+      expect(prisma.playerAuctionLot.findMany).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(500);
+      expect(prisma.playerAuctionLot.findMany).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledTimes(1);
+    } finally { await worker.onModuleDestroy(); log.mockRestore(); }
+  });
+
+  it('retains half-second processing while an auction is active', async () => {
+    jest.useFakeTimers();
+    const { worker, prisma } = scheduledWorker(true);
+    await worker.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(prisma.playerAuctionLot.findMany).toHaveBeenCalledTimes(10);
+    } finally { await worker.onModuleDestroy(); }
   });
 });

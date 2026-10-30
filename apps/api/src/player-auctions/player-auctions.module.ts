@@ -20,6 +20,8 @@ import { PlayerAuctionMessageFormatter } from './player-auction-message.formatte
 import { MyPlayerAuctionsController } from './my-player-auctions.controller.js';
 import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
 
+import { PlayerAuctionPauseTimeoutService } from './player-auction-pause-timeout.service.js';
+
 @Global()
 @Module({
   imports: [AdminAuthModule, AdminModule, AuthorizationModule, LeagueRostersModule, WechatBotModule],
@@ -36,6 +38,7 @@ import { MyPlayerAuctionsService } from './my-player-auctions.service.js';
     PlayerAuctionMessageFormatter,
     PlayerAuctionStateService,
     PlayerAuctionWorker,
+    PlayerAuctionPauseTimeoutService,
     { provide: PLAYER_AUCTION_RECOVERY_HOOK, useExisting: PlayerAuctionRecoveryService },
     { provide: PLAYER_AUCTION_COMMAND_HANDLER, useExisting: PlayerAuctionCommandHandler }
   ],

@@ -83,7 +83,7 @@ export function WechatBotMembersPanel({ deviceId, deviceName, leagueId, api = ad
     finally { if (request === lookupGeneration.current && active.current) setFinding(false); }
   };
   const save = async () => {
-    if (!selected || busy.current || !reason.trim() || (!remove && !candidate)) return;
+    if (!selected || busy.current || (!remove && !candidate)) return;
     busy.current = true; setSaving(true); setModalError('');
     const currentBase = base;
     try {
@@ -128,17 +128,18 @@ export function WechatBotMembersPanel({ deviceId, deviceName, leagueId, api = ad
     </div>}
     <Space style={{ marginTop: 16 }}><Button disabled={loading || cursors.length === 1} onClick={() => setCursors((v) => v.slice(0, -1))}>上一页</Button><span>第 {cursors.length} 页</span><Button disabled={loading || !nextCursor} onClick={() => setCursors((v) => [...v, nextCursor!])}>下一页</Button></Space>
     <Modal title={remove ? '核对并解除关联' : '核对微信成员与用户'} open={selected !== null} okText={remove ? '确认解除' : '确认关联'} cancelText="取消" confirmLoading={saving}
-      okButtonProps={{ disabled: !reason.trim() || (!remove && !candidate) || finding }} onOk={() => void save()} onCancel={() => { if (!busy.current) { setSelected(null); lookupGeneration.current++; } }}>
+      okButtonProps={{ disabled: (!remove && !candidate) || finding }} onOk={() => void save()} onCancel={() => { if (!busy.current) { setSelected(null); lookupGeneration.current++; } }}>
       <p>机器人：{deviceName ?? deviceId}；群：{selected?.groupName}</p>
       <p style={{ overflowWrap: 'anywhere' }}>微信成员：{selected?.displayName ?? '昵称暂不可用'} · {selected?.wechatContactId}</p>
       <p>原关联：{selected?.binding ? `${selected.binding.publicUserNo ?? '无编号'} · ${selected.binding.userName}` : '无'}</p>
-      <Alert type="warning" title="此关联在该机器人服务的所有群中生效，请核实身份后提交。" />
+      <Alert type="warning" title="关联对该机器人服务的所有群生效，请确认微信成员与用户为同一人。" />
       {!remove ? <>
-        <label htmlFor="wechat-member-user-no">用户编号</label>
+        <label style={{ display: 'block', marginTop: 16, marginBottom: 8 }} htmlFor="wechat-member-user-no">用户编号</label>
         <Space.Compact style={{ width: '100%' }}><Input disabled={saving} id="wechat-member-user-no" value={number} maxLength={6} inputMode="numeric" placeholder="六位用户编号，例如 001234" onChange={(e) => { setNumber(e.target.value); setCandidate(null); setFinding(false); lookupGeneration.current++; operationKey.current = crypto.randomUUID(); }} /><Button disabled={!/^\d{6}$/.test(number) || finding} loading={finding} onClick={() => void lookup()}>查找用户</Button></Space.Compact>
         {candidate ? <p>新关联：{candidate.publicUserNo} · {candidate.displayName}<br />{candidate.teams.map((t) => `${t.leagueName} / ${t.name}`).join('；') || '当前没有现役球队；关联不会授予球队权限'}</p> : null}
       </> : null}
-      <label htmlFor="wechat-member-reason">核实说明</label><Input.TextArea disabled={saving} id="wechat-member-reason" value={reason} maxLength={512} placeholder="填写身份核实或解除原因" onChange={(e) => { setReason(e.target.value); operationKey.current = crypto.randomUUID(); }} />
+      <label style={{ display: 'block', marginTop: 16, marginBottom: 8 }} htmlFor="wechat-member-reason">核实说明（选填）</label>
+      <Input.TextArea disabled={saving} id="wechat-member-reason" value={reason} maxLength={512} autoSize={{ minRows: 3, maxRows: 6 }} placeholder={remove ? '可补充解除关联的原因，留空也可提交' : '可补充身份核实情况，留空也可提交'} onChange={(e) => { setReason(e.target.value); operationKey.current = crypto.randomUUID(); }} />
       {modalError ? <Alert role="alert" type="error" title={modalError} /> : null}
     </Modal>
   </Card>;

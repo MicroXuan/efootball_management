@@ -3267,6 +3267,7 @@ model PlayerAuctionBatch {
   status             PlayerAuctionBatchStatus @default(DRAFT)
   currentLotId       String?                  @unique @map("current_lot_id") @db.Char(36)
   createdByAdminId   String                   @map("created_by_admin_id") @db.Char(36)
+  pausedAt           DateTime?                @map("paused_at")
   recoveryDetectedAt DateTime?                @map("recovery_detected_at")
   recoveryReason     String?                  @map("recovery_reason") @db.VarChar(512)
   version            Int                      @default(1) @db.UnsignedInt
@@ -3284,6 +3285,7 @@ model PlayerAuctionBatch {
   @@index([leagueId, status, createdAt], map: "player_auction_batches_league_status_idx")
   @@index([groupBindingId, status], map: "player_auction_batches_group_status_idx")
   @@index([createdByAdminId], map: "player_auction_batches_creator_idx")
+  @@index([status, pausedAt], map: "player_auction_batches_pause_timeout_idx")
   @@map("player_auction_batches")
 }
 

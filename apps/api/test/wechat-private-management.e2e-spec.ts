@@ -8,7 +8,6 @@ import { WechatManagementEffectsService } from '../src/wechat-bot/wechat-managem
 import { PlayerAuctionWorker } from '../src/player-auctions/player-auction-worker.js';
 import { PlayerAuctionStateService } from '../src/player-auctions/player-auction-state.service.js';
 import { defaultSalaryTiers } from '../src/league-rosters/salary-rules.service.js';
-import { WechatBridgeService } from '../src/wechat-bot/wechat-bridge.service.js';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { ResultsService } from '../src/competitions/results.service.js';
@@ -47,12 +46,7 @@ describe('private administrator management integration', () => {
     return db.wechatInboundMessage.create({ data: { deviceId, messageId: randomUUID(), conversationType: 'PRIVATE', conversationId: senderId, senderId, commandText: text, wechatSentAt: new Date() } });
   }
   async function command(text: string) { return scores.handle(await inbound(text)); }
-  async function preview(score = '2:1') {
-    const text = await command(`报分 M${reference} ${score} 原因：赛后核对`);
-    const code = /确认 ([0-9A-F]{12})/.exec(text)?.[1];
-    if (!code) throw new Error(text);
-    return code;
-  }
+
   beforeAll(async () => {
     await db.$connect();
     app = await createTestApp();

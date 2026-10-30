@@ -5,7 +5,7 @@ import { WechatBotMembersPanel } from './wechat-bot-members-panel';
 import type { AdminApi } from '../lib/api';
 
 const member = { id: 'm1', deviceId: 'd1', wechatGroupId: 'g@chatroom', groupName: '联赛群', wechatContactId: 'wxid_abc', displayName: null, lastObservedAt: '2026-10-26T10:00:00Z', binding: null };
-it('looks up a zero-prefixed user number and requires explicit identity confirmation', async () => {
+it.each(['', '本人已核实'])('confirms a zero-prefixed user with optional reason %j', async (reason) => {
   const writes: unknown[] = [];
   const request = vi.fn(async (path: string, options?: { method?: string; body?: unknown }) => {
     if (options?.method === 'PUT') { writes.push(options.body); return { binding: {} }; }
@@ -21,10 +21,10 @@ it('looks up a zero-prefixed user number and requires explicit identity confirma
   await user.click(screen.getByRole('button', { name: '查找用户' }));
   await screen.findByText(/张三/);
   expect(writes).toHaveLength(0);
-  await user.type(screen.getByLabelText('核实说明'), '本人已核实');
+  if (reason) await user.type(screen.getByLabelText('核实说明（选填）'), reason);
   await user.click(screen.getByRole('button', { name: '确认关联' }));
   await waitFor(() => expect(writes).toHaveLength(1));
-  expect(writes[0]).toMatchObject({ userId: 'u1', observedMemberId: 'm1', expectedBindingId: null, expectedVersion: null, reason: '本人已核实' });
+  expect(writes[0]).toMatchObject({ userId: 'u1', observedMemberId: 'm1', expectedBindingId: null, expectedVersion: null, reason });
   expect(request.mock.calls.some(([path]) => path.includes('publicUserNo=001234'))).toBe(true);
 });
 

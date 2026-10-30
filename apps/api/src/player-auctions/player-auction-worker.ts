@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatOutboxService } from '../wechat-bot/wechat-outbox.service.js';
@@ -6,6 +6,8 @@ import { PlayerAuctionClock } from './player-auction-clock.js';
 import { PlayerAuctionLockRepository } from './player-auction-lock.repository.js';
 import { PlayerAuctionRecoveryService } from './player-auction-recovery.service.js';
 import { PlayerAuctionMessageFormatter } from './player-auction-message.formatter.js';
+
+import { PlayerAuctionStateService } from './player-auction-state.service.js';
 
 const MARKS = [20, 10, 3, 2, 1] as const;
 const FULL_DURATION_MS = 30_000;
@@ -18,6 +20,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
   private timer?: NodeJS.Timeout;
   private tickInFlight: Promise<void> | undefined;
   private stopping = false;
+  private nextIdleCheckAt = 0;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -25,7 +28,8 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
     @Inject(PlayerAuctionLockRepository) private readonly locks: PlayerAuctionLockRepository,
     @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService,
     @Inject(PlayerAuctionRecoveryService) private readonly recovery: PlayerAuctionRecoveryService,
-    @Inject(PlayerAuctionMessageFormatter) private readonly formatter: PlayerAuctionMessageFormatter
+    @Inject(PlayerAuctionMessageFormatter) private readonly formatter: PlayerAuctionMessageFormatter,
+    @Optional() @Inject(PlayerAuctionStateService) private readonly state?: PlayerAuctionStateService
   ) {}
 
   async onApplicationBootstrap() {
@@ -42,6 +46,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
 
   private scheduleTick() {
     if (this.stopping || this.tickInFlight) return;
+    if (Date.now() < this.nextIdleCheckAt && !this.state?.activity.isAwake()) return;
     const tick = this.tick()
       .catch((error: unknown) => this.logger.error('Player auction worker tick failed', error))
       .finally(() => {
@@ -59,6 +64,7 @@ export class PlayerAuctionWorker implements OnApplicationBootstrap, OnModuleDest
       orderBy: [{ deadlineAt: 'asc' }, { id: 'asc' }],
       take: 100
     });
+    this.nextIdleCheckAt = lots.length ? 0 : Date.now() + 5_000;
     for (const lot of lots) {
       if (!lot.deadlineAt) continue;
       const remainingMs = lot.deadlineAt.getTime() - now.getTime();

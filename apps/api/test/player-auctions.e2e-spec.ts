@@ -8,6 +8,7 @@ import { PrismaService } from '../src/database/prisma.service.js';
 import { defaultSalaryTiers } from '../src/league-rosters/salary-rules.service.js';
 import { PlayerBuildsService } from '../src/player-builds/player-builds.service.js';
 import { PlayerAuctionRecoveryService } from '../src/player-auctions/player-auction-recovery.service.js';
+import { PlayerAuctionPauseTimeoutService } from '../src/player-auctions/player-auction-pause-timeout.service.js';
 import { PlayerAuctionWorker } from '../src/player-auctions/player-auction-worker.js';
 import { createTestApp } from './test-app.js';
 
@@ -211,6 +212,8 @@ describe('Player auction group acceptance', () => {
   });
 
   afterAll(async () => {
+    if (app) await app.close();
+    await prisma.auditLog.deleteMany({ where: { resourceId: { in: batchIds }, action: 'player-auction.pause-timeout' } });
     if (batchIds.length) {
       await prisma.wechatEntityReference.deleteMany({ where: { kind: 'BATCH', entityId: { in: batchIds } } });
       await prisma.playerAuctionReview.deleteMany({ where: { lot: { batchId: { in: batchIds } } } });
@@ -261,7 +264,6 @@ describe('Player auction group acceptance', () => {
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.adminSession.deleteMany({ where: { adminId } });
     await prisma.adminAccount.deleteMany({ where: { id: adminId } });
-    if (app) await app.close();
     await prisma.$disconnect();
     for (const [i, key] of ['WECHAT_BOT_PRIVATE_SCORE_ENABLED', 'WECHAT_BOT_PRIVATE_MANAGEMENT_ENABLED'].entries()) {
       if (originalFlags[i] === undefined) delete process.env[key]; else process.env[key] = originalFlags[i];
@@ -303,7 +305,7 @@ describe('Player auction group acceptance', () => {
       where: { deviceId, businessKey: { startsWith: `auction:${first.id}:epoch:${afterBid.deadlineEpoch}:countdown:` } },
       orderBy: { createdAt: 'asc' }, select: { text: true }
     });
-    expect(countdowns.map((message) => message.text)).toEqual(['20', '10', '3', '2', '1']);
+    expect(countdowns.map((message) => message.text)).toEqual(['拍卖剩余时间 20s', '拍卖剩余时间 10s', '拍卖剩余时间 3s', '拍卖剩余时间 2s', '拍卖剩余时间 1s']);
     await closeLot(first.id);
     expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('PENDING_REVIEW');
     expect((await prisma.playerAuctionLot.findUniqueOrThrow({ where: { id: batch.lots[1]!.id } })).status).toBe('ACTIVE');
@@ -567,4 +569,44 @@ describe('Player auction group acceptance', () => {
     expect(await prisma.leaguePlayerOwnership.findUnique({ where: { leagueId_footballPlayerId: { leagueId, footballPlayerId: playerIds[6]! } } })).toMatchObject({ leagueTeamId: teamIds[0], status: 'ACTIVE' });
     expect(await prisma.financeLedgerEntry.count({ where: { leagueId, amountMinor: 100, leagueTeamId: teamIds[0]! } })).toBe(1);
   });
+  it('cancels manual and abnormal hour-long pauses without allowing late resumes or touching finances', async () => {
+    const timeout = app.get(PlayerAuctionPauseTimeoutService);
+    await timeout.onModuleDestroy(); // Drive the boundary deterministically, not by wall-clock sleeps.
+    const baseline = await prisma.financeLedgerEntry.count({ where: { leagueId } });
+    for (const channel of ['MINIPROGRAM', 'WECHAT_GROUP'] as const) {
+      const batch = await createPreparedBatch(`暂停超时-${channel}`, 1, { bidChannel: channel, playerOffset: 5 });
+      const basePath = `/v1/admin/leagues/${leagueId}/player-auctions/${batch.id}`;
+      await request(app.getHttpServer()).post(`${basePath}/start`).set(adminHeaders())
+        .send({ expectedVersion: batch.version }).expect(201);
+      if (channel === 'MINIPROGRAM') {
+        const active = await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } });
+        await request(app.getHttpServer()).post(`${basePath}/pause`).set(adminHeaders())
+          .send({ expectedVersion: active.version }).expect(201);
+      } else {
+        await recovery.onBridgeUnavailable(deviceId, 'HEARTBEAT_TIMEOUT');
+      }
+      const paused = await prisma.playerAuctionBatch.findUniqueOrThrow({ where: { id: batch.id } });
+      expect(paused.pausedAt).not.toBeNull();
+      expect(paused.status).toBe(channel === 'MINIPROGRAM' ? 'PAUSED' : 'RECOVERY_REQUIRED');
+      await expect(timeout.cancelExpired()).resolves.toBe(0);
+      await prisma.playerAuctionBatch.update({ where: { id: batch.id }, data: { pausedAt: new Date(Date.now() - 3_601_000) } });
+      if (channel === 'MINIPROGRAM') {
+        await request(app.getHttpServer()).post(`${basePath}/resume`).set(adminHeaders())
+          .send({ expectedVersion: paused.version }).expect(409)
+          .expect(({ body }) => expect(body.error.code).toBe('AUCTION_PAUSE_EXPIRED'));
+      } else {
+        await expect(recovery.recover(batch.id, userIds[0]!, false)).rejects.toMatchObject({ code: 'AUCTION_PAUSE_EXPIRED' });
+      }
+      await expect(timeout.cancelExpired()).resolves.toBe(1);
+      await expect(timeout.cancelExpired()).resolves.toBe(0);
+      await request(app.getHttpServer()).get(basePath).set({ Authorization: `Bearer ${adminToken}` }).expect(200)
+        .expect(({ body }) => {
+          expect(body.status).toBe('CANCELLED');
+          expect(body.lots[0].status).toBe('VOID');
+        });
+      expect(await prisma.auditLog.count({ where: { resourceId: batch.id, action: 'player-auction.pause-timeout' } })).toBe(1);
+    }
+    expect(await prisma.financeLedgerEntry.count({ where: { leagueId } })).toBe(baseline);
+  });
+
 });

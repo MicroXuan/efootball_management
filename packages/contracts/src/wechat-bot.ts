@@ -241,7 +241,7 @@ export const AdminWechatIdentityMutationSchema = z.strictObject({
   userId: ResourceIdSchema.nullable(),
   expectedBindingId: ResourceIdSchema.nullable(),
   expectedVersion: ExpectedVersionSchema.nullable(),
-  reason: z.string().trim().min(1).max(512),
+  reason: z.string().trim().max(512).default(''),
   idempotencyKey: ResourceIdSchema
 }).refine((v) => (v.expectedBindingId === null) === (v.expectedVersion === null), 'Binding and version must both be provided or null');
 export const WechatIdentityUserSchema = z.object({

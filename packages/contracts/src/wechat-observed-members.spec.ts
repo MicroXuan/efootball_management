@@ -21,3 +21,17 @@ it('preserves zero-prefixed public user numbers and requires mutation concurrenc
   assert.ok(mutation);
   assert.equal(mutation.safeParse({ userId: null }).success, false);
 });
+
+
+it('accepts omitted or blank identity notes while retaining the length limit', () => {
+  const input = {
+    observedMemberId: '11111111-1111-4111-8111-111111111111', userId: null,
+    expectedBindingId: null, expectedVersion: null,
+    idempotencyKey: '22222222-2222-4222-8222-222222222222'
+  };
+  const schema = contracts.AdminWechatIdentityMutationSchema;
+  assert.equal(schema.parse(input).reason, '');
+  assert.equal(schema.parse({ ...input, reason: '   ' }).reason, '');
+  assert.equal(schema.parse({ ...input, reason: ' 核实记录 ' }).reason, '核实记录');
+  assert.equal(schema.safeParse({ ...input, reason: '字'.repeat(513) }).success, false);
+});

@@ -1,4 +1,6 @@
+import { Logger } from '@nestjs/common';
 import { jest } from '@jest/globals';
+import { BackgroundActivity } from '../common/scheduling/background-activity.js';
 import { ValuationSnapshotsService } from './valuation-snapshots.service.js';
 
 const at = new Date('2026-10-03T12:00:00.000Z');
@@ -62,7 +64,7 @@ function harness() {
     valuationSubmission: { findFirst: jest.fn(async () => null) },
     leaguePlayerValuation: { findMany: jest.fn(async () => [{ footballPlayerId: 'player-1', currentValueMinor: 1200 }]) }
   };
-  const windows = { getEffectiveRule: jest.fn(async () => ({ window, rule, leagueId: 'league-1' })) };
+  const windows = { activity: new BackgroundActivity(), getEffectiveRule: jest.fn(async () => ({ window, rule, leagueId: 'league-1' })) };
   const service = new ValuationSnapshotsService(prisma as never, windows as never, {
     requireVisible: jest.fn(async () => 'league-1')
   } as never);
@@ -207,5 +209,93 @@ describe('ValuationSnapshotsService', () => {
       minimumAllowedMinor: 900,
       maximumAllowedMinor: 1200
     })]);
+  });
+});
+
+describe('ValuationSnapshotsService background scheduling', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('does not query empty windows every second', async () => {
+    jest.useFakeTimers();
+    const { service, prisma } = harness();
+    prisma.valuationWindow.findFirst.mockResolvedValue(null as never);
+    service.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(prisma.valuationWindow.findMany.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(prisma.valuationWindow.findMany.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally { service.onApplicationShutdown(); }
+  });
+
+  it('reacts to a window edit while an earlier background read is in flight', async () => {
+    jest.useFakeTimers();
+    const { service, prisma, windows } = harness();
+    let finish!: (rows: Array<{ id: string }>) => void;
+    prisma.valuationWindow.findMany.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    prisma.valuationWindow.findFirst.mockResolvedValue(null as never);
+    service.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(1);
+      windows.activity.wake();
+      finish([]);
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(2);
+      await service.onApplicationShutdown();
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(2);
+    } finally { await service.onApplicationShutdown(); }
+  });
+
+  it('waits for pending work on shutdown without starting another scan', async () => {
+    jest.useFakeTimers();
+    const { service, prisma } = harness();
+    let finish!: (rows: Array<{ id: string }>) => void;
+    prisma.valuationWindow.findMany.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    prisma.valuationWindow.findFirst.mockResolvedValue(null as never);
+    service.onApplicationBootstrap();
+    let stopped = false;
+    const shutdown = service.onApplicationShutdown().then(() => { stopped = true; });
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(stopped).toBe(false);
+    finish([]);
+    await shutdown;
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries initialization after a transient database failure', async () => {
+    jest.useFakeTimers();
+    const log = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const { service, prisma } = harness();
+    prisma.valuationWindow.findMany.mockRejectedValueOnce(new Error('temporary database failure'));
+    prisma.valuationWindow.findFirst.mockResolvedValue(null as never);
+    service.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(2);
+      expect(prisma.valuationWindow.findFirst).toHaveBeenCalledTimes(1);
+    } finally { await service.onApplicationShutdown(); log.mockRestore(); }
+  });
+
+  it('checks at the next scheduled opening instead of waiting for the reconciliation interval', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(at);
+    const { service, prisma } = harness();
+    prisma.valuationWindow.findFirst.mockResolvedValue({ id: 'window-1', startsAt: new Date(at.getTime() + 7_000) } as never);
+    prisma.valuationWindow.findMany.mockImplementation(async () => Date.now() >= at.getTime() + 7_000 ? [{ id: 'window-1' }] : []);
+    const ensure = jest.spyOn(service, 'ensureWindowSnapshot').mockResolvedValue([]);
+    service.onApplicationBootstrap();
+    try {
+      await jest.advanceTimersByTimeAsync(6_999);
+      expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(prisma.valuationWindow.findMany).toHaveBeenCalledTimes(2);
+      expect(ensure).toHaveBeenCalledWith('window-1', new Date(at.getTime() + 7_000));
+      expect(prisma.valuationWindow.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ closedAt: null, snapshotInitializedAt: null, startsAt: { gt: at } }),
+        orderBy: { startsAt: 'asc' }
+      }));
+    } finally { await service.onApplicationShutdown(); }
   });
 });
