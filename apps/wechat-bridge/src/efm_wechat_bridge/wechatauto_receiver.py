@@ -3,6 +3,7 @@ from __future__ import annotations
 import platform
 import re
 import json
+from hashlib import sha256
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from threading import RLock
@@ -253,6 +254,8 @@ class WechatautoReceiver:
                 sender_id = prefixed_sender_id
                 text = text[prefix.end():].strip()
         text = _TRAILING_CONTROL_PADDING.sub("", text).strip()
+        if not group and text == "幫助":
+            text = "帮助"
         if (
             not sender_id
             or not _SAFE_ID.fullmatch(sender_id)
@@ -324,6 +327,19 @@ class WechatautoReceiver:
         if not isinstance(full, Mapping) or self._positive_int(full.get("sort_seq")) != self._positive_int(row.get("sort_seq")):
             return row
         row["server_id"] = full.get("server_id")
+        sender_id = self._positive_int(row.get("sender_id"))
+        verified_private_sender = (
+            not username.endswith("@chatroom")
+            and sender_id is not None and sender_id != 2
+            and self._positive_int(full.get("local_id")) == local_id
+            and self._positive_int(full.get("sender_id")) == sender_id
+        )
+        if verified_private_sender:
+            if not self._safe_string(row.get("sender_username")):
+                row["sender_username"] = username
+            if not self._safe_string(row.get("server_id")):
+                stable_key = f"{username}\0{row['sort_seq']}\0{local_id}".encode("utf-8")
+                row["server_id"] = f"local:{sha256(stable_key).hexdigest()}"
         return row
 
     @classmethod

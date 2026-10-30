@@ -285,6 +285,83 @@ def test_pinned_library_rows_are_hydrated_with_server_id_and_contact_name() -> N
     assert receiver.poll(None)[0].message_id == "900000000001"
 
 
+def test_private_message_without_sender_index_uses_verified_conversation_identity() -> None:
+    class PrivateDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}]
+
+        def get_nickname(self, username: str) -> str:
+            return "管理员微信"
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 42, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8100}] if since_seq < 8100 else []
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"local_id": 42, "sort_seq": 8100, "sender_id": 3, "server_id": "private-server-id"}
+
+    receiver = WechatautoReceiver(database=PrivateDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    event = receiver.poll(None)[0]
+
+    assert event.conversation_type == "PRIVATE"
+    assert event.sender_id == "contact-wxid"
+    assert event.text == "帮助"
+
+
+def test_private_message_without_server_id_gets_stable_local_identity_only_after_row_verification() -> None:
+    class PrivateDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}]
+
+        def get_nickname(self, username: str) -> str:
+            return "管理员微信"
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 43, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8101}] if since_seq < 8101 else []
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"local_id": 43, "sort_seq": 8101, "sender_id": 3, "server_id": ""}
+
+    receiver = WechatautoReceiver(database=PrivateDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    first = receiver.poll(None)[0]
+    second = receiver.poll(None)[0]
+
+    assert first.message_id.startswith("local:")
+    assert first.message_id == second.message_id
+    assert first.sender_id == "contact-wxid"
+
+
+def test_private_traditional_help_is_normalized_before_upload() -> None:
+    receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    event = receiver.normalize(raw_message(
+        conversation_id="contact-wxid", sender_username="contact-wxid", content="幫助",
+    ))
+
+    assert event is not None
+    assert event.text == "帮助"
+
+
+def test_private_message_with_unverified_sender_is_not_inferred_from_chat_identity() -> None:
+    class PrivateDatabase:
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "contact-wxid"}]
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 44, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8102}]
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            return {"local_id": 44, "sort_seq": 8102, "sender_id": 7, "server_id": ""}
+
+    receiver = WechatautoReceiver(database=PrivateDatabase(), enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    assert receiver.poll(None) == []
+
+
 def test_poll_paginates_and_tracks_each_conversation_without_skipping_filtered_rows() -> None:
     class BacklogDatabase:
         def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
