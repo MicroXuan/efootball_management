@@ -27,7 +27,7 @@
 ```powershell
 cd apps\wechat-bridge
 .\scripts\install.ps1 -Config .\bridge.toml
-uv run efm-wechat-bridge --config .\bridge.toml doctor
+uv run --extra windows --frozen efm-wechat-bridge --config .\bridge.toml doctor
 ```
 
 `doctor` 必须确认 Python、微信进程和版本、登录状态、本地数据库、交互桌面、API 设备鉴权、状态目录和群列表。输出不得包含令牌、数据库密钥、完整聊天正文或账号数据路径。
@@ -159,7 +159,7 @@ git pull --ff-only origin dev
 cd .\apps\wechat-bridge
 uv sync --python 3.12 --extra windows --frozen
 # 依赖同步成功后再检查连接：
-uv run efm-wechat-bridge --config .\bridge.toml doctor
+uv run --extra windows --frozen efm-wechat-bridge --config .\bridge.toml doctor
 # doctor 通过后，以不发送模式启动：
 .\scripts\run.ps1 -Config .\bridge.toml
 ```
