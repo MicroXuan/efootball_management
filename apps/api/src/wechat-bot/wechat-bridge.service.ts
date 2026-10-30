@@ -1,4 +1,5 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.config.js';
+import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
 import { PrismaService } from '../database/prisma.service.js';
@@ -6,22 +7,43 @@ import { WechatCommandRouterService } from './wechat-command-router.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
 
 const GROUP_COMMAND = /^(?:帮助|查询赛程|我的赛程|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|\d+)$/;
-const PRIVATE_BINDING_COMMAND = /^绑定\s+\d{6}$/;
+const PRIVATE_PRIVATE_COMMAND = /^(?:绑定\s+\d{6}|帮助|联赛|赛季|球队|拍卖列表|赛程(?:\s*[1-9]\d{0,3})?|(?:切换联赛|切换赛季|报分|晋级|转会|阵容|拍卖|开始拍卖|暂停拍卖|继续拍卖|取消拍卖|恢复拍卖|审核成交|调整成交|作废成交|确认|取消|操作)\s+.{1,1000})$/u;
 
 @Injectable()
 export class WechatBridgeService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Optional() @Inject(WechatCommandRouterService) private readonly router?: WechatCommandRouterService,
-    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef
+    @Optional() @Inject(ModuleRef) private readonly moduleRef?: ModuleRef,
+    @Optional() @Inject(WECHAT_BOT_CONFIG) private readonly config?: WechatBotRuntimeConfig
   ) {}
 
   async heartbeat(deviceId: string, input: WechatBridgeHeartbeat) {
     const now = new Date();
-    await this.prisma.wechatBotDevice.update({
+    const changedAccount = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM wechat_bot_devices WHERE id = ${deviceId} FOR UPDATE`;
+      const device = await tx.wechatBotDevice.findUniqueOrThrow({ where: { id: deviceId } });
+      if (input.wechatAccountId && device.wechatAccountId && input.wechatAccountId !== device.wechatAccountId) {
+        await tx.wechatIdentityBinding.updateMany({ where: { deviceId, status: 'ACTIVE' }, data: {
+          status: 'DISABLED', version: { increment: 1 }, unboundAt: now, revokedReason: 'ROBOT_ACCOUNT_CHANGED'
+        } });
+        if (this.config?.privateManagementEnabled) {
+          const contacts = await tx.wechatAdminContact.findMany({ where: { deviceId }, select: { id: true } });
+          await tx.wechatAdminOperation.updateMany({ where: { contactId: { in: contacts.map((c) => c.id) }, status: 'PENDING' }, data: { status: 'CANCELLED', completedAt: now } });
+        }
+        if (this.config?.privateScoreEnabled) {
+          await tx.wechatScoreOperation.updateMany({ where: { contact: { deviceId }, status: 'PENDING' }, data: { status: 'CANCELLED', completedAt: now } });
+          await tx.wechatAdminContact.updateMany({ where: { deviceId }, data: {
+            adminId: null, boundAt: null, leagueId: null, seasonId: null, version: { increment: 1 }
+          } });
+        }
+        await tx.wechatBotDevice.update({ where: { id: deviceId }, data: { status: 'DISABLED', circuitStatus: 'OPEN', circuitReason: 'ROBOT_ACCOUNT_CHANGED', circuitOpenedAt: now } });
+        return true;
+      }
+    await tx.wechatBotDevice.update({
       where: { id: deviceId },
       data: {
-        ...(input.wechatAccountId !== undefined ? { wechatAccountId: input.wechatAccountId } : {}),
+        ...(input.wechatAccountId ? { wechatAccountId: input.wechatAccountId } : {}),
         wechatVersion: input.wechatVersion,
         loginStatus: input.loginStatus,
         ...(input.listenerWatermark !== undefined ? { listenerWatermark: input.listenerWatermark } : {}),
@@ -30,6 +52,9 @@ export class WechatBridgeService {
         lastHeartbeatAt: now
       }
     });
+      return false;
+    });
+    if (changedAccount) throw new ConflictException({ code: 'ROBOT_ACCOUNT_CHANGED', message: '机器人账号已变更，设备已停用，请为新账号配置新设备' });
     const recovery = this.moduleRef?.get<PlayerAuctionRecoveryHook>(PLAYER_AUCTION_RECOVERY_HOOK, { strict: false });
     if (input.loginStatus !== 'LOGGED_IN' || input.screenLocked) {
       await recovery?.onBridgeUnavailable(deviceId, input.screenLocked ? 'WINDOW_SESSION_LOCKED' : 'WECHAT_NOT_LOGGED_IN');
@@ -52,7 +77,13 @@ export class WechatBridgeService {
       select: { wechatGroupId: true, displayName: true },
       orderBy: [{ wechatGroupId: 'asc' }]
     });
-    return { acceptedAt: now.toISOString(), enabledGroups };
+    const privateContacts = this.config?.privateScoreEnabled ? await this.prisma.wechatInboundMessage.findMany({
+      where: { deviceId, conversationType: 'PRIVATE', receivedAt: { gte: new Date(now.getTime() - 24 * 3600_000) } },
+      select: { conversationId: true }, distinct: ['conversationId'], orderBy: { receivedAt: 'desc' }, take: 100
+    }) : null;
+    return { acceptedAt: now.toISOString(), enabledGroups,
+      ...(privateContacts ? { privateReplyContactIds: privateContacts.map((c) => c.conversationId) } : {}) };
+
   }
 
   async acceptBatch(deviceId: string, input: WechatInboundBatch): Promise<WechatInboundBatchResult> {
@@ -87,7 +118,7 @@ export class WechatBridgeService {
           continue;
         }
         groupBindingId = binding.id;
-      } else if (!PRIVATE_BINDING_COMMAND.test(commandText)) {
+      } else if (message.conversationId !== message.senderId || !PRIVATE_PRIVATE_COMMAND.test(commandText)) {
         results.push({ messageId: message.messageId, status: 'IGNORED', inboundId: null, resultCode: 'IGNORED' });
         continue;
       }

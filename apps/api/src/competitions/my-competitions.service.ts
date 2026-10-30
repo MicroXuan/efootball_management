@@ -236,6 +236,7 @@ export class MyCompetitionsService {
       status: record.status,
       resultConfirmationDeadlineAt: record.resultConfirmationDeadlineAt?.toISOString() ?? null,
       version: record.version,
+      advancement: record.advancementWinnerParticipantId ? { winnerParticipantId: record.advancementWinnerParticipantId, reason: record.advancementReason ?? "" } : null,
       officialResult: record.officialResultVersion ? {
         resultVersionId: record.officialResultVersion.id,
         version: record.officialResultVersion.version,

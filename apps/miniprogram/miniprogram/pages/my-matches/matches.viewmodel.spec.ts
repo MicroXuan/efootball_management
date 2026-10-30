@@ -46,6 +46,12 @@ describe('read-only season fixture view model', () => {
     expect(matchCard(response(true))).toMatchObject({ resultCopy: '3 : 1', stateCopy: '已结束' })
   })
 
+  it('treats manual advancement as finished without inventing a score', () => {
+    const item = response(false)
+    item.match.advancement = { winnerParticipantId: item.match.homeParticipant.id, reason: '弃权' }
+    expect(matchCard(item)).toMatchObject({ stateCopy: '已结束', resultCopy: '裁定晋级（无比分）' })
+  })
+
   it('marks archived participants without exposing score workflow fields', () => {
     const item = response(false)
     item.match.awayParticipant = participant({ id: 'participant-2', displayName: '北京国安', teamLifecycleStatus: 'ARCHIVED' })

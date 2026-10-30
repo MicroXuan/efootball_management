@@ -39,6 +39,8 @@ const PlayerMarketReviewPage = lazy(() => import('./player-market/player-market-
 const DisappearanceReviewPage = lazy(() => import('./rosters/disappearance-review-page').then((module) => ({ default: module.DisappearanceReviewPage })));
 const TransferProposalsPage = lazy(() => import('./rosters/transfer-proposals-page').then((module) => ({ default: module.TransferProposalsPage })));
 
+const MobileWorkbench = lazy(() => import('./mobile/mobile-workbench').then((module) => ({ default: module.MobileWorkbench })));
+
 function DefaultRoute() {
   const { identity } = useAdminSession();
   if (identity?.platformAdmin) return <Navigate to="/platform/leagues" replace />;
@@ -60,7 +62,11 @@ export function App() {
       <AdminSessionProvider>
         <BrowserRouter><Routes>
           <Route path="/login" element={deferred(<LoginPage />)} />
-          <Route element={<ProtectedRoute />}><Route element={deferred(<ApplicationShell />)}>
+          <Route element={<ProtectedRoute />}>
+            <Route path="mobile" element={deferred(<MobileWorkbench />)} />
+            <Route path="mobile/:leagueId" element={deferred(<MobileWorkbench />)} />
+            <Route path="mobile/:leagueId/:tab" element={deferred(<MobileWorkbench />)} />
+            <Route element={deferred(<ApplicationShell />)}>
             <Route index element={<DefaultRoute />} />
             <Route element={<PlatformRoute />}>
               <Route path="platform/leagues" element={deferred(<LeaguesPage api={adminApi} />)} />

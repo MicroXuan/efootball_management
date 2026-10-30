@@ -126,7 +126,66 @@ def test_foreground_probe_handles_64_bit_window_handles_and_win32_failures(monke
     probe._window_handle = handle
 
     assert probe.foreground_wechat() is True
-    assert show.calls[0][0].value == handle  # type: ignore[union-attr]
+    assert show.calls == []
+    assert activate.calls == []
 
+    current.result = 0
+    user32.IsIconic = Function(True)
     user32.SetForegroundWindow = Function(error=OSError("win32 failure"))
     assert probe.foreground_wechat() is False
+    assert show.calls[0][0].value == handle
+
+
+def test_version_cache_invalidates_when_executable_changes(tmp_path, monkeypatch):
+    path = tmp_path / 'Weixin.exe'
+    path.write_bytes(b'first')
+    calls = []
+    monkeypatch.setattr(NativeWindowsProbe, '_file_version', staticmethod(lambda p: calls.append(p) or '4.1.15.50'))
+    probe = NativeWindowsProbe()
+    assert probe._cached_file_version(path) == '4.1.15.50'
+    assert probe._cached_file_version(path) == '4.1.15.50'
+    assert len(calls) == 1
+    path.write_bytes(b'updated-binary')
+    assert probe._cached_file_version(path) == '4.1.15.50'
+    assert len(calls) == 2
+
+
+def test_foreground_checks_actual_window_even_if_activation_returns_false(monkeypatch):
+    class Fn:
+        def __init__(self, fn):
+            self.fn = fn
+        def __call__(self, *args):
+            return self.fn(*args)
+    current = [0]
+    handle = 0x123456789
+    def activate(window):
+        current[0] = window.value
+        return False
+    user32 = SimpleNamespace(
+        ShowWindow=Fn(lambda *a: True), IsIconic=Fn(lambda *a: False),
+        SetForegroundWindow=Fn(activate), GetForegroundWindow=Fn(lambda: current[0]))
+    monkeypatch.setattr('efm_wechat_bridge.windows_session.platform.system', lambda: 'Windows')
+    monkeypatch.setattr('efm_wechat_bridge.windows_session.ctypes.windll', SimpleNamespace(user32=user32), raising=False)
+    probe = NativeWindowsProbe()
+    probe._window_handle = handle
+    assert probe.foreground_wechat()
+
+
+def test_foreground_stays_closed_when_os_refuses_activation(monkeypatch):
+    class Fn:
+        def __init__(self, result):
+            self.result = result
+            self.calls = 0
+        def __call__(self, *args):
+            self.calls += 1
+            return self.result
+    activate = Fn(False)
+    user32 = SimpleNamespace(ShowWindow=Fn(True), IsIconic=Fn(False),
+                             SetForegroundWindow=activate, GetForegroundWindow=Fn(10))
+    monkeypatch.setattr('efm_wechat_bridge.windows_session.platform.system', lambda: 'Windows')
+    monkeypatch.setattr('efm_wechat_bridge.windows_session.ctypes.windll', SimpleNamespace(user32=user32), raising=False)
+    monkeypatch.setattr('efm_wechat_bridge.windows_session.time.sleep', lambda seconds: None)
+    probe = NativeWindowsProbe()
+    probe._window_handle = 20
+    assert probe.foreground_wechat() is False
+    assert activate.calls == 3

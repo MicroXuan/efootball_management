@@ -16,6 +16,6 @@ if (-not (Get-Command uv.exe -ErrorAction SilentlyContinue)) { throw "UV_NOT_FOU
 
 $Mode = "--dry-send"
 if ($EnableSend) { $Mode = "--enable-send" }
-& uv.exe run --project $BridgeRoot efm-wechat-bridge --config $Config run $Mode
+& uv.exe run --project $BridgeRoot --extra windows --frozen efm-wechat-bridge --config $Config run $Mode
 exit $LASTEXITCODE
 

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- focused service test doubles */
+import { ConflictException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import { WechatBridgeService } from './wechat-bridge.service.js';
 import { WechatCommandRouterService } from './wechat-command-router.service.js';
@@ -28,7 +29,7 @@ describe('WechatCommandRouterService', () => {
         update: jest.fn(async ({ data }: any) => Object.assign(row, data))
       },
       wechatIdentityBinding: {
-        findUnique: jest.fn(async () => ({ userId: 'user-1', status: 'ACTIVE' }))
+        findUnique: jest.fn(async () => ({ userId: 'user-1', status: 'ACTIVE', user: { status: 'ACTIVE' } }))
       },
       wechatGroupBinding: {
         findFirst: jest.fn(async () => bindingEnabled ? {
@@ -37,7 +38,7 @@ describe('WechatCommandRouterService', () => {
         } : null)
       }
     };
-    const bindings: any = { consume: jest.fn(async () => ({ userId: 'user-1' })) };
+    const bindings: any = { consume: jest.fn(async () => { throw new ConflictException({ code: 'WECHAT_BINDING_ADMIN_MANAGED', message: '请联系管理员在后台关联账号，无需验证码或私聊绑定。' }); }) };
     const schedules: any = { query: jest.fn(async () => ['第1页', '第2页']) };
     const outbox: any = { enqueue: jest.fn(async (input: any) => input) };
     const auction: any = { handle: jest.fn(async () => true) };
@@ -59,7 +60,7 @@ describe('WechatCommandRouterService', () => {
     expect(row).toMatchObject({ processingStatus: 'PROCESSED', resultCode: 'HELP_REPLIED' });
   });
 
-  it('consumes private binding codes and replies privately', async () => {
+  it('directs legacy private binding requests to administrator-managed identities', async () => {
     const { service, bindings, outbox, row } = harness({
       conversationType: 'PRIVATE',
       conversationId: 'wxid-user',
@@ -68,7 +69,7 @@ describe('WechatCommandRouterService', () => {
     });
     await service.route('inbound-1');
     expect(bindings.consume).toHaveBeenCalledWith('device-1', 'wxid-user', '012345', 'inbound-1');
-    expect(outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ targetType: 'PRIVATE', text: '绑定成功。' }));
+    expect(outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ targetType: 'PRIVATE', text: '请联系管理员在后台关联账号，无需验证码或私聊绑定。' }));
     expect(row.processingStatus).toBe('PROCESSED');
   });
 
@@ -85,7 +86,7 @@ describe('WechatCommandRouterService', () => {
     const unbound = harness({ commandText: '我的赛程' });
     unbound.prisma.wechatIdentityBinding.findUnique.mockResolvedValueOnce(null);
     await unbound.service.route('inbound-1');
-    expect(unbound.outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: '请先在小程序获取验证码，再私聊机器人发送：绑定 123456' }));
+    expect(unbound.outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: '请联系管理员在后台关联账号，无需验证码或私聊绑定。' }));
     expect(unbound.schedules.query).not.toHaveBeenCalled();
   });
 
@@ -155,10 +156,8 @@ describe('WechatCommandRouterService', () => {
     expect(queryOnly).not.toContain('纯数字出价');
 
     const auctionOnly = formatWechatHelp(['PLAYER_AUCTION']);
-    expect(auctionOnly).toContain('开始拍卖');
-    expect(auctionOnly).toContain('暂停拍卖');
-    expect(auctionOnly).toContain('继续拍卖');
-    expect(auctionOnly).toContain('取消拍卖');
+    expect(auctionOnly).toContain('管理员请私聊');
+    expect(auctionOnly).not.toContain('开始拍卖：');
     expect(auctionOnly).toContain('纯数字出价');
     expect(auctionOnly).not.toContain('查询赛程');
     expect(auctionOnly).not.toContain('下一位');

@@ -75,7 +75,7 @@ export class SeasonFixturesService {
       .filter((record) => !leagueTeamId || record.homeParticipant.seasonEntry?.leagueTeamId === leagueTeamId
         || record.awayParticipant.seasonEntry?.leagueTeamId === leagueTeamId)
       .filter((record) => query.status === 'ALL'
-        || (query.status === 'FINISHED') === Boolean(record.officialResultVersionId))
+        || (query.status === 'FINISHED') === Boolean(record.officialResultVersionId || record.advancementWinnerParticipantId))
       .filter((record) => !team || this.matchesTeam(record.homeParticipant, team) || this.matchesTeam(record.awayParticipant, team))
       .sort((left, right) => this.compare(left, right))
       .filter((record) => !cursor || this.compareKey(this.key(record), cursor) > 0);
@@ -109,7 +109,7 @@ export class SeasonFixturesService {
 
   private key(record: FixtureRecord): Pick<Cursor, 'phase' | 'roundNumber' | 'matchNumber' | 'id'> {
     return {
-      phase: record.officialResultVersionId ? 1 : 0,
+      phase: (record.officialResultVersionId || record.advancementWinnerParticipantId) ? 1 : 0,
       roundNumber: record.roundNumber,
       matchNumber: record.matchNumber,
       id: record.id
@@ -175,6 +175,7 @@ export class SeasonFixturesService {
       status: record.status,
       resultConfirmationDeadlineAt: record.resultConfirmationDeadlineAt?.toISOString() ?? null,
       version: record.version,
+      advancement: record.advancementWinnerParticipantId ? { winnerParticipantId: record.advancementWinnerParticipantId, reason: record.advancementReason ?? "" } : null,
       officialResult: record.officialResultVersion ? {
         resultVersionId: record.officialResultVersion.id,
         version: record.officialResultVersion.version,

@@ -94,6 +94,16 @@ export class SchedulesController {
     return this.schedules.previewStageForLeague(leagueId, stageId);
   }
 
+  @Post('admin/leagues/:leagueId/competition-stages/:stageId/wechat-match-numbers')
+  @HttpCode(200)
+  @UseGuards(AdminAuthGuard, AdminScopeGuard)
+  ensureWechatMatchNumbers(
+    @Param('leagueId', new ZodValidationPipe(ResourceIdSchema)) leagueId: string,
+    @Param('stageId', new ZodValidationPipe(ResourceIdSchema)) stageId: string
+  ) {
+    return this.schedules.ensureStageWechatMatchNumbers(leagueId, stageId);
+  }
+
   @Get('admin/leagues/:leagueId/competition-stages/:stageId/participants')
   @UseGuards(AdminAuthGuard, AdminScopeGuard)
   stageParticipants(

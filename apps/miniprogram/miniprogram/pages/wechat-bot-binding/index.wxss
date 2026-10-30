@@ -25,3 +25,8 @@ page { background:#0e1417; color:#f4f7f8; }
 .steps-title { display:block; color:#b6f13a; font-size:24rpx; font-weight:800; }
 .step { display:block; margin-top:18rpx; color:#aab5ba; font-size:22rpx; line-height:1.65; }
 .state-card { min-height:360rpx; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; }
+/* Native button defaults must not control text alignment or intrinsic width. */
+.danger-button,.outline-button { display:flex; align-items:center; justify-content:center; width:100%; min-width:0; max-width:100%; box-sizing:border-box; flex:0 1 auto; padding:20rpx 24rpx; line-height:1.4; }
+.danger-button[disabled],.outline-button[disabled] { color:#7e8b91; border-color:#344047; background:#1c262b; }
+/* WeChat injects disabled:not([type]) defaults after page styles. */
+button.danger-button[disabled],button.outline-button[disabled] { background:#1c262b !important; color:#aab5ba !important; }

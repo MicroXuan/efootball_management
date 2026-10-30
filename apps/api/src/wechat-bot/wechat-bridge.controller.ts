@@ -1,3 +1,5 @@
+import { WechatObservedMembersBatchSchema, type WechatObservedMembersBatch } from '@efm/contracts';
+import { WechatObservedMembersService } from './wechat-observed-members.service.js';
 import { Body, Controller, HttpCode, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatOutboxAck, WechatOutboxClaimRequest } from '@efm/contracts';
 import {
@@ -18,7 +20,8 @@ import { WechatOutboxService } from './wechat-outbox.service.js';
 export class WechatBridgeController {
   constructor(
     @Inject(WechatBridgeService) private readonly bridge: WechatBridgeService,
-    @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService
+    @Inject(WechatOutboxService) private readonly outbox: WechatOutboxService,
+    @Inject(WechatObservedMembersService) private readonly members: WechatObservedMembersService
   ) {}
 
   @Post('heartbeat')
@@ -28,6 +31,12 @@ export class WechatBridgeController {
     @Body(new ZodValidationPipe(WechatBridgeHeartbeatSchema)) body: WechatBridgeHeartbeat
   ) {
     return this.bridge.heartbeat(request.bridgePrincipal!.deviceId, body);
+  }
+
+  @Post('observed-members')
+  @HttpCode(200)
+  observedMembers(@Req() request: BridgeRequest, @Body(new ZodValidationPipe(WechatObservedMembersBatchSchema)) body: WechatObservedMembersBatch) {
+    return this.members.accept(request.bridgePrincipal!.deviceId, body);
   }
 
   @Post('messages')

@@ -26,7 +26,7 @@ const routeGroups: Record<string, { topKey: string; childKey: string | null }> =
   'salary-rules': { topKey: 'salary-rules', childKey: null },
   ledger: { topKey: 'finance', childKey: null },
   auctions: { topKey: 'auctions', childKey: null },
-  'wechat-bot': { topKey: 'more', childKey: 'wechat-bot' },
+  'wechat-bot': { topKey: 'more', childKey: null },
 };
 
 export function resolveLeagueNavigation(pathname: string): { topKey: string; childKey: string | null } {
@@ -60,6 +60,6 @@ export function leagueNavigationItems(leagueId: string, includeWechatBot: boolea
     child('salary-rules', '工资规则'),
     { key: 'finance', label: '财务模块', path: `${root}/ledger` },
     child('auctions', '球员拍卖'),
-    ...(includeWechatBot ? [{ key: 'more', label: '更多', path: `${root}/wechat-bot`, children: [child('wechat-bot', '微信群机器人')] }] : []),
+    ...(includeWechatBot ? [{ key: 'more', label: '微信群机器人', path: `${root}/wechat-bot` }] : []),
   ];
 }

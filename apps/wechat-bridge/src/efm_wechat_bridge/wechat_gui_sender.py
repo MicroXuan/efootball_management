@@ -3,7 +3,6 @@ from __future__ import annotations
 import platform
 import threading
 import time
-from datetime import UTC, datetime
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -30,10 +29,6 @@ class GuiDriver(Protocol):
     def open_exact(self, target: ConversationTarget) -> bool: ...
 
     def current_title(self) -> str | None: ...
-
-    def capture_clipboard(self) -> object: ...
-
-    def restore_clipboard(self, value: object) -> None: ...
 
     def capture_readback_marker(self, stable_id: str) -> object: ...
 
@@ -105,38 +100,28 @@ class WechatGuiSender:
 
         try:
             marker = self._driver.capture_readback_marker(task.target_id)
-            clipboard = self._driver.capture_clipboard()
         except Exception:
-            return SendResult(status=SendStatus.FAILED, error_code="SEND_PREPARATION_FAILED")
-
-        entered = False
+            return SendResult(status=SendStatus.FAILED, error_code="READBACK_MARKER_UNAVAILABLE")
+        # The pinned UIA ValuePattern writes to the exact edit control without using
+        # the system clipboard; its contents must not block or be changed by a send.
+        if not self._driver.paste_text(task.text):
+            return SendResult(status=SendStatus.FAILED, error_code="WECHAT_INPUT_FAILED")
         try:
-            if not self._driver.paste_text(task.text):
-                return SendResult(status=SendStatus.FAILED, error_code="WECHAT_INPUT_FAILED")
-            entered = True
-            try:
-                pressed = self._driver.press_enter()
-            except Exception:
-                pressed = False
-            if not pressed and not entered:
-                return SendResult(status=SendStatus.FAILED, error_code="WECHAT_ENTER_FAILED")
-            try:
-                readback_id = self._driver.read_back(
-                    task.target_id,
-                    task.text,
-                    marker,
-                    self._readback_timeout_seconds,
-                )
-            except Exception:
-                readback_id = None
-            if readback_id:
-                return SendResult(status=SendStatus.SENT, readback_message_id=readback_id)
-            return SendResult(status=SendStatus.AMBIGUOUS, error_code="WECHAT_SEND_UNCONFIRMED")
-        finally:
-            try:
-                self._driver.restore_clipboard(clipboard)
-            except Exception:
-                pass
+            self._driver.press_enter()
+        except Exception:
+            pass
+        try:
+            readback_id = self._driver.read_back(
+                task.target_id,
+                task.text,
+                marker,
+                self._readback_timeout_seconds,
+            )
+        except Exception:
+            readback_id = None
+        if readback_id:
+            return SendResult(status=SendStatus.SENT, readback_message_id=readback_id)
+        return SendResult(status=SendStatus.AMBIGUOUS, error_code="WECHAT_SEND_UNCONFIRMED")
 
 
 class WechatautoGuiDriver:
@@ -153,6 +138,7 @@ class WechatautoGuiDriver:
         self._database = database
         self._sleep = sleep
         self._current: ConversationTarget | None = None
+        self._prepared_input: tuple[tuple[int, ...], str] | None = None
 
     @classmethod
     def from_live(cls) -> "WechatautoGuiDriver":
@@ -192,11 +178,15 @@ class WechatautoGuiDriver:
         return ConversationTarget(stable_id=stable_id, title=title)
 
     def open_exact(self, target: ConversationTarget) -> bool:
+        self._prepared_input = None
+        self._current = None
         try:
             uia = getattr(self._gui, "_get_uia")()
-            opened = bool(uia and uia.open_chat(target.title) and uia.current_chat() == target.title)
+            opened = bool(uia and (uia.current_chat() == target.title or uia.open_chat(target.title))
+                          and uia.current_chat() == target.title)
         except Exception:
             return False
+        self._prepared_input = None
         self._current = target if opened else None
         return opened
 
@@ -210,38 +200,13 @@ class WechatautoGuiDriver:
         except Exception:
             return None
 
-    def capture_clipboard(self) -> object:
-        import win32clipboard  # type: ignore[import-not-found]
-
-        win32clipboard.OpenClipboard()
-        try:
-            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
-                return ("text", win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT))
-            if win32clipboard.CountClipboardFormats():
-                raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
-            return ("empty", None)
-        finally:
-            win32clipboard.CloseClipboard()
-
-    def restore_clipboard(self, value: object) -> None:
-        import win32clipboard  # type: ignore[import-not-found]
-
-        kind, content = value if isinstance(value, tuple) and len(value) == 2 else ("empty", None)
-        win32clipboard.OpenClipboard()
-        try:
-            win32clipboard.EmptyClipboard()
-            if kind == "text" and isinstance(content, str):
-                win32clipboard.SetClipboardText(content, win32clipboard.CF_UNICODETEXT)
-        finally:
-            win32clipboard.CloseClipboard()
-
     def capture_readback_marker(self, stable_id: str) -> object:
         try:
             rows = getattr(self._database, "get_messages")(stable_id, limit=10)
         except Exception as error:
             raise RuntimeError("READBACK_MARKER_UNAVAILABLE") from error
         return {
-            "captured_at": datetime.now(UTC).timestamp(),
+            "target_id": stable_id,
             "identities": {
                 (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
                 for row in rows
@@ -249,15 +214,63 @@ class WechatautoGuiDriver:
             },
         }
 
+    def _exact_edit(self):
+        # Never fall back to OCR/coordinate input after checking a UIA title.
+        if self._current is None:
+            return None
+        uia = getattr(self._gui, "_get_uia")()
+        if uia is None or uia.current_chat() != self._current.title:
+            return None
+        edit = uia._chat_input()
+        if edit is None:
+            return None
+        identity = tuple(edit.GetRuntimeId())
+        if not identity:
+            return None
+        return uia, edit, identity
+
     def paste_text(self, text: str) -> bool:
+        self._prepared_input = None
         try:
-            return bool(getattr(self._gui, "input_text")(text))
+            exact = self._exact_edit()
+            if exact is None:
+                return False
+            uia, edit, identity = exact
+            # Unknown content is not an empty draft; never overwrite a user's text.
+            if uia._read_edit_value(edit) != "":
+                return False
+            edit.SetFocus()
+            current = self._exact_edit()
+            if current is None or current[2] != identity or not edit.HasKeyboardFocus:
+                return False
+            # ValuePattern targets this control directly, with no global paste,
+            # coordinate click, pinyin fallback or implicit Enter.
+            if not uia._set_text(edit, text):
+                return False
+            current = self._exact_edit()
+            if (current is None or current[2] != identity
+                    or not edit.HasKeyboardFocus or uia._read_edit_value(edit) != text):
+                return False
+            self._prepared_input = (identity, text)
+            return True
         except Exception:
             return False
 
     def press_enter(self) -> bool:
-        getattr(self._gui, "_input").key(0x0D)
-        return True
+        prepared = self._prepared_input
+        self._prepared_input = None
+        try:
+            exact = self._exact_edit()
+            if prepared is None or exact is None:
+                return False
+            uia, edit, identity = exact
+            if (identity != prepared[0] or not edit.HasKeyboardFocus
+                    or uia._read_edit_value(edit) != prepared[1]):
+                return False
+            getattr(self._gui, "_input").key(0x0D)
+            return True
+        except Exception:
+            return False
 
     def read_back(
         self,
@@ -266,8 +279,14 @@ class WechatautoGuiDriver:
         marker: object,
         timeout_seconds: float,
     ) -> str | None:
-        previous = marker.get("identities", set()) if isinstance(marker, dict) else set()
-        captured_at = float(marker.get("captured_at", 0)) if isinstance(marker, dict) else 0
+        if not isinstance(marker, dict) or marker.get("target_id") != stable_id:
+            return None
+        previous = marker.get("identities")
+        if not isinstance(previous, set):
+            return None
+        # WeChat timestamps and the Windows wall clock can differ. Compare the
+        # target conversation's sequence watermark, never unrelated clocks.
+        watermark = max(previous, default=(0, 0))
         deadline = time.monotonic() + timeout_seconds
         while True:
             try:
@@ -278,10 +297,9 @@ class WechatautoGuiDriver:
                 if not isinstance(row, dict):
                     continue
                 identity = (int(row.get("sort_seq") or 0), int(row.get("local_id") or 0))
-                created = float(row.get("create_time") or 0)
                 if (
                     identity in previous
-                    or created < captured_at - 5
+                    or identity <= watermark
                     or row.get("sender_id") != 2
                     or row.get("content") != text
                 ):

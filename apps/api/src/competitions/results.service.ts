@@ -62,6 +62,7 @@ export class ResultsService {
       const match = await this.playerMatch(transaction, userId, matchId);
       this.assertInProgress(match);
       assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+      if (match.advancementWinnerParticipantId) throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', '比赛已人工裁定晋级，请由管理员更正', 409);
       if (match.status === 'DISPUTED') throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', 'Match is under dispute review', 409);
       this.assertDecisiveKnockoutResult(match, input.homeScore, input.awayScore);
       if (match.stage.competition.season?.league.resultEvidenceRequired && !input.evidenceUploadId) {
@@ -319,7 +320,7 @@ export class ResultsService {
         occurredAt: now, metadata: { evidenceId: evidence.id, role: 'ADMIN', replacedEvidenceIds: replaced.map(({ id }) => id) } });
     }
     await transaction.competitionMatch.update({ where: { id: matchId }, data: {
-      officialResultVersionId: official.id, status: 'ADMIN_DECIDED', version: { increment: 1 }, resultConfirmationDeadlineAt: null
+      officialResultVersionId: official.id, advancementWinnerParticipantId: null, advancementReason: null, status: 'ADMIN_DECIDED', version: { increment: 1 }, resultConfirmationDeadlineAt: null
     } });
     if (dispute) await transaction.matchResultDispute.update({ where: { id: dispute.id }, data: {
       status: 'RESOLVED', activeKey: null, decisionType, decisionReason: reason, decidedByAdminId: adminId ?? null,
@@ -336,6 +337,35 @@ export class ResultsService {
     });
     await this.afterOfficialResult(transaction, match, official.id, official.homeScore, official.awayScore, true);
     return official;
+  }
+
+  // Caller holds administrator authorization and the standard competition/match locks.
+  async applyAdministratorAdvancement(transaction: CompetitionTransaction, matchId: string,
+    input: { winnerParticipantId: string; expectedVersion: number; reason: string }, actor: { adminId: string; leagueId: string }, now = new Date()) {
+    const match = await this.match(transaction, matchId);
+    if (match.stage.competition.season?.league.id !== actor.leagueId || match.stage.competition.season.league.isDeleted) throw this.visibility.notFound();
+    assertExpectedVersion(match.version, input.expectedVersion, 'Match');
+    if (match.stage.format !== 'SINGLE_ELIMINATION' || match.stage.status !== 'PUBLISHED' || !['IN_PROGRESS', 'COMPLETED'].includes(match.stage.competition.status)) {
+      throw new CompetitionError('MATCH_RESULT_NOT_ALLOWED', '仅已发布杯赛淘汰对阵可人工裁定晋级', 409);
+    }
+    if (!input.reason.trim() || ![match.homeParticipantId, match.awayParticipantId].includes(input.winnerParticipantId)) {
+      throw new CompetitionError('INVALID_ADVANCEMENT', '晋级球队或裁定原因无效', 409);
+    }
+    if (!await transaction.cupBracketPairing.findUnique({ where: { matchId } })) throw new CompetitionError('CUP_BRACKET_PAIRING_INVALID', '比赛没有杯赛签表', 409);
+    if (await transaction.matchResultDispute.findUnique({ where: { activeKey: matchId } })) throw new CompetitionError('DISPUTE_NOT_READY', '请先在后台处理比分争议', 409);
+    await this.cupProgression.recordAdvancement(transaction, matchId, input.winnerParticipantId, true);
+    if (match.officialResultVersionId) await transaction.matchResultVersion.update({ where: { id: match.officialResultVersionId }, data: { status: 'SUPERSEDED' } });
+    await transaction.matchResultVersion.updateMany({ where: { matchId, status: 'PROPOSED' }, data: { status: 'SUPERSEDED' } });
+    await transaction.competitionMatch.update({ where: { id: matchId }, data: {
+      advancementWinnerParticipantId: input.winnerParticipantId, advancementReason: input.reason, officialResultVersionId: null,
+      status: 'ADMIN_DECIDED', resultConfirmationDeadlineAt: null, version: { increment: 1 }
+    } });
+    await this.events.append(transaction, { matchId, type: 'ADMIN_DECIDED', eventKey: `advancement:${matchId}:${match.version + 1}`, actorType: 'ADMIN', actorAdminId: actor.adminId, occurredAt: now,
+      metadata: { decisionType: 'ADVANCEMENT', winnerParticipantId: input.winnerParticipantId, reason: input.reason, previousWinnerParticipantId: match.advancementWinnerParticipantId } });
+    await (this.audit ?? new AuditLogService(this.prisma)).record(transaction, { actorAdminId: actor.adminId, leagueId: actor.leagueId,
+      action: 'admin.competition-result.advance', resourceType: 'CompetitionMatch', resourceId: matchId, reason: input.reason,
+      metadata: { winnerParticipantId: input.winnerParticipantId, previousWinnerParticipantId: match.advancementWinnerParticipantId, previousResultVersionId: match.officialResultVersionId } });
+    return { winnerParticipantId: input.winnerParticipantId, winnerName: input.winnerParticipantId === match.homeParticipantId ? match.homeParticipant.displayNameSnapshot : match.awayParticipant.displayNameSnapshot };
   }
 
   private async playerMatch(transaction: CompetitionTransaction, userId: string, matchId: string): Promise<MatchRecord> {

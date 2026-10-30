@@ -1,7 +1,6 @@
 import { Button, Layout, Menu, Tag } from 'antd';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAdminSession } from './auth/admin-session';
-import { featureFlags } from './config/features';
 import { AdminIcon } from './design-system/icons';
 
 const { Header, Sider, Content } = Layout;
@@ -16,9 +15,9 @@ export function ApplicationShell() {
   const admin = session.identity?.admin;
   const platformItems = session.identity?.platformAdmin ? [
     { key: '/platform/leagues', icon: <AdminIcon name="league" />, label: <Link aria-current={location.pathname === '/platform/leagues' ? 'page' : undefined} to="/platform/leagues">联赛管理</Link> },
+    { key: '/platform/wechat-bot', icon: <AdminIcon name="bot" />, label: <Link aria-current={location.pathname === '/platform/wechat-bot' ? 'page' : undefined} to="/platform/wechat-bot">群机器人</Link> },
     { key: '/platform/presentation', icon: <AdminIcon name="league" />, label: <Link aria-current={location.pathname === '/platform/presentation' ? 'page' : undefined} to="/platform/presentation">前台展示</Link> },
     { key: '/platform/data-sync', icon: <AdminIcon name="sync" />, label: <Link aria-current={location.pathname === '/platform/data-sync' ? 'page' : undefined} to="/platform/data-sync">数据同步</Link> },
-    ...(featureFlags.wechatBot ? [{ key: '/platform/wechat-bot', icon: <AdminIcon name="bot" />, label: <Link aria-current={location.pathname === '/platform/wechat-bot' ? 'page' : undefined} to="/platform/wechat-bot">群机器人</Link> }] : []),
     { key: '/platform/admins', icon: <AdminIcon name="administrators" />, label: <Link aria-current={location.pathname === '/platform/admins' ? 'page' : undefined} to="/platform/admins">账号管理</Link> },
     { key: '/platform/audit', icon: <AdminIcon name="audit" />, label: <Link aria-current={location.pathname === '/platform/audit' ? 'page' : undefined} to="/platform/audit">审计日志</Link> }
   ] : [];
@@ -43,6 +42,7 @@ export function ApplicationShell() {
         <Header className="admin-header">
           <div><span className="section-kicker">赛事运营</span><strong>管理工作台</strong></div>
           <div className="admin-identity">
+            <Link to="/mobile">手机工作台</Link>
             <Tag color="success">{session.identity?.platformAdmin ? '平台管理员' : '联赛管理员'}</Tag>
             <span>{presentAdminDisplayName(admin?.displayName)}</span>
             <Button type="text" onClick={() => void session.logout()}>退出登录</Button>

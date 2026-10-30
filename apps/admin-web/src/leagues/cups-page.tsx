@@ -85,7 +85,7 @@ function CupSchedulePreview({ displayName, preview }: { displayName: string; pre
             <span className="fixture-team__identity"><strong>{match.homeParticipant.displayName}</strong><small>#{match.homeParticipant.teamNumber ?? '—'}{match.homeParticipant.ownerDisplayName ? ` · ${match.homeParticipant.ownerDisplayName}` : ''}</small></span>
             <ScheduleTeamCrest participant={match.homeParticipant} />
           </div>
-          <div className="fixture-match__versus"><span>{match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</span><small>第 {match.matchNumber} 场</small></div>
+          <div className="fixture-match__versus"><span>{match.advancement ? '裁定晋级' : match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</span><small>第 {match.matchNumber} 场</small></div>
           <div className="fixture-team fixture-team--away">
             <ScheduleTeamCrest participant={match.awayParticipant} />
             <span className="fixture-team__identity"><strong>{match.awayParticipant.displayName}</strong><small>#{match.awayParticipant.teamNumber ?? '—'}{match.awayParticipant.ownerDisplayName ? ` · ${match.awayParticipant.ownerDisplayName}` : ''}</small></span>
@@ -804,11 +804,11 @@ function BracketBoard({ bracket, confirming, onConfirm }: {
           {round.pairings.map((pairing) => <div key={pairing.id} className="bracket-match">
             <div className={pairing.winnerParticipant?.id === pairing.homeParticipant?.id ? 'is-winner' : ''}>
               <span>{pairing.homeParticipant?.displayName ?? '待定'}{pairing.homeParticipant?.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}</span>
-              <strong>{pairing.match?.homeScore ?? (pairing.isBye ? '轮空' : '—')}</strong>
+              <strong>{pairing.match?.advancement ? (pairing.match.advancement.winnerParticipantId === pairing.homeParticipant?.id ? '裁定晋级' : '—') : pairing.match?.homeScore ?? (pairing.isBye ? '轮空' : '—')}</strong>
             </div>
             <div className={pairing.winnerParticipant?.id === pairing.awayParticipant?.id ? 'is-winner' : ''}>
               <span>{pairing.awayParticipant?.displayName ?? (pairing.isBye ? '轮空' : '待定')}{pairing.awayParticipant?.teamLifecycleStatus === 'ARCHIVED' ? '（已退赛）' : ''}</span>
-              <strong>{pairing.match?.awayScore ?? '—'}</strong>
+              <strong>{pairing.match?.advancement ? (pairing.match.advancement.winnerParticipantId === pairing.awayParticipant?.id ? '裁定晋级' : '—') : pairing.match?.awayScore ?? '—'}</strong>
             </div>
           </div>)}
         </div>

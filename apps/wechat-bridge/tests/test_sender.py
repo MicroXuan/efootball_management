@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 import time
-import sys
 from types import SimpleNamespace
 from datetime import UTC, datetime
 from uuid import UUID
@@ -27,8 +26,6 @@ class Guard:
 class Driver:
     def __init__(self) -> None:
         self.target = ConversationTarget(stable_id="league@chatroom", title="CELL 联赛群")
-        self.clipboard: object = {"text": "user clipboard"}
-        self.restored: object | None = None
         self.pasted: list[str] = []
         self.enter_calls = 0
         self.open_calls = 0
@@ -49,12 +46,6 @@ class Driver:
 
     def current_title(self) -> str | None:
         return self.target.title
-
-    def capture_clipboard(self) -> object:
-        return self.clipboard
-
-    def restore_clipboard(self, value: object) -> None:
-        self.restored = value
 
     def capture_readback_marker(self, stable_id: str) -> object:
         return {"target": stable_id, "sequence": 80}
@@ -139,7 +130,22 @@ def test_dry_run_opens_and_confirms_target_without_input() -> None:
     assert driver.enter_calls == 0
 
 
-def test_restores_clipboard_and_returns_failed_when_paste_never_reached_enter() -> None:
+def test_readback_marker_failure_does_not_enter_text() -> None:
+    class PreparationDriver(Driver):
+        def capture_readback_marker(self, stable_id: str) -> object:
+            raise RuntimeError("READBACK_MARKER_UNAVAILABLE")
+
+    driver = PreparationDriver()
+
+    result = sender(driver).send(task())
+
+    assert result.status is SendStatus.FAILED
+    assert result.error_code == "READBACK_MARKER_UNAVAILABLE"
+    assert driver.pasted == []
+    assert driver.enter_calls == 0
+
+
+def test_returns_failed_when_input_never_reached_enter() -> None:
     driver = Driver()
     driver.fail_paste = True
 
@@ -148,7 +154,6 @@ def test_restores_clipboard_and_returns_failed_when_paste_never_reached_enter() 
     assert result.status is SendStatus.FAILED
     assert result.error_code == "WECHAT_INPUT_FAILED"
     assert driver.enter_calls == 0
-    assert driver.restored == driver.clipboard
 
 
 def test_success_requires_exact_database_readback() -> None:
@@ -159,7 +164,21 @@ def test_success_requires_exact_database_readback() -> None:
     assert result.status is SendStatus.SENT
     assert result.readback_message_id == "wechat-server-id"
     assert driver.enter_calls == 1
-    assert driver.restored == driver.clipboard
+
+
+def test_direct_uia_send_does_not_read_or_replace_a_rich_clipboard() -> None:
+    class RichClipboardDriver(Driver):
+        def capture_clipboard(self) -> object:
+            raise RuntimeError("UNSUPPORTED_CLIPBOARD_CONTENT")
+
+        def restore_clipboard(self, value: object) -> None:
+            pytest.fail("direct UIA input must not touch the clipboard")
+
+    driver = RichClipboardDriver()
+    result = sender(driver).send(task())
+
+    assert result.status is SendStatus.SENT
+    assert driver.enter_calls == 1
 
 
 def test_post_enter_failure_is_ambiguous_but_readback_reconciles_it() -> None:
@@ -261,35 +280,130 @@ def test_live_driver_rejects_duplicate_display_names_and_marker_failures() -> No
         raise AssertionError("marker capture must fail closed")
 
 
-def test_live_driver_uses_exactly_one_physical_enter() -> None:
-    class Input:
-        def __init__(self) -> None:
-            self.keys: list[int] = []
-
-        def key(self, key: int) -> None:
-            self.keys.append(key)
-
-    class Gui:
-        def __init__(self) -> None:
-            self._input = Input()
-
-    gui = Gui()
+def test_live_driver_refuses_enter_without_verified_input() -> None:
+    keys = []
+    gui = SimpleNamespace(_input=SimpleNamespace(key=lambda key: keys.append(key)))
     live = WechatautoGuiDriver(gui=gui, database=object())
+    assert live.press_enter() is False
+    assert keys == []
 
-    assert live.press_enter() is True
-    assert gui._input.keys == [0x0D]
+
+class ExactEdit:
+    def __init__(self):
+        self.HasKeyboardFocus = False
+        self.value = ''
+    def GetRuntimeId(self):
+        return [1, 42]
+    def SetFocus(self):
+        self.HasKeyboardFocus = True
+
+class ExactUia:
+    def __init__(self):
+        self.edit = ExactEdit()
+        self.title = 'CELL 联赛群'
+    def current_chat(self):
+        return self.title
+    def _chat_input(self):
+        return self.edit
+    def _set_text(self, edit, text):
+        edit.value = text
+        return True
+    def _read_edit_value(self, edit):
+        return edit.value
+
+def exact_driver():
+    uia = ExactUia()
+    keys = []
+    gui = SimpleNamespace(_get_uia=lambda: uia,
+                          _input=SimpleNamespace(key=lambda key: keys.append(key)),
+                          input_text=lambda text: pytest.fail('coordinate input must never be used'))
+    driver = WechatautoGuiDriver(gui=gui, database=object())
+    driver._current = ConversationTarget(stable_id='league@chatroom', title='CELL 联赛群')
+    return driver, uia, keys
+
+def test_exact_edit_is_used_for_input_and_one_enter():
+    driver, uia, keys = exact_driver()
+    assert driver.paste_text('帮助回复')
+    assert uia.edit.value == '帮助回复'
+    assert driver.press_enter()
+    assert keys == [0x0D]
+
+@pytest.mark.parametrize('change', ['title', 'focus', 'text', 'control'])
+def test_live_driver_refuses_enter_if_target_changes_after_input(change):
+    driver, uia, keys = exact_driver()
+    assert driver.paste_text('帮助回复')
+    if change == 'title':
+        uia.title = 'AI灵感群'
+    elif change == 'focus':
+        uia.edit.HasKeyboardFocus = False
+    elif change == 'text':
+        uia.edit.value = '其他内容'
+    else:
+        uia.edit.GetRuntimeId = lambda: [1, 99]
+    assert driver.press_enter() is False
+    assert keys == []
+
+def test_live_driver_does_not_overwrite_existing_draft_or_unreadable_edit():
+    for value in ['已有草稿', None]:
+        driver, uia, keys = exact_driver()
+        uia.edit.value = value
+        assert driver.paste_text('帮助回复') is False
+        assert uia.edit.value == value
+        assert keys == []
 
 
-def test_live_driver_refuses_to_destroy_non_text_clipboard(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = SimpleNamespace(
-        CF_UNICODETEXT=13,
-        OpenClipboard=lambda: None,
-        CloseClipboard=lambda: None,
-        IsClipboardFormatAvailable=lambda _format: False,
-        CountClipboardFormats=lambda: 1,
-    )
-    monkeypatch.setitem(sys.modules, "win32clipboard", fake)
-    live = WechatautoGuiDriver(gui=object(), database=object())
+def test_live_driver_does_not_fallback_when_direct_edit_is_unsupported():
+    driver, uia, keys = exact_driver()
+    uia._set_text = lambda edit, text: False
+    assert driver.paste_text('帮助回复') is False
+    assert driver.press_enter() is False
+    assert keys == []
 
-    with pytest.raises(RuntimeError, match="UNSUPPORTED_CLIPBOARD_CONTENT"):
-        live.capture_clipboard()
+
+def test_live_driver_requires_new_verified_input_for_each_enter():
+    driver, uia, keys = exact_driver()
+    assert driver.paste_text('帮助回复')
+    assert driver.press_enter()
+    assert driver.press_enter() is False
+    assert keys == [0x0D]
+
+
+def test_readback_accepts_new_sequence_despite_wechat_clock_behind_windows():
+    class Database:
+        rows = [{'sort_seq': 1000, 'local_id': 21, 'create_time': 100,
+                 'sender_id': 3, 'content': '帮助'}]
+        def get_messages(self, stable_id, limit=10):
+            return self.rows
+    database = Database()
+    driver = WechatautoGuiDriver(gui=object(), database=database)
+    marker = driver.capture_readback_marker('league@chatroom')
+    database.rows = [{'sort_seq': 2000, 'local_id': 22, 'create_time': 101,
+                      'sender_id': 2, 'content': '帮助回复'}]
+    assert driver.read_back('league@chatroom', '帮助回复', marker, 0) == 'local:2000:22'
+
+
+def test_readback_rejects_older_identical_reply_even_if_not_in_snapshot():
+    class Database:
+        rows = [{'sort_seq': 2000, 'local_id': 22, 'sender_id': 3, 'content': '帮助'}]
+        def get_messages(self, stable_id, limit=10):
+            return self.rows
+    database = Database()
+    driver = WechatautoGuiDriver(gui=object(), database=database)
+    marker = driver.capture_readback_marker('league@chatroom')
+    database.rows = [{'sort_seq': 1000, 'local_id': 18, 'create_time': datetime.now(UTC).timestamp(),
+                      'sender_id': 2, 'content': '帮助回复'}]
+    assert driver.read_back('league@chatroom', '帮助回复', marker, 0) is None
+
+
+@pytest.mark.parametrize('sender_id,content', [(3, '帮助回复'), (2, '其他正文')])
+def test_readback_still_requires_robot_sender_and_exact_content(sender_id, content):
+    class Database:
+        rows = []
+        def get_messages(self, stable_id, limit=10):
+            return self.rows
+    database = Database()
+    driver = WechatautoGuiDriver(gui=object(), database=database)
+    marker = driver.capture_readback_marker('league@chatroom')
+    database.rows = [{'sort_seq': 2000, 'local_id': 22, 'sender_id': sender_id, 'content': content}]
+    assert driver.read_back('league@chatroom', '帮助回复', marker, 0) is None
+    assert driver.read_back('other@chatroom', content, marker, 0) is None

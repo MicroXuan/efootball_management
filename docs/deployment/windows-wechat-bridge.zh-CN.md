@@ -27,7 +27,7 @@
 ```powershell
 cd apps\wechat-bridge
 .\scripts\install.ps1 -Config .\bridge.toml
-uv run efm-wechat-bridge --config .\bridge.toml doctor
+uv run --extra windows --frozen efm-wechat-bridge --config .\bridge.toml doctor
 ```
 
 `doctor` 必须确认 Python、微信进程和版本、登录状态、本地数据库、交互桌面、API 设备鉴权、状态目录和群列表。输出不得包含令牌、数据库密钥、完整聊天正文或账号数据路径。
@@ -46,7 +46,8 @@ uv run efm-wechat-bridge --config .\bridge.toml doctor
 
 - [ ] `doctor` 全部通过，微信版本与 `expected_wechat_version` 均为 `4.1.15.50`。
 - [ ] 后台只出现预期测试群；同一联赛的赛程群、拍卖群可分别绑定，能力与赛程来源正确。
-- [ ] 用户私聊 `绑定 123456` 能完成一次性绑定，其他私聊不上传。
+- [ ] 授权群成员正常发言后出现在平台后台；管理员按六位用户编号核对并关联，用户无需验证码或私聊。旧 `绑定 123456` 明确提示联系管理员，不产生关联。
+- [ ] 昵称缺失、同名、改名不影响稳定联系人标识；同一设备跨群使用同一身份。成员观察上传失败不阻断查询/竞价，重启后补传。
 - [ ] 群内发送 `查询赛程`、`我的赛程` 后，在管理后台的微信发件箱中确认生成正确任务；dry-send 模式不会领取或操作这些任务。
 - [ ] 将 `send_enabled = true` 后运行 `run.ps1 -EnableSend`，目标稳定 ID 和群标题均精确匹配。
 - [ ] 发送后从本地数据库读回相同正文及消息 ID，服务端状态为 `SENT`。
@@ -115,3 +116,66 @@ uv run efm-wechat-bridge --config .\bridge.toml doctor
 ```
 
 该命令只移除计划任务，保留本地 SQLite 以便核对未确认消息。确认服务端无待处理消息并备份验收记录后，可手动删除配置指定的 `state_dir` 和 `.venv`。删除本地状态会失去水位及不确定发送证据，无法恢复；不要在排障期间删除。最后在后台禁用设备并撤销令牌。
+
+
+## 成员观察与后台身份关联升级（2026-10-26）
+
+升级顺序：先对目标环境执行 `pnpm db:status` 核对待应用迁移，经受控部署应用 `20261026120000_wechat_observed_members`，再部署 API 和后台，最后升级 Bridge。目标环境连接须由部署流程提供，不能用本机测试结果代替目标迁移验收。禁止在共享环境执行 seed 或开发迁移。
+
+旧 Bridge 不上报成员仍可运行原查询/竞价；新 Bridge 对旧 API 上报失败时独立退避，必须观察 `members_upload_failed` 日志及待传深度，不能当作升级成功。既有身份映射保留，新验证码签发/消费返回 `WECHAT_BINDING_ADMIN_MANAGED`。
+
+平台后台 → 微信机器人设备 → 管理群成员 → 选择实际观察到的联系人 → 输入六位用户编号 → 核对旧/新用户、球队和设备级影响 → 填写核实说明 → 确认关联。联赛管理员仅查看本联赛成员，不可修改设备级身份。没有出现的成员需要在授权群自然发言后才可选择；不承诺读取完整群成员名单。
+
+关联具有版本校验与操作回执，冲突刷新重做；有历史报价的关联禁止直接换成其他用户。机器人账号变化会停用原设备及身份，需要为新账号登记新设备，不能重新启用旧设备来继承身份。
+
+本次仅交付成员观察/后台身份管理。管理员私聊报分、晋级、转会和拍卖控制另按总体设计实施。真实 Windows 验收清单见 [身份关联验收](../development/wechat-admin-identities-verification.zh-CN.md)。
+
+账号检测从固定依赖的 `get_self_info().username` 读取数据库账号，经 transport 和实际心跳上报；无法识别时暂停接收、成员同步和发送。专用电脑只登录一个机器人账号，更换账号须停 Bridge 并重新配置设备，重启后核验真实账号。该依赖可能缓存数据库账号，不能把运行中即时换号检测作为已验收保证。
+
+
+## 使用 Git 同步 Windows Bridge
+
+Mac 开发端在 dev 提交并推送后，Windows 才能从 GitHub 获取更新。Windows 只运行 Bridge，无需安装后台的 Node/pnpm，也无需复制 Mac 的 `.env`。设备令牌保存在 Windows 用户环境变量，`bridge.toml`、`state/`、`.venv/` 已被忽略；只编辑本地 `bridge.toml`，不要修改受 Git 管理的 `config.example.toml`。
+
+首次取得代码（普通 PowerShell，安装 Git 后）：
+
+```powershell
+cd $HOME
+git clone --branch dev --single-branch https://github.com/MicroXuan/efootball_management.git
+cd .\efootball_management\apps\wechat-bridge
+Copy-Item .\config.example.toml .\bridge.toml
+```
+
+如果 Windows 已有 Git 克隆，使用该目录，先 `git status` 确认本地修改并妥善保留，再切换到 `dev`，无需重复克隆。若只有之前的 ZIP 文件夹，则使用上面的新克隆。将旧配置复制到新位置；已有运行历史时停止旧 Bridge 后保留并迁移原 `state/`，不要以空状态目录重新处理旧消息。
+
+每次更新前，先 Ctrl+C 停止正在运行的 Bridge；若已注册计划任务，先停止该任务并避免更新期间自动启动。之后在仓库根目录执行：
+
+```powershell
+git status --short
+git branch --show-current
+# 确认当前分支为 dev；若存在受跟踪文件的本地修改，先处理修改再继续。
+git pull --ff-only origin dev
+# 上一条成功后才继续：
+cd .\apps\wechat-bridge
+uv sync --python 3.12 --extra windows --frozen
+# 依赖同步成功后再检查连接：
+uv run --extra windows --frozen efm-wechat-bridge --config .\bridge.toml doctor
+# doctor 通过后，以不发送模式启动：
+.\scripts\run.ps1 -Config .\bridge.toml
+```
+
+命令逐条执行，任一步报错就停止；不要用 `reset --hard` 或 `clean -fdx` 解决拉取问题，以免丢失配置和状态。需要真实发送时沿用既有验收及 `-EnableSend` 流程，不因代码更新自动打开。涉及数据库迁移或 API 升级时，仍须先完成服务端部署，再更新 Bridge。
+
+## 错群发送防护修复（2026-10-27，Windows 待验收）
+
+曾报告“测试任务”的查询回复出现在不同名的“AI灵感群”。服务端入站和出站群 ID 一致，但 Windows 发送确认失败。代码检查发现：UIA 校验会话后，输入正文仍调用坐标/OCR 输入路径，并在发送回车前缺少目标和焦点复核。该缺口可以导致校验与实际输入目标脱节；尚不能仅凭服务端记录还原当时的每一步窗口状态。
+
+现改为绑定 UIA 输入控件：读取空草稿、确认控件身份和焦点、通过 ValuePattern 写入并读回完整正文，再复核当前会话、控件身份、焦点及正文后执行一次回车。读取或写入能力不支持时停止，不回退坐标输入、拼音输入或隐式回车，也不覆盖已有草稿。
+
+Windows 更新后，先保持设备停用和发送关闭，在专用测试环境验证 UIA 控件读取/写入支持及群切换行为，再进行单条定向发送验收。仅单元测试通过不代表实际 Windows 已修复；不得因之前一条帮助消息成功就直接恢复持续发送。人工操作、窗口切换、同名群、输入草稿和 UIA 不可用均需验证为停止发送。不可删除本地 state 来绕过不确定任务。
+
+附带无消息定位检查：`uv run python -u scripts/check-target.py --target-id "实际群ID" --expected-title "实际群名"`。设备保持停用，先在微信打开另一会话，再运行脚本。观察前台激活与目标定位结果，出现 `switch_to_other_chat_now` 后在 20 秒内切回其他会话，预期 `other_chat_rejected.passed=true`。脚本不调用 API、不输入回复正文、不按发送键；它会操作搜索导航。此检查不代替一次受控真实发送验收，也不能保证任意并发人工操作下绝不发生竞态。
+
+前台激活现在以实际前台窗口为准：已在前台时跳过恢复/激活，只有最小化时恢复，激活后进行短时有限重试；操作系统拒绝切换时仍停止发送。响应优化包括当前已处于目标会话时跳过搜索、按执行文件路径/修改时间/大小短期缓存版本读取（最多 30 秒），减少每轮启动 PowerShell 的开销。发送日志新增 `send_result` 的任务编号、状态、错误码和发送阶段耗时，不包含正文或令牌；实际端到端耗时需 Windows 测量。默认轮询仍为 2 秒，可在验证稳定后将 `poll_interval_seconds` 调为 1.0，并观察负载与日志。
+
+发送确认补充修复：Windows 实测目标群消息 `local_id=22` 的正文、机器人发送者均匹配，但微信 `create_time` 比本地任务开始时间早约 13 秒；旧的“本机捕获时间减 5 秒”过滤会拒绝该消息。确认改为同一目标群发送前序号基准之后的新消息，同时保持机器人发送者及正文完全一致，拒绝旧的相同正文、其他群基准或无法确认的新消息。此变更不延长超时、不重发旧的 AMBIGUOUS 任务；需更新 Windows 后用新的单条任务验收。

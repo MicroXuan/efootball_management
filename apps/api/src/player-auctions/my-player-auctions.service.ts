@@ -90,7 +90,7 @@ export class MyPlayerAuctionsService {
     const team = await this.prisma.leagueTeam.findFirst({
       where: { ownerUserId: userId, leagueId: batch.leagueId, status: 'ACTIVE' }
     });
-    const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT CURRENT_TIMESTAMP(3) AS databaseNow`;
+    const rows = await this.prisma.$queryRaw<Array<{ databaseNow: Date }>>`SELECT UTC_TIMESTAMP(3) AS databaseNow`;
     const serverNow = rows[0]?.databaseNow;
     if (!serverNow) throw new Error('DATABASE_TIME_UNAVAILABLE');
     let currentLotId = batch.currentLotId;

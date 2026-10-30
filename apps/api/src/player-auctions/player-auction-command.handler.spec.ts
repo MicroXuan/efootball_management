@@ -18,7 +18,8 @@ describe('PlayerAuctionCommandHandler', () => {
   it('matches only exact manager commands and produces one reply', async () => {
     const { handler, state, outbox } = harness('开始拍卖');
     await expect(handler.handle('in-1')).resolves.toBe(true);
-    expect(state.start).toHaveBeenCalledWith('group-1', 'user-1');
+    expect(state.start).not.toHaveBeenCalled();
+    expect(outbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('仅限管理员私聊') }));
     expect(outbox.enqueue).toHaveBeenCalledTimes(1);
 
     const mixed = harness('请开始拍卖');

@@ -14,6 +14,8 @@ import { PrismaService } from '../database/prisma.service.js';
 import { Prisma, type ValuationWindowRuleVersion } from '../generated/prisma/client.js';
 import { LeagueVisibilityService } from '../league-visibility/league-visibility.service.js';
 
+import { BackgroundActivity } from '../common/scheduling/background-activity.js';
+
 type WindowWithRule = {
   id: string;
   seasonId: string;
@@ -31,6 +33,7 @@ type WindowWithRule = {
 
 @Injectable()
 export class ValuationWindowsService {
+  readonly activity = new BackgroundActivity();
   private readonly visibility: LeagueVisibilityService;
 
   constructor(
@@ -55,7 +58,7 @@ export class ValuationWindowsService {
     const season = await this.prisma.leagueSeason.findUniqueOrThrow({ where: { id: seasonId } });
     await this.authorization.requireLeagueManager(adminId, season.leagueId);
 
-    return this.receipts.execute(
+    const result = await this.receipts.execute(
       adminId,
       `VALUATION_WINDOW_CREATE:${seasonId}`,
       idempotencyKey,
@@ -102,6 +105,8 @@ export class ValuationWindowsService {
       },
       input
     );
+    this.activity.wake();
+    return result;
   }
 
   async update(
@@ -119,7 +124,7 @@ export class ValuationWindowsService {
     });
     await this.authorization.requireLeagueManager(adminId, current.season.leagueId);
 
-    return this.receipts.execute(
+    const result = await this.receipts.execute(
       adminId,
       `VALUATION_WINDOW_UPDATE:${windowId}`,
       idempotencyKey,
@@ -189,6 +194,8 @@ export class ValuationWindowsService {
       },
       input
     );
+    this.activity.wake();
+    return result;
   }
 
   async listForSeason(adminId: string, seasonId: string, at = new Date()) {
