@@ -100,7 +100,7 @@ export class WechatManagementEffectsService {
     if (['START', 'RESUME', 'RECOVER'].includes(c.kind)) {
       const d = await tx.wechatBotDevice.findUniqueOrThrow({ where: { id: scope.deviceId } });
       if (d.status !== 'ACTIVE' || d.circuitStatus !== 'CLOSED' || d.loginStatus !== 'LOGGED_IN' || d.screenLocked || !d.lastHeartbeatAt || Date.now() - d.lastHeartbeatAt.getTime() > this.config.heartbeatTimeoutMs) return managementFail('机器人未就绪，请先恢复设备、登录及发送状态。');
-      if (c.kind === 'RECOVER' && await tx.wechatOutboxMessage.count({ where: { deviceId: scope.deviceId, targetId: group.wechatGroupId, OR: [{ status: 'LEASED' }, { status: 'FAILED', failureCode: { in: ['WECHAT_SEND_UNCONFIRMED', 'PROCESS_RESTART_DURING_SEND', 'WECHAT_SEND_EXCEPTION'] } }] } })) return managementFail('群里仍有发送不确定或正在发送的任务，请先核对处理。');
+      if (c.kind === 'RECOVER' && await tx.wechatOutboxMessage.count({ where: { deviceId: scope.deviceId, targetId: group.wechatGroupId, OR: [{ status: 'LEASED' }, { status: 'FAILED', createdAt: { gte: batch.createdAt }, failureCode: { in: ['WECHAT_SEND_UNCONFIRMED', 'PROCESS_RESTART_DURING_SEND', 'WECHAT_SEND_EXCEPTION'] } }] } })) return managementFail('群里仍有发送不确定或正在发送的任务，请先核对处理。');
     }
     if (c.kind === 'REVIEW') {
       await tx.$queryRaw`SELECT id FROM player_auction_lots WHERE id=${p.entityId} FOR UPDATE`;

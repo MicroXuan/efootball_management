@@ -206,7 +206,18 @@ describe('private administrator management integration', () => {
       expect(await command(`恢复拍卖 A${batchRef} 原因：已核对消息`)).toContain('发送不确定');
       await db.wechatOutboxMessage.delete({ where: { id: uncertain.id } });
     }
+    const leased = await db.wechatOutboxMessage.create({ data: {
+      deviceId, targetType: 'GROUP', targetId: 'management@chatroom', businessKey: randomUUID(), text: '旧发送中任务',
+      status: 'LEASED', createdAt: new Date(Date.now() - 86_400_000)
+    } });
+    expect(await command(`恢复拍卖 A${batchRef} 原因：已核对消息`)).toContain('发送不确定');
+    await db.wechatOutboxMessage.delete({ where: { id: leased.id } });
+    const historical = await db.wechatOutboxMessage.create({ data: {
+      deviceId, targetType: 'GROUP', targetId: 'management@chatroom', businessKey: randomUUID(), text: '旧任务',
+      status: 'FAILED', failureCode: 'WECHAT_SEND_UNCONFIRMED', createdAt: new Date(Date.now() - 86_400_000)
+    } });
     const recovery = await managementPreview(`恢复拍卖 A${batchRef} 原因：已核对消息`);
+    await db.wechatOutboxMessage.delete({ where: { id: historical.id } });
     for (const failureCode of ['WECHAT_SEND_UNCONFIRMED', 'PROCESS_RESTART_DURING_SEND', 'WECHAT_SEND_EXCEPTION']) {
       const uncertain = await db.wechatOutboxMessage.create({ data: { deviceId, targetType: 'GROUP', targetId: 'management@chatroom', businessKey: randomUUID(), text: '待核对', status: 'FAILED', failureCode } });
       expect(await command(`确认 ${recovery}`)).toContain('发送不确定');
