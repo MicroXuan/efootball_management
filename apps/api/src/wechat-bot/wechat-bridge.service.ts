@@ -3,6 +3,7 @@ import { WECHAT_BOT_CONFIG, type WechatBotRuntimeConfig } from './wechat-bot.con
 import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { WechatBridgeHeartbeat, WechatInboundBatch, WechatInboundBatchResult } from '@efm/contracts';
+import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { WechatCommandRouterService } from './wechat-command-router.service.js';
 import { PLAYER_AUCTION_RECOVERY_HOOK, type PlayerAuctionRecoveryHook } from '../player-auctions/player-auction-recovery.hook.js';
@@ -44,6 +45,7 @@ export class WechatBridgeService {
         ...(input.wechatAccountId ? { wechatAccountId: input.wechatAccountId } : {}),
         wechatVersion: input.wechatVersion,
         loginStatus: input.loginStatus,
+        receiverHealth: input.receiverHealth ?? Prisma.DbNull,
         ...(input.listenerWatermark !== undefined ? { listenerWatermark: input.listenerWatermark } : {}),
         screenLocked: input.screenLocked,
         outboundQueueDepth: input.outboundQueueDepth,

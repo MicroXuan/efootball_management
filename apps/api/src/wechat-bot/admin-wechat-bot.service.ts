@@ -13,6 +13,8 @@ import { PrismaService } from '../database/prisma.service.js';
 const BCRYPT_COST = 10;
 
 type DeviceViewInput = {
+  receiverHealth?: unknown;
+  screenLocked?: boolean;
   id: string;
   name: string;
   status: 'ACTIVE' | 'DISABLED';
@@ -338,6 +340,8 @@ export class AdminWechatBotService {
       name: true,
       status: true,
       loginStatus: true,
+      receiverHealth: true,
+      screenLocked: true,
       circuitStatus: true,
       circuitReason: true,
       lastHeartbeatAt: true,
@@ -354,6 +358,8 @@ export class AdminWechatBotService {
       name: device.name,
       status: device.status,
       loginStatus: device.loginStatus,
+      receiverHealth: device.receiverHealth ?? null,
+      screenLocked: device.screenLocked ?? false,
       circuitStatus: device.circuitStatus,
       circuitReason: device.circuitReason,
       lastHeartbeatAt: device.lastHeartbeatAt?.toISOString() ?? null,

@@ -59,8 +59,11 @@ class WechatautoReceiver:
         robot_user_id: str,
         expected_wechat_version: str = "4.1.15.13",
         version_provider: Callable[[], str | None] | None = None,
+        database_factory: Callable[[], object] | None = None,
     ) -> None:
         self._database = database
+        self._database_factory = database_factory
+        self._confirmed_account_id: str | None = None
         self._enabled_group_ids = frozenset(enabled_group_ids)
         self._robot_user_id = robot_user_id
         self._expected_wechat_version = expected_wechat_version
@@ -96,10 +99,25 @@ class WechatautoReceiver:
             raise RuntimeError("WECHAT_DATABASE_INITIALIZATION_FAILED") from error
         return cls(
             database=database,
+            database_factory=lambda: initialize_wechat_dependency(WeChatDB),
             enabled_group_ids=enabled_group_ids,
             robot_user_id=robot_user_id,
             expected_wechat_version=expected_wechat_version,
         )
+
+    def recover(self) -> None:
+        # Keep persisted cursors and in-memory pending observations intact.
+        with self._database_lock:
+            if self._database_factory is None:
+                raise RuntimeError("WECHAT_RECOVERY_UNAVAILABLE")
+            candidate = self._database_factory()
+            info = getattr(candidate, "get_self_info")()
+            account = info.get("username") if isinstance(info, Mapping) else None
+            if not account:
+                raise RuntimeError("WECHAT_NOT_LOGGED_IN")
+            if (self._confirmed_account_id or self._robot_user_id) and account != (self._confirmed_account_id or self._robot_user_id):
+                raise RuntimeError("WECHAT_ACCOUNT_CHANGED")
+            self._database = candidate
 
     def health(self) -> TransportHealth:
         with self._database_lock:
@@ -114,6 +132,8 @@ class WechatautoReceiver:
             account_id = self._safe_string(info.get("username")) if isinstance(info, Mapping) else None
             if not account_id or not _SAFE_ID.fullmatch(account_id) or account_id.endswith("@chatroom"):
                 return self._unhealthy("WECHAT_ACCOUNT_UNAVAILABLE")
+            if self._confirmed_account_id is None:
+                self._confirmed_account_id = account_id
             self._robot_user_id = account_id
             version = self._version_provider() if self._version_provider else self._expected_wechat_version
             if version != self._expected_wechat_version:
@@ -127,8 +147,8 @@ class WechatautoReceiver:
                 database_available=True,
                 sender_available=False,
             )
-        except Exception:
-            return self._unhealthy("WECHAT_DATABASE_UNAVAILABLE")
+        except Exception as error:
+            return self._unhealthy("WECHAT_DATABASE_UNAVAILABLE").model_copy(update={"error_type": type(error).__name__})
 
     def observed_groups(self) -> list[ObservedGroup]:
         with self._database_lock:
@@ -184,8 +204,8 @@ class WechatautoReceiver:
                         since_seq=cursor,
                         limit=200,
                     )
-                except Exception:
-                    break
+                except Exception as error:
+                    raise RuntimeError("WECHAT_MESSAGE_READ_FAILED") from error
                 page_max = cursor
                 detail_pending = False
                 for raw in messages:
@@ -320,8 +340,8 @@ class WechatautoReceiver:
     def _sessions(self) -> list[Mapping[str, object]]:
         try:
             sessions = getattr(self._database, "get_sessions")(limit=500)
-        except Exception:
-            return []
+        except Exception as error:
+            raise RuntimeError("WECHAT_SESSION_READ_FAILED") from error
         return [session for session in sessions if isinstance(session, Mapping)]
 
     def _nickname(self, username: str) -> str:

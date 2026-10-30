@@ -21,6 +21,7 @@ class TransportHealth(BaseModel):
     sender_available: bool
     error_code: str | None = Field(default=None, max_length=64)
     detail: str | None = Field(default=None, max_length=256)
+    error_type: str | None = Field(default=None, max_length=128)
 
     @model_validator(mode="after")
     def validate_error(self) -> "TransportHealth":
@@ -81,6 +82,9 @@ class LiveWechatTransport:
     def configure_authorized_groups(self, groups: Mapping[str, str]) -> None:
         getattr(self._receiver, "configure_authorized_groups")(groups)
         getattr(self._sender, "configure_authorized_groups")(groups)
+
+    def recover(self) -> None:
+        self._receiver.recover()
 
     def configure_private_reply_contacts(self, contacts: list[str]) -> None:
         self._server_private_targets = self._receiver.private_reply_names(contacts)

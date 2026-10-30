@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
+import logging
+from logging.handlers import RotatingFileHandler
 import sys
 import tempfile
 import threading
@@ -40,9 +43,14 @@ class DoctorReport(BaseModel):
 class StructuredLogger:
     """JSON-lines logger that accepts codes and counters, never exception messages."""
 
-    def __init__(self, *, stream: IO[str] | None = None) -> None:
+    def __init__(self, *, stream: IO[str] | None = None, log_dir: Path | None = None) -> None:
         self._stream = stream or sys.stderr
         self._lock = threading.Lock()
+        self._file = None
+        if log_dir is not None:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            self._file = RotatingFileHandler(log_dir / "bridge.jsonl", maxBytes=5_000_000, backupCount=5, encoding="utf-8")
+            self._file.setFormatter(logging.Formatter("%(message)s"))
 
     def emit(self, event: str, **fields: object) -> None:
         safe: dict[str, object] = {"event": event, "at": datetime.now(UTC).isoformat()}
@@ -54,6 +62,8 @@ class StructuredLogger:
         with self._lock:
             self._stream.write(json.dumps(safe, ensure_ascii=False, separators=(",", ":")) + "\n")
             self._stream.flush()
+            if self._file:
+                self._file.emit(logging.LogRecord("bridge", logging.INFO, "", 0, json.dumps(safe, ensure_ascii=False, separators=(",", ":")), (), None))
 
 
 class BridgeRuntime:
@@ -83,6 +93,49 @@ class BridgeRuntime:
         self._member_failures = 0
         self._authorized_member_groups: frozenset[str] | None = None
         self._doctor_path = settings.state_dir / "doctor.json"
+        self._receiver_status: dict[str, object] = {"status": "STARTING", "errorCode": None, "lastSuccessAt": None}
+        self._receiver_retry_at = 0.0
+        self._receiver_recovery_lock = threading.Lock()
+        self._group_error: str | None = None
+        self._receiver_failures = 0
+
+    def _receiver_failed(self, code: str, error: Exception | None = None, error_type: str | None = None) -> None:
+        previous = self._receiver_status
+        self._receiver_status = {**previous, "status": "RECOVERING", "errorCode": code}
+        if previous.get("errorCode") != code:
+            self.logger.emit("receiver_unhealthy", code=code, error_type=type(error.__cause__ or error).__name__ if error else error_type)
+
+    def _recover_receiver(self) -> None:
+        if not self._receiver_recovery_lock.acquire(blocking=False):
+            return
+        try:
+            self._recover_receiver_locked()
+        finally:
+            self._receiver_recovery_lock.release()
+
+    def _recover_receiver_locked(self) -> None:
+        now = time.monotonic()
+        if now < self._receiver_retry_at:
+            return
+        self._receiver_failures += 1
+        delay = min(60, 5 * 2 ** min(self._receiver_failures - 1, 4))
+        self._receiver_retry_at = now + delay
+        self.logger.emit("receiver_recovery_started", attempt=self._receiver_failures, retry_seconds=delay)
+        try:
+            getattr(self.transport, "recover")()
+            self.logger.emit("receiver_reopened", attempt=self._receiver_failures)
+        except Exception as error:
+            self.logger.emit("receiver_recovery_failed", code=self._error_code(error, "WECHAT_RECOVERY_FAILED"), error_type=type(error).__name__)
+
+    def _receiver_succeeded(self) -> None:
+        if self._group_error:
+            self._receiver_status = {**self._receiver_status, "lastSuccessAt": datetime.now(UTC).isoformat()}
+            return
+        if self._receiver_status["status"] == "RECOVERING":
+            self.logger.emit("receiver_recovered", attempts=self._receiver_failures)
+        self._receiver_status = {"status": "HEALTHY", "errorCode": None, "lastSuccessAt": datetime.now(UTC).isoformat()}
+        self._receiver_failures = 0
+        self._receiver_retry_at = 0.0
 
     def doctor(self) -> DoctorReport:
         errors: list[str] = []
@@ -122,12 +175,27 @@ class BridgeRuntime:
         return report
 
     def heartbeat_once(self) -> bool:
-        health = self.transport.health()
-        groups = self.transport.observed_groups() if health.database_available else []
         try:
-            response = self.api.heartbeat(self._heartbeat_payload(health, groups))
+            health = self.transport.health()
+            complete = False
+            groups = []
+            if health.database_available:
+                try:
+                    groups = self.transport.observed_groups()
+                    complete = True
+                    self._group_error = None
+                except Exception as error:
+                    self._group_error = "WECHAT_GROUP_READ_FAILED"
+                    self._receiver_failed("WECHAT_GROUP_READ_FAILED", error)
+                    self._recover_receiver()
+            else:
+                self._receiver_failed(health.error_code or "WECHAT_DATABASE_UNAVAILABLE", error_type=health.error_type)
+            payload = self._heartbeat_payload(health, groups)
+            payload["observedGroupsComplete"] = complete and health.login_status == "LOGGED_IN"
+            response = self.api.heartbeat(payload)
             self._apply_authorized_groups(response)
             self._confirmed_account_id = health.wechat_account_id
+            self.logger.emit("heartbeat_ok", receiver_status=self._receiver_status["status"], login_status=health.login_status)
             retention_cutoff = datetime.now(UTC) - timedelta(days=7)
             self.spool.purge_acknowledged(before=retention_cutoff)
             self.spool.purge_completed(before=retention_cutoff)
@@ -140,15 +208,27 @@ class BridgeRuntime:
             return False
 
     def receive_upload_once(self) -> int:
-        health = self.transport.health()
+        try:
+            health = self.transport.health()
+        except Exception as error:
+            self._receiver_failed("WECHAT_HEALTH_CHECK_FAILED", error)
+            self._recover_receiver()
+            return 0
         if not health.database_available or not health.wechat_account_id:
+            self._receiver_failed(health.error_code or "WECHAT_DATABASE_UNAVAILABLE", error_type=health.error_type)
+            self._recover_receiver()
             return 0
         if self._confirmed_account_id != health.wechat_account_id:
             if not self.heartbeat_once() or self._confirmed_account_id != health.wechat_account_id:
                 return 0
         try:
             cursor_payload = json.dumps(self.spool.scan_cursors(), separators=(",", ":"))
-            events = self.transport.poll(cursor_payload)
+            try:
+                events = self.transport.poll(cursor_payload)
+            except Exception as error:
+                self._receiver_failed(self._error_code(error, "WECHAT_POLL_FAILED"), error)
+                self._recover_receiver()
+                return 0
             members = getattr(self.transport, "observed_members", lambda: [])()
             self.spool.upsert_observed_members(members)
             if members:
@@ -158,6 +238,7 @@ class BridgeRuntime:
             pending = self.spool.pending_inbound(limit=self.settings.inbound_batch_size)
             if not pending:
                 self._persist_scan_cursors()
+                self._receiver_succeeded()
                 return 0
             results = self.api.upload_messages(pending)
             by_id = {
@@ -166,20 +247,28 @@ class BridgeRuntime:
                 if isinstance(item, dict) and item.get("status") in {"ACCEPTED", "DUPLICATE", "IGNORED"}
             }
             if any(event.message_id not in by_id for event in pending):
+                self._receiver_failed("INBOUND_UPLOAD_INCOMPLETE")
                 self.logger.emit("inbound_upload_incomplete", count=len(pending))
                 return 0
             watermark = max((event.sequence or event.message_id) for event in pending)
             self.spool.ack_inbound([event.message_id for event in pending], watermark=watermark)
             self._persist_scan_cursors()
+            self._receiver_succeeded()
+            self.logger.emit("inbound_uploaded", count=len(pending))
             return len(pending)
         except Exception as error:
+            self._receiver_failed(self._error_code(error, "INBOUND_CYCLE_FAILED"), error)
             self.logger.emit("inbound_cycle_failed", code=self._error_code(error, "INBOUND_CYCLE_FAILED"))
             return 0
 
     def send_once(self) -> int:
         if not self._send_gate_open():
             return 0
-        health = self.transport.health()
+        try:
+            health = self.transport.health()
+        except Exception as error:
+            self.logger.emit("send_health_failed", code=self._error_code(error, "WECHAT_HEALTH_CHECK_FAILED"), error_type=type(error).__name__)
+            return 0
         if not health.ready or health.screen_locked or not health.sender_available or not health.wechat_account_id or health.wechat_account_id != self._confirmed_account_id:
             return 0
         try:
@@ -260,7 +349,11 @@ class BridgeRuntime:
     def upload_members_once(self) -> int:
         if time.monotonic() < self._member_retry_at or self._authorized_member_groups is None:
             return 0
-        health = self.transport.health()
+        try:
+            health = self.transport.health()
+        except Exception as error:
+            self.logger.emit("members_health_failed", code=self._error_code(error, "WECHAT_HEALTH_CHECK_FAILED"), error_type=type(error).__name__)
+            return 0
         if not health.wechat_account_id or health.wechat_account_id != self._confirmed_account_id:
             return 0
         pending = self.spool.pending_observed_members()
@@ -282,6 +375,7 @@ class BridgeRuntime:
             return 0
 
     def run_forever(self) -> None:
+        self.logger.emit("bridge_started", enable_send=self.enable_send)
         workers = [
             threading.Thread(target=self._supervise, args=("members", self.upload_members_once, 5), daemon=True),
             threading.Thread(
@@ -331,6 +425,7 @@ class BridgeRuntime:
             **({"wechatAccountId": health.wechat_account_id} if getattr(health, "wechat_account_id", None) else {}),
             "wechatVersion": getattr(health, "wechat_version", None) or self.settings.expected_wechat_version,
             "loginStatus": getattr(health, "login_status", "UNKNOWN"),
+            "receiverHealth": dict(self._receiver_status),
             **({"listenerWatermark": snapshot.watermark} if snapshot.watermark else {}),
             "screenLocked": bool(getattr(health, "screen_locked", True)),
             "outboundQueueDepth": snapshot.pending_outbox + snapshot.ambiguous_outbox,
@@ -391,8 +486,8 @@ class BridgeRuntime:
         code = getattr(error, "code", None)
         if isinstance(code, str) and 1 <= len(code) <= 64:
             return code
-        if isinstance(error, ValueError) and error.args and isinstance(error.args[0], str):
+        if isinstance(error, (ValueError, RuntimeError)) and error.args and isinstance(error.args[0], str):
             candidate = error.args[0]
-            if candidate.isupper() and 1 <= len(candidate) <= 64:
+            if re.fullmatch(r"[A-Z0-9_]{1,64}", candidate):
                 return candidate
         return fallback

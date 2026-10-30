@@ -246,6 +246,7 @@ describe('WeChat bot foundation acceptance', () => {
       wechatVersion: '4.1.15.50',
       loginStatus: 'LOGGED_IN',
       listenerWatermark: 'acceptance-1',
+      receiverHealth: { status: 'HEALTHY', errorCode: null, lastSuccessAt: new Date().toISOString() },
       screenLocked: false,
       outboundQueueDepth: 0,
       observedGroups: [
@@ -254,6 +255,11 @@ describe('WeChat bot foundation acceptance', () => {
         { wechatGroupId: groupWechatIds.combined, displayName: 'CELL 综合群' },
       ],
     }).expect(200);
+
+    const deviceList = await request(app.getHttpServer()).get('/v1/admin/wechat-bot/devices').set(adminAuth()).expect(200);
+    expect(deviceList.body.items.find((item: { id: string }) => item.id === deviceId)).toMatchObject({
+      receiverHealth: { status: 'HEALTHY', errorCode: null }, screenLocked: false
+    });
 
     for (const [role, wechatGroupId] of Object.entries(groupWechatIds)) {
       const group = await prisma.wechatObservedGroup.findUniqueOrThrow({
@@ -356,32 +362,32 @@ describe('WeChat bot foundation acceptance', () => {
       where: { deviceId },
       orderBy: { createdAt: 'asc' },
     });
-    expect(persistedReplies).toHaveLength(8);
-    expect(new Set(persistedReplies.map((message) => message.businessKey)).size).toBe(8);
+    expect(persistedReplies).toHaveLength(9);
+    expect(new Set(persistedReplies.map((message) => message.businessKey)).size).toBe(9);
     expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `query-number-${runId}`)?.id}:`))).toBe(false);
-    expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `auction-schedule-${runId}`)?.id}:`))).toBe(false);
+    expect(persistedReplies.some((message) => message.businessKey.startsWith(`inbound:${inbound.find((item) => item.messageId === `auction-schedule-${runId}`)?.id}:`))).toBe(true);
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('请联系管理员在后台关联账号');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('赛程（1场）');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('我的赛程（1场）');
     expect(persistedReplies.map((message) => message.text).join('\n')).toContain('上海申花 vs 成都蓉城');
     const repliesFor = (targetId: string) => persistedReplies.filter((message) => message.targetId === targetId).map((message) => message.text).join('\n');
     expect(repliesFor(groupWechatIds.query)).toContain('查询赛程：');
-    expect(repliesFor(groupWechatIds.query)).not.toContain('开始拍卖：');
-    expect(repliesFor(groupWechatIds.auction)).toContain('开始拍卖：');
+    expect(repliesFor(groupWechatIds.query)).not.toContain('拍卖管理：管理员请私聊机器人');
+    expect(repliesFor(groupWechatIds.auction)).toContain('拍卖管理：管理员请私聊机器人');
     expect(repliesFor(groupWechatIds.auction)).not.toContain('查询赛程：');
     expect(repliesFor(groupWechatIds.combined)).toContain('查询赛程：');
-    expect(repliesFor(groupWechatIds.combined)).toContain('开始拍卖：');
+    expect(repliesFor(groupWechatIds.combined)).toContain('拍卖管理：管理员请私聊机器人');
     expect(repliesFor(groupWechatIds.auction)).toContain('当前没有进行中的拍卖');
 
     const claim = await bridgePost('/v1/wechat-bot/bridge/outbox/claim', { limit: 20 }).expect(200);
-    expect(claim.body.messages).toHaveLength(8);
+    expect(claim.body.messages).toHaveLength(9);
     for (const [index, message] of (claim.body.messages as Array<{ id: string }>).entries()) {
       await bridgePost(`/v1/wechat-bot/bridge/outbox/${message.id}/ack`, {
         status: 'SENT',
         readbackMessageId: `wechat-readback-${runId}-${index + 1}`,
       }).expect(200);
     }
-    expect(await prisma.wechatOutboxMessage.count({ where: { deviceId, status: 'SENT' } })).toBe(8);
+    expect(await prisma.wechatOutboxMessage.count({ where: { deviceId, status: 'SENT' } })).toBe(9);
 
     await request(app.getHttpServer())
       .get('/v1/me/wechat-bot/binding')

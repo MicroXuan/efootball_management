@@ -3038,6 +3038,7 @@ model WechatBotDevice {
   loginStatus          WechatLoginStatus            @default(UNKNOWN) @map("login_status")
   wechatVersion        String?                      @map("wechat_version") @db.VarChar(64)
   lastHeartbeatAt      DateTime?                    @map("last_heartbeat_at")
+  receiverHealth      Json?                        @map("receiver_health")
   listenerWatermark    String?                      @map("listener_watermark") @db.VarChar(256)
   outboundQueueDepth   Int                          @default(0) @map("outbound_queue_depth") @db.UnsignedInt
   screenLocked         Boolean                      @default(false) @map("screen_locked")

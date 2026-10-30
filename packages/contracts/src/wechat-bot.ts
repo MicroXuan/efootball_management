@@ -25,6 +25,12 @@ export const WechatObservedGroupInputSchema = z.object({
   displayName: DisplayNameSchema
 });
 
+export const WechatReceiverHealthSchema = z.object({
+  status: z.enum(['STARTING', 'HEALTHY', 'RECOVERING']),
+  errorCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).nullable(),
+  lastSuccessAt: TimestampSchema.nullable()
+});
+
 export const WechatBridgeHeartbeatSchema = z.object({
   wechatAccountId: WechatStableIdSchema.optional(),
   wechatVersion: z.string().trim().min(1).max(64),
@@ -32,6 +38,7 @@ export const WechatBridgeHeartbeatSchema = z.object({
   listenerWatermark: z.string().trim().min(1).max(256).optional(),
   screenLocked: z.boolean(),
   outboundQueueDepth: z.number().int().min(0).max(100_000),
+  receiverHealth: WechatReceiverHealthSchema.optional(),
   observedGroups: z.array(WechatObservedGroupInputSchema).max(500)
 });
 
@@ -122,6 +129,8 @@ export const AdminWechatBotDeviceSchema = z.object({
   loginStatus: WechatLoginStatusSchema,
   circuitStatus: WechatCircuitStatusSchema,
   circuitReason: z.string().max(512).nullable().optional(),
+  receiverHealth: WechatReceiverHealthSchema.nullable().optional(),
+  screenLocked: z.boolean().optional(),
   lastHeartbeatAt: TimestampSchema.nullable(),
   wechatVersion: z.string().max(64).nullable(),
   outboundQueueDepth: z.number().int().min(0),

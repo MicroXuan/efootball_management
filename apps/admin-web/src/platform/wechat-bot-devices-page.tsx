@@ -1,3 +1,4 @@
+import { deviceHealth } from './wechat-device-health';
 import { WechatBotAdminsPanel } from './wechat-bot-admins-panel';
 import { WechatBotMembersPanel } from './wechat-bot-members-panel';
 import {
@@ -13,7 +14,7 @@ import { formatDateTime } from '../lib/date-time';
 import { PaginatedRecords } from '../components/paginated-records';
 
 const loginLabels = {
-  LOGGED_IN: { text: '在线', color: 'success' },
+  LOGGED_IN: { text: '微信已登录', color: 'success' },
   LOGGED_OUT: { text: '离线', color: 'error' },
   UNKNOWN: { text: '状态未知', color: 'default' },
 } as const;
@@ -42,7 +43,11 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
     }
   }, [api]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
   const createDevice = async () => {
     const trimmed = name.trim();
@@ -145,14 +150,16 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
     </Card> : null}
     {devices?.length ? <PaginatedRecords items={devices} label="机器人设备分页" render={(pageItems, offset) => <div className="wechat-device-grid">{pageItems.map((device, index) => {
       const login = loginLabels[device.loginStatus];
-      const healthy = device.status === 'ACTIVE' && device.loginStatus === 'LOGGED_IN' && device.circuitStatus === 'CLOSED';
+      const state = deviceHealth(device);
+      const healthy = state.healthy;
       return <Card key={device.id} className={`wechat-device-card${healthy ? ' is-healthy' : ''}`}>
         <div className="wechat-device-card__top">
           <span>BOT / {String(offset + index + 1).padStart(2, '0')}</span>
           <Space size={6} wrap>
             {device.status === 'DISABLED' ? <Tag>已停用</Tag> : null}
             <Tag color={login.color}>{login.text}</Tag>
-            {device.circuitStatus === 'OPEN' ? <Tag color="error">熔断已开启</Tag> : <Tag color="success">发送正常</Tag>}
+            <Tag color={healthy ? "success" : "warning"}>{state.text}</Tag>
+            {device.circuitStatus === 'OPEN' ? <Tag color="error">熔断已开启</Tag> : <Tag color="success">未熔断</Tag>}
           </Space>
         </div>
         <h2>{device.name}</h2>
@@ -164,7 +171,9 @@ export function WechatBotDevicesPage({ api = adminApi }: { api?: AdminApi }) {
         <dl className="wechat-device-metrics">
           <div><dt>最后心跳</dt><dd>{device.lastHeartbeatAt ? formatDateTime(device.lastHeartbeatAt) : '尚未收到'}</dd></div>
           <div><dt>微信版本</dt><dd>{device.wechatVersion ?? '未上报'}</dd></div>
-          <div><dt>发送队列</dt><dd>{device.outboundQueueDepth} 条</dd></div>
+          <div><dt>本地待发送 / 待确认</dt><dd>{device.outboundQueueDepth} 条</dd></div>
+          <div><dt>最近接收检查成功</dt><dd>{device.receiverHealth?.lastSuccessAt ? formatDateTime(device.receiverHealth.lastSuccessAt) : "尚未上报"}</dd></div>
+          <div><dt>接收异常码</dt><dd>{device.receiverHealth?.errorCode ?? "无"}</dd></div>
           <div><dt>熔断原因</dt><dd>{device.circuitReason ?? '无'}</dd></div>
         </dl>
         <div className="wechat-device-card__actions">

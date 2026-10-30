@@ -5,9 +5,10 @@ import json
 import signal
 from pathlib import Path
 
+from .process_lock import bridge_process_lock
 from .api_client import EfmBridgeClient
 from .config import BridgeSettings
-from .runtime import BridgeRuntime
+from .runtime import BridgeRuntime, StructuredLogger
 from .spool import BridgeSpool
 from .transport import LiveWechatTransport
 from .wechat_gui_sender import WechatGuiSender, WechatautoGuiDriver
@@ -38,10 +39,11 @@ def build_runtime(config_path: Path, *, enable_send: bool) -> BridgeRuntime:
         api=EfmBridgeClient(settings),
         transport=transport,
         enable_send=enable_send,
+        logger=StructuredLogger(log_dir=settings.state_dir / "logs"),
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="efm-wechat-bridge")
     parser.add_argument("--config", type=Path, default=Path("bridge.toml"))
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -65,6 +67,15 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, lambda *_: runtime.request_stop())
     runtime.run_forever()
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        with bridge_process_lock():
+            return _main(argv)
+    except RuntimeError as error:
+        StructuredLogger().emit("startup_failed", code=BridgeRuntime._error_code(error, "BRIDGE_STARTUP_FAILED"))
+        return 2
 
 
 if __name__ == "__main__":
