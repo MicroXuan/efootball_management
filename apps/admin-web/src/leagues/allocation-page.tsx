@@ -27,7 +27,9 @@ const ConfirmedSchema = z.object({
 });
 const SchedulePreviewSchema = z.object({
   id: z.string(), competitionId: z.string(), status: z.enum(['DRAFT', 'PUBLISHED']),
-  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(CompetitionMatchResponseSchema)
+  version: z.number(), roundCount: z.number(), matchCount: z.number(), matches: z.array(CompetitionMatchResponseSchema.extend({
+    wechatMatchNo: z.number().int().positive().nullable().default(null)
+  }))
 });
 const StageParticipantsSchema = z.array(z.object({
   id: z.string(), displayName: z.string(), teamNumber: z.number().nullable().default(null),
@@ -92,7 +94,8 @@ function ScheduleBoard({ preview, onEditScore }: {
           </div>
           <div className="fixture-match__versus">
             <span>{match.officialResult ? `${match.officialResult.homeScore} : ${match.officialResult.awayScore}` : 'VS'}</span>
-            <small>#{match.matchNumber}</small>
+            <small>赛程 #{match.matchNumber}</small>
+            {preview.status === 'PUBLISHED' ? <small>{match.wechatMatchNo ? `微信报分 M${match.wechatMatchNo}` : '微信 M 编号未生成'}</small> : null}
             {match.plannedAt ? <small>{formatDateTime(match.plannedAt)}</small> : null}
             {onEditScore ? <Button
               size="small"
@@ -399,6 +402,21 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
     }
   };
 
+  const ensureWechatMatchNumbers = async (stageId: string) => {
+    setScheduleBusyStageId(stageId); setError(null);
+    try {
+      const preview = await api.request(`/v1/admin/leagues/${leagueId}/competition-stages/${stageId}/wechat-match-numbers`, {
+        method: 'POST', schema: SchedulePreviewSchema
+      });
+      setSchedulePreviews((current) => ({ ...current, [stageId]: preview }));
+      setNotice('微信报分 M 编号已生成，可按赛程中的 M 编号私聊机器人报分');
+    } catch {
+      setError('生成微信 M 编号失败，请重试');
+    } finally {
+      setScheduleBusyStageId(null);
+    }
+  };
+
   const openScoreEditor = (match: CompetitionMatchResponse) => {
     setScoreEditor(match);
     setHomeScore(match.officialResult?.homeScore ?? null);
@@ -528,6 +546,9 @@ export function AllocationPage({ api = adminApi }: { api?: AdminApi }) {
         <header className="allocation-schedule-panel__header">
           <div><span className="section-kicker">当前查看</span><h3>{activeScheduleStage.displayName}赛程</h3></div>
           <Tag color={activeScheduleStage.status === 'PUBLISHED' ? 'green' : 'gold'}>{activeScheduleStage.status === 'PUBLISHED' ? '已发布' : '预览'}</Tag>
+          {activeScheduleStage.status === 'PUBLISHED' && activeSchedulePreview.matches.some((match) => !match.wechatMatchNo)
+            ? <Button loading={scheduleBusyStageId === activeScheduleStage.id} onClick={() => void ensureWechatMatchNumbers(activeScheduleStage.id)}>生成微信 M 编号</Button>
+            : null}
         </header>
         <ScheduleBoard preview={activeSchedulePreview} onEditScore={scheduleModes[activeScheduleStage.id] === 'manage' ? openScoreEditor : undefined} />
       </section> : null}

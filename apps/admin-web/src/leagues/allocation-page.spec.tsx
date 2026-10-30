@@ -293,12 +293,15 @@ it('lets an administrator reopen a published schedule and record its official sc
       homeParticipant: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', displayName: '布莱顿 蓝白', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: null, ownerDisplayName: '布莱顿玩家' },
       awayParticipant: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', displayName: '阿森纳', participantType: 'TEAM', teamLifecycleStatus: 'ACTIVE', teamLogoUrl: null, ownerDisplayName: '阿森纳玩家' },
       plannedAt: null, status: 'AWAITING_RESULT', version: 1, officialResult: null, resultVersions: [],
-      createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1'
+      createdAt: timestamp, updatedAt: timestamp, pairingKey: 'round-1-match-1', wechatMatchNo: null
     }]
   };
   const request = vi.fn(async (path: string, options?: { method?: string }) => {
     if (path.endsWith('/seasons')) return { items: [{ ...season, status: 'IN_PROGRESS' as const, version: 5 }], nextCursor: null };
     if (path.endsWith('/allocation-proposals/latest')) return publishedProposal;
+    if (path.endsWith(`/competition-stages/${stageId}/wechat-match-numbers`) && options?.method === 'POST') {
+      return { ...publishedSchedule, matches: publishedSchedule.matches.map((match) => ({ ...match, wechatMatchNo: 3 })) };
+    }
     if (path.endsWith(`/competition-stages/${stageId}/schedule`)) return publishedSchedule;
     if (path.endsWith(`/competitions/${competitionId}/matches/${matchId}/results`) && options?.method === 'POST') {
       return { id: 'result-1', matchId, version: 1, homeScore: 2, awayScore: 1, status: 'OFFICIAL', submissionSide: 'MANAGER', submittedByMe: true, reason: null, createdAt: timestamp };
@@ -309,6 +312,11 @@ it('lets an administrator reopen a published schedule and record its official sc
 
   await userEvent.click(await screen.findByRole('button', { name: '查看赛程' }));
   expect(await screen.findByText('玩家：布莱顿玩家')).toBeInTheDocument();
+  expect(screen.getByText('赛程 #1')).toBeInTheDocument();
+  expect(screen.getByText('微信 M 编号未生成')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '生成微信 M 编号' }));
+  expect(await screen.findByText('微信报分 M3')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '生成微信 M 编号' })).not.toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button', { name: /比分管理$/ }));
   const recordScoreButton = screen.getByRole('button', { name: '录入比分' });
   expect(recordScoreButton).toHaveClass('fixture-score-action--pending');

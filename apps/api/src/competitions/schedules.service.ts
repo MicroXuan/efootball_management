@@ -34,7 +34,7 @@ type MatchRecord = Prisma.CompetitionMatchGetPayload<{
   };
 }>;
 
-export type ScheduleMatch = CompetitionMatchResponse & { pairingKey: string };
+export type ScheduleMatch = CompetitionMatchResponse & { pairingKey: string; wechatMatchNo?: number | null };
 
 export type SchedulePreview = {
   id: string;
@@ -216,7 +216,32 @@ export class SchedulesService {
   async previewStageForLeague(leagueId: string, stageId: string): Promise<SchedulePreview> {
     const stageLeagueId = await this.visibility.requireVisible({ type: 'STAGE', id: stageId });
     if (stageLeagueId !== leagueId) throw this.visibility.notFound();
-    return this.readStagePreview(this.prisma, stageId);
+    const preview = await this.readStagePreview(this.prisma, stageId);
+    return this.withWechatMatchNumbers(preview);
+  }
+
+  async ensureStageWechatMatchNumbers(leagueId: string, stageId: string): Promise<SchedulePreview> {
+    const preview = await this.previewStageForLeague(leagueId, stageId);
+    if (preview.status !== 'PUBLISHED') throw new CompetitionError('SCHEDULE_NOT_PUBLISHED', '赛程发布后才能生成微信 M 编号', 409);
+    const missing = preview.matches.filter((match) => !match.wechatMatchNo);
+    if (missing.length) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const match of missing) {
+          await tx.wechatMatchReference.upsert({ where: { matchId: match.id }, create: { matchId: match.id }, update: {} });
+        }
+      });
+    }
+    return this.previewStageForLeague(leagueId, stageId);
+  }
+
+  private async withWechatMatchNumbers(preview: SchedulePreview): Promise<SchedulePreview> {
+    if (!preview.matches.length) return preview;
+    const refs = await this.prisma.wechatMatchReference.findMany({
+      where: { matchId: { in: preview.matches.map((match) => match.id) } },
+      select: { matchId: true, id: true }
+    });
+    const byMatch = new Map(refs.map((ref) => [ref.matchId, ref.id]));
+    return { ...preview, matches: preview.matches.map((match) => ({ ...match, wechatMatchNo: byMatch.get(match.id) ?? null })) };
   }
 
   async stageParticipantsForLeague(leagueId: string, stageId: string) {
