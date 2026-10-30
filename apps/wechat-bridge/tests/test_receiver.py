@@ -334,6 +334,38 @@ def test_private_message_without_server_id_gets_stable_local_identity_only_after
     assert first.sender_id == "contact-wxid"
 
 
+def test_private_command_is_retried_when_message_detail_temporarily_unavailable() -> None:
+    class DelayedDetailDatabase:
+        def __init__(self) -> None:
+            self.detail_available = False
+
+        def get_sessions(self, limit: int = 500) -> list[dict[str, object]]:
+            return [{"username": "new-admin-wxid"}]
+
+        def get_nickname(self, username: str) -> str:
+            return "新管理员"
+
+        def get_new_messages(self, username: str, since_seq: int, limit: int = 200) -> list[dict[str, object]]:
+            return [{"local_id": 45, "type": "文本", "sender_id": 3, "sender_username": "",
+                     "create_time": NOW_TS, "content": "帮助", "sort_seq": 8102}] if since_seq < 8102 else []
+
+        def get_message_row(self, username: str, local_id: int) -> dict[str, object]:
+            if not self.detail_available:
+                raise OSError("database snapshot temporarily unavailable")
+            return {"local_id": 45, "sort_seq": 8102, "sender_id": 3,
+                    "server_id": "new-admin-message"}
+
+    database = DelayedDetailDatabase()
+    receiver = WechatautoReceiver(database=database, enabled_group_ids=set(), robot_user_id="robot-wxid")
+
+    assert receiver.poll(None) == []
+    assert receiver.scanned_cursors() == {}
+
+    database.detail_available = True
+    assert [event.message_id for event in receiver.poll(None)] == ["new-admin-message"]
+    assert receiver.scanned_cursors() == {"new-admin-wxid": 8102}
+
+
 def test_private_traditional_help_is_normalized_before_upload() -> None:
     receiver = WechatautoReceiver(database=object(), enabled_group_ids=set(), robot_user_id="robot-wxid")
 

@@ -173,10 +173,14 @@ class WechatautoReceiver:
                 except Exception:
                     break
                 page_max = cursor
+                detail_pending = False
                 for raw in messages:
                     if not isinstance(raw, Mapping):
                         continue
                     row = self._hydrate_raw_message(username, raw)
+                    if self._command_needs_message_detail(username, row):
+                        detail_pending = True
+                        break
                     row.setdefault("conversation_id", username)
                     rows.append(row)
                     page_max = max(page_max, self._positive_int(row.get("sort_seq")) or 0)
@@ -184,7 +188,7 @@ class WechatautoReceiver:
                     break
                 cursor = page_max
                 scanned[username] = cursor
-                if len(messages) < 200 or len(rows) >= 2000:
+                if detail_pending or len(messages) < 200 or len(rows) >= 2000:
                     break
 
         self._scanned_cursors = {key: value for key, value in scanned.items() if key != "*"}
@@ -341,6 +345,21 @@ class WechatautoReceiver:
                 stable_key = f"{username}\0{row['sort_seq']}\0{local_id}".encode("utf-8")
                 row["server_id"] = f"local:{sha256(stable_key).hexdigest()}"
         return row
+
+    @staticmethod
+    def _command_needs_message_detail(username: str, row: Mapping[str, object]) -> bool:
+        if row.get("type") not in _TEXT_TYPES or row.get("sender_id") == 2:
+            return False
+        if WechatautoReceiver._safe_string(row.get("server_id")):
+            return False
+        content = row.get("content")
+        if not isinstance(content, str):
+            return False
+        text = _TRAILING_CONTROL_PADDING.sub("", content).strip()
+        if username.endswith("@chatroom"):
+            text = _GROUP_SENDER_PREFIX.sub("", text, count=1).strip()
+            return bool(_GROUP_COMMAND.fullmatch(text))
+        return bool(_PRIVATE_COMMAND.fullmatch("帮助" if text == "幫助" else text))
 
     @classmethod
     def _parse_cursors(cls, value: str | None) -> dict[str, int]:
